@@ -4,7 +4,7 @@ set -euo pipefail
 
 JUPYTEXT="uvx jupytext@1.17.1"
 NB_CLEAN="uvx nb-clean@4.0.1"
-RUFF="uvx ruff@0.11.10"
+RUFF="uvx ruff@0.14.0"
 
 ###############################################################################
 

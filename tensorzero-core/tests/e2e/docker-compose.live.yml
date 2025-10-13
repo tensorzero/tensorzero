@@ -114,6 +114,12 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+      gateway-clickhouse-migrations:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
       provider-proxy:
         condition: service_healthy
       minio:
@@ -227,6 +233,8 @@ services:
       clickhouse:
         condition: service_healthy
       postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
         condition: service_healthy
       mock-inference-provider:
         condition: service_healthy

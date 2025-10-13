@@ -4,6 +4,7 @@ export const logger = {
     // `messageStr` is a hack until we figure out a way to enforce the type checker for errors
     const messageStr =
       typeof message === "string" ? message : JSON.stringify(message);
+
     console.log(`[TensorZero UI ${__APP_VERSION__}] ${messageStr}`, ...args);
   },
   error: (message: any, ...args: any[]) => {

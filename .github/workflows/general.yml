@@ -62,6 +62,14 @@ jobs:
           mkdir -p examples/multimodal-vision-finetuning/object_storage
           chmod 777 examples/multimodal-vision-finetuning/object_storage
 
+      - name: Apply Postgres migrations for the enforce-custom-rate-limits example
+        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/docs/guides/operations/enforce-custom-rate-limits
+          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose down
+
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
@@ -97,6 +105,14 @@ jobs:
         run: |
           mkdir -p examples/multimodal-vision-finetuning/object_storage
           chmod 777 examples/multimodal-vision-finetuning/object_storage
+
+      - name: Apply Postgres migrations for the enforce-custom-rate-limits example
+        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/docs/guides/operations/enforce-custom-rate-limits
+          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose down
 
       - name: Check all docker-compose.yml files
         run: ./ci/check-all-docker-compose.sh
@@ -329,8 +345,8 @@ jobs:
 
       - name: Lint (Python:ruff)
         run: |
-          uvx ruff@0.9.0 check --output-format=github --extend-select I .
-          uvx ruff@0.9.0 format --check .
+          uvx ruff@0.14.0 check --output-format=github --extend-select I .
+          uvx ruff@0.14.0 format --check .
 
       - name: "Python: Pyo3 Client: Build and install dependencies"
         working-directory: clients/python
@@ -479,16 +495,7 @@ jobs:
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Run database migrations for E2E tests
-        # Note: this step will stand up ClickHouse and Postgres too since the gateway-*-migrations jobs depend on them
-        if: matrix.replicated == false
-        run: |
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-clickhouse-migrations
-          TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-postgres-migrations
-
       - name: Launch dependency services with non-replicated ClickHouse container for E2E tests
-        # Note: ClickHouse and Postgres are already up from the previous step but we block here to
-        # make sure all other services are up too
         if: matrix.replicated == false
         run: TENSORZERO_CLICKHOUSE_VERSION=${{ matrix.clickhouse_version.tag }} docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
@@ -642,15 +649,7 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
-      - name: Run database migrations for E2E tests
-        # Note: this step will stand up ClickHouse and Postgres too since the gateway-*-migrations jobs depend on them
-        run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-clickhouse-migrations
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml --profile migrations run --rm gateway-postgres-migrations
-
       - name: Make sure dependency services are up
-        # Note: ClickHouse and Postgres are already up from the previous step but we block here to
-        # make sure all other services are up too
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --wait
 
       - name: Launch the gateway for E2E tests
