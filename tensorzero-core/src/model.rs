@@ -1965,6 +1965,36 @@ pub enum CredentialLocation {
     None,
 }
 
+/// Wrapper type that supports both single credential location and fallback configuration
+#[derive(Debug, PartialEq, Clone)]
+pub enum CredentialLocationWithFallback {
+    /// Single credential location (backwards compatible)
+    Single(CredentialLocation),
+    /// Credential location with fallback support
+    WithFallback {
+        default: CredentialLocation,
+        fallback: CredentialLocation,
+    },
+}
+
+impl CredentialLocationWithFallback {
+    /// Get the default credential location
+    pub fn default_location(&self) -> &CredentialLocation {
+        match self {
+            CredentialLocationWithFallback::Single(loc) => loc,
+            CredentialLocationWithFallback::WithFallback { default, .. } => default,
+        }
+    }
+
+    /// Get the fallback credential location if it exists
+    pub fn fallback_location(&self) -> Option<&CredentialLocation> {
+        match self {
+            CredentialLocationWithFallback::Single(_) => None,
+            CredentialLocationWithFallback::WithFallback { fallback, .. } => Some(fallback),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -2048,6 +2078,63 @@ impl Serialize for CredentialLocation {
             CredentialLocation::None => "none".to_string(),
         };
         serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for CredentialLocationWithFallback {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Helper {
+            String(String),
+            Table { default: String, fallback: String },
+        }
+
+        match Helper::deserialize(deserializer)? {
+            Helper::String(s) => {
+                let location =
+                    CredentialLocation::deserialize(serde::de::value::StringDeserializer::<
+                        D::Error,
+                    >::new(s))?;
+                Ok(CredentialLocationWithFallback::Single(location))
+            }
+            Helper::Table { default, fallback } => {
+                let default_location =
+                    CredentialLocation::deserialize(serde::de::value::StringDeserializer::<
+                        D::Error,
+                    >::new(default))?;
+                let fallback_location =
+                    CredentialLocation::deserialize(serde::de::value::StringDeserializer::<
+                        D::Error,
+                    >::new(fallback))?;
+                Ok(CredentialLocationWithFallback::WithFallback {
+                    default: default_location,
+                    fallback: fallback_location,
+                })
+            }
+        }
+    }
+}
+
+impl Serialize for CredentialLocationWithFallback {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        match self {
+            CredentialLocationWithFallback::Single(location) => location.serialize(serializer),
+            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+                let mut state = serializer.serialize_struct("CredentialLocationWithFallback", 2)?;
+                state.serialize_field("default", default)?;
+                state.serialize_field("fallback", fallback)?;
+                state.end()
+            }
+        }
     }
 }
 
@@ -3194,5 +3281,49 @@ mod tests {
                 "Shorthand prefix '{shorthand}' is not in RESERVED_MODEL_PREFIXES"
             );
         }
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialization() {
+        // Test single string format (backwards compatible)
+        let single_str = r#""env::API_KEY""#;
+        let result: CredentialLocationWithFallback = serde_json::from_str(single_str).unwrap();
+        assert!(matches!(result, CredentialLocationWithFallback::Single(_)));
+        assert_eq!(
+            result.default_location(),
+            &CredentialLocation::Env("API_KEY".to_string())
+        );
+        assert!(result.fallback_location().is_none());
+
+        // Test table format with fallback
+        let with_fallback =
+            r#"{"default": "dynamic::primary_key", "fallback": "env::FALLBACK_KEY"}"#;
+        let result: CredentialLocationWithFallback = serde_json::from_str(with_fallback).unwrap();
+        assert_eq!(
+            result.default_location(),
+            &CredentialLocation::Dynamic("primary_key".to_string())
+        );
+        assert_eq!(
+            result.fallback_location(),
+            Some(&CredentialLocation::Env("FALLBACK_KEY".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_serialization() {
+        // Test single serialization
+        let single =
+            CredentialLocationWithFallback::Single(CredentialLocation::Env("API_KEY".to_string()));
+        let serialized = serde_json::to_string(&single).unwrap();
+        assert_eq!(serialized, r#""env::API_KEY""#);
+
+        // Test fallback serialization
+        let with_fallback = CredentialLocationWithFallback::WithFallback {
+            default: CredentialLocation::Dynamic("primary_key".to_string()),
+            fallback: CredentialLocation::Env("FALLBACK_KEY".to_string()),
+        };
+        let serialized = serde_json::to_value(&with_fallback).unwrap();
+        assert_eq!(serialized["default"], "dynamic::primary_key");
+        assert_eq!(serialized["fallback"], "env::FALLBACK_KEY");
     }
 }

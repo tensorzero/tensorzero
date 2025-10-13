@@ -803,23 +803,74 @@ region = "us-east-1"
 /// This calls the Default implementation directly, ensuring we test the actual defaults.
 fn get_default_credential_location(provider_type: &str) -> CredentialLocation {
     match provider_type {
-        "anthropic" => AnthropicDefaults::default().api_key_location,
-        "openai" => OpenAIDefaults::default().api_key_location,
-        "azure" => AzureDefaults::default().api_key_location,
-        "deepseek" => DeepSeekDefaults::default().api_key_location,
-        "fireworks" => FireworksDefaults::default().api_key_location,
-        "gcp_vertex_anthropic" => GCPDefaults::default().credential_location,
-        "gcp_vertex_gemini" => GCPDefaults::default().credential_location,
-        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default().api_key_location,
-        "groq" => GroqDefaults::default().api_key_location,
-        "hyperbolic" => HyperbolicDefaults::default().api_key_location,
-        "mistral" => MistralDefaults::default().api_key_location,
-        "openrouter" => OpenRouterDefaults::default().api_key_location,
-        "sglang" => SGLangDefaults::default().api_key_location,
-        "tgi" => TGIDefaults::default().api_key_location,
-        "together" => TogetherDefaults::default().api_key_location,
-        "vllm" => VLLMDefaults::default().api_key_location,
-        "xai" => XAIDefaults::default().api_key_location,
+        "anthropic" => AnthropicDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "openai" => OpenAIDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "azure" => AzureDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "deepseek" => DeepSeekDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "fireworks" => FireworksDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "gcp_vertex_anthropic" => GCPDefaults::default()
+            .credential_location
+            .default_location()
+            .clone(),
+        "gcp_vertex_gemini" => GCPDefaults::default()
+            .credential_location
+            .default_location()
+            .clone(),
+        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "groq" => GroqDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "hyperbolic" => HyperbolicDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "mistral" => MistralDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "openrouter" => OpenRouterDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "sglang" => SGLangDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "tgi" => TGIDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "together" => TogetherDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "vllm" => VLLMDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "xai" => XAIDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
         _ => panic!("Unknown provider type: {provider_type}"),
     }
 }
