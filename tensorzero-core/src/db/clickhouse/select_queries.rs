@@ -832,7 +832,7 @@ impl ClickHouseConnectionInfo {
 
     async fn count_boolean_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let query =
-            "SELECT toUInt64(COUNT()) AS count FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID}".to_string();
+            "SELECT toUInt64(COUNT()) AS count FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} FORMAT JSONEachRow".to_string();
 
         let target_id_str = target_id.to_string();
         let params_vec = [("target_id", target_id_str)];
@@ -845,7 +845,7 @@ impl ClickHouseConnectionInfo {
 
     async fn count_float_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let query =
-            "SELECT toUInt64(COUNT()) AS count FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:UUID}".to_string();
+            "SELECT toUInt64(COUNT()) AS count FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} FORMAT JSONEachRow".to_string();
 
         let target_id_str = target_id.to_string();
         let params_vec = [("target_id", target_id_str)];
@@ -858,7 +858,7 @@ impl ClickHouseConnectionInfo {
 
     async fn count_comment_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let query =
-            "SELECT toUInt64(COUNT()) AS count FROM CommentFeedbackByTargetId WHERE target_id = {target_id:UUID}".to_string();
+            "SELECT toUInt64(COUNT()) AS count FROM CommentFeedbackByTargetId WHERE target_id = {target_id:UUID} FORMAT JSONEachRow".to_string();
 
         let target_id_str = target_id.to_string();
         let params_vec = [("target_id", target_id_str)];
@@ -874,7 +874,7 @@ impl ClickHouseConnectionInfo {
         inference_id: Uuid,
     ) -> Result<u64, Error> {
         let query =
-            "SELECT toUInt64(COUNT()) AS count FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID}".to_string();
+            "SELECT toUInt64(COUNT()) AS count FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID} FORMAT JSONEachRow".to_string();
 
         let inference_id_str = inference_id.to_string();
         let params_vec = [("inference_id", inference_id_str)];
