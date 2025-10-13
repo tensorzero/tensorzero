@@ -8,7 +8,6 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
@@ -31,10 +30,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{
-    build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
-    ModelProvider,
-};
+use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
@@ -55,10 +51,6 @@ const ANTHROPIC_API_VERSION: &str = "2023-06-01";
 const PROVIDER_NAME: &str = "Anthropic";
 pub const PROVIDER_TYPE: &str = "anthropic";
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("ANTHROPIC_API_KEY".to_string())
-}
-
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -68,23 +60,12 @@ pub struct AnthropicProvider {
     credentials: AnthropicCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<AnthropicCredentials> = OnceLock::new();
-
 impl AnthropicProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(AnthropicProvider {
+    pub fn new(model_name: String, credentials: AnthropicCredentials) -> Self {
+        AnthropicProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {

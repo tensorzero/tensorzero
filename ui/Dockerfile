@@ -8,7 +8,7 @@ RUN npm install -g pnpm
 
 # ========== cargo-chef-planner ==========
 
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.90-bookworm AS chef
 WORKDIR /app
 
 FROM chef AS planner
@@ -61,21 +61,6 @@ WORKDIR /build/internal/tensorzero-node
 
 RUN pnpm install --frozen-lockfile && pnpm run build
 
-# ========== evaluations-build-env ==========
-
-FROM chef AS evaluations-build-env
-
-RUN apt-get update && apt-get install -y clang libc++-dev && rm -rf /var/lib/apt/lists/*
-WORKDIR /tensorzero
-COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release -p evaluations --recipe-path recipe.json
-COPY . /tensorzero
-
-ARG CARGO_BUILD_FLAGS=""
-
-RUN cargo build --release -p evaluations $CARGO_BUILD_FLAGS && \
-    cp -r /tensorzero/target/release /release
-
 # ========== build-env ==========
 
 FROM base AS build-env
@@ -118,9 +103,6 @@ COPY --from=build-env /app/ui/build /app/ui/build
 # Copy tensorzero-node bindings for runtime (from build-env which has complete node modules)
 COPY --from=build-env /app/internal/tensorzero-node/index.cjs /app/ui/build/index.cjs
 COPY --from=build-env /app/internal/tensorzero-node/*.node /app/ui/build/
-
-# Copy evaluations binary
-COPY --from=evaluations-build-env /release/evaluations /usr/local/bin/evaluations
 
 # Copy entrypoint script
 # This script calls into the /app/ui directory using `pnpm --filter=tensorzero-ui run start`

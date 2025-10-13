@@ -21,9 +21,7 @@ WHITELIST = {
 BLACKLISTED_FOLDERS = {"node_modules"}
 
 
-async def check_link(
-    client: httpx.AsyncClient, link: str, origin_files: List[str]
-) -> Tuple[List[str], str, int, str]:
+async def check_link(client: httpx.AsyncClient, link: str, origin_files: List[str]) -> Tuple[List[str], str, int, str]:
     """Check if a link is broken."""
     try:
         # Skip checking links that are whitelisted
@@ -105,9 +103,7 @@ async def check_files(path: str) -> List[Tuple[List[str], str, int, str]]:
                 link_to_files[link] = []
             link_to_files[link].append(md_file)
 
-    print(
-        f"Found {total_links_found} total links ({len(link_to_files)} unique) to check"
-    )
+    print(f"Found {total_links_found} total links ({len(link_to_files)} unique) to check")
 
     # Check all links with progress bar
     results = []
@@ -116,9 +112,7 @@ async def check_files(path: str) -> List[Tuple[List[str], str, int, str]]:
 
     async with httpx.AsyncClient(timeout=timeout, limits=limits) as client:
         # Create tasks for all unique links
-        tasks = [
-            check_link(client, link, files) for link, files in link_to_files.items()
-        ]
+        tasks = [check_link(client, link, files) for link, files in link_to_files.items()]
 
         # Process tasks with progress bar
         if tasks:
@@ -137,13 +131,9 @@ async def check_files(path: str) -> List[Tuple[List[str], str, int, str]]:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Check for broken links in markdown files"
-    )
+    parser = argparse.ArgumentParser(description="Check for broken links in markdown files")
     parser.add_argument("path", help="Path to search for markdown files")
-    parser.add_argument(
-        "--whitelist", "-w", nargs="+", help="Additional URLs to whitelist"
-    )
+    parser.add_argument("--whitelist", "-w", nargs="+", help="Additional URLs to whitelist")
     parser.add_argument(
         "--blacklist-folders",
         "-b",
@@ -170,9 +160,7 @@ def main():
         print(f"Whitelisted {len(WHITELIST)} URLs that will not be checked")
 
     if BLACKLISTED_FOLDERS:
-        print(
-            f"Blacklisted folders that will be skipped: {', '.join(BLACKLISTED_FOLDERS)}"
-        )
+        print(f"Blacklisted folders that will be skipped: {', '.join(BLACKLISTED_FOLDERS)}")
 
     print(f"Checking markdown files in {args.path}")
 
@@ -180,9 +168,7 @@ def main():
 
     # Format and display results
     if results:
-        broken_links = [
-            r for r in results if r[3] != "OK" and not r[3].startswith("Skipped")
-        ]
+        broken_links = [r for r in results if r[3] != "OK" and not r[3].startswith("Skipped")]
         skipped_links = [r for r in results if r[3].startswith("Skipped")]
         whitelisted_links = [r for r in skipped_links if "whitelisted" in r[3]]
 

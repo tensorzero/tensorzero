@@ -112,7 +112,7 @@ async fn test_config_from_toml_table_valid() {
         FunctionConfig::Chat(_) => panic!("Expected a JSON function"),
     }
 
-    assert_eq!(config.embedding_models.len(), 1);
+    assert_eq!(config.embedding_models.table.len(), 1);
 
     let embedding_model = config
         .embedding_models
@@ -2074,6 +2074,7 @@ async fn test_missing_json_mode_mixture_of_n() {
 
 #[tokio::test]
 async fn test_missing_json_mode_best_of_n() {
+    // Test that evaluator json_mode is optional (it defaults to `strict` at runtime)
     let config_str = r#"
         [gateway]
         bind_address = "0.0.0.0:3000"
@@ -2088,7 +2089,7 @@ async fn test_missing_json_mode_best_of_n() {
 
         [functions.basic_test.variants.best_of_n_variant]
         type = "experimental_best_of_n_sampling"
-        candidates = ["test"]
+        candidates = ["good_variant"]
 
         [functions.basic_test.variants.best_of_n_variant.evaluator]
         model = "my-model"
@@ -2100,14 +2101,14 @@ async fn test_missing_json_mode_best_of_n() {
         type = "openai"
         model_name = "gpt-4o-mini-2024-07-18"
         "#;
+
     let config = toml::from_str(config_str).expect("Failed to parse sample config");
 
-    let err = SKIP_CREDENTIAL_VALIDATION
+    // This should succeed (evaluator's `json_mode` is optional)
+    SKIP_CREDENTIAL_VALIDATION
         .scope((), Config::load_from_toml(config, &SpanMap::new_empty()))
         .await
-        .unwrap_err();
-
-    assert_eq!(err.to_string(), "`json_mode` must be specified for `[functions.basic_test.variants.best_of_n_variant.evaluator]` (parent function `basic_test` is a JSON function)");
+        .expect("Config should load successfully with missing evaluator json_mode");
 }
 
 #[tokio::test]

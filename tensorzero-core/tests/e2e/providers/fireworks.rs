@@ -108,6 +108,22 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "fireworks".to_string(),
+        model_name: "accounts/fireworks/models/deepseek-v3p1".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "fireworks-shorthand".to_string(),
+        model_name: "fireworks::accounts/fireworks/models/deepseek-v3p1".into(),
+        model_provider_name: "fireworks".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -116,6 +132,9 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
         dynamic_tool_use_inference: tool_providers.clone(),

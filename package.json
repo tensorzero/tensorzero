@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "build-bindings": "pnpm --filter=tensorzero-node build-bindings",
     "ui:dev": "pnpm --filter=tensorzero-ui dev",
     "ui:storybook": "pnpm --filter=tensorzero-ui storybook",
     "ui:test": "pnpm --filter=tensorzero-ui test",

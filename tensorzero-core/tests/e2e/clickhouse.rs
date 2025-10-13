@@ -89,11 +89,8 @@ pub async fn get_clean_clickhouse(
         Uuid::now_v7().simple()
     );
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    clickhouse_url.set_path("");
-    clickhouse_url.set_query(Some(format!("database={database}").as_str()));
+    clickhouse_url.set_path(&database);
     let clickhouse_url = clickhouse_url.to_string();
-    // Set TENSORZERO_E2E_TESTS_DATABASE so the client can use it
-    std::env::set_var("TENSORZERO_E2E_TESTS_DATABASE", &database);
     let clickhouse = ClickHouseConnectionInfo::new(
         &clickhouse_url,
         BatchWritesConfig {
@@ -187,17 +184,8 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
     let s3_fixtures_path = &s3_fixtures_path;
 
-    let ClickHouseConnectionInfo::Production {
-        database_url,
-        database,
-        cluster_name: _,
-        client: _,
-        batch_sender: _,
-    } = clickhouse
-    else {
-        panic!("ClickHouseConnectionInfo is not a Production connection");
-    };
-
+    let database_url = clickhouse.database_url();
+    let database = clickhouse.database();
     let url = url::Url::parse(database_url.expose_secret()).unwrap();
     let mut host = url.host_str().unwrap();
     if host == "localhost" || host == "127.0.0.1" {

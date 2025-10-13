@@ -19,6 +19,7 @@ name = "tensorzero"
 crate-type = ["cdylib"]
 
 [dependencies]
+evaluations = { path = "../../evaluations" }
 tensorzero-core = { path = "../../tensorzero-core" }
 futures = { workspace = true }
 pyo3 = { workspace = true }

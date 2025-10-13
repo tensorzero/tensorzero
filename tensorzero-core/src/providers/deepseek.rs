@@ -28,7 +28,7 @@ use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::tool::ToolCallChunk;
 
@@ -48,14 +48,10 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("DEEPSEEK_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "DeepSeek";
 pub const PROVIDER_TYPE: &str = "deepseek";
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),
@@ -112,18 +108,11 @@ pub struct DeepSeekProvider {
 }
 
 impl DeepSeekProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or_else(default_api_key_location);
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = DeepSeekCredentials::try_from(generic_credentials)?;
-
-        Ok(DeepSeekProvider {
+    pub fn new(model_name: String, credentials: DeepSeekCredentials) -> Self {
+        DeepSeekProvider {
             model_name,
-            credentials: provider_credentials,
-        })
+            credentials,
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -626,7 +615,10 @@ pub(super) async fn prepare_deepseek_messages<'a>(
             );
         }
     } else if let Some(system_msg) = prepare_system_or_developer_message(
-        request.system.as_deref().map(SystemOrDeveloper::System),
+        request
+            .system
+            .as_deref()
+            .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
         Some(&request.json_mode),
         &messages,
     ) {

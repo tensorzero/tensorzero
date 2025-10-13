@@ -48,9 +48,7 @@ SERVERLESS = True  # Whether to use a serverless deployment. Set to False is ful
 
 MAX_SEQ_LENGTH = 8192  # Choose any! Unsloth supports RoPE Scaling internally!
 
-MODEL_DTYPE = (
-    None  # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
-)
+MODEL_DTYPE = None  # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
 
 LOAD_IN_4BIT = True  # Use 4bit quantization to reduce memory usage. Can be False.
 
@@ -228,12 +226,8 @@ def process_conversations(inference: Dict[str, Any]):
 
 
 # %%
-train_dataset = Dataset.from_list(
-    [process_conversations(sample) for sample in train_conversations]
-)
-eval_dataset = Dataset.from_list(
-    [process_conversations(sample) for sample in eval_conversations]
-)
+train_dataset = Dataset.from_list([process_conversations(sample) for sample in train_conversations])
+eval_dataset = Dataset.from_list([process_conversations(sample) for sample in eval_conversations])
 
 # %% [markdown]
 # Set LoRA parameters
@@ -373,9 +367,7 @@ model_config = {
     "models": {
         model_identifier: {
             "routing": ["fireworks"],
-            "providers": {
-                "fireworks": {"type": "fireworks", "model_name": model_identifier}
-            },
+            "providers": {"fireworks": {"type": "fireworks", "model_name": model_identifier}},
         }
     }
 }

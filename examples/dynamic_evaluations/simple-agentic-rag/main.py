@@ -26,9 +26,7 @@ async def main():
     compact_context_variants = ["gpt-4.1-mini", "claude-3.5-haiku"]
 
     # Evaluate all combinations of agent and compact_context variants
-    for agent_variant, compact_context_variant in itertools.product(
-        agent_variants, compact_context_variants
-    ):
+    for agent_variant, compact_context_variant in itertools.product(agent_variants, compact_context_variants):
         variant_pins = {
             "multi_hop_rag_agent": agent_variant,
             "compact_context": compact_context_variant,
@@ -55,9 +53,7 @@ async def evaluate_variant_pins(
     # `data` is a list of dictionaries; each has a `question` (string) and `answers` (list of strings)
     question_tasks = []
     for question in data[:MAX_SAMPLES]:  # Apply MAX_SAMPLES limit here
-        question_tasks.append(
-            evaluate_question(t0, semaphore, question, run_info.run_id)
-        )
+        question_tasks.append(evaluate_question(t0, semaphore, question, run_info.run_id))
 
     # Run all question evaluations concurrently
     await tqdm_asyncio.gather(*question_tasks)
@@ -70,9 +66,7 @@ async def evaluate_question(
     run_id: UUID,
 ):
     try:
-        episode_info = await t0.dynamic_evaluation_run_episode(
-            run_id=run_id, task_name=question["id"]
-        )
+        episode_info = await t0.dynamic_evaluation_run_episode(run_id=run_id, task_name=question["id"])
         episode_id = episode_info.episode_id
         result = await ask_question(
             t0,

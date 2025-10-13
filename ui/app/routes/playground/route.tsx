@@ -10,7 +10,11 @@ import {
 import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { PageHeader, PageLayout } from "~/components/layout/PageLayout";
-import { useFunctionConfig, useAllFunctionConfigs } from "~/context/config";
+import {
+  useFunctionConfig,
+  useAllFunctionConfigs,
+  useConfig,
+} from "~/context/config";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import type { Route } from "./+types/route";
 import { listDatapoints } from "~/utils/tensorzero.server";
@@ -205,6 +209,7 @@ export async function loader({ request }: Route.LoaderArgs) {
             functionName,
             input,
             variant,
+            toolsConfig: config.tools,
           };
           return queryClient.prefetchQuery({
             queryKey: getClientInferenceQueryKey(args),
@@ -273,6 +278,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
     dehydratedState,
   } = loaderData;
   const functionConfig = useFunctionConfig(functionName);
+  const config = useConfig();
   if (functionName && !functionConfig) {
     throw data(`Function config not found for function ${functionName}`, {
       status: 404,
@@ -470,6 +476,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                                   input={inputs[index]}
                                   functionName={functionName}
                                   functionConfig={functionConfig}
+                                  toolsConfig={config.tools}
                                 />
                               </div>
                             );

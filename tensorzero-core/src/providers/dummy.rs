@@ -33,6 +33,7 @@ use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
 use crate::model::{CredentialLocation, ModelProvider};
 use crate::providers::helpers::inject_extra_request_data;
 use crate::rate_limiting::ActiveRateLimitKey;
+use crate::rate_limiting::FailedRateLimit;
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
@@ -277,8 +278,11 @@ impl InferenceProvider for DummyProvider {
             if *counter % 2 == 0 {
                 if self.model_name.contains("rate_limit") {
                     return Err(ErrorDetails::RateLimitExceeded {
-                        key: ActiveRateLimitKey(String::from("key")),
-                        tickets_remaining: 0,
+                        failed_rate_limits: vec![FailedRateLimit {
+                            key: ActiveRateLimitKey(String::from("key")),
+                            requested: 100,
+                            available: 0,
+                        }],
                     }
                     .into());
                 }

@@ -80,6 +80,22 @@ async fn get_providers() -> E2ETestProviders {
         },
     ];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "groq".to_string(),
+        model_name: "qwen/qwen3-32b".into(),
+        model_provider_name: "groq".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "groq-shorthand".to_string(),
+        model_name: "groq::qwen/qwen3-32b".into(),
+        model_provider_name: "groq".into(),
+        credentials: HashMap::new(),
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -88,6 +104,9 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),

@@ -34,12 +34,8 @@ app = modal.App(name="sglang-inference")
     secrets=[modal.Secret.from_name("ro-huggingface-secret")],
     max_containers=1,
 )
-@modal.concurrent(
-    max_inputs=20
-)  #  how many concurrent requests can one container handle
-@modal.web_server(
-    port=SGLANG_PORT, startup_timeout=2 * MINUTES, requires_proxy_auth=True
-)
+@modal.concurrent(max_inputs=20)  #  how many concurrent requests can one container handle
+@modal.web_server(port=SGLANG_PORT, startup_timeout=2 * MINUTES, requires_proxy_auth=True)
 def sglang_inference():
     import os
     import subprocess

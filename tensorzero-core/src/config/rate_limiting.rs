@@ -153,11 +153,11 @@ impl<'de> Deserialize<'de> for RateLimitingConfigPriority {
         match (helper.always, helper.priority) {
             (Some(true), None) => Ok(RateLimitingConfigPriority::Always),
             (Some(false), None) | (None, None) => Err(serde::de::Error::custom(
-                "priority field is required when always is not true",
+                "the `priority` field is required when `always` is not true",
             )),
             (None, Some(p)) => Ok(RateLimitingConfigPriority::Priority(p)),
             (Some(true), Some(_)) => Err(serde::de::Error::custom(
-                "cannot specify both 'always' and 'priority' fields",
+                "cannot specify both `always` and `priority` fields",
             )),
             (Some(false), Some(p)) => Ok(RateLimitingConfigPriority::Priority(p)),
         }
@@ -753,7 +753,7 @@ mod tests {
 
         if let Err(e) = result {
             let error_msg = e.to_string();
-            assert!(error_msg.contains("cannot specify both 'always' and 'priority' fields"));
+            assert!(error_msg.contains("cannot specify both `always` and `priority` fields"));
         }
     }
 
@@ -770,7 +770,9 @@ mod tests {
 
         if let Err(e) = result {
             let error_msg = e.to_string();
-            assert!(error_msg.contains("priority field is required when always is not true"));
+            assert!(
+                error_msg.contains("the `priority` field is required when `always` is not true")
+            );
         }
     }
 

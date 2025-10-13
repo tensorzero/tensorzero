@@ -1,5 +1,8 @@
 use serde::Deserialize;
-use tensorzero::{setup_clickhouse_without_config, ClickHouseConnection, TimeWindow};
+use tensorzero::{
+    setup_clickhouse_without_config, ClickHouseConnection, DatasetQueryParams,
+    GetDatasetMetadataParams, GetDatasetRowsParams, TimeWindow,
+};
 use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
@@ -17,66 +20,74 @@ impl DatabaseClient {
 
     #[napi]
     pub async fn get_model_usage_timeseries(&self, params: String) -> Result<String, napi::Error> {
-        // TODO: (Aaron?, Viraj?) should we serialize here?
-        // I think we could use native types if we cfged #[napi] into the core codebase.
-        // It will be potentially problematic to serialize every database call twice
-        let GetModelUsageTimeseriesParams {
-            time_window,
-            max_periods,
-        } = serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result = self
-            .0
-            .get_model_usage_timeseries(time_window, max_periods)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+        napi_call!(
+            &self,
+            get_model_usage_timeseries,
+            params,
+            GetModelUsageTimeseriesParams {
+                time_window,
+                max_periods
+            }
+        )
     }
 
     #[napi]
     pub async fn get_model_latency_quantiles(&self, params: String) -> Result<String, napi::Error> {
-        let GetModelLatencyQuantilesParams { time_window } =
-            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result = self
-            .0
-            .get_model_latency_quantiles(time_window)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+        napi_call!(
+            &self,
+            get_model_latency_quantiles,
+            params,
+            GetModelLatencyQuantilesParams { time_window }
+        )
     }
 
     #[napi]
     pub async fn count_distinct_models_used(&self) -> Result<u32, napi::Error> {
-        let result = self
-            .0
-            .count_distinct_models_used()
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        Ok(result)
+        napi_call_no_deserializing!(&self, count_distinct_models_used)
     }
 
     #[napi]
     pub async fn query_episode_table(&self, params: String) -> Result<String, napi::Error> {
-        let QueryEpisodeTableParams {
-            page_size,
-            before,
-            after,
-        } = serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result = self
-            .0
-            .query_episode_table(page_size, before, after)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+        napi_call!(
+            &self,
+            query_episode_table,
+            params,
+            QueryEpisodeTableParams {
+                page_size,
+                before,
+                after
+            }
+        )
     }
 
     #[napi]
     pub async fn query_episode_table_bounds(&self) -> Result<String, napi::Error> {
-        let bounds = self
-            .0
-            .query_episode_table_bounds()
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        serde_json::to_string(&bounds).map_err(|e| napi::Error::from_reason(e.to_string()))
+        napi_call!(&self, query_episode_table_bounds)
+    }
+
+    #[napi]
+    pub async fn count_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
+        napi_call_no_deserializing!(&self, count_rows_for_dataset, params, DatasetQueryParams)
+    }
+
+    #[napi]
+    pub async fn insert_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
+        napi_call_no_deserializing!(&self, insert_rows_for_dataset, params, DatasetQueryParams)
+    }
+
+    #[napi]
+    pub async fn get_dataset_rows(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(&self, get_dataset_rows, params, GetDatasetRowsParams)
+    }
+
+    #[napi]
+    pub async fn get_dataset_metadata(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            get_dataset_metadata,
+            params,
+            GetDatasetMetadataParams
+        )
     }
 
     #[napi]
@@ -123,22 +134,25 @@ impl DatabaseClient {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct GetModelUsageTimeseriesParams {
-    time_window: TimeWindow,
-    max_periods: u32,
+    pub time_window: TimeWindow,
+    pub max_periods: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct GetModelLatencyQuantilesParams {
-    time_window: TimeWindow,
+    pub time_window: TimeWindow,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct QueryEpisodeTableParams {
-    page_size: u32,
-    before: Option<Uuid>,
-    after: Option<Uuid>,
+    pub page_size: u32,
+    pub before: Option<Uuid>,
+    pub after: Option<Uuid>,
 }
 
 #[derive(Deserialize)]

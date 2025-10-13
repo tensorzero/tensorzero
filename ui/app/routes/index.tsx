@@ -21,7 +21,7 @@ import {
 } from "~/components/icons/Icons";
 import { countInferencesByFunction } from "~/utils/clickhouse/inference.server";
 import { getConfig, getAllFunctionConfigs } from "~/utils/config/index.server";
-import { getDatasetCounts } from "~/utils/clickhouse/datasets.server";
+import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/index";
 import {
@@ -109,7 +109,7 @@ export async function loader() {
   // Create the promises
   const countsInfoPromise = countInferencesByFunction();
   const episodesPromise = nativeDatabaseClient.queryEpisodeTableBounds();
-  const datasetCountsPromise = getDatasetCounts({});
+  const datasetMetadata = getDatasetMetadata({});
   const numEvaluationRunsPromise = countTotalEvaluationRuns();
   const numDynamicEvaluationRunsPromise = countDynamicEvaluationRuns();
   const numDynamicEvaluationRunProjectsPromise =
@@ -145,7 +145,7 @@ export async function loader() {
     (result) => `${result.count.toLocaleString()} episodes`,
   );
 
-  const numDatasetsDesc = datasetCountsPromise.then(
+  const numDatasetsDesc = datasetMetadata.then(
     (datasetCounts) => `${datasetCounts.length} datasets`,
   );
 

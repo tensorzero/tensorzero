@@ -65,29 +65,32 @@ it("should get config with models including shorthand", async () => {
   const config = await getConfig(UI_FIXTURES_CONFIG_PATH);
 
   // Check shorthand model exists
-  expect(config.models["gpt-4o-mini-2024-07-18"]).toBeDefined();
-  expect(config.models["llama-3.1-8b-instruct"]).toBeDefined();
+  expect(config.models.table["gpt-4o-mini-2024-07-18"]).toBeDefined();
+  expect(config.models.table["llama-3.1-8b-instruct"]).toBeDefined();
   expect(
-    config.models["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"],
+    config.models.table["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"],
   ).toBeDefined();
 
   // Check routing arrays
-  expect(config.models["gpt-4o-mini-2024-07-18"]!.routing).toEqual(["openai"]);
-  expect(config.models["llama-3.1-8b-instruct"]!.routing).toEqual([
+  expect(config.models.table["gpt-4o-mini-2024-07-18"]!.routing).toEqual([
+    "openai",
+  ]);
+  expect(config.models.table["llama-3.1-8b-instruct"]!.routing).toEqual([
     "fireworks",
   ]);
   expect(
-    config.models["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]!.routing,
+    config.models.table["ft:gpt-4o-mini-2024-07-18:tensorzero::ALHEaw1j"]!
+      .routing,
   ).toEqual(["openai"]);
 });
 
 it("should get config with embedding models", async () => {
   const config = await getConfig(UI_FIXTURES_CONFIG_PATH);
 
-  expect(config.embedding_models["text-embedding-3-small"]).toBeDefined();
-  expect(config.embedding_models["text-embedding-3-small"]!.routing).toEqual([
-    "openai",
-  ]);
+  expect(config.embedding_models.table["text-embedding-3-small"]).toBeDefined();
+  expect(
+    config.embedding_models.table["text-embedding-3-small"]!.routing,
+  ).toEqual(["openai"]);
 });
 
 it("should get config with comprehensive function coverage", async () => {

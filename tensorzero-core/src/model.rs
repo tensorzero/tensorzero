@@ -3,9 +3,8 @@ use futures::StreamExt;
 use secrecy::SecretString;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
-use std::{env, fs};
 use strum::VariantNames;
 use tensorzero_derive::TensorZeroDeserialize;
 use tokio::time::error::Elapsed;
@@ -21,10 +20,11 @@ use crate::cache::{
     StreamingCacheData,
 };
 use crate::config::{
-    skip_credential_validation, OtlpConfig, OtlpTracesFormat, ProviderTypesConfig, TimeoutsConfig,
+    provider_types::ProviderTypesConfig, OtlpConfig, OtlpTracesFormat, TimeoutsConfig,
 };
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
+use crate::model_table::ProviderKind;
 use crate::providers::aws_sagemaker::AWSSagemakerProvider;
 #[cfg(any(test, feature = "e2e_tests"))]
 use crate::providers::dummy::DummyProvider;
@@ -42,7 +42,12 @@ use crate::inference::types::{
     Usage,
 };
 use crate::inference::WrappedProvider;
-use crate::model_table::{BaseModelTable, ShorthandModelConfig};
+use crate::model_table::{
+    AnthropicKind, AzureKind, BaseModelTable, DeepSeekKind, FireworksKind,
+    GoogleAIStudioGeminiKind, GroqKind, HyperbolicKind, MistralKind, OpenAIKind, OpenRouterKind,
+    ProviderTypeDefaultCredentials, SGLangKind, ShorthandModelConfig, TGIKind, TogetherKind,
+    VLLMKind, XAIKind,
+};
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::sglang::SGLangProvider;
@@ -92,6 +97,7 @@ impl UninitializedModelConfig {
         self,
         model_name: &str,
         provider_types: &ProviderTypesConfig,
+        provider_type_default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<ModelConfig, Error> {
         // We want `ModelProvider` to know its own name (from the 'providers' config section).
         // We first deserialize to `HashMap<Arc<str>, UninitializedModelProvider>`, and then
@@ -102,11 +108,15 @@ impl UninitializedModelConfig {
                     name.clone(),
                     ModelProvider {
                         name: name.clone(),
-                        config: provider.config.load(provider_types).await.map_err(|e| {
-                            Error::new(ErrorDetails::Config {
-                                message: format!("models.{model_name}.providers.{name}: {e}"),
-                            })
-                        })?,
+                        config: provider
+                            .config
+                            .load(provider_types, provider_type_default_credentials)
+                            .await
+                            .map_err(|e| {
+                                Error::new(ErrorDetails::Config {
+                                    message: format!("models.{model_name}.providers.{name}: {e}"),
+                                })
+                            })?,
                         extra_body: provider.extra_body,
                         extra_headers: provider.extra_headers,
                         timeouts: provider.timeouts,
@@ -184,6 +194,16 @@ impl StreamResponse {
 /// the same as the underlying name passed to a specific provider api
 pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub enum OpenAIAPIType {
+    #[default]
+    ChatCompletions,
+    Responses,
 }
 
 impl ModelConfig {
@@ -998,6 +1018,8 @@ pub enum UninitializedProviderConfig {
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
+        #[serde(default)]
+        api_type: OpenAIAPIType,
     },
     OpenRouter {
         model_name: String,
@@ -1047,12 +1069,24 @@ pub enum UninitializedProviderConfig {
 }
 
 impl UninitializedProviderConfig {
-    pub async fn load(self, provider_types: &ProviderTypesConfig) -> Result<ProviderConfig, Error> {
+    pub async fn load(
+        self,
+        provider_types: &ProviderTypesConfig,
+        provider_type_default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<ProviderConfig, Error> {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, api_key_location)?),
+            } => ProviderConfig::Anthropic(AnthropicProvider::new(
+                model_name,
+                AnthropicKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
                 region,
@@ -1082,14 +1116,27 @@ impl UninitializedProviderConfig {
                         HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
                             model_name,
                             None,
-                            Some(CredentialLocation::None),
-                        )?),
+
+                            OpenAIKind
+                                .get_defaulted_credential(
+                                    Some(&CredentialLocation::None),
+                                    provider_type_default_credentials,
+                                )
+                                .await?,
+                            // TODO - decide how to expose the responses api for wrapped providers
+                            false
+                        )),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
                                 Error::new(ErrorDetails::InternalError { message: format!("Failed to parse fake TGI endpoint: `{e}`. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new") })
                             })?,
-                            Some(CredentialLocation::None),
-                        )?),
+                            TGIKind
+                                .get_defaulted_credential(
+                                    Some(&CredentialLocation::None),
+                                    provider_type_default_credentials,
+                                )
+                                .await?,
+                        )),
                     };
 
                 ProviderConfig::AWSSagemaker(
@@ -1103,7 +1150,12 @@ impl UninitializedProviderConfig {
             } => ProviderConfig::Azure(AzureProvider::new(
                 deployment_id,
                 endpoint,
-                api_key_location,
+                AzureKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )?),
             UninitializedProviderConfig::Fireworks {
                 model_name,
@@ -1111,17 +1163,28 @@ impl UninitializedProviderConfig {
                 parse_think_blocks,
             } => ProviderConfig::Fireworks(FireworksProvider::new(
                 model_name,
-                api_key_location,
+                FireworksKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
                 parse_think_blocks,
-            )?),
+            )),
             UninitializedProviderConfig::GCPVertexAnthropic {
                 model_id,
                 location,
                 project_id,
                 credential_location: api_key_location,
             } => ProviderConfig::GCPVertexAnthropic(
-                GCPVertexAnthropicProvider::new(model_id, location, project_id, api_key_location)
-                    .await?,
+                GCPVertexAnthropicProvider::new(
+                    model_id,
+                    location,
+                    project_id,
+                    api_key_location,
+                    provider_type_default_credentials,
+                )
+                .await?,
             ),
             UninitializedProviderConfig::GCPVertexGemini {
                 model_id,
@@ -1137,6 +1200,7 @@ impl UninitializedProviderConfig {
                     project_id,
                     api_key_location,
                     provider_types,
+                    provider_type_default_credentials,
                 )
                 .await?,
             ),
@@ -1145,64 +1209,158 @@ impl UninitializedProviderConfig {
                 api_key_location,
             } => ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
                 model_name,
-                api_key_location,
+                GoogleAIStudioGeminiKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
             )?),
             UninitializedProviderConfig::Groq {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Groq(GroqProvider::new(model_name, api_key_location)?),
+            } => ProviderConfig::Groq(GroqProvider::new(
+                model_name,
+                GroqKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::Hyperbolic {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, api_key_location)?),
+            } => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
+                model_name,
+                HyperbolicKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::Mistral {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::Mistral(MistralProvider::new(model_name, api_key_location)?),
+            } => ProviderConfig::Mistral(MistralProvider::new(
+                model_name,
+                MistralKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::OpenAI {
                 model_name,
                 api_base,
                 api_key_location,
-            } => {
-                ProviderConfig::OpenAI(OpenAIProvider::new(model_name, api_base, api_key_location)?)
-            }
+                api_type,
+            } => ProviderConfig::OpenAI(OpenAIProvider::new(
+                model_name,
+                api_base,
+                OpenAIKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+                match api_type {
+                    OpenAIAPIType::ChatCompletions => false,
+                    OpenAIAPIType::Responses => true,
+                },
+            )),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, api_key_location)?),
+            } => ProviderConfig::OpenRouter(OpenRouterProvider::new(
+                model_name,
+                OpenRouterKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::Together {
                 model_name,
                 api_key_location,
                 parse_think_blocks,
             } => ProviderConfig::Together(TogetherProvider::new(
                 model_name,
-                api_key_location,
+                TogetherKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
                 parse_think_blocks,
-            )?),
+            )),
             UninitializedProviderConfig::VLLM {
                 model_name,
                 api_base,
                 api_key_location,
-            } => ProviderConfig::VLLM(VLLMProvider::new(model_name, api_base, api_key_location)?),
+            } => ProviderConfig::VLLM(VLLMProvider::new(
+                model_name,
+                api_base,
+                VLLMKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::XAI {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::XAI(XAIProvider::new(model_name, api_key_location)?),
+            } => ProviderConfig::XAI(XAIProvider::new(
+                model_name,
+                XAIKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::SGLang {
                 model_name,
                 api_base,
                 api_key_location,
-            } => {
-                ProviderConfig::SGLang(SGLangProvider::new(model_name, api_base, api_key_location)?)
-            }
+            } => ProviderConfig::SGLang(SGLangProvider::new(
+                model_name,
+                api_base,
+                SGLangKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::TGI {
                 api_base,
                 api_key_location,
-            } => ProviderConfig::TGI(TGIProvider::new(api_base, api_key_location)?),
+            } => ProviderConfig::TGI(TGIProvider::new(
+                api_base,
+                TGIKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::DeepSeek {
                 model_name,
                 api_key_location,
-            } => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, api_key_location)?),
+            } => ProviderConfig::DeepSeek(DeepSeekProvider::new(
+                model_name,
+                DeepSeekKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             #[cfg(any(test, feature = "e2e_tests"))]
             UninitializedProviderConfig::Dummy {
                 model_name,
@@ -1893,7 +2051,7 @@ impl Serialize for CredentialLocation {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Credential {
     Static(SecretString),
     FileContents(SecretString),
@@ -1901,164 +2059,6 @@ pub enum Credential {
     Sdk,
     None,
     Missing,
-}
-
-/// Builds a credential type from the provided `CredentialLocation` and default location.
-/// This is a convenience function that calls `get_creds_with_cache_and_fn` using
-/// the `TryFrom<Credential>` implementation for `T`.
-///
-/// Most providers should be able to use this function to build their credentials,
-/// unless they have special requirements (e.g. calling an `async fn`)
-pub fn build_creds_caching_default<T: Clone + TryFrom<Credential, Error = Error>>(
-    location: Option<CredentialLocation>,
-    default_location: CredentialLocation,
-    provider_type: &str,
-    cache: &OnceLock<T>,
-) -> Result<T, Error> {
-    build_creds_caching_default_with_fn(location, default_location, provider_type, cache, |creds| {
-        T::try_from(creds)
-    })
-}
-
-/// Builds a credential type from the provided `CredentialLocation` and default location.
-/// If the location is `None`, we'll use the provided `OnceLock` to cache the result
-/// of `f(default_location)`.
-/// Otherwise, we'll call `f(location)` without caching the result.
-///
-/// **NOTE** - `f` may be run multiple times in parallel even when `default_location` is used,
-/// due to a limitation of the current `OnceLock` api.
-pub fn build_creds_caching_default_with_fn<T: Clone, F: FnOnce(Credential) -> Result<T, Error>>(
-    location: Option<CredentialLocation>,
-    default_location: CredentialLocation,
-    provider_type: &str,
-    cache: &OnceLock<T>,
-    f: F,
-) -> Result<T, Error> {
-    let make_creds = |location| {
-        let creds = Credential::try_from((location, provider_type))?;
-        let provider_creds = f(creds)?;
-        Ok(provider_creds)
-    };
-    if let Some(location) = location {
-        make_creds(location)
-    } else {
-        racy_get_or_try_init(cache, || make_creds(default_location))
-    }
-}
-
-/// Gets the value from a `OnceLock` or initializes it with the result of `f`
-/// If this is called simultaneously from multiple threads, it may call `f` multiple times
-/// If `f` returns an error, the `OnceLock` will remain uninitialized
-fn racy_get_or_try_init<T: Clone, E>(
-    once_lock: &OnceLock<T>,
-    f: impl FnOnce() -> Result<T, E>,
-) -> Result<T, E> {
-    if let Some(val) = once_lock.get() {
-        Ok(val.clone())
-    } else {
-        let val = f()?;
-        // We don't care if the value was est
-        let _ = once_lock.set(val.clone());
-        Ok(val)
-    }
-}
-
-impl TryFrom<(CredentialLocation, &str)> for Credential {
-    type Error = Error;
-
-    fn try_from(
-        (location, provider_type): (CredentialLocation, &str),
-    ) -> Result<Self, Self::Error> {
-        match location {
-            CredentialLocation::Env(key_name) => match env::var(&key_name) {
-                Ok(value) => Ok(Credential::Static(SecretString::from(value))),
-                Err(_) => {
-                    if skip_credential_validation() {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            tracing::warn!(
-                                "You are missing the credentials required for a model provider of type {provider_type} (environment variable `{key_name}` is unset), so the associated tests will likely fail.",
-                            );
-                        }
-                        Ok(Credential::Missing)
-                    } else {
-                        Err(Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: provider_type.to_string(),
-                            message: format!("Environment variable `{key_name}` is missing"),
-                        }))
-                    }
-                }
-            },
-            CredentialLocation::PathFromEnv(env_key) => {
-                // First get the path from environment variable
-                let path = match env::var(&env_key) {
-                    Ok(path) => path,
-                    Err(_) => {
-                        if skip_credential_validation() {
-                            #[cfg(any(test, feature = "e2e_tests"))]
-                            {
-                                tracing::warn!(
-                                "Environment variable {} is required for a model provider of type {} but is missing, so the associated tests will likely fail.",
-                                env_key, provider_type
-
-                            );
-                            }
-                            return Ok(Credential::Missing);
-                        } else {
-                            return Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: provider_type.to_string(),
-                                message: format!("Environment variable `{env_key}` for credentials path is missing"),
-                            }));
-                        }
-                    }
-                };
-                // Then read the file contents
-                match fs::read_to_string(path) {
-                    Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
-                    Err(e) => {
-                        if skip_credential_validation() {
-                            #[cfg(any(test, feature = "e2e_tests"))]
-                            {
-                                tracing::warn!(
-                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
-                                provider_type, e
-                            );
-                            }
-                            Ok(Credential::Missing)
-                        } else {
-                            Err(Error::new(ErrorDetails::ApiKeyMissing {
-                                provider_name: provider_type.to_string(),
-                                message: format!("Failed to read credentials file - {e}"),
-                            }))
-                        }
-                    }
-                }
-            }
-            CredentialLocation::Path(path) => match fs::read_to_string(path) {
-                Ok(contents) => Ok(Credential::FileContents(SecretString::from(contents))),
-                Err(e) => {
-                    if skip_credential_validation() {
-                        #[cfg(any(test, feature = "e2e_tests"))]
-                        {
-                            tracing::warn!(
-                                "Failed to read credentials file for a model provider of type {}, so the associated tests will likely fail: {}",
-                            provider_type, e
-                        );
-                        }
-                        Ok(Credential::Missing)
-                    } else {
-                        Err(Error::new(ErrorDetails::ApiKeyMissing {
-                            provider_name: provider_type.to_string(),
-                            message: format!("Failed to read credentials file - {e}"),
-                        }))
-                    }
-                }
-            },
-            CredentialLocation::Dynamic(key_name) => Ok(Credential::Dynamic(key_name.clone())),
-            CredentialLocation::Sdk => Ok(Credential::Sdk),
-            CredentialLocation::None => Ok(Credential::None),
-        }
-    }
 }
 
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
@@ -2083,36 +2083,91 @@ pub type ModelTable = BaseModelTable<ModelConfig>;
 impl ShorthandModelConfig for ModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = SHORTHAND_MODEL_PREFIXES;
     const MODEL_TYPE: &str = "Model";
-    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(
+        provider_type: &str,
+        model_name: &str,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
-            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(model_name, None)?),
-            "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(model_name, None)?),
+            "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(
+                model_name,
+                AnthropicKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "deepseek" => ProviderConfig::DeepSeek(DeepSeekProvider::new(
+                model_name,
+                DeepSeekKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
             "fireworks" => ProviderConfig::Fireworks(FireworksProvider::new(
                 model_name,
-                None,
+                FireworksKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
                 crate::providers::fireworks::default_parse_think_blocks(),
-            )?),
-            "google_ai_studio_gemini" => ProviderConfig::GoogleAIStudioGemini(
-                GoogleAIStudioGeminiProvider::new(model_name, None)?,
-            ),
+            )),
+            "google_ai_studio_gemini" => {
+                ProviderConfig::GoogleAIStudioGemini(GoogleAIStudioGeminiProvider::new(
+                    model_name,
+                    GoogleAIStudioGeminiKind
+                        .get_defaulted_credential(None, default_credentials)
+                        .await?,
+                )?)
+            }
             "gcp_vertex_gemini" => ProviderConfig::GCPVertexGemini(
-                GCPVertexGeminiProvider::new_shorthand(model_name).await?,
+                GCPVertexGeminiProvider::new_shorthand(model_name, default_credentials).await?,
             ),
             "gcp_vertex_anthropic" => ProviderConfig::GCPVertexAnthropic(
-                GCPVertexAnthropicProvider::new_shorthand(model_name).await?,
+                GCPVertexAnthropicProvider::new_shorthand(model_name, default_credentials).await?,
             ),
-            "groq" => ProviderConfig::Groq(GroqProvider::new(model_name, None)?),
-            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(model_name, None)?),
-            "mistral" => ProviderConfig::Mistral(MistralProvider::new(model_name, None)?),
-            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?),
-            "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(model_name, None)?),
-            "together" => ProviderConfig::Together(TogetherProvider::new(
+            "groq" => ProviderConfig::Groq(GroqProvider::new(
+                model_name,
+                GroqKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "hyperbolic" => ProviderConfig::Hyperbolic(HyperbolicProvider::new(
+                model_name,
+                HyperbolicKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "mistral" => ProviderConfig::Mistral(MistralProvider::new(
+                model_name,
+                MistralKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 None,
+                OpenAIKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+                false,
+            )),
+            "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
+                model_name,
+                OpenRouterKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
+            "together" => ProviderConfig::Together(TogetherProvider::new(
+                model_name,
+                TogetherKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
                 crate::providers::together::default_parse_think_blocks(),
-            )?),
-            "xai" => ProviderConfig::XAI(XAIProvider::new(model_name, None)?),
+            )),
+            "xai" => ProviderConfig::XAI(XAIProvider::new(
+                model_name,
+                XAIKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+            )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => ProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
@@ -2191,7 +2246,7 @@ impl ShorthandModelConfig for ModelConfig {
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, cell::Cell};
+    use std::borrow::Cow;
 
     use crate::cache::CacheEnabledMode;
     use crate::config::SKIP_CREDENTIAL_VALIDATION;
@@ -2203,6 +2258,7 @@ mod tests {
             ContentBlockChunk, FunctionType, ModelInferenceRequestJsonMode, TextChunk,
         },
         model_table::RESERVED_MODEL_PREFIXES,
+        providers::anthropic::AnthropicCredentials,
         providers::dummy::{
             DummyCredentials, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
             DUMMY_STREAMING_RESPONSE,
@@ -2248,7 +2304,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -2360,7 +2416,7 @@ mod tests {
         };
 
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_mock = PostgresConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let tags = HashMap::new();
@@ -2458,7 +2514,7 @@ mod tests {
         });
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -2611,7 +2667,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
@@ -2679,7 +2735,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
@@ -2794,7 +2850,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: &PostgresConnectionInfo::Disabled,
                     credentials: &api_keys,
                     cache_options: &CacheOptions {
@@ -2872,7 +2928,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -2990,7 +3046,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: &http_client,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -3100,7 +3156,10 @@ mod tests {
         );
         // Test that it works with an initialized model
         let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
-            ProviderConfig::Anthropic(AnthropicProvider::new("claude".to_string(), None).unwrap())
+            ProviderConfig::Anthropic(AnthropicProvider::new(
+                "claude".to_string(),
+                AnthropicCredentials::None,
+            ))
         });
         let anthropic_model_config = ModelConfig {
             routing: vec!["anthropic".into()],
@@ -3117,9 +3176,12 @@ mod tests {
             )]),
             timeouts: Default::default(),
         };
-        let model_table: ModelTable = HashMap::from([("claude".into(), anthropic_model_config)])
-            .try_into()
-            .unwrap();
+        let provider_types = ProviderTypesConfig::default();
+        let model_table: ModelTable = ModelTable::new(
+            HashMap::from([("claude".into(), anthropic_model_config)]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
+        .unwrap();
 
         model_table.validate("dummy::claude").unwrap();
     }
@@ -3132,83 +3194,5 @@ mod tests {
                 "Shorthand prefix '{shorthand}' is not in RESERVED_MODEL_PREFIXES"
             );
         }
-    }
-
-    #[test]
-    fn test_racy_get_or_try_init() {
-        let lock: OnceLock<bool> = OnceLock::new();
-
-        // If the closure returns an error, `racy_get_or_try_init` should return an error
-        racy_get_or_try_init(&lock, || {
-            Err::<_, Box<dyn std::error::Error>>("Test error".into())
-        })
-        .expect_err("Test error");
-        assert!(
-            lock.get().is_none(),
-            "OnceLock was initialized after an error"
-        );
-
-        racy_get_or_try_init(&lock, || Ok::<_, Box<dyn std::error::Error>>(true))
-            .expect("racy_get_or_try_init should succeed with successful closure");
-
-        assert_eq!(lock.get(), Some(&true));
-    }
-
-    #[test]
-    fn test_cache_default_creds() {
-        let make_creds_call_count = Cell::new(0);
-        let make_creds = |_| {
-            make_creds_call_count.set(make_creds_call_count.get() + 1);
-            Ok(())
-        };
-
-        let cache = OnceLock::new();
-
-        build_creds_caching_default_with_fn(
-            None,
-            CredentialLocation::None,
-            "test",
-            &cache,
-            make_creds,
-        )
-        .expect("Failed to build creds");
-        // The first call should initialize the OnceLock, and call `make_creds`
-        assert_eq!(make_creds_call_count.get(), 1);
-        assert_eq!(cache.get(), Some(&()));
-
-        // Subsequent calls should not call `make_creds`
-        build_creds_caching_default_with_fn(
-            None,
-            CredentialLocation::None,
-            "test",
-            &cache,
-            make_creds,
-        )
-        .expect("Failed to build creds");
-        assert_eq!(make_creds_call_count.get(), 1);
-    }
-
-    #[test]
-    fn test_dont_cache_non_default_creds() {
-        let make_creds_call_count = Cell::new(0);
-        let make_creds = |_| {
-            make_creds_call_count.set(make_creds_call_count.get() + 1);
-            Ok(())
-        };
-
-        let cache = OnceLock::new();
-
-        // When we provide a `Some(credential_location)`, we should not cache the creds.
-        build_creds_caching_default_with_fn(
-            Some(CredentialLocation::None),
-            CredentialLocation::None,
-            "test",
-            &cache,
-            make_creds,
-        )
-        .expect("Failed to build creds");
-
-        assert_eq!(cache.get(), None);
-        assert_eq!(make_creds_call_count.get(), 1);
     }
 }

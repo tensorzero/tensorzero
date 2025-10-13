@@ -8,6 +8,7 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
+import { toEpisodeUrl } from "~/utils/urls";
 import type {
   DynamicEvaluationRunEpisodeWithFeedback,
   DynamicEvaluationRunStatisticsByMetricName,
@@ -70,7 +71,7 @@ export default function DynamicEvaluationRunEpisodesTable({
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid
                     id={episode.episode_id}
-                    link={`/observability/episodes/${episode.episode_id}`}
+                    link={toEpisodeUrl(episode.episode_id)}
                   />
                 </TableCell>
                 <TableCell>{formatDate(new Date(episode.timestamp))}</TableCell>

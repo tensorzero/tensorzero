@@ -96,8 +96,10 @@ pub struct EmbeddingResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::provider_types::ProviderTypesConfig;
     use crate::config::Config;
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
+    use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;
     use std::collections::HashMap;
     use tracing_test::traced_test;
@@ -126,8 +128,13 @@ mod tests {
         let mut embedding_models = HashMap::new();
         embedding_models.insert("test-model".to_string().into(), embedding_model);
 
+        let provider_types = ProviderTypesConfig::default();
         let config = Config {
-            embedding_models: embedding_models.try_into().unwrap(),
+            embedding_models: crate::embeddings::EmbeddingModelTable::new(
+                embedding_models,
+                Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
+            )
+            .unwrap(),
             ..Default::default()
         };
 
@@ -144,7 +151,7 @@ mod tests {
             cache_options: CacheParamsOptions::default(),
         };
 
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
 
         let result = embeddings(
             config,
@@ -179,7 +186,7 @@ mod tests {
             cache_options: CacheParamsOptions::default(),
         };
 
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
 
         let result = embeddings(
             config,

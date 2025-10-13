@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::fmt::Display;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::future::try_join_all;
@@ -40,15 +39,14 @@ use crate::inference::types::{
 use crate::inference::InferenceProvider;
 use crate::model::CredentialLocation;
 use crate::model::{fully_qualified_name, ModelProvider};
+use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{
     prefill_json_chunk_response, prefill_json_response, AnthropicDocumentSource,
     AnthropicDocumentType, AnthropicMessageDelta, AnthropicStopReason,
 };
-use super::gcp_vertex_gemini::{
-    default_api_key_location, parse_shorthand_url, GCPVertexCredentials, ShorthandUrl,
-};
+use super::gcp_vertex_gemini::{parse_shorthand_url, GCPVertexCredentials, ShorthandUrl};
 use super::helpers::peek_first_chunk;
 use super::openai::convert_stream_error;
 
@@ -70,12 +68,10 @@ pub struct GCPVertexAnthropicProvider {
     credentials: GCPVertexCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<GCPVertexCredentials> = OnceLock::new();
-
 fn handle_gcp_error(
     // This is only used in test mode
     #[cfg_attr(not(any(test, feature = "e2e_tests")), expect(unused_variables))]
-    provider_type: &str,
+    provider_type: ProviderType,
     e: impl Display + Debug,
 ) -> Result<GCPVertexCredentials, Error> {
     if skip_credential_validation() {
@@ -96,7 +92,9 @@ fn handle_gcp_error(
     }
 }
 
-pub async fn make_gcp_sdk_credentials(provider_type: &str) -> Result<GCPVertexCredentials, Error> {
+pub async fn make_gcp_sdk_credentials(
+    provider_type: ProviderType,
+) -> Result<GCPVertexCredentials, Error> {
     let creds_result = google_cloud_auth::credentials::Builder::default().build();
 
     let creds = match creds_result {
@@ -113,24 +111,19 @@ pub async fn make_gcp_sdk_credentials(provider_type: &str) -> Result<GCPVertexCr
 }
 
 impl GCPVertexAnthropicProvider {
-    async fn build_credentials(
-        cred_location: CredentialLocation,
-    ) -> Result<GCPVertexCredentials, Error> {
-        GCPVertexCredentials::new(
-            Some(cred_location),
-            &DEFAULT_CREDENTIALS,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-        )
-        .await
-    }
     // Constructs a provider from a shorthand string of the form:
     // * 'projects/<project_id>/locations/<location>/publishers/anthropic/models/XXX'
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
-    pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let credentials = Self::build_credentials(default_api_key_location()).await?;
+    pub async fn new_shorthand(
+        project_url_path: String,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self, Error> {
+        let credentials = GCPVertexAnthropicKind
+            .get_defaulted_credential(None, default_credentials)
+            .await?;
+
         // We only support model urls with the publisher 'anthropic'
         let shorthand_url = parse_shorthand_url(&project_url_path, "anthropic")?;
         let (location, model_id) = match shorthand_url {
@@ -163,10 +156,11 @@ impl GCPVertexAnthropicProvider {
         location: String,
         project_id: String,
         api_key_location: Option<CredentialLocation>,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self, Error> {
-        let default_location = default_api_key_location();
-        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
-        let credentials = Self::build_credentials(cred_location.clone()).await?;
+        let credentials = GCPVertexAnthropicKind
+            .get_defaulted_credential(api_key_location.as_ref(), default_credentials)
+            .await?;
 
         let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
         let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");

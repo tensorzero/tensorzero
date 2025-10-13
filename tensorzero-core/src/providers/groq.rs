@@ -7,7 +7,6 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::borrow::Cow;
-use std::sync::OnceLock;
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -27,16 +26,12 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::inference::{InferenceProvider, TensorZeroEventError};
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("GROQ_API_KEY".to_string())
-}
 
 const PROVIDER_NAME: &str = "Groq";
 pub const PROVIDER_TYPE: &str = "groq";
@@ -50,23 +45,12 @@ pub struct GroqProvider {
     credentials: GroqCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<GroqCredentials> = OnceLock::new();
-
 impl GroqProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(GroqProvider {
+    pub fn new(model_name: String, credentials: GroqCredentials) -> Self {
+        GroqProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {

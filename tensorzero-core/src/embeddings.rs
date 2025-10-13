@@ -6,15 +6,15 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, CacheValidationInfo, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
-use crate::config::{ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{provider_types::ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
-use crate::model_table::BaseModelTable;
-use crate::model_table::ShorthandModelConfig;
+use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
+use crate::model_table::{OpenAIKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
 use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
@@ -45,12 +45,21 @@ pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 impl ShorthandModelConfig for EmbeddingModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
     const MODEL_TYPE: &str = "Embedding model";
-    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(
+        provider_type: &str,
+        model_name: &str,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
-            "openai" => {
-                EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
-            }
+            "openai" => EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(
+                model_name,
+                None,
+                OpenAIKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+                false,
+            )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
@@ -94,6 +103,7 @@ impl UninitializedEmbeddingModelConfig {
     pub async fn load(
         self,
         provider_types: &ProviderTypesConfig,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<EmbeddingModelConfig, Error> {
         // Handle timeout deprecation
         let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
@@ -115,7 +125,9 @@ impl UninitializedEmbeddingModelConfig {
         };
 
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
-            let provider_config = config.load(provider_types, name.clone()).await?;
+            let provider_config = config
+                .load(provider_types, name.clone(), default_credentials)
+                .await?;
             Ok::<_, Error>((name, provider_config))
         }))
         .await?
@@ -612,7 +624,12 @@ impl UninitializedEmbeddingProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_name: Arc<str>,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<EmbeddingProviderInfo, Error> {
+        let provider_config = self
+            .config
+            .load(provider_types, default_credentials)
+            .await?;
         // Handle timeout deprecation
         let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
             (Some(timeout_ms), None) => Some(timeout_ms),
@@ -633,7 +650,6 @@ impl UninitializedEmbeddingProviderConfig {
             }
         };
 
-        let provider_config = self.config.load(provider_types).await?;
         let extra_body = self.extra_body;
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
@@ -747,6 +763,7 @@ mod tests {
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
+        model_table::ProviderTypeDefaultCredentials,
     };
 
     use super::*;
@@ -832,6 +849,7 @@ mod tests {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
                 api_key_location: Some(crate::model::CredentialLocation::None),
+                api_type: Default::default(),
             },
             timeout_ms: None,
             timeouts: TimeoutsConfig::default(),
@@ -839,7 +857,11 @@ mod tests {
         };
 
         let provider_info = uninitialized_config
-            .load(&ProviderTypesConfig::default(), Arc::from("test_provider"))
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("test_provider"),
+                &ProviderTypeDefaultCredentials::default(),
+            )
             .await
             .unwrap();
 

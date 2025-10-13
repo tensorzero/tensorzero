@@ -14,15 +14,16 @@ use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model::CredentialLocation,
+    model_table::{GCPVertexGeminiKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::gcp_vertex_gemini::{
-        default_api_key_location, location_subdomain_prefix,
+        location_subdomain_prefix,
         optimization::{
             convert_to_optimizer_status, EncryptionSpec, GCPVertexGeminiFineTuningJob,
             GCPVertexGeminiFineTuningRequest, SupervisedHyperparameters, SupervisedTuningSpec,
         },
-        upload_rows_to_gcp_object_store, GCPVertexCredentials, GCPVertexGeminiProvider,
-        GCPVertexGeminiSupervisedRow, PROVIDER_TYPE,
+        upload_rows_to_gcp_object_store, GCPVertexCredentials, GCPVertexGeminiSupervisedRow,
+        PROVIDER_TYPE,
     },
     stored_inference::RenderedSample,
 };
@@ -116,8 +117,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
         let credentials = credentials
             .map(|s| serde_json::from_str(&s))
             .transpose()
-            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?
-            .or_else(|| Some(default_api_key_location()));
+            .map_err(|e| PyErr::new::<PyValueError, _>(format!("Invalid credentials JSON: {e}")))?;
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -185,7 +185,10 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 }
 
 impl UninitializedGCPVertexGeminiSFTConfig {
-    pub async fn load(self) -> Result<GCPVertexGeminiSFTConfig, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<GCPVertexGeminiSFTConfig, Error> {
         Ok(GCPVertexGeminiSFTConfig {
             model: self.model,
             bucket_name: self.bucket_name,
@@ -195,7 +198,8 @@ impl UninitializedGCPVertexGeminiSFTConfig {
             adapter_size: self.adapter_size,
             n_epochs: self.n_epochs,
             export_last_checkpoint_only: self.export_last_checkpoint_only,
-            credentials: GCPVertexGeminiProvider::build_credentials(self.credentials.clone())
+            credentials: GCPVertexGeminiKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
                 .await?,
             credential_location: self.credentials,
             api_base: self.api_base,
@@ -405,9 +409,11 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
-        let gcp_credentials =
-            GCPVertexGeminiProvider::build_credentials(self.credential_location.clone()).await?;
+        let gcp_credentials = crate::model_table::GCPVertexGeminiKind
+            .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
+            .await?;
 
         let auth_headers = gcp_credentials
             .get_auth_headers(
@@ -464,13 +470,6 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                 })
             })?;
 
-        convert_to_optimizer_status(
-            job,
-            self.region.clone(),
-            self.project_id.clone(),
-            self.credential_location
-                .clone()
-                .unwrap_or_else(default_api_key_location),
-        )
+        convert_to_optimizer_status(job, self.region.clone(), self.project_id.clone())
     }
 }

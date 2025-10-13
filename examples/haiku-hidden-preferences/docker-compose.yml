@@ -9,6 +9,7 @@ services:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
     volumes:
+      - clickhouse-data:/var/lib/clickhouse
       - ./data/clickhouse:/var/lib/clickhouse/backups/mounted:ro # optional fixture data
     ulimits:
       nofile:
@@ -81,3 +82,6 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+
+volumes:
+  clickhouse-data:

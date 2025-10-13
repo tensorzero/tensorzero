@@ -3,6 +3,8 @@ services:
     image: clickhouse/clickhouse-server:24.12-alpine
     ports:
       - "8123:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
     environment:
       CLICKHOUSE_USER: chuser
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
@@ -59,3 +61,6 @@ services:
         condition: service_healthy
       gateway:
         condition: service_healthy
+
+volumes:
+  clickhouse-data:

@@ -12,6 +12,8 @@ debug = true
 template_filesystem_access.enabled = true
 template_filesystem_access.base_path = "."
 export.otlp.traces.enabled = true
+export.otlp.traces.extra_headers."x-config-static-header" = "config-static-value"
+export.otlp.traces.extra_headers."x-config-override-header" = "config-original-value"
 unstable_error_json = true
 
 [object_storage]
@@ -27,6 +29,14 @@ routing = ["openai"]
 [models."gpt-4o-mini-2024-07-18".providers.openai]
 type = "openai"
 model_name = "gpt-4o-mini-2024-07-18"
+
+[models."responses-gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."responses-gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_type = "responses"
 
 [models."gpt-4o-mini-2024-07-18-extra-body"]
 routing = ["openai"]
@@ -725,6 +735,14 @@ model_name = "json_reasoner"
 [models.reasoner]
 routing = ["dummy"]
 
+[models.responses-gpt-5]
+routing = ["openai"]
+
+[models.responses-gpt-5.providers.openai]
+type = "openai"
+model_name = "gpt-5"
+api_type = "responses"
+
 [models.reasoner.providers.dummy]
 type = "dummy"
 model_name = "reasoner"
@@ -1303,6 +1321,12 @@ max_tokens = 100
 [functions.basic_test.variants.openai]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.basic_test.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -2078,6 +2102,22 @@ user_template = "../../fixtures/config/functions/json_success/prompt/user_templa
 json_mode = "on"
 max_tokens = 100
 
+[functions.json_success.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.json_success.variants.openai-responses-strict]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/json_success/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "strict"
+max_tokens = 100
+
 [functions.json_success.variants.openai-strict]
 type = "chat_completion"
 model = "gpt-4o-mini-2024-07-18"
@@ -2381,6 +2421,14 @@ max_tokens = 100
 [functions.json_success.variants.mistral_json_mode_off]
 type = "chat_completion"
 model = "open-mistral-nemo-2407"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
+json_mode = "off"
+max_tokens = 100
+
+[functions.json_success.variants.openai-responses_json_mode_off]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/json_success/prompt/user_template.minijinja"
 json_mode = "off"
@@ -2743,6 +2791,22 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
 user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
 json_mode = "on"
+max_tokens = 100
+
+[functions.dynamic_json.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "on"
+max_tokens = 100
+
+[functions.dynamic_json.variants.openai-responses-strict]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/dynamic_json/prompt/system_template.minijinja"
+user_template = "../../fixtures/config/functions/dynamic_json/prompt/user_template.minijinja"
+json_mode = "strict"
 max_tokens = 100
 
 [functions.dynamic_json.variants.openai-strict]
@@ -3143,6 +3207,12 @@ model = "gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 max_tokens = 100
 
+[functions.weather_helper.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
+max_tokens = 100
+
 [functions.weather_helper.variants.openai-o1]
 type = "chat_completion"
 model = "o1-2024-12-17"
@@ -3190,6 +3260,13 @@ tool_choice = "auto"
 type = "chat_completion"
 weight = 1
 model = "gpt-4o-mini-2024-07-18"
+system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
+max_tokens = 100
+
+[functions.weather_helper_parallel.variants.openai-responses]
+type = "chat_completion"
+weight = 1
+model = "responses-gpt-4o-mini-2024-07-18"
 system_template = "../../fixtures/config/functions/weather_helper_parallel/prompt/system_template.minijinja"
 max_tokens = 100
 
@@ -3554,6 +3631,14 @@ type = "chat"
 [functions.image_judger.variants.honest_answer]
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
+
+[functions.openai_responses_gpt5]
+type = "chat"
+
+[functions.openai_responses_gpt5.variants.openai]
+type = "chat_completion"
+model = "responses-gpt-5"
+
 
 [functions.openai_with_assistant_schema]
 type = "chat"

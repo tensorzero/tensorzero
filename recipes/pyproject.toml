@@ -5,9 +5,9 @@ requires-python = ">=3.9"
 dependencies = [
     "clickhouse-connect",
     "pandas",
+    "pydantic",
     "tensorzero",
     "tiktoken",
-    "pydantic",
     "toml",
 ]
 
