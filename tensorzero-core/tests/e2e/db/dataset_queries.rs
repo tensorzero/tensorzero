@@ -567,11 +567,11 @@ async fn test_get_dataset_rows_pages_correctly() {
 }
 
 #[tokio::test]
-async fn test_get_number_of_datasets() {
+async fn test_count_datasets() {
     let clickhouse = get_clickhouse().await;
 
     // Get initial count
-    let initial_count = clickhouse.get_number_of_datasets().await.unwrap();
+    let initial_count = clickhouse.count_datasets().await.unwrap();
 
     // Insert datapoints in two different datasets
     let dataset1 = format!("test_dataset_{}", Uuid::now_v7().simple());
@@ -629,7 +629,7 @@ async fn test_get_number_of_datasets() {
         .unwrap();
 
     // Count should increase by 2
-    let new_count = clickhouse.get_number_of_datasets().await.unwrap();
+    let new_count = clickhouse.count_datasets().await.unwrap();
     assert_eq!(new_count, initial_count + 2);
 }
 

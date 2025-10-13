@@ -223,7 +223,7 @@ pub trait DatasetQueries {
     ) -> Result<Vec<DatasetMetadata>, Error>;
 
     /// Gets the count of unique dataset names
-    async fn get_number_of_datasets(&self) -> Result<u32, Error>;
+    async fn count_datasets(&self) -> Result<u32, Error>;
 
     /// Marks a datapoint as stale by inserting a new row with staled_at set to now
     async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error>;
@@ -510,7 +510,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             .collect::<Result<Vec<_>, _>>()
     }
 
-    async fn get_number_of_datasets(&self) -> Result<u32, Error> {
+    async fn count_datasets(&self) -> Result<u32, Error> {
         let query = r"
             SELECT
                 toUInt32(uniqExact(dataset_name)) as count
@@ -1937,7 +1937,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_number_of_datasets_executes_successfully() {
+    async fn test_count_datasets_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
             .expect_run_query_synchronous()
@@ -1973,7 +1973,7 @@ mod tests {
             });
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let result = conn.get_number_of_datasets().await.unwrap();
+        let result = conn.count_datasets().await.unwrap();
 
         assert_eq!(result, 5, "Should return 5 datasets");
     }

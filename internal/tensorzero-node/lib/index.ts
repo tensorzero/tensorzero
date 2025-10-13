@@ -307,8 +307,8 @@ export class DatabaseClient {
     return JSON.parse(result) as DatasetDetailRow[];
   }
 
-  async getNumberOfDatasets(): Promise<number> {
-    return this.nativeDatabaseClient.getNumberOfDatasets();
+  async countDatasets(): Promise<number> {
+    return this.nativeDatabaseClient.countDatasets();
   }
 
   async staleDatapoint(params: StaleDatapointParams): Promise<void> {

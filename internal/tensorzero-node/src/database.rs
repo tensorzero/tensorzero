@@ -92,8 +92,8 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn get_number_of_datasets(&self) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, get_number_of_datasets)
+    pub async fn count_datasets(&self) -> Result<u32, napi::Error> {
+        napi_call_no_deserializing!(&self, count_datasets)
     }
 
     #[napi]
