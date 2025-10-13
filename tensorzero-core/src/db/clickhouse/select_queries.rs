@@ -1,8 +1,11 @@
-use crate::db::{
-    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
-    BooleanMetricFeedbackRow, CommentFeedbackRow, DemonstrationFeedbackRow, EpisodeByIdRow,
-    FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant, FeedbackRow, FloatMetricFeedbackRow,
-    TableBounds, TableBoundsWithCount,
+use crate::{
+    db::{
+        clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
+        BooleanMetricFeedbackRow, CommentFeedbackRow, DemonstrationFeedbackRow, EpisodeByIdRow,
+        FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant, FeedbackRow,
+        FloatMetricFeedbackRow, TableBounds, TableBoundsWithCount,
+    },
+    serde_util::deserialize_u64,
 };
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -938,6 +941,7 @@ fn parse_table_bounds(response: &str) -> Result<TableBounds, Error> {
 fn parse_count(response: &str) -> Result<u64, Error> {
     #[derive(Deserialize)]
     struct CountResult {
+        #[serde(deserialize_with = "deserialize_u64")]
         count: u64,
     }
 
