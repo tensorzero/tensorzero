@@ -188,24 +188,23 @@ fn compare_migration_tables(
 ) -> MigrationTableState {
     let expected: BTreeSet<_> = expected_migration_ids.into_iter().collect();
     let actual: BTreeSet<_> = actual_migration_ids.into_iter().collect();
-    tracing::debug!("Actual   migration ids: {actual:?}");
-    tracing::debug!("Expected migration ids: {expected:?}");
+    tracing::debug!("Actual   migration IDs: {actual:?}");
+    tracing::debug!("Expected migration IDs: {expected:?}");
 
     if actual == expected {
-        tracing::debug!("All required migrations present, no extra migrations present.");
+        tracing::debug!("ClickHouse has every required migration and no extra migrations.");
         MigrationTableState::JustRight
     } else if actual.is_superset(&expected) {
-        tracing::warn!("Extra migrations were run");
+        tracing::warn!("ClickHouse previously applied migrations that are not known to the gateway. This means you're likely running an older version of TensorZero.");
         tracing::warn!("Actual   migration ids: {actual:?}");
         tracing::warn!("Expected migration ids: {expected:?}");
         MigrationTableState::TooMany
     } else if expected.is_superset(&actual) {
-        tracing::info!("Some required migrations missing; these will be run unless `is_manual_run` is False and
-        `disable_automatic_migrations` is set to true.");
+        tracing::debug!("ClickHouse is missing required migrations. The gateway will run them unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
         MigrationTableState::TooFew
     } else {
-        tracing::warn!("Some required migrations are missing and some extra migrations were run. The missing migrations
-        will be run unless `is_manual_run` is False and `disable_automatic_migrations` is set to true.");
+        tracing::debug!("ClickHouse is missing required migrations. The gateway will run them unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
+        tracing::warn!("ClickHouse previously applied migrations that are not known to the gateway. This means you're likely running an older version of TensorZero.");
         tracing::warn!("Actual   migration ids: {actual:?}");
         tracing::warn!("Expected migration ids: {expected:?}");
         MigrationTableState::Inconsistent
