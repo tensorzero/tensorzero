@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-#[cfg(any(test, feature = "pyo3"))]
+#[cfg(feature = "pyo3")]
 use crate::model::CredentialLocation;
 use crate::{
     cache::CacheOptions,

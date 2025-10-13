@@ -33,7 +33,7 @@ use crate::{
     stored_inference::RenderedSample,
 };
 
-#[cfg(any(test, feature = "pyo3"))]
+#[cfg(feature = "pyo3")]
 use crate::model::CredentialLocation;
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
