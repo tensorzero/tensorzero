@@ -495,7 +495,6 @@ impl SelectQueries for ClickHouseConnectionInfo {
             format!(
                 r"
                 SELECT
-                    'demonstration' AS type,
                     id,
                     inference_id,
                     value,
