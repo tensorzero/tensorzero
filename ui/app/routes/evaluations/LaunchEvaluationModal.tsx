@@ -4,6 +4,7 @@ import { Button } from "~/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -287,6 +288,9 @@ export default function LaunchEvaluationModal({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Launch Evaluation</DialogTitle>
+          <DialogDescription>
+            Run an evaluation on a dataset to measure variant performance.
+          </DialogDescription>
         </DialogHeader>
         <EvaluationForm
           key={initialFormState?.renderKey}
