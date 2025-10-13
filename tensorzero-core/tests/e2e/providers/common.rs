@@ -1136,7 +1136,6 @@ pub async fn test_provider_type_fallback_credentials_with_provider(provider: E2E
     // Extract the env var name from the credential location
     let original_env_var = match &default_location {
         CredentialLocation::Env(var_name) => var_name.clone(),
-        // TODO: deal with this
         CredentialLocation::PathFromEnv(var_name) => var_name.clone(),
         _ => {
             println!(
