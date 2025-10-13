@@ -2,8 +2,8 @@ use std::sync::{atomic::AtomicU64, Arc};
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::TimeDelta;
 use rlt::{BenchSuite, IterInfo, IterReport, Status};
+use sqlx::postgres::types::PgInterval;
 use sqlx::PgPool;
 use tensorzero_core::{
     db::{postgres::PostgresConnectionInfo, ConsumeTicketsRequest, RateLimitQueries},
@@ -46,11 +46,11 @@ impl Contention {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct BucketSettings {
     pub capacity: i64,
     pub refill_amount: i64,
-    pub interval: TimeDelta,
+    pub interval: PgInterval,
 }
 
 #[derive(Clone)]
@@ -163,6 +163,10 @@ pub fn create_bucket_settings(capacity: i64, refill_amount: i64) -> BucketSettin
     BucketSettings {
         capacity,
         refill_amount,
-        interval: TimeDelta::seconds(1), // 1 second refill interval
+        interval: PgInterval {
+            months: 0,
+            days: 0,
+            microseconds: 1_000_000, // 1 second
+        },
     }
 }

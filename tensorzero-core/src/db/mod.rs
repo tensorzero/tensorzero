@@ -1,6 +1,7 @@
 use async_trait::async_trait;
-use chrono::{DateTime, TimeDelta, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
 
 use crate::db::clickhouse::dataset_queries::DatasetQueries;
@@ -133,7 +134,7 @@ pub trait RateLimitQueries {
         key: &str,
         capacity: u64,
         refill_amount: u64,
-        refill_interval: TimeDelta,
+        refill_interval: PgInterval,
     ) -> Result<u64, Error>;
 }
 
@@ -143,7 +144,7 @@ pub struct ConsumeTicketsRequest {
     pub requested: u64,
     pub capacity: u64,
     pub refill_amount: u64,
-    pub refill_interval: TimeDelta,
+    pub refill_interval: PgInterval,
 }
 
 #[derive(Debug)]
@@ -159,7 +160,7 @@ pub struct ReturnTicketsRequest {
     pub returned: u64,
     pub capacity: u64,
     pub refill_amount: u64,
-    pub refill_interval: TimeDelta,
+    pub refill_interval: PgInterval,
 }
 
 pub struct ReturnTicketsReceipt {

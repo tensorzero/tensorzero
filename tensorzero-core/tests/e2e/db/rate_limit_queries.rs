@@ -18,7 +18,9 @@ fn create_consume_request(
         requested,
         capacity,
         refill_amount,
-        refill_interval,
+        refill_interval: refill_interval
+            .try_into()
+            .expect("Failed to convert Duration to PgInterval"),
     }
 }
 
@@ -34,7 +36,9 @@ fn create_return_request(
         returned,
         capacity,
         refill_amount,
-        refill_interval,
+        refill_interval: refill_interval
+            .try_into()
+            .expect("Failed to convert Duration to PgInterval"),
     }
 }
 
@@ -65,7 +69,14 @@ async fn test_atomic_multi_key_all_or_nothing(pool: PgPool) {
 
     // Verify key1 balance unchanged - no partial consumption
     let balance = conn
-        .get_balance("key1", 100, 10, Duration::seconds(60))
+        .get_balance(
+            "key1",
+            100,
+            10,
+            Duration::seconds(60)
+                .try_into()
+                .expect("Failed to convert Duration"),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -158,7 +169,14 @@ async fn test_race_condition_no_over_consumption(pool: PgPool) {
 
     // Final balance should be 0
     let final_balance = conn
-        .get_balance(key, 100, 10, Duration::seconds(60))
+        .get_balance(
+            key,
+            100,
+            10,
+            Duration::seconds(60)
+                .try_into()
+                .expect("Failed to convert Duration"),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -208,7 +226,14 @@ async fn test_race_condition_interleaved_consume_return(pool: PgPool) {
 
     // Final balance should be consistent and within bounds
     let final_balance = conn
-        .get_balance(key, 100, 10, Duration::seconds(60))
+        .get_balance(
+            key,
+            100,
+            10,
+            Duration::seconds(60)
+                .try_into()
+                .expect("Failed to convert Duration"),
+        )
         .await
         .unwrap();
     assert!(
@@ -233,7 +258,14 @@ async fn test_rate_limit_lifecycle(pool: PgPool) {
 
     // Phase 2: Check balance
     let balance = conn
-        .get_balance(key, 100, 10, Duration::seconds(60))
+        .get_balance(
+            key,
+            100,
+            10,
+            Duration::seconds(60)
+                .try_into()
+                .expect("Failed to convert Duration"),
+        )
         .await
         .unwrap();
     assert_eq!(balance, 40);
@@ -299,7 +331,14 @@ async fn test_refill_mechanics(pool: PgPool) {
     // Phase 2: Wait for single refill
     tokio::time::sleep(tokio::time::Duration::from_millis(150)).await;
     let balance = conn
-        .get_balance(key, 100, 30, Duration::milliseconds(100))
+        .get_balance(
+            key,
+            100,
+            30,
+            Duration::milliseconds(100)
+                .try_into()
+                .expect("Failed to convert Duration"),
+        )
         .await
         .unwrap();
     assert_eq!(balance, 50); // 20 + 30 refill
@@ -307,7 +346,14 @@ async fn test_refill_mechanics(pool: PgPool) {
     // Phase 3: Wait for multiple refills and verify capping
     tokio::time::sleep(tokio::time::Duration::from_millis(300)).await; // 3 more intervals
     let balance = conn
-        .get_balance(key, 100, 30, Duration::milliseconds(100))
+        .get_balance(
+            key,
+            100,
+            30,
+            Duration::milliseconds(100)
+                .try_into()
+                .expect("Failed to convert Duration"),
+        )
         .await
         .unwrap();
     assert_eq!(balance, 100); // Should be capped at capacity
@@ -320,7 +366,14 @@ async fn test_refill_mechanics(pool: PgPool) {
 
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
     let balance = conn
-        .get_balance(zero_refill_key, 100, 0, Duration::milliseconds(100))
+        .get_balance(
+            zero_refill_key,
+            100,
+            0,
+            Duration::milliseconds(100)
+                .try_into()
+                .expect("Failed to convert Duration"),
+        )
         .await
         .unwrap();
     assert_eq!(balance, 60); // No refill should occur
@@ -347,7 +400,14 @@ async fn test_new_bucket_behavior(pool: PgPool) {
 
     // New bucket starts at capacity
     let balance = conn
-        .get_balance("new_bucket", 100, 10, Duration::seconds(60))
+        .get_balance(
+            "new_bucket",
+            100,
+            10,
+            Duration::seconds(60)
+                .try_into()
+                .expect("Failed to convert Duration"),
+        )
         .await
         .unwrap();
     assert_eq!(balance, 100);
