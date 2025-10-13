@@ -48,11 +48,11 @@ Take what you need, adopt incrementally, and complement with other tools.
 > **Integrate with TensorZero once and access every major LLM provider.**
 
 - [x] **[Call any LLM](https://www.tensorzero.com/docs/gateway/call-any-llm)** (API or self-hosted) through a single unified API
-- [x] Infer with **[streaming](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)**, **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, structured generation (JSON mode), **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/guides/multimodal-inference)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
+- [x] Infer with **[streaming](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)**, **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, structured generation, **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/guides/multimodal-inference)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
 - [x] **[Create prompt templates and schemas](https://www.tensorzero.com/docs/gateway/create-a-prompt-template)** to enforce a consistent, typed interface between your application and the LLMs
 - [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: **[<1ms p99 latency overhead at 10k+ QPS](https://www.tensorzero.com/docs/gateway/benchmarks)**
-- [x] **[Integrate using our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API (use any programming language)](https://www.tensorzero.com/docs/gateway/clients)**
-- [x] **[Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks)**
+- [x] Use any programming language: **[integrate via our Python client, any OpenAI SDK, or our HTTP API](https://www.tensorzero.com/docs/gateway/clients)**
+- [x] **[Ensure high availability](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks)** with routing, retries, fallbacks, load balancing, granular timeouts, etc.
 - [x] **[Enforce custom rate limits](https://www.tensorzero.com/docs/operations/enforce-custom-rate-limits)** with granular scopes (e.g. user-defined tags) to keep usage under control
 - [ ] Soon: spend tracking and budgeting, service accounts
 
