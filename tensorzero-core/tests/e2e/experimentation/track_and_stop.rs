@@ -116,6 +116,9 @@ const CLICKHOUSE_FLUSH_DELAY_MS: u64 = 1000;
 /// Delay after ClickHouse flush for feedback to allow background update (milliseconds).
 const BACKGROUND_UPDATE_DELAY_MS: u64 = 1000;
 
+/// Delay for background task initialization when creating a new client (milliseconds).
+const BACKGROUND_TASK_INIT_DELAY_MS: u64 = 1000;
+
 // ============================================================================
 // Test Configuration
 // ============================================================================
@@ -871,7 +874,7 @@ async fn test_effect_of_delta_on_stopping() {
     let client_large = std::sync::Arc::new(client_large);
 
     // Give time for background task to process existing data
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
     // Run one batch and check if stopped
     let results_large = run_inference_batch(&client_large, 50).await;
@@ -901,7 +904,7 @@ async fn test_effect_of_delta_on_stopping() {
         make_embedded_gateway_with_existing_clickhouse(&config_small, &clickhouse).await;
     let client_small = std::sync::Arc::new(client_small);
 
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
     let results_small = run_inference_batch(&client_small, 50).await;
     let variants_small: Vec<String> = results_small.into_iter().map(|(_, v)| v).collect();
@@ -991,7 +994,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let (client_large, _) =
         make_embedded_gateway_with_existing_clickhouse(&config_large, &clickhouse).await;
     let client_large = std::sync::Arc::new(client_large);
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
     let results_large = run_inference_batch(&client_large, 50).await;
     let variants_large: Vec<String> = results_large.into_iter().map(|(_, v)| v).collect();
@@ -1019,7 +1022,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let (client_small, _) =
         make_embedded_gateway_with_existing_clickhouse(&config_small, &clickhouse).await;
     let client_small = std::sync::Arc::new(client_small);
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
     let results_small = run_inference_batch(&client_small, 50).await;
     let variants_small: Vec<String> = results_small.into_iter().map(|(_, v)| v).collect();
@@ -1149,7 +1152,7 @@ async fn test_cold_start_with_stopped_experiment() {
     let new_client = std::sync::Arc::new(new_client);
 
     // Give the new client time to initialize and check the database
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
     // Run a batch of inferences with the new client
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
@@ -1303,7 +1306,7 @@ async fn test_new_variant_triggers_reexploration() {
     let new_bandit = std::sync::Arc::new(new_bandit);
 
     // Give the new client time to initialize
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
     // Run batch 0 to verify that only the winner and new variant receive pulls
 
@@ -1535,7 +1538,7 @@ async fn test_remove_winner_variant_after_stopping() {
     let new_client = std::sync::Arc::new(new_client);
     let new_bandit = std::sync::Arc::new(new_bandit);
 
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
     // Run a batch and verify both remaining variants are explored
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
@@ -1669,7 +1672,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
         make_embedded_gateway_with_existing_clickhouse(&new_config, &clickhouse).await;
     let new_client = std::sync::Arc::new(new_client);
 
-    tokio::time::sleep(Duration::from_millis(2000)).await;
+    tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
     // Run a batch and verify variant_b (winner) is still heavily sampled
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
