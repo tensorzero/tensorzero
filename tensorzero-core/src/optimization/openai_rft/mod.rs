@@ -20,7 +20,6 @@ use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    model::{CredentialLocation, CredentialLocationWithFallback},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
         optimization::{
@@ -32,6 +31,9 @@ use crate::{
     },
     stored_inference::RenderedSample,
 };
+
+#[cfg(any(test, feature = "pyo3"))]
+use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 

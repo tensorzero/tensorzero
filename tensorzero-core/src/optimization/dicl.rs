@@ -3,6 +3,8 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+#[cfg(any(test, feature = "pyo3"))]
+use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
@@ -17,7 +19,6 @@ use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
-    model::{CredentialLocation, CredentialLocationWithFallback},
     model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::OpenAICredentials,
