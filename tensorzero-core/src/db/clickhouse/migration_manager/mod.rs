@@ -200,10 +200,10 @@ fn compare_migration_tables(
         tracing::warn!("Expected migration IDs: {expected:?}");
         MigrationTableState::TooMany
     } else if expected.is_superset(&actual) {
-        tracing::debug!("ClickHouse is missing required migrations. The gateway will run them unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
+        tracing::debug!("ClickHouse is missing required migrations. The gateway will run them automatically unless `disable_automatic_migrations` is true.");
         MigrationTableState::TooFew
     } else {
-        tracing::warn!("ClickHouse is in an inconsistent state. It is missing required migrations but previously applied migrations that are not known to the gateway. The gateway will run the missing migrations unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
+        tracing::warn!("ClickHouse is in an inconsistent state. It is missing required migrations but previously applied migrations that are not known to the gateway. The gateway will run the missing migrations automatically unless `disable_automatic_migrations` is true.");
         tracing::warn!("Actual   migration IDs: {actual:?}");
         tracing::warn!("Expected migration IDs: {expected:?}");
         MigrationTableState::Inconsistent
