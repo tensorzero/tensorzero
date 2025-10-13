@@ -7,7 +7,7 @@ import {
   queryMetricsWithFeedback,
   type CommentFeedbackRow,
 } from "./feedback";
-import { getDatabaseClient } from "./client.server";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 
 test("queryCommentFeedbackByTargetId", async () => {
   const target_id = "01942e26-4693-7e80-8591-47b98e25d721";
@@ -223,7 +223,7 @@ test("pollForFeedbackItem should find feedback when it exists", async () => {
   const targetId = "01942e26-4693-7e80-8591-47b98e25d721";
   const pageSize = 10;
 
-  const dbClient = await getDatabaseClient();
+  const dbClient = await getNativeDatabaseClient();
   // RUn the queryFeedbackByTargetId function to return feedback with the target ID
   const originalQueryFeedback = await dbClient.queryFeedbackByTargetId(
     targetId,

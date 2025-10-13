@@ -7,7 +7,7 @@ import {
   queryDemonstrationFeedbackByInferenceId,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
-import { getDatabaseClient } from "~/utils/clickhouse/client.server";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -77,7 +77,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // --- Define all promises, conditionally choosing the feedback promise ---
 
-  const dbClient = await getDatabaseClient();
+  const dbClient = await getNativeDatabaseClient();
 
   const inferencePromise = queryInferenceById(inference_id);
   const modelInferencesPromise =

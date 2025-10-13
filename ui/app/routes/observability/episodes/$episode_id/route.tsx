@@ -7,7 +7,7 @@ import {
   pollForFeedbackItem,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
-import { getDatabaseClient } from "~/utils/clickhouse/client.server";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -54,7 +54,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
-  const dbClient = await getDatabaseClient();
+  const dbClient = await getNativeDatabaseClient();
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table as it is eventually consistent.

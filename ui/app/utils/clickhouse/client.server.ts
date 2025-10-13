@@ -1,7 +1,6 @@
 import { createClient, type ClickHouseClient } from "@clickhouse/client";
 import { canUseDOM, isErrorLike } from "../common";
 import { getEnv } from "../env.server";
-import type { DatabaseClient } from "tensorzero-node";
 
 class ClickHouseClientError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -115,33 +114,4 @@ function isPromiseLike<T>(value: unknown): value is Promise<T> {
     typeof (value as Promise<T>).then === "function" &&
     typeof (value as Promise<T>).catch === "function"
   );
-}
-
-let _databaseClient: DatabaseClient | undefined;
-export async function getDatabaseClient(): Promise<DatabaseClient> {
-  if (canUseDOM) {
-    throw new ClickHouseClientError(
-      "DatabaseClient can only be used on the server side",
-    );
-  }
-
-  if (_databaseClient) {
-    return _databaseClient;
-  }
-
-  const env = getEnv();
-  try {
-    const { DatabaseClient } = await import("tensorzero-node");
-    _databaseClient = await DatabaseClient.fromClickhouseUrl(
-      env.TENSORZERO_CLICKHOUSE_URL,
-    );
-    return _databaseClient;
-  } catch (error) {
-    throw new ClickHouseClientError(
-      "Failed to create DatabaseClient. Please ensure that the `TENSORZERO_CLICKHOUSE_URL` environment variable is set correctly.\n\n" +
-        "Failed with the following message:\n\n" +
-        (isErrorLike(error) ? error.message : String(error)),
-      { cause: error },
-    );
-  }
 }

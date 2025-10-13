@@ -1,6 +1,7 @@
 import { type TableBounds, TableBoundsSchema, CountSchema } from "./common";
 import { data } from "react-router";
-import { getClickhouseClient, getDatabaseClient } from "./client.server";
+import { getClickhouseClient } from "./client.server";
+import { getNativeDatabaseClient } from "../tensorzero/native_client.server";
 import { z } from "zod";
 import { logger } from "~/utils/logger";
 import type { FeedbackRow } from "tensorzero-node";
@@ -848,7 +849,7 @@ export async function pollForFeedbackItem(
   maxRetries: number = 10,
   retryDelay: number = 200,
 ): Promise<FeedbackRow[]> {
-  const dbClient = await getDatabaseClient();
+  const dbClient = await getNativeDatabaseClient();
 
   let feedback: FeedbackRow[] = [];
   let found = false;
