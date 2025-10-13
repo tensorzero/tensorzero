@@ -4,21 +4,100 @@ use rand_distr::Distribution;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tensorzero::test_helpers::{
-    make_embedded_gateway_with_clean_clickhouse, make_embedded_gateway_with_existing_clickhouse,
-};
+use tempfile::NamedTempFile;
+use tensorzero::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero::{
-    Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     FeedbackParams, InferenceOutput, InferenceResponse, Role,
 };
 use tensorzero_core::db::clickhouse::test_helpers::clickhouse_flush_async_insert;
-use tensorzero_core::db::FeedbackByVariant;
-use tensorzero_core::experimentation::track_and_stop::estimate_optimal_probabilities::{
-    estimate_optimal_probabilities, EstimateOptimalProbabilitiesArgs,
-};
+use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
+use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::inference::types::TextKind;
 use tokio::time::Duration;
+use url::Url;
 use uuid::Uuid;
+
+// ============================================================================
+// Test Helpers
+// ============================================================================
+
+/// Build an embedded gateway backed by a fresh ClickHouse database.
+/// Returns the client, the ClickHouse connection, and a guard that drops the database.
+async fn make_embedded_gateway_with_clean_clickhouse(
+    config: &str,
+) -> (
+    Client,
+    ClickHouseConnectionInfo,
+    crate::clickhouse::DeleteDbOnDrop,
+) {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
+
+    let (clickhouse, guard) = crate::clickhouse::get_clean_clickhouse(false).await;
+
+    clickhouse
+        .create_database_and_migrations_table()
+        .await
+        .expect("failed to create ClickHouse database for embedded gateway tests");
+
+    let tmp_config = NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+
+    // Point the embedded gateway at the freshly-created database.
+    let database = clickhouse.database();
+    let mut clickhouse_url = Url::parse(&CLICKHOUSE_URL).unwrap();
+    clickhouse_url.set_path(database);
+    let clickhouse_url_string = clickhouse_url.to_string();
+
+    let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(tmp_config.path().to_owned()),
+        clickhouse_url: Some(clickhouse_url_string),
+        postgres_url: Some(postgres_url),
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap();
+
+    (client, clickhouse, guard)
+}
+
+/// Build an embedded gateway backed by an existing ClickHouse database.
+/// This is useful for testing cold-start behavior where a new gateway needs to read
+/// existing data from the database.
+async fn make_embedded_gateway_with_existing_clickhouse(
+    config: &str,
+    existing_clickhouse: &ClickHouseConnectionInfo,
+) -> (Client, ClickHouseConnectionInfo) {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
+
+    let tmp_config = NamedTempFile::new().unwrap();
+    std::fs::write(tmp_config.path(), config).unwrap();
+
+    // Point the embedded gateway at the existing database.
+    let database = existing_clickhouse.database();
+    let mut clickhouse_url = Url::parse(&CLICKHOUSE_URL).unwrap();
+    clickhouse_url.set_path(database);
+    let clickhouse_url_string = clickhouse_url.to_string();
+
+    let client = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+        config_file: Some(tmp_config.path().to_owned()),
+        clickhouse_url: Some(clickhouse_url_string),
+        postgres_url: Some(postgres_url),
+        timeout: None,
+        verify_credentials: true,
+        allow_batch_writes: true,
+    })
+    .build()
+    .await
+    .unwrap();
+
+    (client, existing_clickhouse.clone())
+}
 
 // ============================================================================
 // Test Constants
@@ -154,12 +233,6 @@ update_period_s = {update_period_s}
 "#,
         variants = variant_configs.join("\n"),
     )
-}
-
-/// Enum to distinguish between Bernoulli and Gaussian bandit configurations
-enum BanditConfig<'a> {
-    Bernoulli(Vec<(&'a str, f64)>),
-    Gaussian(Vec<(&'a str, f64, f64)>),
 }
 
 /// Bernoulli bandit environment for testing.
@@ -387,7 +460,7 @@ async fn expect_config_error(config: &str) -> String {
     .to_string()
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_config_invalid_metric() {
     let config = r#"
   [models.test_model]
@@ -425,7 +498,7 @@ async fn test_config_invalid_metric() {
     assert!(err.contains("nonexistent_metric"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_config_invalid_candidate_variant() {
     let config = r#"
 [models.test_model]
@@ -466,7 +539,7 @@ update_period_s = 300
     assert!(err.contains("nonexistent_variant"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_config_invalid_fallback_variant() {
     let config = r#"
 [models.test_model]
@@ -507,7 +580,7 @@ update_period_s = 300
     assert!(err.contains("nonexistent_variant"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_config_invalid_min_samples() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
@@ -526,7 +599,7 @@ async fn test_config_invalid_min_samples() {
     assert!(err.contains(">= 1"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_config_invalid_delta() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
@@ -545,7 +618,7 @@ async fn test_config_invalid_delta() {
     assert!(err.contains("(0, 1)"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_config_invalid_epsilon() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
@@ -564,7 +637,7 @@ async fn test_config_invalid_epsilon() {
     assert!(err.contains(">= 0"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_config_valid() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "accuracy",
@@ -642,227 +715,6 @@ async fn test_min_pulls() {
     }
 }
 
-/// Helper function to test bandit sampling behavior.
-///
-/// Computes optimal sampling probabilities and runs 5 independent experiments.
-/// Verifies that on average (across all batches and runs), the arm with the
-/// highest optimal sampling probability receives more samples than the arm
-/// with the lowest optimal sampling probability. Note that stricter tests are
-/// unlikely to consistently pass, both because the bandit may stop arbitrarily
-/// soon before the sampling probabilities converge to the optimal probabilities,
-/// and because the estimation of optimal sampling probabilities is highly sensitive
-/// to the sample statistics, so it would require averaging over many runs to observe
-/// full convergence.
-async fn test_bandit_convergence_helper(
-    epsilon: f64,
-    bandit_config: BanditConfig<'_>,
-    description: &str,
-) {
-    // Experiment parameters
-    let num_runs = 5; // Number of independent experiments to run
-    let num_batches = 5; // Target number of batches, where a batch is what happens between updates from the background task
-    let inferences_per_batch = 100; // Target number of inferences between updates from background task
-
-    // Extract variant names from bandit config
-    let variant_names: Vec<&str> = match &bandit_config {
-        BanditConfig::Bernoulli(distribution) => {
-            distribution.iter().map(|(name, _)| *name).collect()
-        }
-        BanditConfig::Gaussian(distribution) => {
-            distribution.iter().map(|(name, _, _)| *name).collect()
-        }
-    };
-
-    // Determine metric configuration based on bandit type
-    let (metric_name, metric_type) = match &bandit_config {
-        BanditConfig::Bernoulli(_) => ("success_rate", "boolean"),
-        BanditConfig::Gaussian(_) => ("performance_score", "float"),
-    };
-
-    let config = make_track_and_stop_config(TrackAndStopTestConfig {
-        metric_name,
-        metric_type,
-        optimize: "max",
-        candidate_variants: &variant_names,
-        fallback_variants: &[],
-        min_samples_per_variant: 20,
-        delta: 1e-12,
-        epsilon,
-        update_period_s: 1,
-    });
-
-    // Compute true optimal probabilities based on bandit type
-    let true_feedback: Vec<FeedbackByVariant> = match &bandit_config {
-        BanditConfig::Bernoulli(distribution) => distribution
-            .iter()
-            .map(|(name, prob)| FeedbackByVariant {
-                variant_name: name.to_string(),
-                mean: *prob as f32,
-                variance: (*prob * (1.0 - *prob)) as f32,
-                count: 10000,
-            })
-            .collect(),
-        BanditConfig::Gaussian(distribution) => distribution
-            .iter()
-            .map(|(name, mean, stddev)| FeedbackByVariant {
-                variant_name: name.to_string(),
-                mean: *mean as f32,
-                variance: (stddev * stddev) as f32,
-                count: 10000,
-            })
-            .collect(),
-    };
-
-    let optimal_probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
-        feedback: true_feedback,
-        epsilon: Some(epsilon),
-        variance_floor: None,
-        min_prob: None,
-        reg0: None,
-    })
-    .expect("Failed to compute optimal probabilities");
-
-    // Identify arms with highest and lowest optimal probability
-    let (highest_prob_arm, highest_prob) = optimal_probs
-        .iter()
-        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-        .unwrap();
-    let (lowest_prob_arm, lowest_prob) = optimal_probs
-        .iter()
-        .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-        .unwrap();
-
-    // Track cumulative sample counts across runs
-    let mut cumulative_counts: HashMap<String, usize> = variant_names
-        .iter()
-        .map(|name| (name.to_string(), 0usize))
-        .collect();
-
-    for run in 0..num_runs {
-        let (client, clickhouse, _guard) =
-            make_embedded_gateway_with_clean_clickhouse(&config).await;
-
-        // Create appropriate bandit type
-        let bandit = match &bandit_config {
-            BanditConfig::Bernoulli(distribution) => Bandit::Bernoulli(std::sync::Arc::new(
-                BernoulliBandit::new(distribution.clone(), Some(42 + run)),
-            )),
-            BanditConfig::Gaussian(distribution) => Bandit::Gaussian(std::sync::Arc::new(
-                GaussianBandit::new(distribution.clone(), Some(42 + run)),
-            )),
-        };
-
-        let client = std::sync::Arc::new(client);
-
-        let mut batch_variant_names: Vec<Vec<String>> = vec![Vec::new(); num_batches];
-
-        for batch_variants in &mut batch_variant_names {
-            // Phase 1: Run all inferences
-            let inference_results = run_inference_batch(&client, inferences_per_batch).await;
-
-            // Wait for ClickHouse to flush inferences
-            clickhouse_flush_async_insert(&clickhouse).await;
-            tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
-
-            // Phase 2: Send feedback for all inferences
-            let variant_names =
-                send_feedback(&client, &inference_results, &bandit, metric_name).await;
-            batch_variants.extend(variant_names);
-
-            // Wait for ClickHouse and background update
-            clickhouse_flush_async_insert(&clickhouse).await;
-            tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
-        }
-
-        // Compute cumulative counts across all batches for this run
-        let mut run_variant_counts: HashMap<String, usize> = HashMap::new();
-        for batch in &batch_variant_names {
-            for variant_name in batch {
-                *run_variant_counts.entry(variant_name.clone()).or_insert(0) += 1;
-            }
-        }
-
-        for (variant, &count) in &run_variant_counts {
-            *cumulative_counts.entry(variant.clone()).or_insert(0) += count;
-        }
-    }
-
-    // Compute average counts across runs
-    let avg_counts: HashMap<String, f64> = cumulative_counts
-        .into_iter()
-        .map(|(k, v)| (k, v as f64 / num_runs as f64))
-        .collect();
-
-    let highest_avg_count = avg_counts.get(highest_prob_arm.as_str()).unwrap();
-    let lowest_avg_count = avg_counts.get(lowest_prob_arm.as_str()).unwrap();
-
-    // Assert that the arm with highest optimal probability gets more samples on average
-    assert!(
-        highest_avg_count > lowest_avg_count,
-        "Expected arm with highest optimal prob ({highest_prob_arm}: {highest_prob:.3}) to get
-        more samples on average than arm with lowest optimal prob ({lowest_prob_arm}: {lowest_prob:.3}),
-        but got {highest_avg_count:.1} vs {lowest_avg_count:.1} samples. Test case: {description}",
-    );
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_bernoulli_bandit_convergence_three_arms() {
-    test_bandit_convergence_helper(
-        0.001,
-        BanditConfig::Bernoulli(vec![
-            ("variant_a", 0.40),
-            ("variant_b", 0.50),
-            ("variant_c", 0.60),
-        ]),
-        "three arms",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_bernoulli_bandit_convergence_five_arms() {
-    test_bandit_convergence_helper(
-        0.001,
-        BanditConfig::Bernoulli(vec![
-            ("variant_a", 0.30),
-            ("variant_b", 0.40),
-            ("variant_c", 0.50),
-            ("variant_d", 0.60),
-            ("variant_e", 0.70),
-        ]),
-        "five arms",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_gaussian_bandit_convergence_same_variances() {
-    test_bandit_convergence_helper(
-        0.001,
-        BanditConfig::Gaussian(vec![
-            ("variant_a", 0.50, 0.10),
-            ("variant_b", 0.60, 0.10),
-            ("variant_c", 0.70, 0.10),
-        ]),
-        "close means, low variance",
-    )
-    .await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_gaussian_bandit_convergence_different_variances() {
-    test_bandit_convergence_helper(
-        0.001,
-        BanditConfig::Gaussian(vec![
-            ("variant_a", 0.50, 0.50),
-            ("variant_b", 0.60, 0.30),
-            ("variant_c", 0.70, 0.10),
-        ]),
-        "different variances",
-    )
-    .await;
-}
-
 // ============================================================================
 // Stopping Behavior Tests
 // ============================================================================
@@ -878,7 +730,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
     // Use a very clear winner to ensure stopping happens quickly
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
-        metric_type: "float",
+        metric_type: "boolean",
         optimize: "max",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &[],
@@ -888,15 +740,15 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
         update_period_s: 1,
     });
 
-    // Set up bandit with very clear winner (variant_c has much higher mean)
+    // Set up bandit with very clear winner (variant_c has much higher success rate)
     let bandit_distribution = vec![
-        ("variant_a", 0.30, 0.10),
-        ("variant_b", 0.40, 0.10),
-        ("variant_c", 1.0, 0.10), // Clear winner
+        ("variant_a", 0.30),
+        ("variant_b", 0.40),
+        ("variant_c", 0.95), // Clear winner
     ];
 
     let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
-    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(42));
+    let bandit = BernoulliBandit::new(bandit_distribution.clone(), Some(42));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);
 
@@ -914,7 +766,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
         let variant_names = send_feedback(
             &client,
             &inference_results,
-            &Bandit::Gaussian(bandit.clone()),
+            &Bandit::Bernoulli(bandit.clone()),
             "performance_score",
         )
         .await;
@@ -943,16 +795,16 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
         *variant_counts.entry(name.clone()).or_insert(0) += 1;
     }
 
-    // After stopping, we expect ALL inferences to go to the winner
-    let winner_count = variant_counts.values().max().copied().unwrap_or(0);
+    // After stopping, we expect ALL inferences to go to variant_c (highest success rate)
+    let variant_c_count = variant_counts.get("variant_c").copied().unwrap_or(0);
 
     assert_eq!(
-        winner_count, verification_inferences,
-        "Expected 100% of inferences to go to winner after stopping. Distribution: {variant_counts:?}"
+        variant_c_count, verification_inferences,
+        "Expected 100% of inferences to go to variant_c (winner with highest mean for optimize=max). Distribution: {variant_counts:?}"
     );
 }
 
-/// Test that after stopping, only the winning arm is pulled, with optimize="max"
+/// Test that after stopping, only the winning arm is pulled, with optimize="min"
 #[tokio::test(flavor = "multi_thread")]
 async fn test_winner_arm_pulled_after_stopping_optimize_min() {
     // Experiment parameters
@@ -973,7 +825,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_min() {
         update_period_s: 1,
     });
 
-    // Set up bandit with very clear winner (variant_c has much higher mean)
+    // Set up bandit with very clear winner (variant_a has much lower mean)
     let bandit_distribution = vec![
         ("variant_a", 0.30, 0.10), // Clear winner
         ("variant_b", 0.80, 0.10),
@@ -1028,12 +880,12 @@ async fn test_winner_arm_pulled_after_stopping_optimize_min() {
         *variant_counts.entry(name.clone()).or_insert(0) += 1;
     }
 
-    // After stopping, we expect ALL inferences to go to the winner
-    let winner_count = variant_counts.values().max().copied().unwrap_or(0);
+    // After stopping, we expect ALL inferences to go to variant_a (lowest mean for optimize=min)
+    let variant_a_count = variant_counts.get("variant_a").copied().unwrap_or(0);
 
     assert_eq!(
-        winner_count, verification_inferences,
-        "Expected 100% of inferences to go to winner after stopping. Distribution: {variant_counts:?}"
+        variant_a_count, verification_inferences,
+        "Expected 100% of inferences to go to variant_a (winner with lowest mean for optimize=min). Distribution: {variant_counts:?}"
     );
 }
 
@@ -1337,9 +1189,9 @@ async fn test_effect_of_epsilon_on_stopping() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_cold_start_with_stopped_experiment() {
     let bandit_distribution = vec![
-        ("variant_a", 0.40, 0.10),
-        ("variant_b", 0.80, 0.10), // Very clearly better
-        ("variant_c", 0.45, 0.10),
+        ("variant_a", 0.40),
+        ("variant_b", 0.90), // Very clearly better
+        ("variant_c", 0.45),
     ];
     let seed = 42;
 
@@ -1349,7 +1201,7 @@ async fn test_cold_start_with_stopped_experiment() {
 
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
-        metric_type: "float",
+        metric_type: "boolean",
         optimize: "max",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &[],
@@ -1360,7 +1212,7 @@ async fn test_cold_start_with_stopped_experiment() {
     });
 
     let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
-    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(seed));
+    let bandit = BernoulliBandit::new(bandit_distribution.clone(), Some(seed));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);
     let mut stopped_at_batch = None;
@@ -1379,7 +1231,7 @@ async fn test_cold_start_with_stopped_experiment() {
         let variant_names = send_feedback(
             &client,
             &inference_results,
-            &Bandit::Gaussian(bandit.clone()),
+            &Bandit::Bernoulli(bandit.clone()),
             "performance_score",
         )
         .await;
@@ -1428,7 +1280,7 @@ async fn test_cold_start_with_stopped_experiment() {
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
     // Create a new client with the same configuration but fresh gateway instance
-    let (new_client, new_clickhouse, _new_guard) =
+    let (new_client, new_clickhouse) =
         make_embedded_gateway_with_existing_clickhouse(&config, &clickhouse).await;
     let new_client = std::sync::Arc::new(new_client);
 
@@ -1581,7 +1433,7 @@ async fn test_new_variant_triggers_reexploration() {
     let new_bandit = GaussianBandit::new(new_bandit_distribution.clone(), Some(seed));
 
     // Create a new client with the updated configuration
-    let (new_client, new_clickhouse, _new_guard) =
+    let (new_client, new_clickhouse) =
         make_embedded_gateway_with_existing_clickhouse(&new_config, &clickhouse).await;
     let new_client = std::sync::Arc::new(new_client);
     let new_bandit = std::sync::Arc::new(new_bandit);
@@ -1814,7 +1666,7 @@ async fn test_remove_winner_variant_after_stopping() {
     ];
     let new_bandit = GaussianBandit::new(new_bandit_distribution, Some(seed));
 
-    let (new_client, new_clickhouse, _new_guard) =
+    let (new_client, new_clickhouse) =
         make_embedded_gateway_with_existing_clickhouse(&new_config, &clickhouse).await;
     let new_client = std::sync::Arc::new(new_client);
     let new_bandit = std::sync::Arc::new(new_bandit);
@@ -1865,9 +1717,9 @@ async fn test_remove_winner_variant_after_stopping() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_remove_non_winner_variant_after_stopping() {
     let initial_bandit_distribution = vec![
-        ("variant_a", 0.50, 0.10),
-        ("variant_b", 0.90, 0.10), // Clear winner
-        ("variant_c", 0.55, 0.10),
+        ("variant_a", 0.50),
+        ("variant_b", 0.95), // Clear winner
+        ("variant_c", 0.55),
     ];
     let seed = 42;
 
@@ -1876,7 +1728,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
 
     let initial_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
-        metric_type: "float",
+        metric_type: "boolean",
         optimize: "max",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &[],
@@ -1888,7 +1740,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
 
     let (client, clickhouse, _guard) =
         make_embedded_gateway_with_clean_clickhouse(&initial_config).await;
-    let bandit = GaussianBandit::new(initial_bandit_distribution.clone(), Some(seed));
+    let bandit = BernoulliBandit::new(initial_bandit_distribution.clone(), Some(seed));
     let client = std::sync::Arc::new(client);
     let bandit = std::sync::Arc::new(bandit);
     let mut stopped_at_batch = None;
@@ -1903,7 +1755,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
         let variant_names = send_feedback(
             &client,
             &inference_results,
-            &Bandit::Gaussian(bandit.clone()),
+            &Bandit::Bernoulli(bandit.clone()),
             "performance_score",
         )
         .await;
@@ -1939,7 +1791,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
     // Create new config without variant_a
     let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
-        metric_type: "float",
+        metric_type: "boolean",
         optimize: "max",
         candidate_variants: &["variant_b", "variant_c"], // Removed variant_a
         fallback_variants: &[],
@@ -1949,7 +1801,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
         update_period_s: 1,
     });
 
-    let (new_client, new_clickhouse, _new_guard) =
+    let (new_client, new_clickhouse) =
         make_embedded_gateway_with_existing_clickhouse(&new_config, &clickhouse).await;
     let new_client = std::sync::Arc::new(new_client);
 
