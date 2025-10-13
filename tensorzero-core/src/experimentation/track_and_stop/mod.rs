@@ -1,3 +1,45 @@
+//! Track-and-Stop experimentation strategy for adaptive A/B testing.
+//!
+//! This module implements a bandit-based approach to variant selection that dynamically
+//! adjusts sampling probabilities based on observed performance metrics. It can automatically
+//! detect when a clear winner emerges and stop the experiment.
+//!
+//! # How it works
+//!
+//! 1. **Nursery Phase**: Variants start in a "nursery" where they're sampled round-robin
+//!    until they reach the minimum sample threshold (`min_samples_per_variant`).
+//!
+//! 2. **Bandit Phase**: Once variants have sufficient data, the system estimates the asymptotically
+//!    optimal sampling probabilities for the arms (see `estimate_optimal_probabilities`).
+//!    A background task periodically updates these probabilities based on accumulated feedback.
+//!    These estimates converge to the true optimal sampling probabilities as the sample statistics
+//!    converge.
+//!
+//! 3. **Stopping Phase**: When statistical analysis determines a clear winner (within
+//!    confidence bounds specified by `delta` and `epsilon`), the experiment stops and
+//!    only the winning variant is selected (see `check_stopping`) going forward, unless
+//!    new variants are introduced.
+//!
+//! 4. **Re-exploration Phase**: If new variants are introduced after a winner is selected,
+//!    they will be put in the "nursery", and eventually the whole set of active variants will
+//!    re-enter the Bandit Phase, meaning the system will have lost track of the winner. They
+//!    way to avoid this is to remove non-winning variants from the set of active variants in
+//!    config before introducing new variants.
+//!
+//! # Module structure
+//!
+//! - **Main type**: `TrackAndStopConfig` - the public API for track-and-stop experiments
+//! - **State machine**: `TrackAndStopState` - tracks whether we're in nursery, bandit, stopped phase,
+//!   or somewhere in between (e.g. some arms still in nursery with some arms in the bandit phases)
+//! - **Nursery**: Round-robin sampling for cold-start variants
+//! - **Background task**: `probability_update_task` - periodically recomputes sampling probabilities
+//!
+//! ## Submodules
+//!
+//! - `check_stopping`: Algorithm for detecting when to stop the experiment
+//! - `estimate_optimal_probabilities`: Optimization procedure for estimating the optimal sampling probabilities
+//! - `error`: Error types specific to track-and-stop
+
 use arc_swap::ArcSwap;
 use check_stopping::{check_stopping, CheckStoppingArgs, StoppingResult};
 use error::TrackAndStopError;
@@ -67,6 +109,12 @@ enum TrackAndStopState {
     },
 }
 
+/// Round-robin sampler for variants in the cold-start phase.
+///
+/// The nursery holds variants that don't yet have enough data for statistical
+/// analysis (i.e., fewer than `min_samples_per_variant` samples). It uses an
+/// atomic counter to implement thread-safe round-robin sampling, ensuring each
+/// variant gets sampled until it graduates to the bandit phase.
 #[derive(Debug)]
 struct Nursery {
     variants: Vec<String>,
@@ -211,8 +259,13 @@ impl VariantSampler for TrackAndStopConfig {
         clickhouse: &ClickHouseConnectionInfo,
         function_name: &str,
     ) -> Result<(), Error> {
-        // TODO: validate all fields
-        // Spawn a task to estimate the optimal probabilities
+        // Spawn a background task that continuously updates sampling probabilities.
+        // This task:
+        // 1. Runs independently for the lifetime of the application
+        // 2. Periodically (every `update_period`) queries ClickHouse for feedback data
+        // 3. Computes new optimal sampling probabilities based on observed performance
+        // 4. Updates the shared `self.state` via ArcSwap (lock-free concurrent updates)
+        // 5. Concurrent `sample()` calls read the latest state without blocking
         tokio::spawn(probability_update_task(ProbabilityUpdateTaskArgs {
             clickhouse: clickhouse.clone(),
             candidate_variants: self.candidate_variants.clone().into(),
@@ -290,6 +343,16 @@ struct ProbabilityUpdateTaskArgs {
     delta: f64,
 }
 
+/// Background task that continuously updates sampling probabilities for track-and-stop experiments.
+///
+/// This task runs in an infinite loop with the following behavior:
+/// - Sleeps for `update_period` between iterations
+/// - Queries ClickHouse for feedback data on all candidate variants
+/// - Computes optimal sampling probabilities (or detects a winner to stop)
+/// - Updates the shared state via `ArcSwap::store()` for lock-free reads
+/// - Logs warnings on errors but never crashes (continues retrying)
+///
+/// The task is spawned once per function during `setup()` and runs for the application's lifetime.
 async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
     let ProbabilityUpdateTaskArgs {
         clickhouse,
