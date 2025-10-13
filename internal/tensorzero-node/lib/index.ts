@@ -24,6 +24,8 @@ import type {
   QueryFeedbackBoundsByTargetIdParams,
   QueryFeedbackByTargetIdParams,
   CountFeedbackByTargetIdParams,
+  QueryDemonstrationFeedbackByInferenceIdParams,
+  DemonstrationFeedbackRow,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -275,6 +277,17 @@ export class DatabaseClient {
     const feedbackString =
       await this.nativeDatabaseClient.queryFeedbackByTargetId(paramsString);
     return JSON.parse(feedbackString) as FeedbackRow[];
+  }
+
+  async queryDemonstrationFeedbackByInferenceId(
+    params: QueryDemonstrationFeedbackByInferenceIdParams,
+  ): Promise<DemonstrationFeedbackRow[]> {
+    const paramsString = safeStringify(params);
+    const feedbackString =
+      await this.nativeDatabaseClient.queryDemonstrationFeedbackByInferenceId(
+        paramsString,
+      );
+    return JSON.parse(feedbackString) as DemonstrationFeedbackRow[];
   }
 
   async queryFeedbackBoundsByTargetId(

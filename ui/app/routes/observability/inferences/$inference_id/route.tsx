@@ -4,7 +4,6 @@ import {
 } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
-  queryDemonstrationFeedbackByInferenceId,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
@@ -82,10 +81,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const inferencePromise = queryInferenceById(inference_id);
   const modelInferencesPromise =
     queryModelInferencesByInferenceId(inference_id);
-  const demonstrationFeedbackPromise = queryDemonstrationFeedbackByInferenceId({
-    inference_id,
-    page_size: 1, // Only need to know if *any* exist
-  });
+  const demonstrationFeedbackPromise =
+    dbClient.queryDemonstrationFeedbackByInferenceId({
+      inference_id,
+      page_size: 1, // Only need to know if *any* exist
+      before: null,
+      after: null,
+    });
   const feedbackBoundsPromise = dbClient.queryFeedbackBoundsByTargetId({
     target_id: inference_id,
   });

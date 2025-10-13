@@ -127,6 +127,24 @@ impl DatabaseClient {
             CountFeedbackByTargetIdParams { target_id }
         )
     }
+
+    #[napi]
+    pub async fn query_demonstration_feedback_by_inference_id(
+        &self,
+        params: String,
+    ) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            query_demonstration_feedback_by_inference_id,
+            params,
+            QueryDemonstrationFeedbackByInferenceIdParams {
+                inference_id,
+                before,
+                after,
+                page_size
+            }
+        )
+    }
 }
 
 #[derive(Deserialize, ts_rs::TS)]
@@ -154,6 +172,15 @@ struct QueryEpisodeTableParams {
 #[ts(export, optional_fields)]
 struct QueryFeedbackByTargetIdParams {
     target_id: Uuid,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
+    page_size: Option<u32>,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export)]
+struct QueryDemonstrationFeedbackByInferenceIdParams {
+    inference_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
     page_size: Option<u32>,

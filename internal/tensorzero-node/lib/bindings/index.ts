@@ -178,6 +178,7 @@ export * from "./PathWithContents";
 export * from "./PostgresConfig";
 export * from "./ProviderConfig";
 export * from "./ProviderTypesConfig";
+export * from "./QueryDemonstrationFeedbackByInferenceIdParams";
 export * from "./QueryEpisodeTableParams";
 export * from "./QueryFeedbackBoundsByTargetIdParams";
 export * from "./QueryFeedbackByTargetIdParams";

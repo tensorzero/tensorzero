@@ -4,6 +4,7 @@ use tensorzero_core::db::{
     clickhouse::{
         migration_manager::migrations::migration_0037::QUANTILES, test_helpers::get_clickhouse,
     },
+    feedback::FeedbackRow,
     SelectQueries,
 };
 
@@ -720,7 +721,7 @@ async fn test_clickhouse_query_episode_table_bounds() {
 
 #[tokio::test]
 async fn test_query_feedback_by_target_id_basic() {
-    use tensorzero_core::db::FeedbackRow;
+    use tensorzero_core::db::feedback::FeedbackRow;
     use uuid::Uuid;
 
     let clickhouse = get_clickhouse().await;
@@ -780,10 +781,10 @@ async fn test_query_feedback_by_target_id_pagination() {
     // If we have multiple items, test pagination with 'before'
     if first_page.len() > 1 {
         let second_id = match &first_page[1] {
-            tensorzero_core::db::FeedbackRow::Boolean(f) => f.id,
-            tensorzero_core::db::FeedbackRow::Float(f) => f.id,
-            tensorzero_core::db::FeedbackRow::Comment(f) => f.id,
-            tensorzero_core::db::FeedbackRow::Demonstration(f) => f.id,
+            FeedbackRow::Boolean(f) => f.id,
+            FeedbackRow::Float(f) => f.id,
+            FeedbackRow::Comment(f) => f.id,
+            FeedbackRow::Demonstration(f) => f.id,
         };
 
         let second_page = clickhouse
@@ -794,10 +795,10 @@ async fn test_query_feedback_by_target_id_pagination() {
         // Second page should not contain items from first page
         for item in &second_page {
             let item_id = match item {
-                tensorzero_core::db::FeedbackRow::Boolean(f) => f.id,
-                tensorzero_core::db::FeedbackRow::Float(f) => f.id,
-                tensorzero_core::db::FeedbackRow::Comment(f) => f.id,
-                tensorzero_core::db::FeedbackRow::Demonstration(f) => f.id,
+                FeedbackRow::Boolean(f) => f.id,
+                FeedbackRow::Float(f) => f.id,
+                FeedbackRow::Comment(f) => f.id,
+                FeedbackRow::Demonstration(f) => f.id,
             };
             assert!(item_id < second_id, "Second page should have older items");
         }
