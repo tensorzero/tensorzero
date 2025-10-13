@@ -30,7 +30,7 @@ TEST_CONFIG_FILE = os.path.join(
     "../../../tensorzero-core/tests/e2e/tensorzero.toml",
 )
 
-CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_python_e2e"
+CLICKHOUSE_URL = "http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests"
 
 
 class ClientType(Enum):

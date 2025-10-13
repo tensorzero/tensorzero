@@ -270,7 +270,7 @@ async def test_async_client_build_http_sync():
 async def test_async_client_build_embedded_sync():
     client_ = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_python_e2e",
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
         async_setup=False,
     )
     assert isinstance(client_, AsyncTensorZeroGateway)
@@ -1048,7 +1048,7 @@ async def test_async_tensorzero_error_http():
 async def test_async_tensorzero_error_embedded():
     async_client = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_python_e2e",
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
         async_setup=False,
     )
     assert isinstance(async_client, AsyncTensorZeroGateway)
@@ -2106,7 +2106,7 @@ def test_sync_tensorzero_error_http():
 def test_sync_tensorzero_error_embedded():
     sync_client = TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_python_e2e",
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
     )
     with pytest.raises(TensorZeroError) as excinfo:
         sync_client.inference(function_name="not_a_function", input={"messages": []})
@@ -2621,7 +2621,7 @@ async def test_async_timeout_int_http():
 async def test_async_timeout_int_embedded():
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_python_e2e",
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
         timeout=1,
     )
     assert inspect.isawaitable(client_fut)
@@ -2662,7 +2662,7 @@ async def test_async_timeout_float_http():
 async def test_async_timeout_float_embedded():
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_python_e2e",
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
         timeout=0.1,
     )
     assert inspect.isawaitable(client_fut)
@@ -3137,7 +3137,8 @@ def test_text_arguments_deprecation_1170_warning(
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
                         "content": [
-                            Text(type="text", text={"country": "Japan"}),  # type: ignore
+                            # type: ignore
+                            Text(type="text", text={"country": "Japan"}),
                         ],
                     }
                 ],
@@ -3541,7 +3542,7 @@ async def test_async_http_client_no_spurious_log(capfd: CaptureFixture[str]):
 def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     client = TensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_python_e2e",
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
     )
     assert client is not None
     captured = capfd.readouterr()
@@ -3555,7 +3556,7 @@ async def test_async_embedded_client_no_spurious_log(
 ):
     client_fut = AsyncTensorZeroGateway.build_embedded(
         config_file=TEST_CONFIG_FILE,
-        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_python_e2e",
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
     )
     assert inspect.isawaitable(client_fut)
     client = await client_fut
