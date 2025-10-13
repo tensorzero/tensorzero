@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
-#![allow(dead_code)]
 use clarabel::algebra::CscMatrix;
+use clarabel::solver::SolverStatus;
 use clarabel::solver::{
     DefaultSettings, DefaultSolver, IPSolver, NonnegativeConeT, SecondOrderConeT, SupportedConeT,
     ZeroConeT,
@@ -293,7 +293,6 @@ pub fn estimate_optimal_probabilities(
     solver.solve();
 
     // Check solver status and validate solution
-    use clarabel::solver::SolverStatus;
     match solver.solution.status {
         SolverStatus::Solved => {
             // Solution is valid, extract weights
