@@ -23,16 +23,27 @@ export CLICKHOUSE_HOST
 
 # Generate unique database name with random suffix for isolation
 RANDOM_SUFFIX=$(openssl rand -hex 4)
-export TENSORZERO_E2E_TESTS_DATABASE="tensorzero_e2e_tests_${RANDOM_SUFFIX}"
-echo "Using database name: $TENSORZERO_E2E_TESTS_DATABASE"
+DATABASE_NAME="tensorzero_e2e_tests_${RANDOM_SUFFIX}"
+echo "Using database name: $DATABASE_NAME"
+
+# Append the database name to the ClickHouse URL path
+TENSORZERO_CLICKHOUSE_URL="${TENSORZERO_CLICKHOUSE_URL%/}/${DATABASE_NAME}"
+export TENSORZERO_CLICKHOUSE_URL
+echo "Updated ClickHouse URL with database: $TENSORZERO_CLICKHOUSE_URL"
 
 # Set up cleanup function to run on exit
 cleanup_database() {
-    if [ -n "${TENSORZERO_E2E_TESTS_DATABASE:-}" ] && [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
-        echo "Cleaning up database: $TENSORZERO_E2E_TESTS_DATABASE"
-        curl -X POST "${TENSORZERO_CLICKHOUSE_URL%/}/?param_target=$TENSORZERO_E2E_TESTS_DATABASE" \
-            --data-binary "DROP DATABASE IF EXISTS {target:Identifier}" || true
-        echo "Cleanup completed for database: $TENSORZERO_E2E_TESTS_DATABASE"
+    if [ -n "${TENSORZERO_CLICKHOUSE_URL:-}" ]; then
+        # Extract database name from the URL path
+        DB_NAME=$(echo "$TENSORZERO_CLICKHOUSE_URL" | sed 's|.*/||')
+        if [ -n "$DB_NAME" ]; then
+            echo "Cleaning up database: $DB_NAME"
+            # Remove the database path from URL for the cleanup call
+            BASE_URL=$(echo "$TENSORZERO_CLICKHOUSE_URL" | sed 's|/[^/]*$||')
+            curl -X POST "${BASE_URL%/}/?param_target=$DB_NAME" \
+                --data-binary "DROP DATABASE IF EXISTS {target:Identifier}" || true
+            echo "Cleanup completed for database: $DB_NAME"
+        fi
     fi
     cat e2e_logs.txt || echo "e2e logs don't exist"
 }
@@ -83,7 +94,7 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
 export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
 export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
 cd ui/fixtures
-./load_fixtures.sh $TENSORZERO_E2E_TESTS_DATABASE
+./load_fixtures.sh $DATABASE_NAME
 cd ../..
 sleep 2
 
