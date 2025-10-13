@@ -61,8 +61,7 @@ use uuid::Uuid;
 
 use crate::{
     db::{
-        clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo,
-        ExperimentationQueries, FeedbackByVariant, SelectQueries,
+        postgres::PostgresConnectionInfo, ExperimentationQueries, FeedbackByVariant, SelectQueries,
     },
     error::{Error, ErrorDetails},
     variant::VariantInfo,
@@ -256,18 +255,18 @@ impl UninitializedTrackAndStopConfig {
 impl VariantSampler for TrackAndStopConfig {
     async fn setup(
         &self,
-        clickhouse: &ClickHouseConnectionInfo,
+        db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
     ) -> Result<(), Error> {
         // Spawn a background task that continuously updates sampling probabilities.
         // This task:
         // 1. Runs independently for the lifetime of the application
-        // 2. Periodically (every `update_period`) queries ClickHouse for feedback data
+        // 2. Periodically queries the database for feedback data
         // 3. Computes new optimal sampling probabilities based on observed performance
         // 4. Updates the shared `self.state` via ArcSwap (lock-free concurrent updates)
         // 5. Concurrent `sample()` calls read the latest state without blocking
         tokio::spawn(probability_update_task(ProbabilityUpdateTaskArgs {
-            clickhouse: clickhouse.clone(),
+            db,
             candidate_variants: self.candidate_variants.clone().into(),
             metric_name: self.metric.clone(),
             function_name: function_name.to_string(),
@@ -332,7 +331,7 @@ impl VariantSampler for TrackAndStopConfig {
 }
 
 struct ProbabilityUpdateTaskArgs {
-    clickhouse: ClickHouseConnectionInfo,
+    db: Arc<dyn SelectQueries + Send + Sync>,
     candidate_variants: Arc<Vec<String>>,
     metric_name: String,
     function_name: String,
@@ -355,7 +354,7 @@ struct ProbabilityUpdateTaskArgs {
 /// The task is spawned once per function during `setup()` and runs for the application's lifetime.
 async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
     let ProbabilityUpdateTaskArgs {
-        clickhouse,
+        db,
         candidate_variants,
         metric_name,
         function_name,
@@ -368,7 +367,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
 
     loop {
         let result = update_probabilities(UpdateProbabilitiesArgs {
-            clickhouse: &clickhouse,
+            db: db.as_ref(),
             candidate_variants: &candidate_variants,
             metric_name: &metric_name,
             function_name: &function_name,
@@ -391,7 +390,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
 }
 
 struct UpdateProbabilitiesArgs<'a> {
-    clickhouse: &'a ClickHouseConnectionInfo,
+    db: &'a (dyn SelectQueries + Send + Sync),
     candidate_variants: &'a Arc<Vec<String>>,
     metric_name: &'a str,
     function_name: &'a str,
@@ -403,7 +402,7 @@ struct UpdateProbabilitiesArgs<'a> {
 
 async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), TrackAndStopError> {
     let UpdateProbabilitiesArgs {
-        clickhouse,
+        db,
         candidate_variants,
         metric_name,
         function_name,
@@ -414,7 +413,7 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
     } = args;
 
     // Fetch feedback from database
-    let variant_performances = clickhouse
+    let variant_performances = db
         .get_feedback_by_variant(metric_name, function_name, Some(candidate_variants))
         .await?;
 

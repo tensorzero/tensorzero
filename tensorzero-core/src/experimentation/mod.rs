@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::SelectQueries;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
@@ -56,7 +56,7 @@ impl UninitializedExperimentationConfig {
 pub trait VariantSampler {
     async fn setup(
         &self,
-        clickhouse: &ClickHouseConnectionInfo,
+        db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
     ) -> Result<(), Error>;
     async fn sample(
@@ -91,13 +91,13 @@ impl ExperimentationConfig {
 impl VariantSampler for ExperimentationConfig {
     async fn setup(
         &self,
-        clickhouse: &ClickHouseConnectionInfo,
+        db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
     ) -> Result<(), Error> {
         match self {
-            Self::StaticWeights(config) => config.setup(clickhouse, function_name).await,
+            Self::StaticWeights(config) => config.setup(db, function_name).await,
             Self::Uniform => Ok(()),
-            Self::TrackAndStop(config) => config.setup(clickhouse, function_name).await,
+            Self::TrackAndStop(config) => config.setup(db, function_name).await,
         }
     }
 
