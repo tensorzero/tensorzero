@@ -54,6 +54,7 @@ pub enum ClientInputMessageContent {
     /// without any validation or transformation by TensorZero.
     Unknown {
         data: Value,
+        #[ts(optional)]
         model_provider_name: Option<String>,
     },
     // We may extend this in the future to include other types of content

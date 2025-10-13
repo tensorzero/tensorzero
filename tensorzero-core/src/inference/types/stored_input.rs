@@ -32,7 +32,7 @@ use pyo3::prelude::*;
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct StoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
@@ -118,6 +118,7 @@ pub enum StoredInputMessageContent {
     File(Box<StoredFile>),
     Unknown {
         data: Value,
+        #[cfg_attr(test, ts(optional))]
         model_provider_name: Option<String>,
     },
     // We may extend this in the future to include other types of content
