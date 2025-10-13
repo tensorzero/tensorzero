@@ -196,8 +196,8 @@ fn compare_migration_tables(
         MigrationTableState::JustRight
     } else if actual.is_superset(&expected) {
         tracing::warn!("ClickHouse previously applied migrations that are not known to the gateway. This means you're likely running an older version of TensorZero.");
-        tracing::warn!("Actual   migration ids: {actual:?}");
-        tracing::warn!("Expected migration ids: {expected:?}");
+        tracing::warn!("Actual   migration IDs: {actual:?}");
+        tracing::warn!("Expected migration IDs: {expected:?}");
         MigrationTableState::TooMany
     } else if expected.is_superset(&actual) {
         tracing::debug!("ClickHouse is missing required migrations. The gateway will run them unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
@@ -205,8 +205,8 @@ fn compare_migration_tables(
     } else {
         tracing::debug!("ClickHouse is missing required migrations. The gateway will run them unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
         tracing::warn!("ClickHouse previously applied migrations that are not known to the gateway. This means you're likely running an older version of TensorZero.");
-        tracing::warn!("Actual   migration ids: {actual:?}");
-        tracing::warn!("Expected migration ids: {expected:?}");
+        tracing::warn!("Actual   migration IDs: {actual:?}");
+        tracing::warn!("Expected migration IDs: {expected:?}");
         MigrationTableState::Inconsistent
     }
 }
