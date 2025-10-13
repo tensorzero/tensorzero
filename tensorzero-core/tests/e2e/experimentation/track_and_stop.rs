@@ -124,6 +124,8 @@ model = "test_model"
 
     format!(
         r#"
+gateway.unstable_disable_feedback_target_validation = true
+
 [models.test_model]
 routing = ["dummy"]
 
