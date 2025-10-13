@@ -40,17 +40,12 @@ class TemperatureAPI:
 
         # Check if we received a tool call for `temperature_api`
         for content_block in state["messages"][-1]["content"]:
-            if (
-                isinstance(content_block, ToolCall)
-                and content_block.name == "temperature_api"
-            ):
+            if isinstance(content_block, ToolCall) and content_block.name == "temperature_api":
                 tool_call_id = content_block.id
                 break
 
         if tool_call_id is None:
-            raise ValueError(
-                "TemperatureAPI didn't find a tool call for `temperature_api`"
-            )
+            raise ValueError("TemperatureAPI didn't find a tool call for `temperature_api`")
 
         # Pretend it's 25 degrees Celsius everywhere!
         message = Message(
@@ -146,9 +141,7 @@ def main():
                         print(f"\n[Tool Call: {content_block.raw_name}]")
                         print(content_block.raw_arguments)
                     else:
-                        raise NotImplementedError(
-                            f"Unknown Content Block: {content_block}"
-                        )
+                        raise NotImplementedError(f"Unknown Content Block: {content_block}")
 
             if "temperature_api" in event:
                 messages = event["temperature_api"]["messages"]

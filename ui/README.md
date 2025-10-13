@@ -29,4 +29,4 @@ The instructions below assume you're using the provided setup with fixture data.
 
 ## Things to note
 
-1. For any new code, prefer `null` over `undefined`, because `napi-rs` uses `null` to represent an `Option<T>`. Existing code uses both, but we will clean things up.
+1. For any new code, prefer `undefined` over `null`. The only place to use `null` is for `napi-rs` compatibility, because it uses `null` to represent an `Option<T>`. Never write a type as `T | undefined | null`.

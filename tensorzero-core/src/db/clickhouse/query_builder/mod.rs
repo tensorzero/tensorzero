@@ -246,7 +246,7 @@ LEFT JOIN (
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-pub struct FloatMetricNode {
+pub struct FloatMetricFilter {
     pub metric_name: String,
     pub value: f64,
     pub comparison_operator: FloatComparisonOperator,
@@ -255,7 +255,7 @@ pub struct FloatMetricNode {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-pub struct BooleanMetricNode {
+pub struct BooleanMetricFilter {
     pub metric_name: String,
     pub value: bool,
 }
@@ -263,7 +263,7 @@ pub struct BooleanMetricNode {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-pub struct TagNode {
+pub struct TagFilter {
     pub key: String,
     pub value: String,
     pub comparison_operator: TagComparisonOperator,
@@ -272,7 +272,7 @@ pub struct TagNode {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
-pub struct TimeNode {
+pub struct TimeFilter {
     #[cfg_attr(test, ts(type = "Date"))]
     pub time: DateTime<Utc>,
     pub comparison_operator: TimeComparisonOperator,
@@ -283,10 +283,10 @@ pub struct TimeNode {
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum InferenceFilterTreeNode {
-    FloatMetric(FloatMetricNode),
-    BooleanMetric(BooleanMetricNode),
-    Tag(TagNode),
-    Time(TimeNode),
+    FloatMetric(FloatMetricFilter),
+    BooleanMetric(BooleanMetricFilter),
+    Tag(TagFilter),
+    Time(TimeFilter),
     And {
         children: Vec<InferenceFilterTreeNode>,
     },
@@ -381,7 +381,7 @@ impl InferenceFilterTreeNode {
                 // We handle this farther up the recursive tree
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
             }
-            InferenceFilterTreeNode::Tag(TagNode {
+            InferenceFilterTreeNode::Tag(TagFilter {
                 key,
                 value,
                 comparison_operator,
@@ -395,7 +395,7 @@ impl InferenceFilterTreeNode {
                     "i.tags[{key_placeholder}] {comparison_operator} {value_placeholder}"
                 ))
             }
-            InferenceFilterTreeNode::Time(TimeNode {
+            InferenceFilterTreeNode::Time(TimeFilter {
                 time,
                 comparison_operator,
             }) => {
@@ -957,7 +957,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_simple_query_with_float_filters() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+        let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
             metric_name: "jaccard_similarity".to_string(),
             value: 0.5,
             comparison_operator: FloatComparisonOperator::GreaterThan,
@@ -1040,7 +1040,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_unknown_metric_name() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+        let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
             metric_name: "unknown_metric_name".to_string(),
             value: 0.5,
             comparison_operator: FloatComparisonOperator::GreaterThan,
@@ -1107,7 +1107,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_boolean_metric_filter() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+        let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
             metric_name: "task_success".to_string(),
             value: true,
         });
@@ -1168,7 +1168,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_boolean_metric_filter_false() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+        let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
             metric_name: "task_success".to_string(),
             value: false,
         });
@@ -1231,18 +1231,18 @@ FORMAT JSONEachRow";
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
-                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.5,
                     comparison_operator: FloatComparisonOperator::GreaterThan,
                 }),
                 // We test that the join is not duplicated
-                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.8,
                     comparison_operator: FloatComparisonOperator::LessThan,
                 }),
-                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                     metric_name: "brevity_score".to_string(),
                     value: 10.0,
                     comparison_operator: FloatComparisonOperator::LessThan,
@@ -1329,16 +1329,16 @@ FORMAT JSONEachRow";
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::Or {
             children: vec![
-                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.8,
                     comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
                 }),
-                InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
                     metric_name: "exact_match".to_string(),
                     value: true,
                 }),
-                InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
                     // Episode-level metric
                     metric_name: "goal_achieved".to_string(),
                     value: true,
@@ -1439,11 +1439,11 @@ FORMAT JSONEachRow";
         let filter_node = InferenceFilterTreeNode::Not {
             child: Box::new(InferenceFilterTreeNode::Or {
                 children: vec![
-                    InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                    InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
                         metric_name: "task_success".to_string(),
                         value: true,
                     }),
-                    InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                    InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
                         metric_name: "task_success".to_string(),
                         value: false,
                     }),
@@ -1515,12 +1515,12 @@ FORMAT JSONEachRow";
             children: vec![
                 InferenceFilterTreeNode::Or {
                     children: vec![
-                        InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                        InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                             metric_name: "jaccard_similarity".to_string(),
                             value: 0.7,
                             comparison_operator: FloatComparisonOperator::GreaterThan,
                         }),
-                        InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                        InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                             metric_name: "brevity_score".to_string(),
                             value: 5.0,
                             comparison_operator: FloatComparisonOperator::LessThanOrEqual,
@@ -1528,10 +1528,12 @@ FORMAT JSONEachRow";
                     ],
                 },
                 InferenceFilterTreeNode::Not {
-                    child: Box::new(InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
-                        metric_name: "task_success".to_string(),
-                        value: false,
-                    })),
+                    child: Box::new(InferenceFilterTreeNode::BooleanMetric(
+                        BooleanMetricFilter {
+                            metric_name: "task_success".to_string(),
+                            value: false,
+                        },
+                    )),
                 },
             ],
         };
@@ -1598,25 +1600,25 @@ FORMAT JSONEachRow";
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
-                InferenceFilterTreeNode::Time(TimeNode {
+                InferenceFilterTreeNode::Time(TimeFilter {
                     time: DateTime::from_timestamp(1609459200, 0).unwrap(), // 2021-01-01 00:00:00 UTC
                     comparison_operator: TimeComparisonOperator::GreaterThan,
                 }),
                 InferenceFilterTreeNode::Or {
                     children: vec![
-                        InferenceFilterTreeNode::Time(TimeNode {
+                        InferenceFilterTreeNode::Time(TimeFilter {
                             time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                             comparison_operator: TimeComparisonOperator::LessThan,
                         }),
                         InferenceFilterTreeNode::And {
                             children: vec![
-                                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                                     metric_name: "jaccard_similarity".to_string(),
                                     value: 0.9,
                                     comparison_operator:
                                         FloatComparisonOperator::GreaterThanOrEqual,
                                 }),
-                                InferenceFilterTreeNode::Tag(TagNode {
+                                InferenceFilterTreeNode::Tag(TagFilter {
                                     key: "priority".to_string(),
                                     value: "high".to_string(),
                                     comparison_operator: TagComparisonOperator::Equal,
@@ -1776,7 +1778,7 @@ FORMAT JSONEachRow";
         ];
 
         for (op, expected_op_str) in operators {
-            let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+            let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                 metric_name: "jaccard_similarity".to_string(),
                 value: 0.5,
                 comparison_operator: op,
@@ -1841,7 +1843,7 @@ FORMAT JSONEachRow",
     #[tokio::test(flavor = "multi_thread")]
     async fn test_simple_tag_filter_equal() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Tag(TagNode {
+        let filter_node = InferenceFilterTreeNode::Tag(TagFilter {
             key: "environment".to_string(),
             value: "production".to_string(),
             comparison_operator: TagComparisonOperator::Equal,
@@ -1895,7 +1897,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_tag_filter_not_equal() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Tag(TagNode {
+        let filter_node = InferenceFilterTreeNode::Tag(TagFilter {
             key: "version".to_string(),
             value: "v1.0".to_string(),
             comparison_operator: TagComparisonOperator::NotEqual,
@@ -1951,12 +1953,12 @@ FORMAT JSONEachRow";
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
-                InferenceFilterTreeNode::Tag(TagNode {
+                InferenceFilterTreeNode::Tag(TagFilter {
                     key: "environment".to_string(),
                     value: "production".to_string(),
                     comparison_operator: TagComparisonOperator::Equal,
                 }),
-                InferenceFilterTreeNode::Tag(TagNode {
+                InferenceFilterTreeNode::Tag(TagFilter {
                     key: "region".to_string(),
                     value: "us-west".to_string(),
                     comparison_operator: TagComparisonOperator::Equal,
@@ -2022,12 +2024,12 @@ FORMAT JSONEachRow";
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
-                InferenceFilterTreeNode::Tag(TagNode {
+                InferenceFilterTreeNode::Tag(TagFilter {
                     key: "experiment".to_string(),
                     value: "A".to_string(),
                     comparison_operator: TagComparisonOperator::Equal,
                 }),
-                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.7,
                     comparison_operator: FloatComparisonOperator::GreaterThan,
@@ -2101,12 +2103,12 @@ FORMAT JSONEachRow";
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
-                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.6,
                     comparison_operator: FloatComparisonOperator::GreaterThan,
                 }),
-                InferenceFilterTreeNode::BooleanMetric(BooleanMetricNode {
+                InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
                     metric_name: "exact_match".to_string(),
                     value: true,
                 }),
@@ -2204,7 +2206,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_simple_time_filter() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Time(TimeNode {
+        let filter_node = InferenceFilterTreeNode::Time(TimeFilter {
             time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
             comparison_operator: TimeComparisonOperator::GreaterThan,
         });
@@ -2263,7 +2265,7 @@ FORMAT JSONEachRow";
         ];
 
         for (op, expected_op_str) in operators {
-            let filter_node = InferenceFilterTreeNode::Time(TimeNode {
+            let filter_node = InferenceFilterTreeNode::Time(TimeFilter {
                 time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                 comparison_operator: op,
             });
@@ -2317,16 +2319,16 @@ FORMAT JSONEachRow",
         let config = get_e2e_config().await;
         let filter_node = InferenceFilterTreeNode::And {
             children: vec![
-                InferenceFilterTreeNode::Time(TimeNode {
+                InferenceFilterTreeNode::Time(TimeFilter {
                     time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                     comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
                 }),
-                InferenceFilterTreeNode::Tag(TagNode {
+                InferenceFilterTreeNode::Tag(TagFilter {
                     key: "environment".to_string(),
                     value: "production".to_string(),
                     comparison_operator: TagComparisonOperator::Equal,
                 }),
-                InferenceFilterTreeNode::FloatMetric(FloatMetricNode {
+                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.8,
                     comparison_operator: FloatComparisonOperator::GreaterThan,

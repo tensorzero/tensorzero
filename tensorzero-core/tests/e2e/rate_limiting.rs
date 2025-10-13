@@ -1188,3 +1188,79 @@ async fn test_rate_limiting_cancelled_stream_return_tokens() {
         "Did not find sqlx call to return_multiple_resource_tickets"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rate_limiting_priority_override_with_each_non_streaming() {
+    test_rate_limiting_priority_override_with_each_helper(false).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rate_limiting_priority_override_with_each_streaming() {
+    test_rate_limiting_priority_override_with_each_helper(true).await;
+}
+
+async fn test_rate_limiting_priority_override_with_each_helper(stream: bool) {
+    let id = Uuid::now_v7();
+    let config = generate_rate_limit_config(&[
+        // Collectively, all users can make a maximum of 1k model inferences per hour and 10M tokens per day
+        &format!(
+            r#"[[rate_limiting.rules]]
+always = true
+model_inferences_per_hour = {{ capacity = 1000, refill_rate = 1000 }}
+tokens_per_day = {{ capacity = 10_000_000, refill_rate = 10_000_000 }}
+scope = [
+    {{ tag_key = "user_id_{id}", tag_value = "tensorzero::total" }}
+]"#
+        ),
+        // Each individual user can make a maximum of 1 model inference per minute
+        &format!(
+            r#"[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_minute = {{ capacity = 1, refill_rate = 1 }}
+scope = [
+    {{ tag_key = "user_id_{id}", tag_value = "tensorzero::each" }}
+]"#
+        ),
+        // But override the individual limit for the CEO
+        &format!(
+            r#"[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_minute = {{ capacity = 5, refill_rate = 5 }}
+scope = [
+    {{ tag_key = "user_id_{id}", tag_value = "ceo" }}
+]"#
+        ),
+        // The entire system (i.e. without restricting the scope) can make a maximum of 10M tokens per hour
+        r"[[rate_limiting.rules]]
+always = true
+tokens_per_hour = { capacity = 10_000_000, refill_rate = 10_000_000 }",
+    ]);
+
+    let client =
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+
+    let tags_intern = HashMap::from([(format!("user_id_{id}"), "intern".to_string())]);
+    let tags_ceo = HashMap::from([(format!("user_id_{id}"), "ceo".to_string())]);
+
+    // Intern should be able to make 1 request per minute (capacity = 1)
+    let result1 = make_request_with_tags(&client, tags_intern.clone(), stream).await;
+    assert!(result1.is_ok(), "First intern request should succeed");
+
+    // Second intern request should fail (exceeded capacity of 1)
+    let result2 = make_request_with_tags(&client, tags_intern.clone(), stream).await;
+    assert_rate_limit_exceeded(result2);
+
+    // Third intern request should also fail
+    let result3 = make_request_with_tags(&client, tags_intern.clone(), stream).await;
+    assert_rate_limit_exceeded(result3);
+
+    // CEO should be able to make 5 requests (priority override)
+    for i in 0..5 {
+        let result = make_request_with_tags(&client, tags_ceo.clone(), stream).await;
+        assert!(result.is_ok(), "CEO request {} should succeed", i + 1);
+    }
+
+    // Sixth CEO request should fail (exceeded capacity of 5)
+    let result6 = make_request_with_tags(&client, tags_ceo.clone(), stream).await;
+    assert_rate_limit_exceeded(result6);
+}

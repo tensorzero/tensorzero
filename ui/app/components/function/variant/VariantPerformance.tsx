@@ -4,7 +4,11 @@ import type {
 } from "~/utils/clickhouse/function";
 // import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
-import { formatChartNumber, formatDetailedNumber } from "~/utils/chart";
+import {
+  formatChartNumber,
+  formatDetailedNumber,
+  CHART_COLORS,
+} from "~/utils/chart";
 
 import {
   Card,
@@ -21,14 +25,6 @@ import {
   ChartTooltipContent,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
-
-const CHART_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-] as const;
 
 export function VariantPerformance({
   variant_performances,

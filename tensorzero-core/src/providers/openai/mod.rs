@@ -5,6 +5,7 @@ use lazy_static::lazy_static;
 use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use reqwest_eventsource::Event;
+use responses::stream_openai_responses;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -398,52 +399,88 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        // TODO(https://github.com/tensorzero/tensorzero/issues/3802) - support this
-        if self.use_responses {
-            return Err(
-                ErrorDetails::UnsupportedModelProviderForStreamingInference {
-                    provider_type: "OpenAI Responses".to_string(),
-                }
-                .into(),
-            );
-        }
-        let request_url = get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
-
-        let request_body = serde_json::to_value(
-            OpenAIRequest::new(&self.model_name, request).await?,
-        )
-        .map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!(
-                    "Error serializing OpenAI request: {}",
-                    DisplayOrDebugGateway::new(e)
-                ),
-            })
-        })?;
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
-        let mut request_builder = http_client.post(request_url);
-        if let Some(api_key) = api_key {
-            request_builder = request_builder.bearer_auth(api_key.expose_secret());
-        }
-        let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
-            PROVIDER_TYPE,
-            &request.extra_body,
-            &request.extra_headers,
-            model_provider,
-            model_name,
-            request_body,
-            request_builder,
-        )
-        .await?;
 
-        let stream = stream_openai(
-            PROVIDER_TYPE.to_string(),
-            event_source.map_err(TensorZeroEventError::EventSource),
-            start_time,
-        )
-        .peekable();
-        Ok((stream, raw_request))
+        if self.use_responses {
+            // Use OpenAI Responses API for streaming
+            let request_url =
+                get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+
+            let request_body =
+                serde_json::to_value(OpenAIResponsesRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI Responses request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?;
+
+            let mut request_builder = http_client.post(request_url);
+            if let Some(api_key) = api_key {
+                request_builder = request_builder.bearer_auth(api_key.expose_secret());
+            }
+
+            let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                PROVIDER_TYPE,
+                &request.extra_body,
+                &request.extra_headers,
+                model_provider,
+                model_name,
+                request_body,
+                request_builder,
+            )
+            .await?;
+
+            let stream = stream_openai_responses(
+                PROVIDER_TYPE.to_string(),
+                event_source.map_err(TensorZeroEventError::EventSource),
+                start_time,
+            )
+            .peekable();
+            Ok((stream, raw_request))
+        } else {
+            // Use Chat Completions API for streaming
+            let request_url =
+                get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
+
+            let request_body =
+                serde_json::to_value(OpenAIRequest::new(&self.model_name, request).await?)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Error serializing OpenAI request: {}",
+                                DisplayOrDebugGateway::new(e)
+                            ),
+                        })
+                    })?;
+
+            let mut request_builder = http_client.post(request_url);
+            if let Some(api_key) = api_key {
+                request_builder = request_builder.bearer_auth(api_key.expose_secret());
+            }
+
+            let (event_source, raw_request) = inject_extra_request_data_and_send_eventsource(
+                PROVIDER_TYPE,
+                &request.extra_body,
+                &request.extra_headers,
+                model_provider,
+                model_name,
+                request_body,
+                request_builder,
+            )
+            .await?;
+
+            let stream = stream_openai(
+                PROVIDER_TYPE.to_string(),
+                event_source.map_err(TensorZeroEventError::EventSource),
+                start_time,
+            )
+            .peekable();
+            Ok((stream, raw_request))
+        }
     }
 
     // Get a single chunk from the stream and make sure it is OK then send to client.

@@ -3,6 +3,7 @@ import type {
   VariantThroughput,
 } from "~/utils/clickhouse/function";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { CHART_COLORS } from "~/utils/chart";
 
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import {
@@ -12,14 +13,6 @@ import {
   ChartTooltip,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
-
-const CHART_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-] as const;
 
 export function VariantThroughput({
   variant_throughput,

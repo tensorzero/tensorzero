@@ -287,6 +287,7 @@ parameters = "tools/load_wikipedia_page.json"
 strict = true
 
 [tools.answer_question]
+name = "submit_answer"
 description = "End the search process and answer a question. Returns the answer to the question."
 parameters = "tools/answer_question.json"
 strict = true

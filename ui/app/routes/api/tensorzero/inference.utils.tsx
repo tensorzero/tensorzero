@@ -16,6 +16,7 @@ import type {
   Tool,
   ResolvedTomlPath,
   ChatTemplates,
+  StaticToolConfig,
 } from "tensorzero-node";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -307,6 +308,7 @@ interface ClickHouseDatapointActionArgs {
   cache_options: CacheParamsOptions;
   editedVariantInfo?: VariantInfo;
   functionConfig: FunctionConfig;
+  toolsConfig: { [key in string]?: StaticToolConfig };
 }
 
 type ActionArgs =
@@ -384,6 +386,7 @@ export function prepareInferenceActionRequest(
       ? subtractStaticToolsFromInferenceInput(
           args.tool_params?.tools_available,
           args.functionConfig,
+          args.toolsConfig,
         )
       : null;
 
@@ -814,11 +817,23 @@ function variantInfoToUninitializedVariantInfo(
 function subtractStaticToolsFromInferenceInput(
   datapointTools: Tool[],
   functionConfig: FunctionConfig,
+  toolsConfig: { [key in string]?: StaticToolConfig },
 ): Tool[] {
   if (functionConfig.type === "json") {
     return datapointTools;
   }
-  return datapointTools.filter(
-    (tool) => !functionConfig.tools.some((t) => t === tool.name),
-  );
+
+  // We can't differentiate between static and dynamic tools.
+  // We also can't differentiate between tool IDs and tool names.
+  // TODO: #3880, #3879 would allow us to remove this workaround entirely
+  const toolNames = new Set<string>();
+  for (const toolConfigId of functionConfig.tools) {
+    const toolConfig = toolsConfig?.[toolConfigId];
+    if (toolConfig) {
+      toolNames.add(toolConfig.name);
+    }
+  }
+
+  // Filter out static tools
+  return datapointTools.filter((tool) => !toolNames.has(tool.name));
 }

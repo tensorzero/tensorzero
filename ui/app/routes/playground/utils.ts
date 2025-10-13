@@ -6,6 +6,7 @@ import type {
   ClientInferenceParams,
   FunctionConfig,
   InferenceResponse,
+  StaticToolConfig,
 } from "tensorzero-node";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
@@ -139,12 +140,20 @@ export interface ClientInferenceInputArgs {
   datapoint: TensorZeroDatapoint;
   input: DisplayInput;
   functionConfig: FunctionConfig;
+  toolsConfig: { [key in string]?: StaticToolConfig };
 }
 
 export function preparePlaygroundInferenceRequest(
   args: ClientInferenceInputArgs,
 ): ClientInferenceParams {
-  const { variant, functionName, datapoint, input, functionConfig } = args;
+  const {
+    variant,
+    functionName,
+    datapoint,
+    input,
+    functionConfig,
+    toolsConfig,
+  } = args;
   const variantInferenceInfo = getVariantInferenceInfo(variant);
   const request = prepareInferenceActionRequest({
     source: "clickhouse_datapoint",
@@ -163,6 +172,7 @@ export function preparePlaygroundInferenceRequest(
     },
     editedVariantInfo: variantInferenceInfo.editedVariantInfo,
     functionConfig,
+    toolsConfig,
   });
   const extraOptions = getExtraInferenceOptions();
   return {

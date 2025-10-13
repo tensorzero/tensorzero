@@ -14,11 +14,7 @@ with TensorZeroGateway.build_http(
 
     # The model can return multiple content blocks, including tool calls
     # In a real application, you'd be stricter about validating the response
-    tool_calls = [
-        content_block
-        for content_block in response.content
-        if isinstance(content_block, ToolCall)
-    ]
+    tool_calls = [content_block for content_block in response.content if isinstance(content_block, ToolCall)]
     assert len(tool_calls) == 1, "Expected the model to return exactly one tool call"
 
     # Add the tool call to the message history

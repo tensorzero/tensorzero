@@ -16,62 +16,95 @@ test.describe("Custom user agent", () => {
   // between polling mock-inference-provider
   test.use({ userAgent: "TensorZeroE2E" });
 
-  test("@slow should fine-tune on filtered metric data with a mocked OpenAI server", async ({
-    page,
-  }) => {
-    await page.goto("/optimization/supervised-fine-tuning");
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
-    await page.getByRole("option", { name: "extract_entities" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
-    await page.getByText("exact_match", { exact: true }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a variant name" })
-      .click();
-    await page
-      .getByLabel("gpt4o_mini_initial_prompt")
-      .getByText("gpt4o_mini_initial_prompt")
-      .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    await page
-      .getByRole("option", { name: "gpt-4o-2024-08-06 OpenAI" })
-      .click();
-    await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
+  [
+    {
+      provider: "OpenAI",
+      model: "gpt-4o-2024-08-06",
+      results: `
+    [models.mock-inference-finetune-1234]
+    routing = [ "mock-inference-finetune-1234" ]
 
-    await page.getByText("running", { exact: true }).waitFor({ timeout: 3000 });
+    [models.mock-inference-finetune-1234.providers.mock-inference-finetune-1234]
+    type = "openai"
+    model_name = "mock-inference-finetune-1234"
+    `,
+    },
+    {
+      provider: "Fireworks",
+      model: "llama-3.2-3b-instruct",
+      results: `
+[models."accounts/fake_fireworks_account/models/mock-fireworks-model"]
+routing = [ "accounts/fake_fireworks_account/models/mock-fireworks-model" ]
 
-    await expect(page.getByText("gpt-4o-2024-08-06")).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "extract_entities" }),
-    ).toBeVisible();
-    await expect(page.getByText("exact_match")).toBeVisible();
-    await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+[models."accounts/fake_fireworks_account/models/mock-fireworks-model".providers."accounts/fake_fireworks_account/models/mock-fireworks-model"]
+type = "fireworks"
+model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
+`,
+    },
+    {
+      provider: "Together",
+      model: "gpt-oss-20b",
+      results: `
+      type = "together"
+      `,
+      // Together mock SFT provider randomly generates model name so we'll just
+      // assert that we have a model type together
+    },
+  ]
+    .slice(2)
+    .forEach(({ provider, model, results }) => {
+      test(`@slow should fine-tune on filtered metric data with a mocked ${provider} server`, async ({
+        page,
+      }) => {
+        await page.goto("/optimization/supervised-fine-tuning");
+        await page
+          .getByRole("combobox")
+          .filter({ hasText: "Select a function" })
+          .click();
+        await page.getByRole("option", { name: "extract_entities" }).click();
+        await page
+          .getByRole("combobox")
+          .filter({ hasText: "Select a metric" })
+          .click();
+        await page.getByText("exact_match", { exact: true }).click();
+        await page
+          .getByRole("combobox")
+          .filter({ hasText: "Select a variant name" })
+          .click();
+        await page
+          .getByLabel("gpt4o_mini_initial_prompt")
+          .getByText("gpt4o_mini_initial_prompt")
+          .click();
+        await page
+          .getByRole("combobox")
+          .filter({ hasText: "Select a model..." })
+          .click();
+        await page
+          .getByRole("option", { name: [model, provider].join(" ") })
+          .click();
+        await page
+          .getByRole("button", { name: "Start Fine-tuning Job" })
+          .click();
 
-    // The mock server completes the job after 2 seconds (so that we can eventually test the progress bar),
-    // so wait for 3 seconds here to make sure it completes
-    await page
-      .getByText("completed", { exact: true })
-      .waitFor({ timeout: 3000 });
-    await expect(
-      page.getByText(`
-[models.mock-inference-finetune-1234]
-routing = [ "mock-inference-finetune-1234" ]
+        await page
+          .getByText("running", { exact: true })
+          .waitFor({ timeout: 3000 });
 
-[models.mock-inference-finetune-1234.providers.mock-inference-finetune-1234]
-type = "openai"
-model_name = "mock-inference-finetune-1234"
-`),
-    ).toBeVisible();
-  });
+        await expect(page.getByText(model)).toBeVisible();
+        await expect(
+          page.getByRole("link", { name: "extract_entities" }),
+        ).toBeVisible();
+        await expect(page.getByText("exact_match")).toBeVisible();
+        await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
+
+        // The mock server completes the job after 2 seconds (so that we can eventually test the progress bar),
+        // so wait for 3 seconds here to make sure it completes
+        await page
+          .getByText("completed", { exact: true })
+          .waitFor({ timeout: 3000 });
+        await expect(page.getByText(results)).toBeVisible();
+      });
+    });
 
   test("@slow should fine-tune on demonstration data with a mocked OpenAI server", async ({
     page,
@@ -185,61 +218,6 @@ model_name = "mock-inference-finetune-1234"
     ).toBeVisible();
   });
 
-  test("@slow should fine-tune with a mocked Fireworks server", async ({
-    page,
-  }) => {
-    await page.goto("/optimization/supervised-fine-tuning");
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a function" })
-      .click();
-    await page.getByRole("option", { name: "extract_entities" }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a metric" })
-      .click();
-    await page.getByText("exact_match", { exact: true }).click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a variant name" })
-      .click();
-    await page
-      .getByLabel("gpt4o_mini_initial_prompt")
-      .getByText("gpt4o_mini_initial_prompt")
-      .click();
-    await page
-      .getByRole("combobox")
-      .filter({ hasText: "Select a model..." })
-      .click();
-    await page
-      .getByRole("option", { name: "llama-3.2-3b-instruct Fireworks" })
-      .click();
-    await page.getByRole("button", { name: "Start Fine-tuning Job" }).click();
-
-    await page
-      .getByText("running", { exact: true })
-      .waitFor({ timeout: 10_000 });
-    await expect(
-      page.getByText("accounts/fireworks/models/llama-v3p2-3b-instruct"),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "extract_entities" }),
-    ).toBeVisible();
-    await expect(page.getByText("exact_match")).toBeVisible();
-    await expect(page.getByText("gpt4o_mini_initial_prompt")).toBeVisible();
-
-    await expect(
-      page.getByText(`
-[models."accounts/fake_fireworks_account/models/mock-fireworks-model"]
-routing = [ "accounts/fake_fireworks_account/models/mock-fireworks-model" ]
-
-[models."accounts/fake_fireworks_account/models/mock-fireworks-model".providers."accounts/fake_fireworks_account/models/mock-fireworks-model"]
-type = "fireworks"
-model_name = "accounts/fake_fireworks_account/models/mock-fireworks-model"
-`),
-    ).toBeVisible();
-  });
-
   test("should show demonstration metric option for write_haiku function", async ({
     page,
   }) => {
@@ -318,6 +296,7 @@ test.describe("should expose configured providers", () => {
     "openai",
     "fireworks",
     "gcp_vertex_gemini",
+    "together",
   ];
 
   // ensure each provider we expect is in the list

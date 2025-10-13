@@ -31,7 +31,9 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
-use crate::{config::Config, db::clickhouse::ClickHouseConnectionInfo};
+use crate::config::Config;
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 
 lazy_static! {
     /// The URL to send usage data to.
@@ -53,7 +55,8 @@ pub fn setup_howdy(
         info!("Pseudonymous usage analytics is disabled");
         return;
     }
-    if let ClickHouseConnectionInfo::Disabled = clickhouse {
+    // TODO(shuyangli): Don't like this...
+    if clickhouse.client_type() == ClickHouseClientType::Disabled {
         return;
     }
     tokio::spawn(howdy_loop(clickhouse, token));

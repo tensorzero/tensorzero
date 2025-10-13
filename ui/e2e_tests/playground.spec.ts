@@ -296,3 +296,60 @@ test("editing variants works @credentials", async ({ page }) => {
     page.getByRole("textbox").filter({ hasText: "obtuse" }).first(),
   ).toBeVisible({ timeout: 10000 });
 });
+
+test("playground should work with tool config ID different from display name @credentials", async ({
+  page,
+}) => {
+  // This test verifies that tool filtering works correctly when a tool's config ID
+  // differs from its display name. The function 'multi_hop_rag_agent' has a tool
+  // configured with config ID 'answer_question' but display name 'submit_answer'.
+  // Before the fix, the tool filtering logic would incorrectly compare these values
+  // directly, causing tools not to be filtered properly.
+  await page.goto("/playground?limit=1");
+  await expect(page.getByText("Select a function")).toBeVisible();
+
+  // Select function 'multi_hop_rag_agent'
+  await page.getByText("Select a function").click();
+  await page.getByPlaceholder("Find a function...").fill("multi_hop_rag_agent");
+  await page.getByRole("option", { name: "multi_hop_rag_agent" }).click();
+
+  // Select dataset 'tool_call_examples'
+  await page.getByText("Select a dataset").click();
+  await page.getByPlaceholder(/dataset/i).fill("tool_call_examples");
+  await page.getByRole("option", { name: "tool_call_examples" }).click();
+
+  // Select variant 'baseline'
+  await page.getByPlaceholder("Filter by variant...").fill("baseline");
+  await page.getByRole("option", { name: "baseline" }).click();
+
+  // Verify the selections are visible
+  await expect(page.getByText("multi_hop_rag_agent")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "tool_call_examples" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "baseline" })).toBeVisible();
+
+  // Verify that there is at least 1 input
+  await expect(page.getByRole("heading", { name: "Input" })).toHaveCount(1);
+
+  // Wait for the inference to complete by verifying the tool call appears
+  // The inference should complete successfully because the tool filtering logic
+  // correctly maps config IDs to display names before filtering
+  await expect(
+    page
+      .getByTestId("datapoint-playground-output")
+      .getByText("Tool Call")
+      .first(),
+  ).toBeVisible({ timeout: 30_000 });
+
+  // Verify the tool call has expected fields
+  await expect(page.getByText("Name").first()).toBeVisible();
+  await expect(page.getByText("ID").first()).toBeVisible();
+  await expect(page.getByText("Arguments").first()).toBeVisible();
+
+  // Verify that there are no inference errors
+  // This is the key assertion - if tool filtering was broken, we'd see an error here
+  await expect(
+    page.getByRole("heading", { name: "Inference Error" }),
+  ).toHaveCount(0);
+});
