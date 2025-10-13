@@ -41,43 +41,6 @@ Take what you need, adopt incrementally, and complement with other tools.
 
 ---
 
-<table>
-  <tr>
-    <td width="30%" valign="top"><b>What is TensorZero?</b></td>
-    <td width="70%" valign="top">TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluation, and experimentation.</td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>How is TensorZero different from other LLM frameworks?</b></td>
-    <td width="70%" valign="top">
-      1. TensorZero enables you to optimize complex LLM applications based on production metrics and human feedback.<br>
-      2. TensorZero supports the needs of industrial-grade LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.<br>
-      3. TensorZero unifies the entire LLMOps stack, creating compounding benefits. For example, LLM evaluations can be used for fine-tuning models alongside AI judges.
-    </td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>Can I use TensorZero with ___?</b></td>
-    <td width="70%" valign="top">Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API.</td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>Is TensorZero production-ready?</b></td>
-    <td width="70%" valign="top">Yes. Here's a case study: <b><a href="https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms">Automating Code Changelogs at a Large Bank with LLMs</a></b></td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>How much does TensorZero cost?</b></td>
-    <td width="70%" valign="top">Nothing. TensorZero is 100% self-hosted and open-source. There are no paid features.</td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>Who is building TensorZero?</b></td>
-    <td width="70%" valign="top">Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic). See our <b><a href="https://www.tensorzero.com/blog/tensorzero-raises-7-3m-seed-round-to-build-an-open-source-stack-for-industrial-grade-llm-applications/">$7.3M seed round announcement</a></b> and <b><a href="https://venturebeat.com/ai/tensorzero-nabs-7-3m-seed-to-solve-the-messy-world-of-enterprise-llm-development/" rel="nofollow" target="_blank">coverage from VentureBeat</a></b>. We're <b><a href="https://www.tensorzero.com/jobs" rel="nofollow" target="_blank">hiring in NYC</a></b>.</td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>How do I get started?</b></td>
-    <td width="70%" valign="top">You can adopt TensorZero incrementally. Our <b><a href="https://www.tensorzero.com/docs/quickstart">Quick Start</a></b> goes from a vanilla OpenAI wrapper to a production-ready LLM application with observability and fine-tuning in just 5 minutes.</td>
-  </tr>
-</table>
-
----
-
 ## Features
 
 ### 🌐 LLM Gateway
@@ -421,6 +384,38 @@ item_count: 7.15 ± 0.39</code></pre>
 - [x] **[Extend TensorZero](https://www.tensorzero.com/docs/operations/extend-tensorzero)** with built-in escape hatches, programmatic-first usage, direct database access, and more
 - [x] Integrate with third-party tools: specialized observability and evaluations, model providers, agent orchestration frameworks, etc.
 - [x] Iterate quickly by experimenting with prompts interactively using the Playground UI
+
+## Frequently Asked Questions
+
+**What is TensorZero?**
+
+TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluation, and experimentation.
+
+**How is TensorZero different from other LLM frameworks?**
+
+1. TensorZero enables you to optimize complex LLM applications based on production metrics and human feedback.
+2. TensorZero supports the needs of industrial-grade LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.
+3. TensorZero unifies the entire LLMOps stack, creating compounding benefits. For example, LLM evaluations can be used for fine-tuning models alongside AI judges.
+
+**Can I use TensorZero with \_\_\_?**
+
+Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API.
+
+**Is TensorZero production-ready?**
+
+Yes. Here's a case study: **[Automating Code Changelogs at a Large Bank with LLMs](https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms)**
+
+**How much does TensorZero cost?**
+
+Nothing. TensorZero is 100% self-hosted and open-source. There are no paid features.
+
+**Who is building TensorZero?**
+
+Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic). See our **[$7.3M seed round announcement](https://www.tensorzero.com/blog/tensorzero-raises-7-3m-seed-round-to-build-an-open-source-stack-for-industrial-grade-llm-applications/)** and **[coverage from VentureBeat](https://venturebeat.com/ai/tensorzero-nabs-7-3m-seed-to-solve-the-messy-world-of-enterprise-llm-development/)**. We're **[hiring in NYC](https://www.tensorzero.com/jobs)**.
+
+**How do I get started?**
+
+You can adopt TensorZero incrementally. Our **[Quick Start](https://www.tensorzero.com/docs/quickstart)** goes from a vanilla OpenAI wrapper to a production-ready LLM application with observability and fine-tuning in just 5 minutes.
 
 ## Demo
 
