@@ -66,7 +66,7 @@ services:
       - 55679:55679 # ZPages
 
   postgres:
-    image: postgres:17-alpine
+    image: postgres:14-alpine
     environment:
       POSTGRES_DB: tensorzero-e2e-tests
       POSTGRES_USER: postgres
@@ -84,29 +84,45 @@ services:
   # bump this to a locally-built image (or published 'sha' tag)
   gateway-clickhouse-migrations:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
-    profiles: ["migrations"]
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
     depends_on:
       clickhouse:
         condition: service_healthy
-    command: ["--run-clickhouse-migrations"]
-    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-clickhouse-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+      ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_period: 5s
 
   # This is not a gateway to use but rather one that just sets up migrations for the Postgres db
   # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
   # bump this to a locally-built image (or published 'sha' tag)
   gateway-postgres-migrations:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
-    profiles: ["migrations"]
     environment:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["--run-postgres-migrations"]
-    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+      ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_period: 5s

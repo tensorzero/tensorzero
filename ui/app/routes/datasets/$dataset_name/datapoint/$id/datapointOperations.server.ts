@@ -5,7 +5,7 @@ import type {
   ParsedJsonInferenceDatapointRow,
 } from "~/utils/clickhouse/datasets";
 import {
-  getDatasetCounts,
+  getDatasetMetadata,
   staleDatapoint,
 } from "~/utils/clickhouse/datasets.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
@@ -105,7 +105,7 @@ export async function deleteDatapoint(params: {
 
   await staleDatapoint(dataset_name, id, functionType);
 
-  const datasetCounts = await getDatasetCounts({});
+  const datasetCounts = await getDatasetMetadata({});
   const datasetCount = datasetCounts.find(
     (count) => count.dataset_name === dataset_name,
   );

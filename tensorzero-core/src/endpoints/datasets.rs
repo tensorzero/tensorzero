@@ -1121,8 +1121,9 @@ pub struct ExistingInferenceInfo {
     pub episode_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum DatapointKind {
     Chat,
     Json,
