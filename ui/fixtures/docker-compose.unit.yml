@@ -6,7 +6,7 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
     volumes:
-      - ./config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./config.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -114,6 +114,7 @@ services:
       BUILDKITE_COMMIT: ${BUILDKITE_COMMIT:-}
       # For mock server during SFT jobs
       OPENAI_BASE_URL: http://mock-inference-provider:3030/openai
+      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together
     volumes:
       # Mount config if tests need to read it at runtime
       - ./config:/app/ui/fixtures/config:ro

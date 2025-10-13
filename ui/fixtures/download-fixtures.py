@@ -84,9 +84,7 @@ def download_file(filename, remote_etag):
 
             local_etag = calculate_etag(local_file)
             if local_etag != remote_etag:
-                raise Exception(
-                    f"ETag mismatch after downloading: {local_etag} != {remote_etag}"
-                )
+                raise Exception(f"ETag mismatch after downloading: {local_etag} != {remote_etag}")
             return
         except Exception as e:
             print(
@@ -101,10 +99,7 @@ def main():
     # Create s3-fixtures directory if it doesn't exist
     S3_FIXTURES_DIR.mkdir(exist_ok=True)
 
-    if (
-        os.environ.get("R2_ACCESS_KEY_ID") is not None
-        and os.environ.get("R2_SECRET_ACCESS_KEY") != ""
-    ):
+    if os.environ.get("R2_ACCESS_KEY_ID") is not None and os.environ.get("R2_SECRET_ACCESS_KEY") != "":
         print("R2_ACCESS_KEY_ID set, downloading fixtures using 'aws s3 sync'")
         subprocess.check_call(
             f"aws s3 --region auto --endpoint-url https://19918a216783f0ac9e052233569aef60.r2.cloudflarestorage.com/ sync s3://tensorzero-fixtures/ {S3_FIXTURES_DIR}",

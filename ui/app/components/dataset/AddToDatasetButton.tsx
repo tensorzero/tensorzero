@@ -14,7 +14,7 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { ToastAction } from "~/components/ui/toast";
 
-export interface InferenceDatasetButtonProps {
+export interface AddToDatasetButtonProps {
   // Required fields for creating a datapoint
   inferenceId: string;
   functionName: string;
@@ -38,7 +38,7 @@ export function AddToDatasetButton({
   hasDemonstration,
   alwaysUseInherit = false,
   onDatasetSelect,
-}: InferenceDatasetButtonProps) {
+}: AddToDatasetButtonProps) {
   const [selectedDataset, setSelectedDataset] = useState("");
   const [outputDialogOpen, setOutputDialogOpen] = useState(false);
   const fetcher = useFetcher();

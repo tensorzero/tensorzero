@@ -34,10 +34,12 @@
 //!    If present, we use the wrapped `CustomTracer`, which will cause the span to get exported using the correct
 //!    custom HTTP headers. Otherwise, we our default `SdkTracer`, which doesn't attach any custom headers
 use std::borrow::Cow;
-use std::hash::Hash;
-use std::hash::Hasher;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
+
+use once_cell::sync::OnceCell;
 
 use axum::extract::MatchedPath;
 use axum::extract::State;
@@ -155,6 +157,9 @@ struct CustomTracerContextEntry {
 pub struct TracerWrapper {
     default_tracer: SdkTracer,
     default_provider: SdkTracerProvider,
+    // Static headers from the config that are always included (can be overridden by dynamic headers)
+    // Wrapped in Arc<OnceCell> so we can set them once after initialization (e.g. in the gateway after loading config)
+    static_otlp_traces_extra_headers: Arc<OnceCell<MetadataMap>>,
     // We need to build a new `CustomTracer` for each unique list of extra headers,
     // since export headers can only be configured at the `Tracer` level.
     // We use a `moka` Cache to handle automatic eviction (see `internal_build_otel_layer` for
@@ -277,15 +282,21 @@ struct OtelLayerData<T: Layer<Registry>> {
 }
 
 // Builds the internal OpenTelemetry layer, without any filtering applied.
+// The default tracer is always built with empty headers. Config headers are stored separately
+// and applied when building spans. Use `TracerWrapper::set_static_otlp_traces_extra_headers` to set headers after initialization.
 fn internal_build_otel_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<OtelLayerData<impl Layer<Registry>>, Error> {
+    // Default tracer always has empty headers
     let (provider, tracer) = build_tracer(MetadataMap::new(), override_exporter)?;
     opentelemetry::global::set_tracer_provider(provider.clone());
     let shutdown_tasks = TaskTracker::new();
+    // Initialize empty - will be set once later via set_static_otlp_traces_extra_headers
+    let config_headers = Arc::new(OnceCell::new());
     let wrapper = TracerWrapper {
         default_tracer: tracer,
         default_provider: provider,
+        static_otlp_traces_extra_headers: config_headers.clone(),
         // This cache stores `Arc<CustomTracer>`, so we don't need a custom eviction handler
         // Once all clones of an `Arc` are dropped (including those stored in opentelemetry `Context`
         // objects associated with various `Span`s), the `CustomTracer::drop` method will automatically get called,
@@ -302,6 +313,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     let cloned_wrapper = TracerWrapper {
         default_tracer: wrapper.default_tracer.clone(),
         default_provider: wrapper.default_provider.clone(),
+        static_otlp_traces_extra_headers: wrapper.static_otlp_traces_extra_headers.clone(),
         custom_tracers: wrapper.custom_tracers.clone(),
         shutdown_tasks: wrapper.shutdown_tasks.clone(),
     };
@@ -455,11 +467,45 @@ pub trait RouterExt<S> {
 /// 5. The custom `SdkTracer` is preserved in a `moka::Cache` for subsequent requests.
 const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
 
+/// Converts a HashMap of config headers to a MetadataMap
+fn config_headers_to_metadata(
+    config_headers: &HashMap<String, String>,
+) -> Result<MetadataMap, Error> {
+    let mut metadata = MetadataMap::new();
+    for (name, value) in config_headers {
+        let key: AsciiMetadataKey = name.parse().map_err(|e| {
+            Error::new(ErrorDetails::Observability {
+                message: format!(
+                    "Failed to parse config header `{name}` as valid metadata key: {e}"
+                ),
+            })
+        })?;
+        let value = MetadataValue::from_str(value).map_err(|e| {
+            Error::new(ErrorDetails::Observability {
+                message: format!(
+                    "Failed to parse config header `{name}` value as valid metadata value: {e}"
+                ),
+            })
+        })?;
+        metadata.insert(key, value);
+    }
+    Ok(metadata)
+}
+
 // Removes all of the headers prefixed with `TENSORZERO_OTLP_HEADERS_PREFIX`.
 // If any are present, constructs a `CustomTracerKey` with all of the  matching header/value pairs
 // (with `TENSORZERO_OTLP_HEADERS_PREFIX` removed from the header name).
-fn extract_tensorzero_headers(headers: &HeaderMap) -> Result<Option<CustomTracerKey>, Error> {
-    let mut metadata = MetadataMap::new();
+// We also apply any static custom OTLP headers set in the `TracerWrapper`.
+fn extract_tensorzero_headers(
+    tracer_wrapper: &TracerWrapper,
+    headers: &HeaderMap,
+) -> Result<Option<CustomTracerKey>, Error> {
+    // Merge config headers with dynamic headers (dynamic takes precedence)
+    let mut metadata = tracer_wrapper
+        .static_otlp_traces_extra_headers
+        .get()
+        .cloned()
+        .unwrap_or_default();
     for (name, value) in headers {
         if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_HEADERS_PREFIX) {
             let key: AsciiMetadataKey = suffix.parse().map_err(|e| {
@@ -559,7 +605,7 @@ async fn tensorzero_tracing_middleware(
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
-    let custom_tracer_key = match extract_tensorzero_headers(req.headers()) {
+    let custom_tracer_key = match extract_tensorzero_headers(&tracer_wrapper, req.headers()) {
         Ok(key) => key,
         Err(e) => {
             return e.into_response();
@@ -647,6 +693,22 @@ pub struct ObservabilityHandle {
 }
 
 impl TracerWrapper {
+    /// Set the config headers that will be merged with dynamic headers.
+    /// This can only be called once after initialization (e.g. in the gateway after loading config).
+    pub fn set_static_otlp_traces_extra_headers(
+        &self,
+        headers: &HashMap<String, String>,
+    ) -> Result<(), Error> {
+        let metadata_map = config_headers_to_metadata(headers)?;
+        self.static_otlp_traces_extra_headers
+            .set(metadata_map)
+            .map_err(|_| {
+                Error::new(ErrorDetails::Observability {
+                    message: "Failed to set static OTLP headers: already initialized".to_string(),
+                })
+            })
+    }
+
     pub async fn shutdown(&self) {
         // First, spawn shutdown tasks for all of our custom tracers.
         // This might happen in parallel for the same custom tracer, but opentelemetry

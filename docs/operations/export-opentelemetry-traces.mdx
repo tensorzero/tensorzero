@@ -88,13 +88,60 @@ For inference requests, these traces additionally contain spans that represent t
 
 ### Send custom HTTP headers
 
-You can attach custom HTTP headers to the outgoing requests made to `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
-When making a request to a TensorZero HTTP endpoint, add a header prefixed with `tensorzero-otlp-traces-extra-header-`. For example:
+You can attach custom HTTP headers to the outgoing OTLP export requests made to `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
+
+#### Define custom headers in the configuration
+
+You can configure static headers that will be included in all OTLP export requests by adding them to the `export.otlp.traces.extra_headers` field in your configuration file:
+
+```toml title="tensorzero.toml"
+[gateway.export.otlp.traces]
+# ...
+extra_headers.space_id = "my-workspace-123"
+extra_headers."X-Environment" = "production"
+# ...
+```
+
+#### Define custom headers during inference
+
+You can also send custom headers dynamically on a per-request basis.
+When there is a conflict between static and dynamic headers, the latter takes precedence.
+
+When making a request to a TensorZero HTTP endpoint, add a header prefixed with `tensorzero-otlp-traces-extra-header-`:
 
 ```
-tensorzero-otlp-traces-extra-header-my-first-header: my-first-value
-tensorzero-otlp-traces-extra-header-my-second-header: my-second-value
+tensorzero-otlp-traces-extra-header-user-id: user-123
+tensorzero-otlp-traces-extra-header-request-source: mobile-app
 ```
 
-This will attach the headers `my-first-header: my-first-value` and `my-second-header: my-second-value` when exporting any span associated with your TensorZero API request.
-TensorZero API requests _without_ these headers set will be unaffected.
+This will attach the headers `user-id: user-123` and `request-source: mobile-app` when exporting any span associated with that specific API request.
+
+When using the TensorZero Python SDK, you can pass dynamic OTLP headers using the `otlp_traces_extra_headers` parameter in the `inference` method.
+The headers will be automatically prefixed with `tensorzero-otlp-traces-extra-header-` for you:
+
+```python
+response = t0.inference(
+    function_name="your_function_name",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": "Write a haiku about artificial intelligence.",
+            }
+        ]
+    },
+    otlp_traces_extra_headers={
+        "user-id": "user-123",
+        "request-source": "mobile-app",
+    },
+)
+```
+
+This will attach the headers `user-id: user-123` and `request-source: mobile-app` when exporting any span associated with that specific inference request.
+
+### Export OpenInference traces
+
+By default, TensorZero exports traces with attributes that follow the [OpenTelemetry Generative AI semantic conventions](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai).
+
+You can instead choose to export traces with attributes that follow the [OpenInference semantic conventions](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md) by setting `export.otlp.traces.format = "openinference"` in your configuration file.
+See [Configuration Reference](/gateway/configuration-reference/) for more details.

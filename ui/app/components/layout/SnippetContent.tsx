@@ -10,7 +10,6 @@ import {
   FileText,
   FileAudio,
   AlignLeftIcon,
-  BlocksIcon,
   FileCode,
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
@@ -60,7 +59,7 @@ export function TextMessage({
 }: TextMessageProps) {
   const formattedContent = useFormattedJson(content || "");
 
-  return !content && !isEditing ? (
+  return content === undefined && !isEditing ? (
     <EmptyMessage message={emptyMessage} />
   ) : (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
@@ -79,50 +78,6 @@ export function TextMessage({
   );
 }
 
-export function ParameterizedMessage({
-  parameters,
-  templateName,
-  isEditing,
-  onChange,
-}: {
-  parameters?: unknown;
-  templateName?: string;
-  isEditing?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onChange?: (value: any) => void;
-}) {
-  const formattedJson = useFormattedJson(parameters ?? {});
-  const [jsonError, setJsonError] = useState<string | null>(null);
-
-  const labelText = templateName
-    ? `Template: ${templateName}`
-    : "Template Arguments";
-
-  return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label icon={<BlocksIcon className="text-fg-muted h-3 w-3" />}>
-        {labelText}
-      </Label>
-      <CodeEditor
-        allowedLanguages={["json"]}
-        value={formattedJson}
-        readOnly={!isEditing}
-        onChange={(updatedJson) => {
-          try {
-            // TODO: does is satisfy the schema?
-            const parsedJson = JSON.parse(updatedJson);
-            setJsonError(null);
-            onChange?.(parsedJson);
-          } catch {
-            setJsonError("Invalid JSON format");
-          }
-        }}
-      />
-      {jsonError && <div className="text-xs text-red-500">{jsonError}</div>}
-    </div>
-  );
-}
-
 export function TemplateMessage({
   templateName,
   arguments: templateArguments,
@@ -130,7 +85,7 @@ export function TemplateMessage({
   onChange,
 }: {
   templateName: string;
-  arguments?: unknown;
+  arguments: unknown;
   isEditing?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange?: (value: any) => void;

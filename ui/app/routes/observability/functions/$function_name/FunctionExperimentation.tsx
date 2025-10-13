@@ -1,0 +1,58 @@
+import type { FunctionConfig } from "tensorzero-node";
+import {
+  ExperimentationPieChart,
+  type VariantWeight,
+} from "~/components/experimentation/PieChart";
+import { DEFAULT_FUNCTION } from "~/utils/constants";
+
+interface FunctionExperimentationProps {
+  functionConfig: FunctionConfig;
+  functionName: string;
+}
+
+function extractVariantWeights(
+  functionConfig: FunctionConfig,
+): VariantWeight[] {
+  const experimentationConfig = functionConfig.experimentation;
+
+  if (experimentationConfig.type === "static_weights") {
+    // Extract candidate variants and their weights
+    const candidateVariants = experimentationConfig.candidate_variants;
+    return Object.entries(candidateVariants)
+      .filter(([, weight]) => weight !== undefined)
+      .map(([variant_name, weight]) => ({
+        variant_name,
+        weight: weight!,
+      }));
+  } else if (experimentationConfig.type === "uniform") {
+    // For uniform distribution, all variants get equal weight
+    const variantNames = Object.keys(functionConfig.variants);
+    const equalWeight = 1.0 / variantNames.length;
+    return variantNames.map((variant_name) => ({
+      variant_name,
+      weight: equalWeight,
+    }));
+  }
+
+  // Default case (shouldn't happen, but TypeScript requires it)
+  return [];
+}
+
+export default function FunctionExperimentation({
+  functionConfig,
+  functionName,
+}: FunctionExperimentationProps) {
+  // Don't render experimentation section for the default function
+  if (functionName === DEFAULT_FUNCTION) {
+    return null;
+  }
+
+  const variantWeights = extractVariantWeights(functionConfig);
+
+  // Don't render if there are no variant weights
+  if (variantWeights.length === 0) {
+    return null;
+  }
+
+  return <ExperimentationPieChart variantWeights={variantWeights} />;
+}

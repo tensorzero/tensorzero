@@ -1,87 +1,73 @@
-import type { FunctionConfig, JsonValue } from "tensorzero-node";
+import type { FunctionConfig, SchemaData } from "tensorzero-node";
 import {
   SnippetLayout,
   SnippetContent,
   SnippetTabs,
-  type SnippetTab,
 } from "~/components/layout/SnippetLayout";
 import { EmptyMessage } from "~/components/layout/SnippetContent";
 import { CodeEditor } from "~/components/ui/code-editor";
+import { LegacyStructuredPromptBadge } from "~/components/ui/LegacyStructuredPromptBadge";
 
 interface FunctionSchemaProps {
   functionConfig: FunctionConfig;
 }
 
-// Create a schema tab with appropriate indicator based on schema content
-function createSchemaTab(
-  id: string,
-  label: string,
-  schema?: JsonValue,
-  emptyMessage?: string,
-): SnippetTab & { emptyMessage?: string } {
-  return {
-    id,
-    label,
-    indicator: schema ? "content" : "empty",
-    emptyMessage,
-  };
-}
-
 export default function FunctionSchema({
   functionConfig,
 }: FunctionSchemaProps) {
-  const schemas = {
-    system: functionConfig.schemas.system?.value,
-    user: functionConfig.schemas.user?.value,
-    assistant: functionConfig.schemas.assistant?.value,
+  // Build schemas object dynamically from all available schemas
+  const schemas: SchemaData = {
+    ...functionConfig.schemas,
     ...(functionConfig.type === "json"
-      ? { output: functionConfig.output_schema?.value }
+      ? {
+          output: {
+            schema: { value: functionConfig.output_schema?.value },
+            legacy_definition: false,
+          },
+        }
       : {}),
   };
 
-  const tabs = [
-    createSchemaTab(
-      "system",
-      "System Schema",
-      schemas.system,
-      "No system schema defined.",
-    ),
-    createSchemaTab(
-      "user",
-      "User Schema",
-      schemas.user,
-      "No user schema defined.",
-    ),
-    createSchemaTab(
-      "assistant",
-      "Assistant Schema",
-      schemas.assistant,
-      "No assistant schema defined.",
-    ),
-    ...(functionConfig.type === "json"
-      ? [
-          createSchemaTab(
-            "output",
-            "Output Schema",
-            schemas.output,
-            "No output schema defined.",
-          ),
-        ]
-      : []),
-  ];
+  // Get all schema entries
+  const schemaEntries = Object.entries(schemas);
 
-  // Find the first tab with content, or default to "system"
-  const defaultTab =
-    tabs.find((tab) => tab.indicator === "content")?.id || "system";
+  // If no schemas exist, show an empty state
+  if (schemaEntries.length === 0) {
+    return (
+      <SnippetLayout>
+        <SnippetContent maxHeight={240}>
+          <EmptyMessage message="No schemas defined." />
+        </SnippetContent>
+      </SnippetLayout>
+    );
+  }
+
+  // Create tabs for each schema
+  const tabs = schemaEntries.map(([name, schemaData]) => {
+    const isLegacy = schemaData?.legacy_definition ?? false;
+    const isOutputSchema = name === "output";
+    return {
+      id: name,
+      label: (
+        <div className="flex items-center gap-2">
+          <span>{name}</span>
+          {isLegacy && !isOutputSchema && (
+            <LegacyStructuredPromptBadge name={name} type="schema" />
+          )}
+        </div>
+      ),
+      emptyMessage: "No schema defined.",
+    };
+  });
 
   return (
     <SnippetLayout>
-      <SnippetTabs tabs={tabs} defaultTab={defaultTab}>
+      <SnippetTabs tabs={tabs} defaultTab={tabs[0]?.id}>
         {(activeTab) => {
           const tab = tabs.find((tab) => tab.id === activeTab);
-          const schema = schemas[activeTab as keyof typeof schemas];
-          const formattedContent = schema
-            ? JSON.stringify(schema, null, 2)
+          const schema = schemas[activeTab];
+          const formattedContent = schema?.schema?.value
+            ? JSON.stringify(schema.schema.value, null, 2)
             : undefined;
 
           return (

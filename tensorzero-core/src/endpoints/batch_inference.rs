@@ -21,8 +21,9 @@ use super::inference::{
 use crate::cache::{CacheEnabledMode, CacheOptions};
 use crate::config::Config;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
-use crate::error::{Error, ErrorDetails};
-use crate::function::{sample_variant, FunctionConfig};
+use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::experimentation::VariantSampler;
+use crate::function::FunctionConfig;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{
     BatchEpisodeIds, BatchEpisodeIdsWithSize, BatchInferenceDatabaseInsertMetadata,
@@ -253,6 +254,42 @@ pub async fn start_batch_inference(
         .map(|input| input.into_lazy_resolved_input(context))
         .collect::<Result<Vec<LazyResolvedInput>, Error>>()?;
 
+    // If we have a pinned variant (only one candidate), skip sampling and directly start the batch inference
+    if candidate_variants.len() == 1 {
+        let (variant_name, variant) = candidate_variants
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("No candidate variants available for batch inference. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                })
+            })?;
+
+        return start_variant_batch_inference(StartVariantBatchInferenceArgs {
+            variant_name,
+            variant,
+            function: &function,
+            function_name: &params.function_name,
+            episode_ids: &episode_ids,
+            inference_ids: &inference_ids,
+            resolved_inputs: resolved_inputs.clone(),
+            inference_models: &inference_models,
+            inference_clients: &inference_clients,
+            inference_params: inference_params.clone(),
+            tool_configs: &tool_configs,
+            batch_dynamic_output_schemas: &batch_dynamic_output_schemas,
+            config: &config,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            tags: params.tags.clone(),
+        })
+        .await
+        .map(|(batch_id, inference_ids)| PrepareBatchInferenceOutput {
+            batch_id,
+            inference_ids,
+            episode_ids,
+        });
+    }
+
     // Keep sampling variants until one succeeds
     // We already guarantee there is at least one inference
     let first_episode_id = episode_ids
@@ -263,11 +300,26 @@ pub async fn start_batch_inference(
 
     while !candidate_variants.is_empty() {
         // We sample the same variant for the whole batch
-        let (variant_name, variant) = sample_variant(
-            &mut candidate_variants,
-            &params.function_name,
-            first_episode_id,
-        )?;
+        let result = function
+            .experimentation()
+            .sample(
+                &params.function_name,
+                *first_episode_id,
+                &mut candidate_variants,
+            )
+            .await;
+        let (variant_name, variant) = match result {
+            Ok((variant_name, variant)) => (variant_name, variant),
+            Err(e) => {
+                if variant_errors.is_empty() {
+                    return Err(e);
+                }
+                // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                // It is more informative to the caller that variants have failed than that there's some internal error with the sampling strategy.
+                // As we continue work on experimentation we will make sure that the sampler only errors if there is no way to provide a valid variant.
+                break;
+            }
+        };
 
         let result = start_variant_batch_inference(StartVariantBatchInferenceArgs {
             variant_name: variant_name.clone(),

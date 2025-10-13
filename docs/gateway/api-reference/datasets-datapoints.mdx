@@ -64,6 +64,7 @@ For `chat` functions, each datapoint object must have the following fields:
 - `tool_choice` (string, optional, identical to an inference's `tool_choice`)
 - `parallel_tool_calls` (boolean, optional, defaults to `false`)
 - `tags` (map of string to string, optional)
+- `name` (string, optional)
 
 For `json` functions, each datapoint object must have the following fields:
 
@@ -72,6 +73,7 @@ For `json` functions, each datapoint object must have the following fields:
 - `output` (object, optional, an object that matches the `output_schema` of the function)
 - `output_schema` (object, optional, a dynamic JSON schema that overrides the output schema of the function)
 - `tags` (map of string to string, optional)
+- `name` (string, optional)
 
 ### Delete a datapoint
 

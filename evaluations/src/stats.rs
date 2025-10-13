@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{evaluators, OutputFormat};
 
-pub(crate) struct EvaluationStats {
+pub struct EvaluationStats {
     pub output_format: OutputFormat,
     pub evaluation_infos: Vec<EvaluationInfo>,
     pub evaluation_errors: Vec<EvaluationError>,
@@ -19,7 +19,7 @@ pub(crate) struct EvaluationStats {
 }
 
 impl EvaluationStats {
-    pub(crate) fn new(output_format: OutputFormat, dataset_len: usize) -> Self {
+    pub fn new(output_format: OutputFormat, dataset_len: usize) -> Self {
         let progress_bar = match output_format {
             OutputFormat::Jsonl => None,
             OutputFormat::Pretty => Some(ProgressBar::new(dataset_len as u64)),
@@ -44,13 +44,23 @@ impl EvaluationStats {
     ) -> Result<()> {
         match self.output_format {
             OutputFormat::Jsonl => {
-                writeln!(writer, "{}", serde_json::to_string(&evaluation_update)?)?;
+                let json = match &evaluation_update {
+                    EvaluationUpdate::RunInfo(run_info) => serde_json::to_string(run_info)?,
+                    other => serde_json::to_string(other)?,
+                };
+                writeln!(writer, "{json}")?;
             }
-            OutputFormat::Pretty => {
-                if let Some(progress_bar) = &mut self.progress_bar {
-                    progress_bar.inc(1);
+            OutputFormat::Pretty => match &evaluation_update {
+                EvaluationUpdate::RunInfo(run_info) => {
+                    writeln!(writer, "Run ID: {}", run_info.evaluation_run_id)?;
+                    writeln!(writer, "Number of datapoints: {}", run_info.num_datapoints)?;
                 }
-            }
+                EvaluationUpdate::Success(_) | EvaluationUpdate::Error(_) => {
+                    if let Some(progress_bar) = &mut self.progress_bar {
+                        progress_bar.inc(1);
+                    }
+                }
+            },
         }
         match evaluation_update {
             EvaluationUpdate::Success(evaluation_info) => {
@@ -59,13 +69,17 @@ impl EvaluationStats {
             EvaluationUpdate::Error(evaluation_error) => {
                 self.evaluation_errors.push(evaluation_error);
             }
+            EvaluationUpdate::RunInfo(_) => {
+                // No data to store
+            }
         }
+
         Ok(())
     }
 
     /// Computes the mean and stderr for each of the evaluations observed
     #[instrument(skip_all, fields(evaluation_infos_count = self.evaluation_infos.len(), evaluation_errors_count = self.evaluation_errors.len()))]
-    pub(crate) fn compute_stats(
+    pub fn compute_stats(
         &self,
         evaluators: &HashMap<String, EvaluatorConfig>,
     ) -> HashMap<String, EvaluatorStats> {
@@ -131,11 +145,17 @@ impl EvaluationStats {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum EvaluationUpdate {
+    // RunInfo is used for internal channel communication only and receives special
+    // serialization handling in EvaluationStats::push (serializes the inner RunInfo
+    // directly, not the enum wrapper). The #[serde(skip)] prevents accidental
+    // serialization of the enum variant itself.
+    #[serde(skip)]
+    RunInfo(crate::RunInfo),
     Success(EvaluationInfo),
     Error(EvaluationError),
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvaluationInfo {
     pub datapoint: Datapoint,
     pub response: InferenceResponse,
@@ -170,7 +190,7 @@ impl EvaluationInfo {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EvaluationError {
     pub datapoint_id: Uuid,
     pub message: String,
@@ -178,6 +198,7 @@ pub struct EvaluationError {
 
 /// Statistics computed about a particular evaluator
 /// We anticipate extending this over time
+#[derive(Serialize)]
 pub struct EvaluatorStats {
     pub mean: f32,
     pub stderr: f32,

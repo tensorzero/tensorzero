@@ -177,9 +177,9 @@ async fn get_providers() -> E2ETestProviders {
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
-        image_inference: image_providers,
+        image_inference: image_providers.clone(),
         shorthand_inference: shorthand_providers.clone(),
-        pdf_inference: vec![],
+        pdf_inference: image_providers,
     }
 }
 

@@ -331,15 +331,22 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
     .filter({ has: page.getByRole("heading", { name: "Tags" }) });
   await expect(tagsSection.locator("table")).toBeVisible();
 
+  // Wait for the input fields to be visible and ready
+  await tagsSection.getByPlaceholder("Key").waitFor({ state: "visible" });
+  await tagsSection.getByPlaceholder("Value").waitFor({ state: "visible" });
+
   // Test 1: Add a new tag
   const testKey1 = "environment";
   const testValue1 = "test";
 
-  await page.getByPlaceholder("Key").fill(testKey1);
-  await page.getByPlaceholder("Value").fill(testValue1);
+  await tagsSection.getByPlaceholder("Key").fill(testKey1);
+  await tagsSection.getByPlaceholder("Value").fill(testValue1);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify the tag appears in the table
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
+
+  // Wait for the tag to appear in the table before proceeding
   await expect(tagsSection.locator("table")).toContainText(testKey1);
   await expect(tagsSection.locator("table")).toContainText(testValue1);
 
@@ -347,11 +354,14 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   const testKey2 = "author";
   const testValue2 = "e2e-test";
 
-  await page.getByPlaceholder("Key").fill(testKey2);
-  await page.getByPlaceholder("Value").fill(testValue2);
+  await tagsSection.getByPlaceholder("Key").fill(testKey2);
+  await tagsSection.getByPlaceholder("Value").fill(testValue2);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify both tags appear in the table (should be sorted alphabetically)
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection.getByPlaceholder("Key")).toHaveValue("");
+
+  // Wait for the tag to appear in the table before proceeding
   await expect(tagsSection.locator("table")).toContainText(testKey2);
   await expect(tagsSection.locator("table")).toContainText(testValue2);
 
@@ -359,8 +369,11 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   const systemKey = "tensorzero::blocked";
   const systemValue = "should_not_work";
 
-  await page.getByPlaceholder("Key").fill(systemKey);
-  await page.getByPlaceholder("Value").fill(systemValue);
+  await tagsSection.getByPlaceholder("Key").fill(systemKey);
+  await tagsSection.getByPlaceholder("Value").fill(systemValue);
+
+  // Wait for the button state to update based on input validation
+  await page.waitForTimeout(100);
 
   // The Add button should be disabled
   await expect(page.getByRole("button", { name: "Add" })).toBeDisabled();
@@ -373,8 +386,8 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   ).toBeVisible();
 
   // Clear the system tag input
-  await page.getByPlaceholder("Key").clear();
-  await page.getByPlaceholder("Value").clear();
+  await tagsSection.getByPlaceholder("Key").clear();
+  await tagsSection.getByPlaceholder("Value").clear();
 
   // Test 4: Save the datapoint and verify tags persist
   await page.getByRole("button", { name: "Save" }).click();
@@ -415,11 +428,14 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   // Test 6: Edit an existing tag by overwriting it
   const newTestValue1 = "production"; // New value for environment tag
 
-  await page.getByPlaceholder("Key").fill(testKey1); // Use same key "environment"
-  await page.getByPlaceholder("Value").fill(newTestValue1);
+  await tagsSection3.getByPlaceholder("Key").fill(testKey1); // Use same key "environment"
+  await tagsSection3.getByPlaceholder("Value").fill(newTestValue1);
   await page.getByRole("button", { name: "Add" }).click();
 
-  // Verify the tag value was overwritten (old value gone, new value present)
+  // Wait for inputs to be cleared after adding (indicates operation completed)
+  await expect(tagsSection3.getByPlaceholder("Key")).toHaveValue("");
+
+  // Wait for the tag to be updated in the table
   await expect(tagsSection3.locator("table")).toContainText(testKey1);
   await expect(tagsSection3.locator("table")).toContainText(newTestValue1);
   await expect(tagsSection3.locator("table")).not.toContainText(testValue1); // Old value should be gone
@@ -536,7 +552,7 @@ test("should be able to add a system message when none exists", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -549,7 +565,7 @@ test("should be able to add a system message when none exists", async ({
 
   // Reload the page to verify persistence
   await page.reload();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Verify system message is still present after reload
   await expect(page.getByText(systemMessageText)).toBeVisible();
@@ -622,7 +638,7 @@ test("should be able to delete an existing system message", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -651,7 +667,7 @@ test("should be able to delete an existing system message", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -664,8 +680,60 @@ test("should be able to delete an existing system message", async ({
 
   // Reload the page to verify persistence
   await page.reload();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Verify system role is still not present after reload
   await expect(page.getByText("system", { exact: true })).not.toBeVisible();
+});
+
+test("should be able to rename a datapoint", async ({ page }) => {
+  await page.goto(
+    "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
+  );
+  await page.waitForLoadState("networkidle");
+  await expect(
+    page.getByRole("button", { name: "Rename datapoint" }),
+  ).toBeVisible();
+
+  // Click on the Add to dataset button
+  await page.getByRole("button", { name: "Rename datapoint" }).click();
+
+  // Wait for the datapoint name input by its label to be visible
+  const datapointNameInput = page.getByLabel("Datapoint name");
+  await datapointNameInput.waitFor({ state: "visible" });
+  await datapointNameInput.fill("New Datapoint Name");
+
+  // Click on the Save button
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Datapoint name should be updated
+  await expect(
+    page.getByText("New Datapoint Name", { exact: true }),
+  ).toBeVisible();
+});
+
+test("should be able to cancel renaming a datapoint", async ({ page }) => {
+  await page.goto(
+    "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
+  );
+  await page.waitForLoadState("networkidle");
+  await expect(
+    page.getByRole("button", { name: "Rename datapoint" }),
+  ).toBeVisible();
+
+  // Click on the Add to dataset button
+  await page.getByRole("button", { name: "Rename datapoint" }).click();
+
+  // Wait for the datapoint name input by its label to be visible
+  const datapointNameInput = page.getByLabel("Datapoint name");
+  await datapointNameInput.waitFor({ state: "visible" });
+  await datapointNameInput.fill("Renamed Datapoint Name");
+
+  // Click on the Cancel button
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  // We should not have updated the datapoint name
+  await expect(
+    page.getByText("Renamed Datapoint Name", { exact: false }),
+  ).not.toBeVisible();
 });

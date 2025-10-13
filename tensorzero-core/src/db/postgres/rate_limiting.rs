@@ -1,4 +1,3 @@
-use chrono::TimeDelta;
 use sqlx::postgres::types::PgInterval;
 
 use crate::{
@@ -17,13 +16,13 @@ pub struct BucketInfo {
     pub key: String,
     pub capacity: i64,
     pub refill_amount: i64,
-    pub interval: TimeDelta,
+    pub interval: PgInterval,
 }
 
 impl RateLimitQueries for PostgresConnectionInfo {
     async fn consume_tickets(
         &self,
-        requests: Vec<ConsumeTicketsRequest>,
+        requests: &[ConsumeTicketsRequest],
     ) -> Result<Vec<ConsumeTicketsReceipt>, Error> {
         if requests.is_empty() {
             return Ok(vec![]);
@@ -39,17 +38,8 @@ impl RateLimitQueries for PostgresConnectionInfo {
         let requested_amounts: Vec<i64> = requests.iter().map(|r| r.requested as i64).collect();
         let capacities: Vec<i64> = requests.iter().map(|r| r.capacity as i64).collect();
         let refill_amounts: Vec<i64> = requests.iter().map(|r| r.refill_amount as i64).collect();
-        let refill_intervals: Vec<PgInterval> = requests
-            .iter()
-            .map(|r| {
-                r.refill_interval.try_into().map_err(|_| {
-                    Error::new(ErrorDetails::PostgresQuery {
-                        message: "Failed to convert TimeDelta to PgInterval".to_string(),
-                        function_name: Some("consume_tickets".to_string()),
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let refill_intervals: Vec<PgInterval> =
+            requests.iter().map(|r| r.refill_interval).collect();
 
         let responses = sqlx::query_as!(
             ConsumeTicketsResponse,
@@ -91,17 +81,8 @@ impl RateLimitQueries for PostgresConnectionInfo {
         let amounts: Vec<i64> = requests.iter().map(|r| r.returned as i64).collect();
         let capacities: Vec<i64> = requests.iter().map(|r| r.capacity as i64).collect();
         let refill_amounts: Vec<i64> = requests.iter().map(|r| r.refill_amount as i64).collect();
-        let refill_intervals: Vec<PgInterval> = requests
-            .iter()
-            .map(|r| {
-                r.refill_interval.try_into().map_err(|_| {
-                    Error::new(ErrorDetails::PostgresQuery {
-                        message: "Failed to convert TimeDelta to PgInterval".to_string(),
-                        function_name: Some("return_tickets".to_string()),
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let refill_intervals: Vec<PgInterval> =
+            requests.iter().map(|r| r.refill_interval).collect();
 
         let responses = sqlx::query_as!(
             ReturnTicketsResponse,
@@ -135,7 +116,7 @@ impl RateLimitQueries for PostgresConnectionInfo {
         key: &str,
         capacity: u64,
         refill_amount: u64,
-        refill_interval: TimeDelta,
+        refill_interval: PgInterval,
     ) -> Result<u64, Error> {
         let pool = self.get_pool().ok_or_else(|| {
             Error::new(ErrorDetails::PostgresQuery {
@@ -144,19 +125,12 @@ impl RateLimitQueries for PostgresConnectionInfo {
             })
         })?;
 
-        let pg_interval: PgInterval = refill_interval.try_into().map_err(|_| {
-            Error::new(ErrorDetails::PostgresQuery {
-                message: "Failed to convert TimeDelta to PgInterval".to_string(),
-                function_name: Some("get_balance".to_string()),
-            })
-        })?;
-
         let balance: Option<i64> = sqlx::query_scalar!(
             "SELECT get_resource_bucket_balance($1, $2, $3, $4)",
             key,
             capacity as i64,
             refill_amount as i64,
-            pg_interval
+            refill_interval
         )
         .fetch_one(pool)
         .await

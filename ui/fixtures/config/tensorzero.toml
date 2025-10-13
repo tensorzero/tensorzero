@@ -94,6 +94,7 @@ type = "experimental_dynamic_in_context_learning"
 embedding_model = "text-embedding-3-small"
 model = "gpt-4o-mini-2024-07-18"
 k = 10
+max_distance = 0.5
 system_instructions = "functions/extract_entities/baseline/system_template.minijinja"
 json_mode = "strict"
 weight = 1
@@ -251,6 +252,21 @@ system_template = "functions/judge_answer/gpt-4.1-mini/system_template.minijinja
 user_template = "functions/judge_answer/gpt-4.1-mini/user_template.minijinja"
 json_mode = "strict"
 
+[functions.custom_template_test]
+type = "chat"
+description = "Test function for custom-named templates and schemas"
+schemas.greeting_template.path = "functions/custom_template_test/greeting_schema.json"
+schemas.analysis_prompt.path = "functions/custom_template_test/analysis_schema.json"
+schemas.fun_fact_topic.path = "functions/custom_template_test/fun_fact_schema.json"
+
+[functions.custom_template_test.variants.baseline]
+type = "chat_completion"
+model = "gpt-4o-mini-2024-07-18"
+templates.greeting_template.path = "functions/custom_template_test/baseline/greeting_template.minijinja"
+templates.analysis_prompt.path = "functions/custom_template_test/baseline/analysis_prompt.minijinja"
+templates.fun_fact_topic.path = "functions/custom_template_test/baseline/fun_fact_topic.minijinja"
+retries = { num_retries = 3, max_delay_s = 10 }
+
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                   TOOLS                                    │
 # └────────────────────────────────────────────────────────────────────────────┘
@@ -271,6 +287,7 @@ parameters = "tools/load_wikipedia_page.json"
 strict = true
 
 [tools.answer_question]
+name = "submit_answer"
 description = "End the search process and answer a question. Returns the answer to the question."
 parameters = "tools/answer_question.json"
 strict = true

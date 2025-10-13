@@ -29,9 +29,7 @@ async def main():
     )
 
     # Initialize the TensorZero Gateway
-    async with await AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000"
-    ) as t0:
+    async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as t0:
         # Initialize the MCP client
         async with stdio_client(server_params) as (read, write):
             async with ClientSession(
@@ -78,9 +76,7 @@ async def main():
                     episode_id = response.episode_id
 
                     # Add the assistant message to the conversation
-                    assistant_message = Message(
-                        role="assistant", content=response.content
-                    )
+                    assistant_message = Message(role="assistant", content=response.content)
 
                     messages.append(assistant_message)
 
@@ -95,14 +91,10 @@ async def main():
                             print(content_block.raw_arguments)
 
                             # NB: depending on the use case, you might want to await multiple tool calls in parallel
-                            mcp_tool_result = await session.call_tool(
-                                content_block.name, content_block.arguments
-                            )
+                            mcp_tool_result = await session.call_tool(content_block.name, content_block.arguments)
 
                             # MCP servers technically could return multiple blocks, so we concatenate them
-                            t0_tool_result_text = "\n".join(
-                                [block.text for block in mcp_tool_result.content]
-                            )
+                            t0_tool_result_text = "\n".join([block.text for block in mcp_tool_result.content])
 
                             print("\n[Tool Result]")
                             print(t0_tool_result_text)

@@ -116,6 +116,17 @@ impl StaticJSONSchema {
     }
 }
 
+/// Wraps a schema with metadata indicating whether it was defined using legacy syntax
+/// (e.g., `user_schema`, `assistant_schema`, `system_schema`) or new syntax (e.g., `schemas.<name>`).
+/// This is used to determine whether to show a "Legacy" badge in the UI.
+#[derive(Clone, Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct SchemaWithMetadata {
+    pub schema: StaticJSONSchema,
+    pub legacy_definition: bool,
+}
+
 /// This is a JSONSchema that is compiled on the fly.
 /// This is useful for schemas that are not known at compile time, in particular, for dynamic tool definitions.
 /// In order to avoid blocking the inference, we compile the schema asynchronously as the inference runs.
