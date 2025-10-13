@@ -115,9 +115,9 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: Python &mdash; OpenAI Client</b></summary>
+<summary><b>Usage: Python &mdash; OpenAI SDK</b></summary>
 
-You can access any provider using the OpenAI Python client with TensorZero.
+You can access any provider using the OpenAI Python SDK with TensorZero.
 
 1. `pip install tensorzero`
 2. Optional: Set up the TensorZero configuration.
@@ -153,9 +153,9 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: JavaScript / TypeScript (Node) &mdash; OpenAI Client</b></summary>
+<summary><b>Usage: JavaScript / TypeScript (Node) &mdash; OpenAI SDK</b></summary>
 
-You can access any provider using the OpenAI Node client with TensorZero.
+You can access any provider using the OpenAI Node SDK with TensorZero.
 
 1. Deploy `tensorzero/gateway` using Docker.
    **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
