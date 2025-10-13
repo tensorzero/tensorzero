@@ -501,7 +501,7 @@ impl ClickHouseConnectionInfo {
                         metric_name,
                         value,
                         tags,
-                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                     FROM BooleanMetricFeedbackByTargetId
                     WHERE target_id = {{target_id:UUID}} {where_clause}
                     ORDER BY toUInt128(id) {order_clause}
@@ -520,7 +520,7 @@ impl ClickHouseConnectionInfo {
                     metric_name,
                     value,
                     tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                 FROM BooleanMetricFeedbackByTargetId
                 WHERE target_id = {{target_id:UUID}} {where_clause}
                 ORDER BY toUInt128(id) {order_clause}
@@ -571,7 +571,7 @@ impl ClickHouseConnectionInfo {
                         metric_name,
                         value,
                         tags,
-                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                     FROM FloatMetricFeedbackByTargetId
                     WHERE target_id = {{target_id:UUID}} {where_clause}
                     ORDER BY toUInt128(id) {order_clause}
@@ -590,7 +590,7 @@ impl ClickHouseConnectionInfo {
                     metric_name,
                     value,
                     tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                 FROM FloatMetricFeedbackByTargetId
                 WHERE target_id = {{target_id:UUID}} {where_clause}
                 ORDER BY toUInt128(id) {order_clause}
@@ -641,7 +641,7 @@ impl ClickHouseConnectionInfo {
                         target_type,
                         value,
                         tags,
-                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                     FROM CommentFeedbackByTargetId
                     WHERE target_id = {{target_id:UUID}} {where_clause}
                     ORDER BY toUInt128(id) {order_clause}
@@ -660,7 +660,7 @@ impl ClickHouseConnectionInfo {
                     target_type,
                     value,
                     tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                 FROM CommentFeedbackByTargetId
                 WHERE target_id = {{target_id:UUID}} {where_clause}
                 ORDER BY toUInt128(id) {order_clause}
@@ -709,7 +709,7 @@ impl ClickHouseConnectionInfo {
                         inference_id,
                         value,
                         tags,
-                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                     FROM DemonstrationFeedbackByInferenceId
                     WHERE inference_id = {{inference_id:UUID}} {where_clause}
                     ORDER BY toUInt128(id) {order_clause}
@@ -727,7 +727,7 @@ impl ClickHouseConnectionInfo {
                     inference_id,
                     value,
                     tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%%H:%%i:%%SZ') AS timestamp
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
                 FROM DemonstrationFeedbackByInferenceId
                 WHERE inference_id = {{inference_id:UUID}} {where_clause}
                 ORDER BY toUInt128(id) {order_clause}
