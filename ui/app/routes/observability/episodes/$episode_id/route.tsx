@@ -61,12 +61,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // In this case, we poll for the feedback item until it is found but time out and log a warning.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(episode_id, newFeedbackId, pageSize)
-    : dbClient.queryFeedbackByTargetId(
-        episode_id,
-        beforeFeedback || undefined,
-        afterFeedback || undefined,
-        pageSize,
-      );
+    : dbClient.queryFeedbackByTargetId({
+        target_id: episode_id,
+        before: beforeFeedback || undefined,
+        after: afterFeedback || undefined,
+        page_size: pageSize,
+      });
 
   const [
     inferences,
@@ -87,9 +87,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       episode_id,
     }),
     feedbackDataPromise,
-    dbClient.queryFeedbackBoundsByTargetId(episode_id),
+    dbClient.queryFeedbackBoundsByTargetId({
+      target_id: episode_id,
+    }),
     countInferencesForEpisode(episode_id),
-    dbClient.countFeedbackByTargetId(episode_id),
+    dbClient.countFeedbackByTargetId({
+      target_id: episode_id,
+    }),
     queryLatestFeedbackIdByMetric({ target_id: episode_id }),
   ]);
   if (inferences.length === 0) {

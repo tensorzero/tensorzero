@@ -224,13 +224,13 @@ test("pollForFeedbackItem should find feedback when it exists", async () => {
   const pageSize = 10;
 
   const dbClient = await getNativeDatabaseClient();
-  // RUn the queryFeedbackByTargetId function to return feedback with the target ID
-  const originalQueryFeedback = await dbClient.queryFeedbackByTargetId(
-    targetId,
-    undefined,
-    undefined,
-    pageSize,
-  );
+  // Run the queryFeedbackByTargetId function to return feedback with the target ID
+  const originalQueryFeedback = await dbClient.queryFeedbackByTargetId({
+    target_id: targetId,
+    before: undefined,
+    after: undefined,
+    page_size: pageSize,
+  });
 
   // Ensure we have feedback to test with
   expect(originalQueryFeedback.length).toBeGreaterThan(0);

@@ -21,6 +21,9 @@ import type {
   FeedbackRow,
   FeedbackBounds,
   TimeWindow,
+  QueryFeedbackBoundsByTargetIdParams,
+  QueryFeedbackByTargetIdParams,
+  CountFeedbackByTargetIdParams,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -266,39 +269,31 @@ export class DatabaseClient {
   }
 
   async queryFeedbackByTargetId(
-    targetId: string,
-    before?: string,
-    after?: string,
-    pageSize?: number,
+    params: QueryFeedbackByTargetIdParams,
   ): Promise<FeedbackRow[]> {
-    const params = safeStringify({
-      target_id: targetId,
-      before,
-      after,
-      page_size: pageSize,
-    });
+    const paramsString = safeStringify(params);
     const feedbackString =
-      await this.nativeDatabaseClient.queryFeedbackByTargetId(params);
+      await this.nativeDatabaseClient.queryFeedbackByTargetId(paramsString);
     return JSON.parse(feedbackString) as FeedbackRow[];
   }
 
   async queryFeedbackBoundsByTargetId(
-    targetId: string,
+    params: QueryFeedbackBoundsByTargetIdParams,
   ): Promise<FeedbackBounds> {
-    const params = safeStringify({
-      target_id: targetId,
-    });
+    const paramsString = safeStringify(params);
     const boundsString =
-      await this.nativeDatabaseClient.queryFeedbackBoundsByTargetId(params);
+      await this.nativeDatabaseClient.queryFeedbackBoundsByTargetId(
+        paramsString,
+      );
     return JSON.parse(boundsString) as FeedbackBounds;
   }
 
-  async countFeedbackByTargetId(targetId: string): Promise<number> {
-    const params = safeStringify({
-      target_id: targetId,
-    });
+  async countFeedbackByTargetId(
+    params: CountFeedbackByTargetIdParams,
+  ): Promise<number> {
+    const paramsString = safeStringify(params);
     const countString =
-      await this.nativeDatabaseClient.countFeedbackByTargetId(params);
+      await this.nativeDatabaseClient.countFeedbackByTargetId(paramsString);
     return JSON.parse(countString) as number;
   }
 

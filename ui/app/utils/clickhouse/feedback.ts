@@ -854,12 +854,12 @@ export async function pollForFeedbackItem(
   let feedback: FeedbackRow[] = [];
   let found = false;
   for (let i = 0; i < maxRetries; i++) {
-    feedback = await dbClient.queryFeedbackByTargetId(
-      targetId,
-      undefined,
-      undefined,
-      pageSize,
-    );
+    feedback = await dbClient.queryFeedbackByTargetId({
+      target_id: targetId,
+      before: undefined,
+      after: undefined,
+      page_size: pageSize,
+    });
     if (feedback.some((f) => f.id === feedbackId)) {
       found = true;
       break;

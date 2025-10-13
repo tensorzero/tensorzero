@@ -86,20 +86,21 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     inference_id,
     page_size: 1, // Only need to know if *any* exist
   });
-  const feedbackBoundsPromise =
-    dbClient.queryFeedbackBoundsByTargetId(inference_id);
+  const feedbackBoundsPromise = dbClient.queryFeedbackBoundsByTargetId({
+    target_id: inference_id,
+  });
 
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
-    : dbClient.queryFeedbackByTargetId(
-        inference_id,
-        beforeFeedback || undefined,
-        afterFeedback || undefined,
-        pageSize,
-      );
+    : dbClient.queryFeedbackByTargetId({
+        target_id: inference_id,
+        before: beforeFeedback || undefined,
+        after: afterFeedback || undefined,
+        page_size: pageSize,
+      });
 
   // --- Execute all promises concurrently ---
 
