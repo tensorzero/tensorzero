@@ -1,4 +1,16 @@
 /**
+ * Standard chart colors for consistent theming across all charts
+ * Uses CSS custom properties defined in the theme
+ */
+export const CHART_COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
+] as const;
+
+/**
  * Format numbers for chart axes to avoid overflow with large numbers
  * Uses compact notation (K, M, B) for readability
  */

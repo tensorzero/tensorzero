@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import React, { useState, useMemo } from "react";
 import { Await } from "react-router";
+import { CHART_COLORS } from "~/utils/chart";
 import {
   Select,
   SelectItem,
@@ -84,14 +85,6 @@ function CustomTooltipContent({ active, payload, label }: TooltipProps) {
     </div>
   );
 }
-
-const CHART_COLORS = [
-  "hsl(var(--chart-1))",
-  "hsl(var(--chart-2))",
-  "hsl(var(--chart-3))",
-  "hsl(var(--chart-4))",
-  "hsl(var(--chart-5))",
-] as const;
 
 const MARGIN = { top: 12, right: 16, bottom: 28, left: 56 };
 

@@ -29,9 +29,7 @@ app = modal.App(name="vllm-inference-qwen")
     secrets=[modal.Secret.from_name("vllm-secret")],
     max_containers=1,
 )
-@modal.concurrent(
-    max_inputs=20
-)  #  how many concurrent requests can one container handle
+@modal.concurrent(max_inputs=20)  #  how many concurrent requests can one container handle
 @modal.web_server(port=VLLM_PORT, startup_timeout=2 * MINUTES, requires_proxy_auth=True)
 def vllm_inference():
     import os

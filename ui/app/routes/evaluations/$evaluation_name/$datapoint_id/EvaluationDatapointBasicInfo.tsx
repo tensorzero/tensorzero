@@ -8,12 +8,15 @@ import {
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import type { StaticEvaluationConfig } from "tensorzero-node";
+import EditableChip from "~/components/ui/EditableChip";
+import { toEvaluationUrl, toFunctionUrl, toDatasetUrl } from "~/utils/urls";
 
 interface BasicInfoProps {
   evaluation_name: string;
   evaluation_config: StaticEvaluationConfig;
   dataset_name: string;
   datapoint_name: string | null;
+  onRenameDatapoint?: (newName: string) => void | Promise<void>;
 }
 
 export default function BasicInfo({
@@ -21,6 +24,7 @@ export default function BasicInfo({
   evaluation_config,
   dataset_name,
   datapoint_name,
+  onRenameDatapoint,
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const functionConfig = useFunctionConfig(functionName);
@@ -34,8 +38,12 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>Name</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          {/* TODO: support editing names */}
-          <Chip label={datapoint_name || "-"} font="mono" />
+          <EditableChip
+            label={datapoint_name}
+            defaultLabel="—"
+            font="mono"
+            onSetLabel={onRenameDatapoint}
+          />
         </BasicInfoItemContent>
       </BasicInfoItem>
       <BasicInfoItem>
@@ -43,7 +51,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={evaluation_name}
-            link={`/evaluations/${evaluation_name}`}
+            link={toEvaluationUrl(evaluation_name)}
             font="mono"
           />
         </BasicInfoItemContent>
@@ -57,7 +65,7 @@ export default function BasicInfo({
               iconBg={functionIconConfig.iconBg}
               label={functionName}
               secondaryLabel={`· ${functionType}`}
-              link={`/observability/functions/${functionName}`}
+              link={toFunctionUrl(functionName)}
               font="mono"
             />
           )}
@@ -69,7 +77,7 @@ export default function BasicInfo({
         <BasicInfoItemContent>
           <Chip
             label={dataset_name}
-            link={`/datasets/${dataset_name}`}
+            link={toDatasetUrl(dataset_name)}
             font="mono"
           />
         </BasicInfoItemContent>

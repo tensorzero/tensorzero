@@ -7,4 +7,8 @@ export type OtlpTracesConfig = {
    */
   enabled: boolean;
   format: OtlpTracesFormat;
+  /**
+   * Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
+   */
+  extra_headers: { [key in string]?: string };
 };

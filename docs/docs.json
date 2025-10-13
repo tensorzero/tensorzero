@@ -106,6 +106,7 @@
               "deployment/tensorzero-gateway",
               "deployment/tensorzero-ui",
               "deployment/clickhouse",
+              "deployment/postgres",
               "deployment/optimize-latency-and-throughput"
             ]
           },
@@ -116,6 +117,7 @@
               "operations/organize-your-configuration",
               "operations/export-opentelemetry-traces",
               "operations/export-prometheus-metrics",
+              "operations/enforce-custom-rate-limits",
               "operations/extend-tensorzero"
             ]
           }

@@ -9,6 +9,9 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
+pub use tensorzero_core::db::clickhouse::dataset_queries::{
+    DatasetDetailRow, DatasetQueryParams, GetDatasetMetadataParams, GetDatasetRowsParams,
+};
 pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
 pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
@@ -55,9 +58,9 @@ pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageConten
 
 pub use tensorzero_core::cache::CacheParamsOptions;
 pub use tensorzero_core::db::clickhouse::query_builder::{
-    BooleanMetricNode, FloatComparisonOperator, FloatMetricNode, InferenceFilterTreeNode,
-    InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagNode,
-    TimeComparisonOperator, TimeNode,
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilterTreeNode,
+    InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagFilter,
+    TimeComparisonOperator, TimeFilter,
 };
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
@@ -203,6 +206,8 @@ pub enum ClientBuilderError {
     HTTPClientBuild(TensorZeroError),
     #[error("Failed to get gateway version: {0}")]
     GatewayVersion(String),
+    #[error("Failed to set up embedded gateway: {0}")]
+    EmbeddedGatewaySetup(TensorZeroError),
 }
 
 // Helper type to choose between using Debug or Display for a type
@@ -369,7 +374,13 @@ impl ClientBuilder {
                                 clickhouse_connection_info,
                                 postgres_connection_info,
                                 http_client,
-                            ),
+                            )
+                            .await
+                            .map_err(|e| {
+                                ClientBuilderError::EmbeddedGatewaySetup(TensorZeroError::Other {
+                                    source: e.into(),
+                                })
+                            })?,
                         },
                         timeout: *timeout,
                     }),
@@ -390,25 +401,16 @@ impl ClientBuilder {
     /// (e.g. if a TLS backend cannot be initialized)
     #[cfg(feature = "pyo3")]
     pub fn build_dummy() -> Client {
-        use tensorzero_core::db::{
-            clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo,
-        };
-
+        let handle = GatewayHandle::new_dummy(
+            // NOTE - we previously called `reqwest::Client::new()`, which panics
+            // if a TLS backend cannot be initialized.
+            // This explicit `expect` does not actually increase the risk of panics,
+            #[expect(clippy::expect_used)]
+            TensorzeroHttpClient::new().expect("Failed to construct TensorzeroHttpClient"),
+        );
         Client {
             mode: Arc::new(ClientMode::EmbeddedGateway {
-                gateway: EmbeddedGateway {
-                    handle: GatewayHandle::new_with_database_and_http_client(
-                        Arc::new(Config::default()),
-                        ClickHouseConnectionInfo::Disabled,
-                        PostgresConnectionInfo::Disabled,
-                        // NOTE - we previously called `reqwest::Client::new()`, which panics
-                        // if a TLS backend cannot be initialized.
-                        // This explicit `expect` does not actually increase the risk of panics,
-                        #[expect(clippy::expect_used)]
-                        TensorzeroHttpClient::new()
-                            .expect("Failed to construct TensorzeroHttpClient"),
-                    ),
-                },
+                gateway: EmbeddedGateway { handle },
                 timeout: None,
             }),
             verbose_errors: false,
@@ -456,12 +458,12 @@ impl ClientBuilder {
 }
 
 /// A TensorZero client. This is constructed using `ClientBuilder`
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     mode: Arc<ClientMode>,
     verbose_errors: bool,
     #[cfg(feature = "e2e_tests")]
-    pub last_body: Mutex<Option<String>>,
+    pub last_body: Arc<Mutex<Option<String>>>,
 }
 
 impl StoragePathResolver for Client {
@@ -575,11 +577,18 @@ impl Client {
                 {
                     *self.last_body.lock().await = Some(body.clone());
                 }
-                let builder = client
+                let mut builder = client
                     .http_client
                     .post(url)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
                     .body(body);
+
+                // Add OTLP trace headers with the required prefix
+                for (key, value) in &params.otlp_traces_extra_headers {
+                    let header_name = format!("tensorzero-otlp-traces-extra-header-{key}");
+                    builder = builder.header(header_name, value);
+                }
+
                 if params.stream.unwrap_or(false) {
                     let event_source =
                         builder.eventsource().map_err(|e| TensorZeroError::Other {

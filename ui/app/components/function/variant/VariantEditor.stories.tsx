@@ -304,6 +304,80 @@ export const WithTemplatesOnly: Story = {
   ),
 };
 
+export const WithCustomNamedTemplates: Story = {
+  args: {
+    variantInfo: {} as VariantInfo,
+    confirmVariantInfo: () => {},
+    isOpen: false,
+    onClose: () => {},
+    variantName: "custom-named-templates",
+  },
+  render: () => (
+    <VariantEditorWrapper
+      initialInfo={{
+        inner: {
+          type: "chat_completion",
+          weight: null,
+          model: "gpt-5-mini",
+          templates: {
+            fun_fact_topic: {
+              template: {
+                path: "templates/fun_fact_topic.jinja2",
+                contents: "Share a fun fact about: {{ topic }}",
+              },
+              schema: null,
+              legacy_definition: false,
+            },
+            greeting_template: {
+              template: {
+                path: "templates/greeting.jinja2",
+                contents:
+                  "Hello {{ name }}! Welcome to {{ place }}. Today is {{ day_of_week }}.",
+              },
+              schema: null,
+              legacy_definition: false,
+            },
+            analysis_prompt: {
+              template: {
+                path: "templates/analysis.jinja2",
+                contents: `Analyze the following data:
+{{ data }}
+
+Focus on:
+{% for aspect in aspects %}
+- {{ aspect }}
+{% endfor %}`,
+              },
+              schema: null,
+              legacy_definition: false,
+            },
+          },
+          temperature: 0.8,
+          top_p: null,
+          max_tokens: 512,
+          presence_penalty: null,
+          frequency_penalty: null,
+          seed: null,
+          stop_sequences: null,
+          json_mode: null,
+          retries: {
+            num_retries: 1,
+            max_delay_s: 10,
+          },
+        },
+        timeouts: {
+          non_streaming: {
+            total_ms: 30000n,
+          },
+          streaming: {
+            ttft_ms: 5000n,
+          },
+        },
+      }}
+    />
+  ),
+};
+
 export const UnsupportedVariantType: Story = {
   args: {
     variantInfo: {} as VariantInfo,

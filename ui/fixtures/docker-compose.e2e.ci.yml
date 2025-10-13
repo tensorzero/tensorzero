@@ -6,7 +6,7 @@ services:
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_PASSWORD: chpassword
     volumes:
-      - ./config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./config.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
     ports:
       - "8123:8123" # HTTP port
       - "9000:9000" # Native port
@@ -112,6 +112,7 @@ services:
       OPENAI_BASE_URL: http://mock-inference-provider:3030/openai/
       FIREWORKS_BASE_URL: http://mock-inference-provider:3030/fireworks/
       FIREWORKS_ACCOUNT_ID: ${FIREWORKS_ACCOUNT_ID:-fake_fireworks_account}
+      TOGETHER_BASE_URL: http://mock-inference-provider:3030/together/
       VITE_TENSORZERO_FORCE_CACHE_ON: ${VITE_TENSORZERO_FORCE_CACHE_ON:-1}
     volumes:
       - ./config:/app/config:ro

@@ -1,3 +1,4 @@
+import type { DatasetDetailRow } from "tensorzero-node";
 import {
   Table,
   TableBody,
@@ -7,7 +8,6 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { DatasetDetailRow } from "~/utils/clickhouse/datasets";
 import {
   TableItemTime,
   TableItemFunction,
@@ -18,6 +18,7 @@ import { Button } from "~/components/ui/button";
 import { Trash } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useFetcher } from "react-router";
+import { toFunctionUrl, toDatapointUrl, toEpisodeUrl } from "~/utils/urls";
 import {
   Dialog,
   DialogContent,
@@ -72,23 +73,26 @@ export default function DatasetRowTable({
                 <TableCell className="max-w-[200px]">
                   <TableItemShortUuid
                     id={row.id}
-                    link={`/datasets/${dataset_name}/datapoint/${row.id}`}
+                    link={toDatapointUrl(dataset_name, row.id)}
                   />
                 </TableCell>
                 <TableCell>
-                  <TableItemShortUuid
-                    id={row.episode_id}
-                    link={`/observability/episodes/${row.episode_id}`}
-                  />
+                  {row.episode_id && (
+                    <TableItemShortUuid
+                      id={row.episode_id}
+                      link={toEpisodeUrl(row.episode_id)}
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
-                  <TableItemText text={row.name} />
+                  {/* TODO: switch to using undefined instead of null */}
+                  <TableItemText text={row.name ?? null} />
                 </TableCell>
                 <TableCell>
                   <TableItemFunction
                     functionName={row.function_name}
                     functionType={row.type}
-                    link={`/observability/functions/${row.function_name}`}
+                    link={toFunctionUrl(row.function_name)}
                   />
                 </TableCell>
                 <TableCell>

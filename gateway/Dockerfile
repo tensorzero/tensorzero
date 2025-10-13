@@ -1,6 +1,6 @@
 # ========== builder ==========
 
-FROM lukemathwalker/cargo-chef:latest-rust-1.88.0 AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.90-bookworm AS chef
 
 WORKDIR /src
 
@@ -43,5 +43,3 @@ WORKDIR /app
 EXPOSE 3000
 
 ENTRYPOINT ["gateway"]
-
-CMD ["--warn-default-cmd", "--config-file", "config/tensorzero.toml"]

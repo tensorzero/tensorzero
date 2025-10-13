@@ -103,15 +103,11 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                     "messages": [
                         {
                             "role": "user",
-                            "content": [
-                                {"type": "text", "value": {"country": "Japan"}}
-                            ],
+                            "content": [{"type": "text", "value": {"country": "Japan"}}],
                         },
                     ],
                 },
-                output=JsonInferenceOutput(
-                    parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'
-                ),
+                output=JsonInferenceOutput(parsed={"answer": "Tokyo"}, raw='{"answer": "Tokyo"}'),
                 episode_id=uuid7(),
                 inference_id=uuid7(),
                 output_schema={
@@ -119,11 +115,7 @@ def test_sync_render_samples_success(embedded_sync_client: TensorZeroGateway):
                     "properties": {"answer": {"type": "string"}},
                 },
                 tool_params=None,
-                dispreferred_outputs=[
-                    JsonInferenceOutput(
-                        parsed={"answer": "Kyoto"}, raw='{"answer": "Kyoto"}'
-                    )
-                ],
+                dispreferred_outputs=[JsonInferenceOutput(parsed={"answer": "Kyoto"}, raw='{"answer": "Kyoto"}')],
                 tags={},
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ),
@@ -361,9 +353,7 @@ def test_sync_render_samples_no_variant(embedded_sync_client: TensorZeroGateway)
             ],
             variants={"basic_test": "non_existent_variant"},
         )
-    assert "Variant non_existent_variant for function basic_test not found" in str(
-        excinfo.value
-    )
+    assert "Variant non_existent_variant for function basic_test not found" in str(excinfo.value)
 
 
 def test_sync_render_samples_missing_variable(
@@ -495,9 +485,7 @@ async def test_async_render_samples_success(
                     "messages": [
                         {
                             "role": "user",
-                            "content": [
-                                {"type": "text", "value": {"country": "Japan"}}
-                            ],
+                            "content": [{"type": "text", "value": {"country": "Japan"}}],
                         }
                     ],
                 },
@@ -752,9 +740,7 @@ async def test_async_render_samples_no_variant(
             ],
             variants={"basic_test": "non_existent_variant"},
         )
-    assert "Variant non_existent_variant for function basic_test not found" in str(
-        excinfo.value
-    )
+    assert "Variant non_existent_variant for function basic_test not found" in str(excinfo.value)
 
 
 @pytest.mark.asyncio

@@ -23,15 +23,11 @@ def search_wikipedia(tool_call: ToolCall) -> ToolResult:
             The result field contains the search results as a string.
     """
     if tool_call.arguments is None:
-        raise ValueError(
-            "The tool call doesn't have `arguments`, so it must not have parsed correctly."
-        )
+        raise ValueError("The tool call doesn't have `arguments`, so it must not have parsed correctly.")
 
     query = tool_call.arguments.get("query")
     if query is None:
-        raise ValueError(
-            "The `query` argument is required for `search_wikipedia` tool."
-        )
+        raise ValueError("The `query` argument is required for `search_wikipedia` tool.")
 
     search_wikipedia_result = "\n".join(wikipedia.search(query))
 
@@ -56,23 +52,17 @@ def load_wikipedia_page(tool_call: ToolCall) -> ToolResult:
             If the page is not found or there's a disambiguation error, returns an error message.
     """
     if tool_call.arguments is None:
-        raise ValueError(
-            "The tool call doesn't have `arguments`, so it must not have parsed correctly."
-        )
+        raise ValueError("The tool call doesn't have `arguments`, so it must not have parsed correctly.")
 
     title = tool_call.arguments.get("title")
     if title is None:
-        raise ValueError(
-            "The `title` argument is required for `load_wikipedia_page` tool."
-        )
+        raise ValueError("The `title` argument is required for `load_wikipedia_page` tool.")
 
     try:
         page = wikipedia.page(title)
         # Preprocess result by converting the HTML content to Markdown to reduce token usage
         page_markdown = markdownify(page.html())
-        load_wikipedia_page_result = (
-            f"# URL\n\n{page.url}\n\n# CONTENT\n\n{page_markdown}"
-        )
+        load_wikipedia_page_result = f"# URL\n\n{page.url}\n\n# CONTENT\n\n{page_markdown}"
     except wikipedia.exceptions.PageError:
         load_wikipedia_page_result = f"ERROR: page '{title}' not found."
     except wikipedia.exceptions.DisambiguationError as e:

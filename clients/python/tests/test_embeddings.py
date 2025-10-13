@@ -47,10 +47,7 @@ async def test_basic_embeddings_shorthand(async_openai_client):
     )
 
     # Verify the response structure
-    assert (
-        result.model
-        == "tensorzero::embedding_model_name::openai::text-embedding-3-large"
-    )
+    assert result.model == "tensorzero::embedding_model_name::openai::text-embedding-3-large"
     assert len(result.data) == 1
     assert result.data[0].index == 0
     assert result.data[0].object == "embedding"
@@ -214,9 +211,7 @@ async def test_embeddings_consistency(async_openai_client):
 
     # Check that embeddings are similar (allowing for small numerical differences)
     for i in range(min(10, len(embedding1))):  # Check first 10 dimensions
-        assert abs(embedding1[i] - embedding2[i]) < 0.01, (
-            f"Embeddings differ significantly at index {i}"
-        )
+        assert abs(embedding1[i] - embedding2[i]) < 0.01, f"Embeddings differ significantly at index {i}"
 
 
 @pytest.mark.asyncio

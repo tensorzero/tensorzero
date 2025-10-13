@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
-use axum::extract::{rejection::JsonRejection, FromRequest, Json, Request};
+use crate::experimentation::VariantSampler;
+use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
@@ -14,12 +15,16 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 use crate::config::{Config, ConfigFileGlob};
+use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
 use crate::http::TensorzeroHttpClient;
+
+#[cfg(test)]
+use crate::db::clickhouse::ClickHouseClient;
 
 /// Represents an active gateway (either standalone or embedded)
 /// The contained `app_state` can be freely cloned and dropped.
@@ -54,7 +59,7 @@ impl Drop for GatewayHandle {
             .batcher_join_handle();
         // Drop our `ClickHouseConnectionInfo`, so that we stop holding on to the `Arc<BatchSender>`
         // This allows the batch writer task to exit (once all of the remaining `ClickhouseConnectionInfo`s are dropped)
-        self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        self.app_state.clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         if let Some(handle) = handle {
             tracing::info!("Waiting for ClickHouse batch writer to finish");
             // This could block forever if:
@@ -98,12 +103,6 @@ pub type AppState = axum::extract::State<AppStateData>;
 impl GatewayHandle {
     pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
         let clickhouse_url = std::env::var("TENSORZERO_CLICKHOUSE_URL").ok();
-        if clickhouse_url.is_none()
-            && std::env::var("CLICKHOUSE_URL").is_ok()
-            && config.gateway.observability.enabled.is_none()
-        {
-            return Err(ErrorDetails::ClickHouseConfiguration { message: "`CLICKHOUSE_URL` is deprecated and no longer accepted. Please set `TENSORZERO_CLICKHOUSE_URL`".to_string() }.into());
-        }
         let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL").ok();
         Self::new_with_databases(config, clickhouse_url, postgres_url).await
     }
@@ -116,12 +115,13 @@ impl GatewayHandle {
         let clickhouse_connection_info = setup_clickhouse(&config, clickhouse_url, false).await?;
         let postgres_connection_info = setup_postgres(&config, postgres_url).await?;
         let http_client = TensorzeroHttpClient::new()?;
-        Ok(Self::new_with_database_and_http_client(
+        Self::new_with_database_and_http_client(
             config,
             clickhouse_connection_info,
             postgres_connection_info,
             http_client,
-        ))
+        )
+        .await
     }
 
     /// # Panics
@@ -130,29 +130,10 @@ impl GatewayHandle {
     pub fn new_unit_test_data(config: Arc<Config>, test_options: GatewayHandleTestOptions) -> Self {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info =
-            ClickHouseConnectionInfo::new_mock(test_options.clickhouse_healthy);
+            ClickHouseConnectionInfo::new_mock(test_options.clickhouse_client);
         let postgres_connection_info =
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
-        Self::new_with_database_and_http_client(
-            config,
-            clickhouse_connection_info,
-            postgres_connection_info,
-            http_client,
-        )
-    }
-
-    pub fn new_with_database_and_http_client(
-        config: Arc<Config>,
-        clickhouse_connection_info: ClickHouseConnectionInfo,
-        postgres_connection_info: PostgresConnectionInfo,
-        http_client: TensorzeroHttpClient,
-    ) -> Self {
         let cancel_token = CancellationToken::new();
-        setup_howdy(
-            &config,
-            clickhouse_connection_info.clone(),
-            cancel_token.clone(),
-        );
         Self {
             app_state: AppStateData {
                 config,
@@ -164,6 +145,53 @@ impl GatewayHandle {
             cancel_token,
             _private: (),
         }
+    }
+
+    #[cfg(feature = "pyo3")]
+    pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
+        let config = Arc::new(Config::default());
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
+        let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
+        let cancel_token = CancellationToken::new();
+        Self {
+            app_state: AppStateData {
+                config,
+                http_client,
+                clickhouse_connection_info,
+                postgres_connection_info,
+                _private: (),
+            },
+            cancel_token,
+            _private: (),
+        }
+    }
+
+    pub async fn new_with_database_and_http_client(
+        config: Arc<Config>,
+        clickhouse_connection_info: ClickHouseConnectionInfo,
+        postgres_connection_info: PostgresConnectionInfo,
+        http_client: TensorzeroHttpClient,
+    ) -> Result<Self, Error> {
+        let cancel_token = CancellationToken::new();
+        setup_howdy(
+            &config,
+            clickhouse_connection_info.clone(),
+            cancel_token.clone(),
+        );
+        for function_config in config.functions.values() {
+            function_config.experimentation().setup().await?;
+        }
+        Ok(Self {
+            app_state: AppStateData {
+                config,
+                http_client,
+                clickhouse_connection_info,
+                postgres_connection_info,
+                _private: (),
+            },
+            cancel_token,
+            _private: (),
+        })
     }
 }
 
@@ -220,7 +248,7 @@ pub async fn setup_clickhouse(
     };
 
     // Run ClickHouse migrations (if any) if we have a production ClickHouse connection
-    if let ClickHouseConnectionInfo::Production { .. } = &clickhouse_connection_info {
+    if clickhouse_connection_info.client_type() == ClickHouseClientType::Production {
         migration_manager::run(RunMigrationManagerArgs {
             clickhouse: &clickhouse_connection_info,
             is_manual_run: false,
@@ -345,6 +373,7 @@ pub async fn start_openai_compatible_gateway(
     let router = Router::new()
         .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         .with_state(gateway_handle.app_state.clone());
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
@@ -368,7 +397,7 @@ pub async fn start_openai_compatible_gateway(
 
 #[cfg(test)]
 pub struct GatewayHandleTestOptions {
-    pub clickhouse_healthy: bool,
+    pub clickhouse_client: Arc<dyn ClickHouseClient>,
     pub postgres_healthy: bool,
 }
 
@@ -407,10 +436,10 @@ mod tests {
         }));
 
         let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
-        assert!(matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ));
+        assert_eq!(
+            clickhouse_connection_info.client_type(),
+            ClickHouseClientType::Disabled
+        );
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
@@ -432,10 +461,10 @@ mod tests {
             ..Default::default()
         }));
         let clickhouse_connection_info = setup_clickhouse(config, None, false).await.unwrap();
-        assert!(matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ));
+        assert_eq!(
+            clickhouse_connection_info.client_type(),
+            ClickHouseClientType::Disabled
+        );
         assert!(!logs_contain(
             "Missing environment variable TENSORZERO_CLICKHOUSE_URL"
         ));
