@@ -17,13 +17,13 @@ See the [Quick Start](https://www.tensorzero.com/docs/quickstart/) and the [Tens
 We provide fixture data for development purposes, but you can also use the UI with any relevant configuration.
 The instructions below assume you're using the provided setup with fixture data.
 
-1. Build the `evaluations` binary. Run: `cargo build -p evaluations`
-2. Set the environment variables for the gateway. Create a `.env` file in `fixtures/` with credentials. See `fixtures/.env.example` for reference.
-3. Launch the TensorZero Gateway and ClickHouse with `docker compose -f fixtures/docker-compose.yml up`.
-4. Set the UI environment variables in the shell (not `.env`). See `./.env.example` for reference.
-5. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings` from `internal/tensorzero-node`.
-6. Run `pnpm` scripts from the root of the repository to start the app:
-   - Run `pnpm install` to install the dependencies.
+1. Set the environment variables for the gateway. Create a `.env` file in `fixtures/` with credentials. See `fixtures/.env.example` for reference.
+2. Launch the TensorZero Gateway and ClickHouse with `docker compose -f fixtures/docker-compose.yml up`.
+3. Set the UI environment variables in the shell (not `.env`). See `./.env.example` for reference.
+4. Install dependencies and build the internal N-API client for TensorZero:
+   - Run `pnpm install`.
+   - Run `pnpm -r build`. If you have changed Rust code, you may also need to run `pnpm build-bindings` from `internal/tensorzero-node`.
+5. Run `pnpm` scripts from the root of the repository to start the app:
    - Run `pnpm ui:dev` to start the development server.
    - You can also run tests with `pnpm ui:test` and Storybook with `pnpm ui:storybook`.
 

@@ -29,7 +29,3 @@ export const logger = {
     console.debug(`[TensorZero UI ${__APP_VERSION__}] ${messageStr}`, ...args);
   },
 };
-
-export const getVersionInfo = () => ({
-  version: __APP_VERSION__,
-});

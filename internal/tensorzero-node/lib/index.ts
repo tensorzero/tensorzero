@@ -1,11 +1,13 @@
 import { createRequire } from "module";
-import {
+import type {
+  CacheEnabledMode,
   ClientInferenceParams,
   Config,
-  DatasetMetadata,
   DatasetDetailRow,
+  DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
+  EvaluationRunEvent,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
   InferenceResponse,
@@ -22,17 +24,21 @@ import type {
   TensorZeroClient as NativeTensorZeroClientType,
   DatabaseClient as NativeDatabaseClientType,
 } from "../index";
+import { logger } from "./utils/logger";
 
 // Re-export types from bindings
-export * from "./bindings";
+export type * from "./bindings";
+export { createLogger } from "./utils/logger";
 
 // Use createRequire to load CommonJS module
 const require = createRequire(import.meta.url);
+
 const {
   TensorZeroClient: NativeTensorZeroClient,
   getConfig: nativeGetConfig,
   DatabaseClient: NativeDatabaseClient,
   getQuantiles,
+  runEvaluationStreaming: nativeRunEvaluationStreaming,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -110,6 +116,78 @@ export async function getConfig(configPath: string | null): Promise<Config> {
 
 // Export quantiles array from migration_0035
 export { getQuantiles };
+
+interface RunEvaluationStreamingParams {
+  gatewayUrl: string;
+  clickhouseUrl: string;
+  configPath: string;
+  evaluationName: string;
+  datasetName: string;
+  variantName: string;
+  concurrency: number;
+  inferenceCache: CacheEnabledMode;
+  onEvent: (event: EvaluationRunEvent) => void;
+}
+
+/**
+ * Runs an evaluation asynchronously with streaming event updates.
+ *
+ * This function executes an evaluation by running inference on a dataset using a specified variant,
+ * and streaming progress events back to the caller through a callback function. It bridges TypeScript
+ * to native Rust code that performs the actual evaluation work.
+ *
+ * The `onEvent` callback will receive events in this typical sequence:
+ * 1. `start`: Evaluation run has begun, includes the evaluation_run_id
+ * 2. `success`: Each successful datapoint evaluation (may be many)
+ * 3. `error`: Each failed datapoint evaluation (may be zero or many)
+ * 4. `fatal_error`: Critical error that stops the evaluation (rare, may not occur)
+ * 5. `complete`: Evaluation run has finished (always the last event)
+ *
+ */
+export async function runEvaluationStreaming(
+  params: RunEvaluationStreamingParams,
+): Promise<void> {
+  const { onEvent, ...nativeParams } = params;
+
+  return nativeRunEvaluationStreaming(
+    nativeParams,
+    (err: Error | null, payload: string | null) => {
+      // Handle errors from the native callback
+      if (err) {
+        logger.error("Native evaluation streaming error:", err);
+        return;
+      }
+
+      // Check if payload is null or undefined
+      if (!payload) {
+        logger.error("Received null or undefined payload from native code");
+        return;
+      }
+
+      try {
+        const event = JSON.parse(payload) as EvaluationRunEvent;
+
+        // Check if event is null or missing the required 'type' property
+        if (!event || typeof event !== "object" || !("type" in event)) {
+          logger.error(
+            "Received invalid evaluation event from native code. Payload:",
+            payload,
+          );
+          return;
+        }
+
+        onEvent(event);
+      } catch (error) {
+        logger.error(
+          "Failed to parse evaluation event. Payload:",
+          payload,
+          "Error:",
+          error,
+        );
+      }
+    },
+  );
+}
 
 function safeStringify(obj: unknown) {
   try {
