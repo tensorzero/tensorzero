@@ -13,9 +13,9 @@ describe("update datapoints", () => {
   test("should preserve original source_inference_id and is_custom when updating datapoint", async () => {
     const datapoint: JsonInferenceDatapoint = {
       function_name: "extract_entities",
-      name: null,
-      episode_id: null,
-      staled_at: null,
+      name: undefined,
+      episode_id: undefined,
+      staled_at: undefined,
       input: {
         messages: [
           {
@@ -76,10 +76,10 @@ describe("update datapoints", () => {
 
     await tensorZeroClient.updateDatapoint("test", datapoint);
 
-    const retrievedDatapoint = await getDatapoint(
-      "test",
-      "01960832-7028-743c-8c44-a598aa5130fd",
-    );
+    const retrievedDatapoint = await getDatapoint({
+      dataset_name: "test",
+      datapoint_id: "01960832-7028-743c-8c44-a598aa5130fd",
+    });
     expect(retrievedDatapoint?.source_inference_id).toBe(
       datapoint.source_inference_id,
     );

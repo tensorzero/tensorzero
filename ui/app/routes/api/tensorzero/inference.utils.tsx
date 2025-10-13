@@ -260,7 +260,7 @@ function tensorZeroStoredContentToInputContent(
       return {
         type: "file",
         file: {
-          url: null,
+          url: content.file.url ?? null,
           mime_type: content.file.mime_type,
         },
         storage_path: {
@@ -593,14 +593,13 @@ function resolvedInputMessageContentToClientInputMessageContent(
       return {
         type: "thought",
         text: content.text,
-        signature: content.signature || null,
-        _internal_provider_type: null,
+        signature: content.signature,
       };
     case "unknown":
       return {
         type: "unknown",
         data: content.data,
-        model_provider_name: content.model_provider_name || null,
+        model_provider_name: content.model_provider_name,
       };
     case "file":
       return resolvedFileContentToClientFile(content);

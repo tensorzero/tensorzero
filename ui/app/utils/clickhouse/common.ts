@@ -3,7 +3,17 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   JsonValue,
+  StoredInput,
+  StoredInputMessage,
+  StoredInputMessageContent,
+  Datapoint,
+  JsonInferenceDatapoint,
 } from "tensorzero-node";
+import type {
+  ParsedChatInferenceDatapointRow,
+  ParsedJsonInferenceDatapointRow,
+  ParsedDatasetRow,
+} from "./datasets";
 
 /**
  * JSON types.
@@ -40,7 +50,8 @@ export type TemplateInput = z.infer<typeof templateInputSchema>;
 // where the function 1) does not use schemas
 export const displayUnstructuredTextInputSchema = z.object({
   type: z.literal("text"),
-  text: z.string(),
+  // This is a `Value type in Rust, which maps to any in Typescript.
+  text: z.any().transform((v) => v ?? null),
 });
 export type DisplayUnstructuredTextInput = z.infer<
   typeof displayUnstructuredTextInputSchema
@@ -82,21 +93,21 @@ export const thoughtContentSchema = z.object({
   text: z
     .string()
     .nullish()
-    .transform((val) => val ?? null),
+    .transform((v) => v ?? undefined),
   signature: z
     .string()
     .nullish()
-    .transform((val) => val ?? null),
+    .transform((v) => v ?? undefined),
   _internal_provider_type: z
     .string()
     .nullish()
-    .transform((val) => val ?? null),
+    .transform((v) => v ?? undefined),
 });
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
   data: JsonValueSchema,
-  model_provider_name: z.string().nullable(),
+  model_provider_name: z.string().optional(),
 });
 export type Unknown = z.infer<typeof unknownSchema>;
 
@@ -135,7 +146,11 @@ export const toolResultContentSchema = z
 export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
 
 export const base64FileSchema = z.object({
-  url: z.string().url().nullable(),
+  url: z
+    .string()
+    .url()
+    .nullish()
+    .transform((v) => v ?? null),
   mime_type: z.string(),
 });
 export type Base64File = z.infer<typeof base64FileSchema>;
@@ -156,9 +171,9 @@ export const storageKindSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("s3_compatible"),
       bucket_name: z.string(),
-      region: z.string().nullable(),
-      endpoint: z.string().nullable(),
-      allow_http: z.boolean().nullable(),
+      region: z.string().optional(),
+      endpoint: z.string().optional(),
+      allow_http: z.boolean().optional(),
     })
     .strict(),
   z
@@ -344,8 +359,8 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 ]);
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string().nullable(),
-  parsed: JsonValueSchema,
+  raw: z.string().optional(),
+  parsed: JsonValueSchema.optional(),
 }) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const toolCallOutputSchema = z
@@ -434,6 +449,54 @@ export const CountSchema = z.object({
 export type Count = z.infer<typeof CountSchema>;
 
 /**
+ * Converts stored input message content (from Rust) to display input message content (for frontend).
+ */
+function storedInputMessageContentToDisplayInputMessageContent(
+  content: StoredInputMessageContent,
+): DisplayInputMessageContent {
+  switch (content.type) {
+    case "text":
+      return { type: "text", text: content.value };
+    case "template":
+      return content;
+    case "tool_call":
+      return content;
+    case "tool_result":
+      return content;
+    case "file":
+      // Handle storage_path conversion
+      let convertedKind;
+      const storageKind = content.storage_path.kind;
+      if (storageKind.type === "s3_compatible") {
+        convertedKind = {
+          ...storageKind,
+          bucket_name: storageKind.bucket_name || "",
+        };
+      } else {
+        convertedKind = storageKind;
+      }
+
+      return {
+        type: "file",
+        file: {
+          dataUrl: content.file.url || "",
+          mime_type: content.file.mime_type,
+        },
+        storage_path: {
+          path: content.storage_path.path,
+          kind: convertedKind,
+        },
+      };
+    case "raw_text":
+      return content;
+    case "thought":
+      return content;
+    case "unknown":
+      return content;
+  }
+}
+
+/**
  * Converts the display input message content to the input message content.
  * This is useful for the case where we've edited a datapoint and need to convert
  * the display form back into something we can write to ClickHouse.
@@ -441,7 +504,7 @@ export type Count = z.infer<typeof CountSchema>;
 
 function displayInputMessageContentToInputMessageContent(
   content: DisplayInputMessageContent,
-): InputMessageContent {
+): StoredInputMessageContent {
   switch (content.type) {
     case "text":
       return { type: "text", value: content.text };
@@ -463,6 +526,10 @@ function displayInputMessageContentToInputMessageContent(
     case "file_error":
       return {
         ...content,
+        file: {
+          url: content.file.url || undefined,
+          mime_type: content.file.mime_type,
+        },
         type: "file",
       };
     case "raw_text":
@@ -483,7 +550,7 @@ function displayInputMessageContentToInputMessageContent(
  */
 function displayInputMessageToInputMessage(
   message: DisplayInputMessage,
-): InputMessage {
+): StoredInputMessage {
   return {
     role: message.role,
     content: message.content.map(
@@ -493,13 +560,80 @@ function displayInputMessageToInputMessage(
 }
 
 /**
+ * Converts stored input message (from Rust) to display input message (for frontend).
+ */
+function storedInputMessageToDisplayInputMessage(
+  message: StoredInputMessage,
+): DisplayInputMessage {
+  return {
+    role: message.role,
+    content: message.content.map(
+      storedInputMessageContentToDisplayInputMessageContent,
+    ),
+  };
+}
+
+/**
+ * Converts stored input (from Rust) to display input (for frontend).
+ * This is useful when we receive data from Rust and need to display it in the frontend.
+ */
+export function storedInputToDisplayInput(
+  storedInput: StoredInput,
+): DisplayInput {
+  return {
+    system: storedInput.system,
+    messages: storedInput.messages.map(storedInputMessageToDisplayInputMessage),
+  };
+}
+
+/**
  * Converts the display input to the input.
  * This is useful for the case where we've edited a datapoint and need to convert
  * the display form back into something we can write to ClickHouse.
  */
-export function displayInputToInput(displayInput: DisplayInput): Input {
+export function displayInputToInput(displayInput: DisplayInput): StoredInput {
   return {
     system: displayInput.system,
     messages: displayInput.messages.map(displayInputMessageToInputMessage),
   };
+}
+
+/**
+ * Converts Datapoint (from Rust with StoredInput) to ParsedDatasetRow (frontend type with DisplayInput).
+ * This bridges the gap between Rust-generated types and frontend types.
+ */
+export function datapointToParsedDatasetRow(
+  datapoint: Datapoint,
+): ParsedDatasetRow {
+  const commonFields = {
+    dataset_name: datapoint.dataset_name,
+    function_name: datapoint.function_name,
+    id: datapoint.id,
+    name: datapoint.name,
+    episode_id: datapoint.episode_id,
+    input: storedInputToDisplayInput(datapoint.input),
+    tags: datapoint.tags || {},
+    auxiliary: datapoint.auxiliary || "",
+    is_deleted: datapoint.is_deleted,
+    updated_at: datapoint.updated_at,
+    staled_at: datapoint.staled_at ?? null,
+    source_inference_id: datapoint.source_inference_id ?? null,
+    is_custom: datapoint.is_custom,
+  };
+
+  if ("tool_params" in datapoint) {
+    // Chat datapoint
+    return {
+      ...commonFields,
+      output: datapoint.output,
+      tool_params: datapoint.tool_params,
+    } as ParsedChatInferenceDatapointRow;
+  } else {
+    // JSON datapoint
+    return {
+      ...commonFields,
+      output: datapoint.output,
+      output_schema: (datapoint as JsonInferenceDatapoint).output_schema,
+    } as ParsedJsonInferenceDatapointRow;
+  }
 }

@@ -10,7 +10,11 @@ import type {
   ParsedJsonInferenceDatapointRow,
 } from "~/utils/clickhouse/datasets";
 import type { Datapoint } from "~/utils/tensorzero";
-import type { DatasetMetadata } from "tensorzero-node";
+import type {
+  GetDatasetMetadataParams,
+  DatasetMetadata,
+  StaleDatapointParams,
+} from "tensorzero-node";
 
 // TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
 
@@ -28,22 +32,12 @@ vi.mock("~/utils/tensorzero.server", () => ({
 
 // Mock the datasets server functions
 const mockGetDatasetMetadata = vi.hoisted(() =>
-  vi.fn<
-    (arg: {
-      function_name?: string;
-      page_size?: number;
-      offset?: number;
-    }) => Promise<DatasetMetadata[]>
-  >(async () => []),
+  vi.fn<(params: GetDatasetMetadataParams) => Promise<DatasetMetadata[]>>(
+    async () => [],
+  ),
 );
 const mockStaleDatapoint = vi.hoisted(() =>
-  vi.fn<
-    (
-      dataset_name: string,
-      datapoint_id: string,
-      function_type: "chat" | "json",
-    ) => Promise<void>
-  >(async () => {}),
+  vi.fn<(params: StaleDatapointParams) => Promise<void>>(async () => { }),
 );
 vi.mock("~/utils/clickhouse/datasets.server", () => ({
   staleDatapoint: mockStaleDatapoint,
@@ -156,7 +150,7 @@ describe("datapointOperations", () => {
         expect.objectContaining({
           id: newId,
           function_name: "write_haiku",
-          episode_id: null,
+          episode_id: undefined,
           // TODO: should assert on input and output
           tags: { environment: "test" },
           is_custom: true,
@@ -164,7 +158,7 @@ describe("datapointOperations", () => {
           tool_params: { temperature: 0.7 },
           auxiliary: "",
           name: "test_datapoint",
-          staled_at: null,
+          staled_at: undefined,
         }),
       );
 
@@ -244,7 +238,7 @@ describe("datapointOperations", () => {
         datasetName,
         expect.objectContaining({
           id: newId,
-          episode_id: null,
+          episode_id: undefined,
           function_name: "extract_entities",
           tags: { source: "test" },
           // TODO: should assert on input and output.
@@ -255,7 +249,7 @@ describe("datapointOperations", () => {
           output_schema: parsedFormData.output_schema,
           auxiliary: "",
           name: "test_json_datapoint",
-          staled_at: null,
+          staled_at: undefined,
         }),
       );
 
@@ -271,9 +265,9 @@ describe("datapointOperations", () => {
       const parsedFormData: ParsedJsonInferenceDatapointRow = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
-        name: null,
+        name: undefined,
         id: uuid(),
-        episode_id: null,
+        episode_id: undefined,
         input: {
           messages: [
             {
@@ -313,9 +307,9 @@ describe("datapointOperations", () => {
       const parsedFormData: ParsedJsonInferenceDatapointRow = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
-        name: null,
+        name: undefined,
         id: uuid(),
-        episode_id: null,
+        episode_id: undefined,
         input: {
           messages: [
             {
@@ -416,7 +410,7 @@ describe("datapointOperations", () => {
           tool_params: { temperature: 0.7 },
           auxiliary: "",
           name: newName,
-          staled_at: null,
+          staled_at: undefined,
         }),
       );
 
@@ -501,7 +495,7 @@ describe("datapointOperations", () => {
           output_schema: datapoint.output_schema,
           auxiliary: "",
           name: newName,
-          staled_at: null,
+          staled_at: undefined,
         }),
       );
 
@@ -510,6 +504,7 @@ describe("datapointOperations", () => {
     });
 
     test("should throw error when json datapoint is missing output_schema", async () => {
+      // This is explicitly typed as unknown because we are missing the output_schema field.
       const datapoint = {
         dataset_name: "test_dataset",
         function_name: "extract_entities",
@@ -532,7 +527,7 @@ describe("datapointOperations", () => {
         staled_at: null,
         source_inference_id: null,
         is_custom: false,
-      } as ParsedJsonInferenceDatapointRow;
+      } as unknown as ParsedJsonInferenceDatapointRow;
 
       await expect(
         renameDatapoint({

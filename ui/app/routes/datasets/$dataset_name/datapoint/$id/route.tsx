@@ -42,6 +42,10 @@ import type {
   ContentBlockChatOutput,
 } from "tensorzero-node";
 import {
+  datapointToParsedDatasetRow,
+  type DisplayInput,
+} from "~/utils/clickhouse/common";
+import {
   deleteDatapoint,
   renameDatapoint,
   saveDatapoint,
@@ -70,8 +74,8 @@ export function validateJsonOutput(
 }
 
 export function hasDatapointChanged(params: {
-  currentInput: ParsedDatasetRow["input"];
-  originalInput: ParsedDatasetRow["input"];
+  currentInput: DisplayInput;
+  originalInput: DisplayInput;
   currentOutput: ContentBlockChatOutput[] | JsonInferenceOutput | null;
   originalOutput: ParsedDatasetRow["output"];
   currentTags: Record<string, string>;
@@ -208,7 +212,10 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getDatapoint(dataset_name, id);
+  const datapoint = await getDatapoint({
+    dataset_name,
+    datapoint_id: id,
+  });
   if (!datapoint) {
     throw data(`No datapoint found for id ${id}.`, {
       status: 404,
@@ -221,32 +228,38 @@ export async function loader({
 
 export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const { datapoint } = loaderData;
+  // Convert the Rust datapoint to frontend ParsedDatasetRow for easier manipulation
+  const parsedDatapoint = useMemo(
+    () => datapointToParsedDatasetRow(datapoint),
+    [datapoint],
+  );
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
-  const [input, setInput] = useState<typeof datapoint.input>(datapoint.input);
-  const [originalInput, setOriginalInput] = useState(datapoint.input);
-  const [originalOutput, setOriginalOutput] = useState(datapoint.output);
-  const [originalTags, setOriginalTags] = useState(datapoint.tags || {});
+  const [input, setInput] = useState<DisplayInput>(parsedDatapoint.input);
+  const [originalInput, setOriginalInput] = useState(parsedDatapoint.input);
+  const [originalOutput, setOriginalOutput] = useState(parsedDatapoint.output);
+  const [originalTags, setOriginalTags] = useState(parsedDatapoint.tags || {});
   const [output, setOutput] = useState<
     ContentBlockChatOutput[] | JsonInferenceOutput | null
-  >(datapoint.output ?? null);
+  >(parsedDatapoint.output ?? null);
   const [tags, setTags] = useState<Record<string, string>>(
-    datapoint.tags || {},
+    parsedDatapoint.tags || {},
   );
   const [isEditing, setIsEditing] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // Reset state when datapoint changes (e.g., after save redirect)
   useEffect(() => {
-    setInput(datapoint.input);
-    setOriginalInput(datapoint.input);
-    setOutput(datapoint.output ?? null);
-    setOriginalOutput(datapoint.output);
-    setTags(datapoint.tags || {});
-    setOriginalTags(datapoint.tags || {});
+    setInput(parsedDatapoint.input);
+    setOriginalInput(parsedDatapoint.input);
+    setOutput(parsedDatapoint.output ?? null);
+    setOriginalOutput(parsedDatapoint.output);
+    setTags(parsedDatapoint.tags || {});
+    setOriginalTags(parsedDatapoint.tags || {});
     setIsEditing(false);
     setValidationError(null);
-  }, [datapoint]);
+  }, [parsedDatapoint]);
 
   const canSave = useMemo(() => {
     return (
@@ -273,9 +286,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const toggleEditing = () => setIsEditing(!isEditing);
 
   const handleReset = () => {
-    setInput(datapoint.input);
-    setOutput(datapoint.output ?? null);
-    setTags(datapoint.tags || {});
+    setInput(parsedDatapoint.input);
+    setOutput(parsedDatapoint.output ?? null);
+    setTags(parsedDatapoint.tags || {});
   };
 
   const handleSystemChange = (system: string | object | null) => {
@@ -299,8 +312,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
 
   const submitDatapointAction = (action: string) => {
-    // Create a copy of datapoint with updated input, output, and tags if we're saving
-    const dataToSubmit = { ...datapoint, input, output, tags };
+    // Create a copy of parsedDatapoint with updated input, output, and tags if we're saving
+    const dataToSubmit = { ...parsedDatapoint, input, output, tags };
 
     const formData = serializeDatapointToFormData(dataToSubmit);
     formData.append("action", action);
@@ -327,7 +340,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     }
   };
 
-  const functionConfig = useFunctionConfig(datapoint.function_name);
+  const functionConfig = useFunctionConfig(parsedDatapoint.function_name);
   const variants = Object.keys(functionConfig?.variants || {});
 
   const variantInferenceFetcher = useInferenceActionFetcher();
@@ -343,7 +356,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setSelectedVariant(variant);
     setIsModalOpen(true);
     const request = prepareInferenceActionRequest({
-      resource: datapoint,
+      resource: parsedDatapoint,
       source: variantSource,
       variant,
     });
@@ -357,7 +370,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   };
 
   const handleRenameDatapoint = async (newName: string) => {
-    const dataToSubmit = { ...datapoint, name: newName };
+    const dataToSubmit = { ...parsedDatapoint, name: newName };
     const formData = serializeDatapointToFormData(dataToSubmit);
     formData.append("action", "rename");
     await fetcher.submit(formData, { method: "post", action: "." });
@@ -367,8 +380,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     <PageLayout>
       <PageHeader
         label="Datapoint"
-        name={datapoint.id}
-        tag={datapoint.is_custom && <Badge className="ml-2">Custom</Badge>}
+        name={parsedDatapoint.id}
+        tag={
+          parsedDatapoint.is_custom && <Badge className="ml-2">Custom</Badge>
+        }
       />
 
       {(saveError || validationError) && (
@@ -381,7 +396,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <DatapointBasicInfo
-            datapoint={datapoint}
+            datapoint={parsedDatapoint}
             onRenameDatapoint={handleRenameDatapoint}
           />
         </SectionLayout>
@@ -398,7 +413,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             canSave={canSave}
             onSave={handleSave}
             onReset={handleReset}
-            showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
+            showTryWithButton={
+              parsedDatapoint.function_name !== DEFAULT_FUNCTION
+            }
           />
         </SectionLayout>
 
@@ -442,7 +459,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           variantResponse={variantInferenceFetcher.data?.info ?? null}
           rawResponse={variantInferenceFetcher.data?.raw ?? null}
           onClose={handleModalClose}
-          item={datapoint}
+          item={parsedDatapoint}
           selectedVariant={selectedVariant}
           source="datapoint"
         />
