@@ -203,8 +203,7 @@ fn compare_migration_tables(
         tracing::debug!("ClickHouse is missing required migrations. The gateway will run them unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
         MigrationTableState::TooFew
     } else {
-        tracing::debug!("ClickHouse is missing required migrations. The gateway will run them unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
-        tracing::warn!("ClickHouse previously applied migrations that are not known to the gateway. This means you're likely running an older version of TensorZero.");
+        tracing::warn!("ClickHouse is in an inconsistent state. It is missing required migrations but previously applied migrations that are not known to the gateway. The gateway will run the missing migrations unless `disable_automatic_migrations` is true (and `is_manual_run` is false).");
         tracing::warn!("Actual   migration IDs: {actual:?}");
         tracing::warn!("Expected migration IDs: {expected:?}");
         MigrationTableState::Inconsistent
