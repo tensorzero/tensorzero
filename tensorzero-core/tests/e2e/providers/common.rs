@@ -3,6 +3,8 @@ use std::io::Cursor;
 use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
+use secrecy::SecretString;
+
 use object_store::{aws::AmazonS3Builder, ObjectStore};
 use std::sync::Arc;
 use tensorzero_core::config::provider_types::{
@@ -29,7 +31,7 @@ use serde_json::{json, Value};
 use std::future::IntoFuture;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, InferenceOutput, InferenceResponse,
+    ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
 use tracing_test::traced_test;
@@ -165,6 +167,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_basic_embedding_with_provider;
         use $crate::providers::embeddings::test_bulk_embedding_with_provider;
         use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
+        use $crate::providers::common::test_provider_type_fallback_credentials_with_provider;
         use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
         use $crate::providers::embeddings::test_embedding_with_user_parameter_with_provider;
         use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
@@ -280,6 +283,15 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.provider_type_default_credentials_shorthand;
             for provider in providers {
                 test_provider_type_default_credentials_shorthand_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_provider_type_fallback_credentials() {
+            // We just need a longhand model
+            let providers = $func().await.provider_type_default_credentials;
+            for provider in providers {
+                test_provider_type_fallback_credentials_with_provider(provider).await;
             }
         }
 
@@ -1095,6 +1107,151 @@ defaults.{}
         provider.model_provider_name,
         result.err()
     );
+}
+
+/// Test that fallback credentials work correctly.
+/// This test:
+/// 1. Gets the default credential location from the provider's Default impl
+/// 2. Gets the credential value from the env var or path
+/// 3. Sets up a provider with a dynamic credential location that falls back to the default location
+/// 4. Infers with the dynamic credential
+/// 5. Infers with the default credential
+/// 6. Asserts that the logs contain exactly one message about falling back
+#[traced_test]
+pub async fn test_provider_type_fallback_credentials_with_provider(provider: E2ETestProvider) {
+    // Get the default credential location for this provider
+    let default_location = get_default_credential_location(&provider.model_provider_name);
+
+    // Create the credential location config based on the type
+    let credential_location_key = if uses_credential_location(&provider.model_provider_name) {
+        "credential_location"
+    } else {
+        "api_key_location"
+    };
+    let default_credential_location_str = serde_json::to_string(&default_location).unwrap();
+    let credential_location_config = format!(
+        r#"{credential_location_key}= {{default = "dynamic::test_credential", fallback = {default_credential_location_str}}}"#
+    );
+
+    // Extract the env var name from the credential location
+    let original_env_var = match &default_location {
+        CredentialLocation::Env(var_name) => var_name.clone(),
+        // TODO: deal with this
+        CredentialLocation::PathFromEnv(var_name) => var_name.clone(),
+        _ => {
+            println!(
+                "Skipping test for {} - unsupported credential location type",
+                provider.model_provider_name
+            );
+            return;
+        }
+    };
+
+    // Create a config with the custom credential location
+    let config = format!(
+        r#"
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+{}
+type = "{}"
+model_name = "{}"
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#,
+        credential_location_config, provider.model_provider_name, provider.model_name
+    );
+
+    println!(
+        "Testing provider type fallback credentials for {}",
+        provider.model_provider_name
+    );
+    println!("Config:\n{config}");
+
+    // Create an embedded gateway with this config
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
+
+    // Save the original credential value if it exists
+    let original_value = std::env::var(&original_env_var).unwrap();
+
+    // Make a simple inference request with primary credentials to verify it works
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Say hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            credentials: HashMap::from([(
+                "test_credential".to_string(),
+                ClientSecretString(SecretString::new(original_value.clone().into())),
+            )]),
+            // pass dynamic credentials here
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the inference succeeded
+    assert!(
+        result.is_ok(),
+        "Inference failed for {}: {:?}",
+        provider.model_provider_name,
+        result.err()
+    );
+
+    assert!(!logs_contain("attempting fallback"));
+
+    // Make a simple inference request without primary credentials to verify it works
+    // with a fallback
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Say hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            credentials: HashMap::from([(
+                "test_credentials".to_string(),
+                ClientSecretString(SecretString::new(original_value.into())),
+            )]),
+            // pass dynamic credentials here
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the inference succeeded
+    assert!(
+        result.is_ok(),
+        "Inference failed for {}: {:?}",
+        provider.model_provider_name,
+        result.err()
+    );
+
+    assert!(logs_contain("attempting fallback"));
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
