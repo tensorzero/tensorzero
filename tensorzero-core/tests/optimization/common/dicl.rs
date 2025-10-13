@@ -176,9 +176,9 @@ pub async fn test_dicl_optimization_chat() {
     };
 
     // Validate that the returned config matches our input
-    assert_eq!(dicl_config.embedding_model.as_ref(), embedding_model);
+    assert_eq!(&dicl_config.embedding_model, &embedding_model);
     assert_eq!(dicl_config.k, k);
-    assert_eq!(dicl_config.model.as_ref(), model);
+    assert_eq!(&dicl_config.model, &model);
 
     // Test DICL variant inference by creating a temporary config
     let (config_path, _temp_dir) = create_dicl_test_files(
@@ -454,9 +454,9 @@ pub async fn test_dicl_optimization_json() {
     };
 
     // Validate that the returned config matches our input
-    assert_eq!(dicl_config.embedding_model.as_ref(), embedding_model);
+    assert_eq!(&dicl_config.embedding_model, &embedding_model);
     assert_eq!(dicl_config.k, k, "k value should match input");
-    assert_eq!(dicl_config.model.as_ref(), model);
+    assert_eq!(&dicl_config.model, &model);
 
     // Test DICL variant inference by creating a temporary config
     let (config_path, _temp_dir) = create_dicl_test_files(
