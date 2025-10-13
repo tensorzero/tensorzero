@@ -18,6 +18,8 @@ import type {
 import { displayInputToInput } from "./common";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 
+// TODO(shuyangli): Consider removing this file and fully use DatabaseClient from tensorzero-node/lib.
+
 /**
  * Executes an INSERT INTO ... SELECT ... query to insert rows into the dataset table.
  *
@@ -66,9 +68,9 @@ export async function getDatasetMetadata(
   return await dbClient.getDatasetMetadata(params);
 }
 
-export async function getNumberOfDatasets(): Promise<number> {
+export async function countDatasets(): Promise<number> {
   const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getNumberOfDatasets();
+  return await dbClient.countDatasets();
 }
 
 export async function getDatasetRows(
