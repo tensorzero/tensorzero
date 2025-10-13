@@ -260,6 +260,24 @@ pub async fn make_gcp_object_store(
                 }));
             }
         }
+        GCPVertexCredentials::WithFallback { default, fallback } => {
+            // Try default first, fall back to fallback if it fails
+            // We need to recursively call this function with each credential
+            match Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await {
+                Ok(store) => return Ok(store),
+                Err(_) => {
+                    #[cfg(any(test, feature = "e2e_tests"))]
+                    {
+                        tracing::warn!(
+                            "Default credential for {} is unavailable for GCS, attempting fallback",
+                            PROVIDER_NAME
+                        );
+                    }
+                    return Box::pin(make_gcp_object_store(gs_url, fallback, dynamic_api_keys))
+                        .await;
+                }
+            }
+        }
         GCPVertexCredentials::None => {
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
@@ -630,6 +648,10 @@ pub enum GCPVertexCredentials {
     Dynamic(String),
     Sdk(Credentials),
     None,
+    WithFallback {
+        default: Box<GCPVertexCredentials>,
+        fallback: Box<GCPVertexCredentials>,
+    },
 }
 
 pub fn build_gcp_non_sdk_credentials(
@@ -648,6 +670,10 @@ pub fn build_gcp_non_sdk_credentials(
         }),
         Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
         Credential::Missing => Ok(GCPVertexCredentials::None),
+        Credential::WithFallback { default, fallback } => Ok(GCPVertexCredentials::WithFallback {
+            default: Box::new(build_gcp_non_sdk_credentials(*default, provider_type)?),
+            fallback: Box::new(build_gcp_non_sdk_credentials(*fallback, provider_type)?),
+        }),
         _ => Err(Error::new(ErrorDetails::GCPCredentials {
             message: format!("Invalid credential_location for {provider_type} provider"),
         }))?,
@@ -815,6 +841,23 @@ impl GCPVertexCredentials {
                         return Err(Error::new(ErrorDetails::InternalError {
                             message: "GCP SDK return CacheableResource::NotModified. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
                         }))
+                    }
+                }
+            }
+            GCPVertexCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                match Box::pin(default.get_auth_headers(audience, dynamic_api_keys)).await {
+                    Ok(headers) => return Ok(headers),
+                    Err(_) => {
+                        #[cfg(any(test, feature = "e2e_tests"))]
+                        {
+                            tracing::warn!(
+                                "Default credential for {} is unavailable, attempting fallback",
+                                PROVIDER_NAME
+                            );
+                        }
+                        return Box::pin(fallback.get_auth_headers(audience, dynamic_api_keys))
+                            .await;
                     }
                 }
             }

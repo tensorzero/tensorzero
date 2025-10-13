@@ -2179,6 +2179,10 @@ pub enum Credential {
     Sdk,
     None,
     Missing,
+    WithFallback {
+        default: Box<Credential>,
+        fallback: Box<Credential>,
+    },
 }
 
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[

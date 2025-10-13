@@ -508,40 +508,28 @@ async fn make_gcp_credentials_with_fallback(
     provider_type: ProviderType,
     location: &CredentialLocationWithFallback,
 ) -> Result<GCPVertexCredentials, Error> {
-    // Try default location
-    let default_result = match location.default_location() {
-        CredentialLocation::Sdk => make_gcp_sdk_credentials(provider_type).await,
-        loc => match load_credential(loc, provider_type) {
-            Ok(cred) if !matches!(cred, Credential::Missing | Credential::None) => {
-                build_gcp_non_sdk_credentials(cred, &provider_type)
-            }
-            _ => {
-                // Default failed, try fallback if available
-                if let Some(fallback_location) = location.fallback_location() {
-                    #[cfg(any(test, feature = "e2e_tests"))]
-                    {
-                        tracing::warn!(
-                            "Default credential for provider type {provider_type} is missing, attempting fallback"
-                        );
-                    }
-                    return match fallback_location {
-                        CredentialLocation::Sdk => make_gcp_sdk_credentials(provider_type).await,
-                        fallback_loc => build_gcp_non_sdk_credentials(
-                            load_credential(fallback_loc, provider_type)?,
-                            &provider_type,
-                        ),
-                    };
-                }
-                // No fallback, return error
-                return Err(Error::new(ErrorDetails::ApiKeyMissing {
-                    provider_name: provider_type.to_string(),
-                    message: "Credential is missing and no fallback provided".to_string(),
-                }));
-            }
-        },
+    // Build default credential
+    let default_cred = match location.default_location() {
+        CredentialLocation::Sdk => make_gcp_sdk_credentials(provider_type).await?,
+        loc => build_gcp_non_sdk_credentials(load_credential(loc, provider_type)?, &provider_type)?,
     };
 
-    default_result
+    // If fallback location is specified, construct a WithFallback credential
+    if let Some(fallback_location) = location.fallback_location() {
+        let fallback_cred = match fallback_location {
+            CredentialLocation::Sdk => make_gcp_sdk_credentials(provider_type).await?,
+            fallback_loc => build_gcp_non_sdk_credentials(
+                load_credential(fallback_loc, provider_type)?,
+                &provider_type,
+            )?,
+        };
+        Ok(GCPVertexCredentials::WithFallback {
+            default: Box::new(default_cred),
+            fallback: Box::new(fallback_cred),
+        })
+    } else {
+        Ok(default_cred)
+    }
 }
 
 impl Default for ProviderTypeDefaultCredentials {
@@ -655,8 +643,7 @@ fn load_credential(
 }
 
 /// Load credential with fallback support
-/// Attempts to load the default credential first, and if it results in Missing or None,
-/// tries the fallback credential location
+/// Constructs a WithFallback credential that will be resolved at inference time
 fn load_credential_with_fallback(
     location_with_fallback: &crate::model::CredentialLocationWithFallback,
     provider_type: ProviderType,
@@ -664,27 +651,15 @@ fn load_credential_with_fallback(
     let default_credential =
         load_credential(location_with_fallback.default_location(), provider_type)?;
 
-    // If default credential is available, use it
-    match &default_credential {
-        Credential::Static(_)
-        | Credential::FileContents(_)
-        | Credential::Dynamic(_)
-        | Credential::Sdk => Ok(default_credential),
-        Credential::Missing | Credential::None => {
-            // Try fallback if available
-            if let Some(fallback_location) = location_with_fallback.fallback_location() {
-                #[cfg(any(test, feature = "e2e_tests"))]
-                {
-                    if matches!(default_credential, Credential::Missing) {
-                        tracing::warn!(
-                            "Default credential for provider type {provider_type} is missing, attempting fallback"
-                        );
-                    }
-                }
-                return load_credential(fallback_location, provider_type);
-            }
-            Ok(default_credential)
-        }
+    // If fallback location is specified, construct a WithFallback credential
+    if let Some(fallback_location) = location_with_fallback.fallback_location() {
+        let fallback_credential = load_credential(fallback_location, provider_type)?;
+        Ok(Credential::WithFallback {
+            default: Box::new(default_credential),
+            fallback: Box::new(fallback_credential),
+        })
+    } else {
+        Ok(default_credential)
     }
 }
 
