@@ -211,6 +211,68 @@ pub(crate) fn build_comment_feedback_query(
     (query, params_map)
 }
 
+pub(crate) fn build_demonstration_feedback_query(
+    inference_id: uuid::Uuid,
+    before: Option<uuid::Uuid>,
+    after: Option<uuid::Uuid>,
+    page_size: u32,
+) -> (String, std::collections::HashMap<String, String>) {
+    let (where_clause, params) = build_pagination_clause(before, after, "inference_id");
+    let order_clause = if after.is_some() { "ASC" } else { "DESC" };
+
+    let mut params_map: std::collections::HashMap<String, String> = params
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    params_map.insert("inference_id".to_string(), inference_id.to_string());
+    params_map.insert("page_size".to_string(), page_size.to_string());
+
+    let query = if after.is_some() {
+        format!(
+            r"
+            SELECT
+                id,
+                inference_id,
+                value,
+                tags,
+                timestamp
+            FROM (
+                SELECT
+                    id,
+                    inference_id,
+                    value,
+                    tags,
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM DemonstrationFeedbackByInferenceId
+                WHERE inference_id = {{inference_id:UUID}} {where_clause}
+                ORDER BY toUInt128(id) {order_clause}
+                LIMIT {{page_size:UInt32}}
+            )
+            ORDER BY toUInt128(id) DESC
+            FORMAT JSONEachRow
+            "
+        )
+    } else {
+        format!(
+            r"
+            SELECT
+                id,
+                inference_id,
+                value,
+                tags,
+                formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+            FROM DemonstrationFeedbackByInferenceId
+            WHERE inference_id = {{inference_id:UUID}} {where_clause}
+            ORDER BY toUInt128(id) {order_clause}
+            LIMIT {{page_size:UInt32}}
+            FORMAT JSONEachRow
+            "
+        )
+    };
+
+    (query, params_map)
+}
+
 pub(crate) fn build_bounds_query(
     table_name: &str,
     id_column: &str,
@@ -647,6 +709,71 @@ mod tests {
         assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
 
         assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
+        assert_eq!(params.get("after"), Some(&after.to_string()));
+        assert_eq!(params.get("page_size"), Some(&"25".to_string()));
+    }
+
+    // Demonstration Feedback Tests - testing production query builder
+    #[test]
+    fn test_build_demonstration_feedback_query_no_pagination() {
+        let inference_id = Uuid::now_v7();
+        let (query, params) = build_demonstration_feedback_query(inference_id, None, None, 100);
+
+        assert_query_contains(&query, "SELECT id, inference_id, value, tags");
+        assert_query_contains(&query, "FROM DemonstrationFeedbackByInferenceId");
+        assert_query_contains(&query, "WHERE inference_id = {inference_id:UUID}");
+        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
+        assert_query_contains(&query, "LIMIT {page_size:UInt32}");
+        assert_query_does_not_contain(&query, "AND toUInt128(id)"); // No pagination clause
+        assert_eq!(params.get("inference_id"), Some(&inference_id.to_string()));
+        assert_eq!(params.get("page_size"), Some(&"100".to_string()));
+        assert!(!params.contains_key("before"));
+        assert!(!params.contains_key("after"));
+    }
+
+    #[test]
+    fn test_build_demonstration_feedback_query_before_pagination() {
+        let inference_id = Uuid::now_v7();
+        let before = Uuid::now_v7();
+        let (query, params) =
+            build_demonstration_feedback_query(inference_id, Some(before), None, 50);
+
+        assert_query_contains(&query, "WHERE inference_id = {inference_id:UUID}");
+        assert_query_contains(
+            &query,
+            "AND toUInt128(id) < toUInt128(toUUID({before:UUID}))",
+        );
+        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
+        assert_eq!(params.get("inference_id"), Some(&inference_id.to_string()));
+        assert_eq!(params.get("before"), Some(&before.to_string()));
+        assert_eq!(params.get("page_size"), Some(&"50".to_string()));
+    }
+
+    #[test]
+    fn test_build_demonstration_feedback_query_after_pagination() {
+        let inference_id = Uuid::now_v7();
+        let after = Uuid::now_v7();
+        let (query, params) =
+            build_demonstration_feedback_query(inference_id, None, Some(after), 25);
+
+        // Inner subquery should have ASC ordering
+        assert_query_contains(
+            &query,
+            "FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID}",
+        );
+        assert_query_contains(
+            &query,
+            "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))",
+        );
+        assert_query_contains(
+            &query,
+            "ORDER BY toUInt128(id) ASC LIMIT {page_size:UInt32} )",
+        );
+
+        // Outer query should reverse to DESC
+        assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
+
+        assert_eq!(params.get("inference_id"), Some(&inference_id.to_string()));
         assert_eq!(params.get("after"), Some(&after.to_string()));
         assert_eq!(params.get("page_size"), Some(&"25".to_string()));
     }

@@ -487,60 +487,18 @@ impl SelectQueries for ClickHouseConnectionInfo {
         after: Option<Uuid>,
         page_size: Option<u32>,
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error> {
-        let (where_clause, params) = build_pagination_clause(before, after, "inference_id");
-        let order_clause = if after.is_some() { "ASC" } else { "DESC" };
         let page_size = page_size.unwrap_or(100).min(100);
+        let (query, params_owned) = super::feedback::build_demonstration_feedback_query(
+            inference_id,
+            before,
+            after,
+            page_size,
+        );
 
-        let query = if after.is_some() {
-            format!(
-                r"
-                SELECT
-                    id,
-                    inference_id,
-                    value,
-                    tags,
-                    timestamp
-                FROM (
-                    SELECT
-                        id,
-                        inference_id,
-                        value,
-                        tags,
-                        formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-                    FROM DemonstrationFeedbackByInferenceId
-                    WHERE inference_id = {{inference_id:UUID}} {where_clause}
-                    ORDER BY toUInt128(id) {order_clause}
-                    LIMIT {{page_size:UInt32}}
-                )
-                ORDER BY toUInt128(id) DESC
-                FORMAT JSONEachRow
-                "
-            )
-        } else {
-            format!(
-                r"
-                SELECT
-                    id,
-                    inference_id,
-                    value,
-                    tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-                FROM DemonstrationFeedbackByInferenceId
-                WHERE inference_id = {{inference_id:UUID}} {where_clause}
-                ORDER BY toUInt128(id) {order_clause}
-                LIMIT {{page_size:UInt32}}
-                FORMAT JSONEachRow
-                "
-            )
-        };
-
-        let mut params_vec: Vec<(&str, String)> =
-            params.iter().map(|(k, v)| (*k, v.clone())).collect();
-        params_vec.push(("inference_id", inference_id.to_string()));
-        params_vec.push(("page_size", page_size.to_string()));
-
-        let query_params: std::collections::HashMap<&str, &str> =
-            params_vec.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let query_params: std::collections::HashMap<&str, &str> = params_owned
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
 
         let response = self.run_query_synchronous(query, &query_params).await?;
 
