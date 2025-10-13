@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -243,7 +245,7 @@ pub struct DemonstrationFeedbackRow {
     pub id: Uuid,
     pub inference_id: Uuid,
     pub value: String,
-    pub tags: std::collections::HashMap<String, String>,
+    pub tags: HashMap<String, String>,
     pub timestamp: DateTime<Utc>,
 }
 
@@ -261,7 +263,9 @@ pub enum FeedbackRow {
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct FeedbackBounds {
+    #[ts(optional)]
     pub first_id: Option<Uuid>,
+    #[ts(optional)]
     pub last_id: Option<Uuid>,
     pub by_type: FeedbackBoundsByType,
 }
@@ -278,7 +282,9 @@ pub struct FeedbackBoundsByType {
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TableBounds {
+    #[ts(optional)]
     pub first_id: Option<Uuid>,
+    #[ts(optional)]
     pub last_id: Option<Uuid>,
 }
 

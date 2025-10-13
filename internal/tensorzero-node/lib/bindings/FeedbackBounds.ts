@@ -2,7 +2,7 @@
 import type { FeedbackBoundsByType } from "./FeedbackBoundsByType";
 
 export type FeedbackBounds = {
-  first_id: string | null;
-  last_id: string | null;
+  first_id?: string;
+  last_id?: string;
   by_type: FeedbackBoundsByType;
 };
