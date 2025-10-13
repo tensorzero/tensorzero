@@ -493,7 +493,7 @@ fn config_headers_to_metadata(
 }
 
 // Removes all of the headers prefixed with `TENSORZERO_OTLP_HEADERS_PREFIX`.
-// If any are present, constructs a `CustomTracerKey` with all of the  matching header/value pairs
+// If any are present (or we have static config headers), constructs a `CustomTracerKey` with all of the  matching header/value pairs
 // (with `TENSORZERO_OTLP_HEADERS_PREFIX` removed from the header name).
 // We also apply any static custom OTLP headers set in the `TracerWrapper`.
 fn extract_tensorzero_headers(
