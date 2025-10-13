@@ -86,11 +86,15 @@ Take what you need, adopt incrementally, and complement with other tools.
 
 - [x] Access every major LLM provider (API or self-hosted) through a single unified API
 - [x] Infer with streaming, tool use, structured generation (JSON mode), batch, embeddings, multimodal (VLMs), file inputs, caching, etc.
-- [x] Define prompt templates and schemas to enforce a consistent, typed interface between your application and the LLMs
+- [x] **[Create prompt templates and schemas](https://www.tensorzero.com/docs/gateway/create-a-prompt-template)** to enforce a consistent, typed interface between your application and the LLMs
 - [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: <1ms p99 latency overhead at 10k+ QPS
 - [x] Integrate using our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API (use any programming language)
 - [x] Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.
-- [ ] Soon: rate limits, spend tracking and budgeting, service accounts
+- [x] **[Enforce custom rate limits](https://www.tensorzero.com/docs/operations/enforce-custom-rate-limits)** with granular scopes (e.g. user-defined tags) to keep usage under control.
+- [ ] Soon: spend tracking and budgeting, service accounts
+
+> **Supported Model Providers**:
+> **[Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic)**, **[AWS Bedrock](https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock)**, **[AWS SageMaker](https://www.tensorzero.com/docs/gateway/guides/providers/aws-sagemaker)**, **[Azure OpenAI Service](https://www.tensorzero.com/docs/gateway/guides/providers/azure)**, **[DeepSeek](https://www.tensorzero.com/docs/gateway/guides/providers/deepseek)**, **[Fireworks](https://www.tensorzero.com/docs/gateway/guides/providers/fireworks)**, **[GCP Vertex AI Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic)**, **[GCP Vertex AI Gemini](https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-gemini)**, **[Google AI Studio (Gemini API)](https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini)**, **[Groq](https://www.tensorzero.com/docs/gateway/guides/providers/groq)**, **[Hyperbolic](https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic)**, **[Mistral](https://www.tensorzero.com/docs/gateway/guides/providers/mistral)**, **[OpenAI](https://www.tensorzero.com/docs/gateway/guides/providers/openai)**, **[OpenRouter](https://www.tensorzero.com/docs/gateway/guides/providers/openrouter)**, **[SGLang](https://www.tensorzero.com/docs/gateway/guides/providers/sglang)**, **[TGI](https://www.tensorzero.com/docs/gateway/guides/providers/tgi)**, **[Together AI](https://www.tensorzero.com/docs/gateway/guides/providers/together)**, **[vLLM](https://www.tensorzero.com/docs/gateway/guides/providers/vllm)**, **[xAI (Grok)](https://www.tensorzero.com/docs/gateway/guides/providers/xai)**
 
 <table>
   <tr></tr> <!-- flip highlight order -->
@@ -304,7 +308,7 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 - [x] Dive into individual inferences or high-level aggregate patterns using the TensorZero UI or programmatically
 - [x] Build datasets for optimization, evaluation, and other workflows
 - [x] Replay historical inferences with new prompts, models, inference strategies, etc.
-- [x] Export OpenTelemetry (OTLP) traces to your favorite general-purpose observability tool
+- [x] **[Export OpenTelemetry traces (OTLP)](https://www.tensorzero.com/docs/operations/export-opentelemetry-traces)** and **[export Prometheus metrics](https://www.tensorzero.com/docs/observability/export-prometheus-metrics)** to your favorite application observability tools
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
 
 <table>
