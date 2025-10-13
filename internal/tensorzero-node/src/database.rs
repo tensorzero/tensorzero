@@ -92,18 +92,17 @@ impl DatabaseClient {
 
     #[napi]
     pub async fn query_feedback_by_target_id(&self, params: String) -> Result<String, napi::Error> {
-        let QueryFeedbackByTargetIdParams {
-            target_id,
-            before,
-            after,
-            page_size,
-        } = serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result = self
-            .0
-            .query_feedback_by_target_id(target_id, before, after, page_size)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+        napi_call!(
+            &self,
+            query_feedback_by_target_id,
+            params,
+            QueryFeedbackByTargetIdParams {
+                target_id,
+                before,
+                after,
+                page_size
+            }
+        )
     }
 
     #[napi]
@@ -111,26 +110,22 @@ impl DatabaseClient {
         &self,
         params: String,
     ) -> Result<String, napi::Error> {
-        let QueryFeedbackBoundsByTargetIdParams { target_id } =
-            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result = self
-            .0
-            .query_feedback_bounds_by_target_id(target_id)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+        napi_call!(
+            &self,
+            query_feedback_bounds_by_target_id,
+            params,
+            QueryFeedbackBoundsByTargetIdParams { target_id }
+        )
     }
 
     #[napi]
     pub async fn count_feedback_by_target_id(&self, params: String) -> Result<String, napi::Error> {
-        let CountFeedbackByTargetIdParams { target_id } =
-            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        let result = self
-            .0
-            .count_feedback_by_target_id(target_id)
-            .await
-            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+        napi_call!(
+            &self,
+            count_feedback_by_target_id,
+            params,
+            CountFeedbackByTargetIdParams { target_id }
+        )
     }
 }
 
@@ -155,7 +150,8 @@ struct QueryEpisodeTableParams {
     pub after: Option<Uuid>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct QueryFeedbackByTargetIdParams {
     target_id: Uuid,
     before: Option<Uuid>,
@@ -163,12 +159,14 @@ struct QueryFeedbackByTargetIdParams {
     page_size: Option<u32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct QueryFeedbackBoundsByTargetIdParams {
     target_id: Uuid,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct CountFeedbackByTargetIdParams {
     target_id: Uuid,
 }
