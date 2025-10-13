@@ -33,9 +33,7 @@ pub struct OpenAIResponsesRequest<'a> {
     model: &'a str,
     input: Vec<OpenAIResponsesInput<'a>>,
     text: OpenAIResponsesTextConfig,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    // TODO: add support for built-in tools
-    tools: Option<Vec<OpenAIResponsesTool<'a>>>,
+    tools: Vec<OpenAIResponsesTool<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -209,18 +207,24 @@ pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
 
 impl<'a> OpenAITool<'a> {
     pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
-        OpenAIResponsesTool {
+        OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
             r#type: self.r#type,
             name: self.function.name,
             description: self.function.description,
             parameters: self.function.parameters,
             strict: self.strict,
-        }
+        })
     }
 }
 
+#[derive(Debug, Serialize)]
+pub enum OpenAIResponsesTool<'a> {
+    Function(OpenAIResponsesFunctionTool<'a>),
+    BuiltIn(Value),
+}
+
 #[derive(Serialize, Debug)]
-pub struct OpenAIResponsesTool<'a> {
+pub struct OpenAIResponsesFunctionTool<'a> {
     r#type: OpenAIToolType,
     name: &'a str,
     description: Option<&'a str>,
@@ -277,14 +281,25 @@ impl<'a> OpenAIResponsesRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        built_in_tools: &[Value],
     ) -> Result<OpenAIResponsesRequest<'a>, Error> {
-        let tools = request.tool_config.as_ref().map(|tool_config| {
-            tool_config
-                .tools_available
+        let mut tools: Vec<OpenAIResponsesTool> = request
+            .tool_config
+            .as_ref()
+            .map(|tool_config| {
+                tool_config
+                    .tools_available
+                    .iter()
+                    .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
+                    .collect()
+            })
+            .unwrap_or_default();
+        // If we have built_in_tools we should extend the list with them
+        tools.extend(
+            built_in_tools
                 .iter()
-                .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
-                .collect()
-        });
+                .map(|tool| OpenAIResponsesTool::BuiltIn(tool.clone())),
+        );
 
         // For now, we don't allow selecting any built-in tools
         let tool_choice =

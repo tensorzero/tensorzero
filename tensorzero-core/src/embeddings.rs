@@ -16,6 +16,7 @@ use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
 use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
 use crate::model_table::{OpenAIKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
+use crate::providers::openai::OpenAIAPIType;
 use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
     RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
@@ -58,7 +59,9 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                false,
+                // TODO: handle the fact that there are also embeddings
+                OpenAIAPIType::ChatCompletions,
+                Vec::new(),
             )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
@@ -845,11 +848,12 @@ mod tests {
         };
 
         let uninitialized_config = UninitializedEmbeddingProviderConfig {
-            config: crate::model::UninitializedProviderConfig::OpenAI {
+            config: UninitializedProviderConfig::OpenAI {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
                 api_key_location: Some(crate::model::CredentialLocation::None),
                 api_type: Default::default(),
+                provider_tools: Vec::new(),
             },
             timeout_ms: None,
             timeouts: TimeoutsConfig::default(),

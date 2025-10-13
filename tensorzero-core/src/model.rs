@@ -1,6 +1,7 @@
 use futures::future::try_join_all;
 use futures::StreamExt;
 use secrecy::SecretString;
+use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -50,6 +51,7 @@ use crate::model_table::{
 };
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
+use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
 use crate::rate_limiting::{RateLimitResourceUsage, ScopeInfo, TicketBorrows};
@@ -194,16 +196,6 @@ impl StreamResponse {
 /// the same as the underlying name passed to a specific provider api
 pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub enum OpenAIAPIType {
-    #[default]
-    ChatCompletions,
-    Responses,
 }
 
 impl ModelConfig {
@@ -1020,6 +1012,8 @@ pub enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocation>,
         #[serde(default)]
         api_type: OpenAIAPIType,
+        #[serde(default)]
+        provider_tools: Vec<Value>,
     },
     OpenRouter {
         model_name: String,
@@ -1124,7 +1118,8 @@ impl UninitializedProviderConfig {
                                 )
                                 .await?,
                             // TODO - decide how to expose the responses api for wrapped providers
-                            false
+                            OpenAIAPIType::ChatCompletions,
+                            Vec::new(),
                         )),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
@@ -1257,6 +1252,7 @@ impl UninitializedProviderConfig {
                 api_base,
                 api_key_location,
                 api_type,
+                provider_tools,
             } => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 api_base,
@@ -1266,10 +1262,8 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
-                match api_type {
-                    OpenAIAPIType::ChatCompletions => false,
-                    OpenAIAPIType::Responses => true,
-                },
+                api_type,
+                provider_tools,
             )),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
@@ -2147,7 +2141,8 @@ impl ShorthandModelConfig for ModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                false,
+                OpenAIAPIType::ChatCompletions,
+                Vec::new(),
             )),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
