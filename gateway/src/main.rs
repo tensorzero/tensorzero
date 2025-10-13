@@ -252,7 +252,7 @@ async fn main() {
         .route("/health", get(endpoints::status::health_handler))
         .route(
             "/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::insert_datapoints_handler),
+            post(endpoints::datasets::create_datapoints_handler),
         )
         // TODO(#3459): Deprecated in #3721. Remove in a future release.
         .route(

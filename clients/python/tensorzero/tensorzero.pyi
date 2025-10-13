@@ -634,7 +634,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
-    def insert_datapoints(
+    def create_datapoints(
         self,
         *,
         dataset_name: str,
@@ -654,7 +654,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
-        DEPRECATED: Use `insert_datapoints` instead.
+        DEPRECATED: Use `create_datapoints` instead.
 
         Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
 
@@ -1012,7 +1012,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
-    async def insert_datapoints(
+    async def create_datapoints(
         self,
         *,
         dataset_name: str,
@@ -1032,7 +1032,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         datapoints: Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
     ) -> List[UUID]:
         """
-        DEPRECATED: Use `insert_datapoints` instead.
+        DEPRECATED: Use `create_datapoints` instead.
 
         Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
 

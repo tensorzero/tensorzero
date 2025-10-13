@@ -776,7 +776,7 @@ impl Client {
         }
     }
 
-    async fn insert_datapoints_internal(
+    async fn create_datapoints_internal(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
@@ -810,23 +810,23 @@ impl Client {
         }
     }
 
-    pub async fn insert_datapoints(
+    pub async fn create_datapoints(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
-        self.insert_datapoints_internal(dataset_name, params, "datapoints")
+        self.create_datapoints_internal(dataset_name, params, "datapoints")
             .await
     }
 
-    /// DEPRECATED: Use `insert_datapoints` instead.
+    /// DEPRECATED: Use `create_datapoints` instead.
     pub async fn bulk_insert_datapoints(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
-        tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::insert_datapoints` instead.");
-        self.insert_datapoints_internal(dataset_name, params, "datapoints/bulk")
+        tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead.");
+        self.create_datapoints_internal(dataset_name, params, "datapoints/bulk")
             .await
     }
 
