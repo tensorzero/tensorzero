@@ -3319,4 +3319,206 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_credential_location_with_fallback_serialize_single() {
+        // Test serializing a Single variant (backward compatible)
+        let single =
+            CredentialLocationWithFallback::Single(CredentialLocation::Env("API_KEY".to_string()));
+        let json = serde_json::to_string(&single).unwrap();
+        assert_eq!(json, r#""env::API_KEY""#);
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_serialize_with_fallback() {
+        // Test serializing a WithFallback variant
+        let with_fallback = CredentialLocationWithFallback::WithFallback {
+            default: CredentialLocation::Dynamic("key1".to_string()),
+            fallback: CredentialLocation::Env("FALLBACK_KEY".to_string()),
+        };
+        let json = serde_json::to_string(&with_fallback).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["default"], "dynamic::key1");
+        assert_eq!(parsed["fallback"], "env::FALLBACK_KEY");
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_single_string() {
+        // Test deserializing from a simple string (backward compatible)
+        let json = r#""env::API_KEY""#;
+        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationWithFallback::Single(CredentialLocation::Env(key)) => {
+                assert_eq!(key, "API_KEY");
+            }
+            _ => panic!("Expected Single(Env)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_dynamic_string() {
+        // Test deserializing a dynamic credential from a string
+        let json = r#""dynamic::my_key""#;
+        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationWithFallback::Single(CredentialLocation::Dynamic(key)) => {
+                assert_eq!(key, "my_key");
+            }
+            _ => panic!("Expected Single(Dynamic)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_with_fallback() {
+        // Test deserializing an object with default and fallback fields
+        let json = r#"{"default":"dynamic::key1","fallback":"env::FALLBACK_KEY"}"#;
+        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+                match default {
+                    CredentialLocation::Dynamic(key) => assert_eq!(key, "key1"),
+                    _ => panic!("Expected Dynamic for default"),
+                }
+                match fallback {
+                    CredentialLocation::Env(key) => assert_eq!(key, "FALLBACK_KEY"),
+                    _ => panic!("Expected Env for fallback"),
+                }
+            }
+            CredentialLocationWithFallback::Single(..) => panic!("Expected WithFallback"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_path_variants() {
+        // Test deserializing path-based credentials
+        let json = r#"{"default":"path::/etc/key","fallback":"path_from_env::KEY_PATH"}"#;
+        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationWithFallback::WithFallback { default, fallback } => {
+                match default {
+                    CredentialLocation::Path(path) => assert_eq!(path, "/etc/key"),
+                    _ => panic!("Expected Path for default"),
+                }
+                match fallback {
+                    CredentialLocation::PathFromEnv(key) => assert_eq!(key, "KEY_PATH"),
+                    _ => panic!("Expected PathFromEnv for fallback"),
+                }
+            }
+            CredentialLocationWithFallback::Single(..) => panic!("Expected WithFallback"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_sdk() {
+        // Test deserializing SDK credential
+        let json = r#""sdk""#;
+        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationWithFallback::Single(CredentialLocation::Sdk) => {}
+            _ => panic!("Expected Single(Sdk)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_none() {
+        // Test deserializing None credential
+        let json = r#""none""#;
+        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
+        match result {
+            CredentialLocationWithFallback::Single(CredentialLocation::None) => {}
+            _ => panic!("Expected Single(None)"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_roundtrip_single() {
+        // Test serializing and deserializing a Single variant
+        let original =
+            CredentialLocationWithFallback::Single(CredentialLocation::Env("MY_KEY".to_string()));
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: CredentialLocationWithFallback = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_roundtrip_with_fallback() {
+        // Test serializing and deserializing a WithFallback variant
+        let original = CredentialLocationWithFallback::WithFallback {
+            default: CredentialLocation::Dynamic("primary".to_string()),
+            fallback: CredentialLocation::Env("SECONDARY".to_string()),
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: CredentialLocationWithFallback = serde_json::from_str(&json).unwrap();
+        assert_eq!(original, deserialized);
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_missing_default() {
+        // Test that missing default field returns an error
+        let json = r#"{"fallback":"env::FALLBACK_KEY"}"#;
+        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("missing field `default`"));
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_missing_fallback() {
+        // Test that missing fallback field returns an error
+        let json = r#"{"default":"env::DEFAULT_KEY"}"#;
+        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("missing field `fallback`"));
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_deserialize_unknown_field() {
+        // Test that unknown fields return an error
+        let json = r#"{"default":"env::KEY","fallback":"env::FALLBACK","unknown":"value"}"#;
+        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("unknown field"));
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_default_location() {
+        // Test the default_location() method
+        let single =
+            CredentialLocationWithFallback::Single(CredentialLocation::Env("KEY".to_string()));
+        match single.default_location() {
+            CredentialLocation::Env(key) => assert_eq!(key, "KEY"),
+            _ => panic!("Expected Env"),
+        }
+
+        let with_fallback = CredentialLocationWithFallback::WithFallback {
+            default: CredentialLocation::Dynamic("primary".to_string()),
+            fallback: CredentialLocation::Env("secondary".to_string()),
+        };
+        match with_fallback.default_location() {
+            CredentialLocation::Dynamic(key) => assert_eq!(key, "primary"),
+            _ => panic!("Expected Dynamic"),
+        }
+    }
+
+    #[test]
+    fn test_credential_location_with_fallback_fallback_location() {
+        // Test the fallback_location() method
+        let single =
+            CredentialLocationWithFallback::Single(CredentialLocation::Env("KEY".to_string()));
+        assert!(single.fallback_location().is_none());
+
+        let with_fallback = CredentialLocationWithFallback::WithFallback {
+            default: CredentialLocation::Dynamic("primary".to_string()),
+            fallback: CredentialLocation::Env("secondary".to_string()),
+        };
+        match with_fallback.fallback_location() {
+            Some(CredentialLocation::Env(key)) => assert_eq!(key, "secondary"),
+            _ => panic!("Expected Some(Env)"),
+        }
+    }
 }
