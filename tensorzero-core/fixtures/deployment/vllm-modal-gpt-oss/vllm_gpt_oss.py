@@ -142,10 +142,7 @@ def serve():
     cmd += ["--enforce-eager" if FAST_BOOT else "--no-enforce-eager"]
 
     if not FAST_BOOT:  # CUDA graph capture is only used with `--enforce-eager`
-        cmd += [
-            "-O.cudagraph_capture_sizes="
-            + str(CUDA_GRAPH_CAPTURE_SIZES).replace(" ", "")
-        ]
+        cmd += ["-O.cudagraph_capture_sizes=" + str(CUDA_GRAPH_CAPTURE_SIZES).replace(" ", "")]
 
     # assume multiple GPUs are for splitting up large matrix multiplications
     cmd += ["--tensor-parallel-size", str(N_GPU)]

@@ -50,9 +50,7 @@ if SERVERLESS:
         ),
     )
 else:
-    predictor = huggingface_model.deploy(
-        initial_instance_count=1, instance_type="ml.t2.medium"
-    )
+    predictor = huggingface_model.deploy(initial_instance_count=1, instance_type="ml.t2.medium")
 # send request
 predictor.predict(
     {

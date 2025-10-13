@@ -173,9 +173,7 @@ def merge_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def render_chat_message(
     role: str,
-    content_blocks: List[
-        Any
-    ],  # instances of Text, RawText, Thought, ToolCall, ToolResult
+    content_blocks: List[Any],  # instances of Text, RawText, Thought, ToolCall, ToolResult
 ) -> Optional[Dict[str, Any]]:
     """
     Render a single chat message into Google “parts” format.
@@ -295,9 +293,7 @@ val_data = [inference_to_google(sample) for sample in val_samples]
 
 
 # %%
-def upload_dataset_to_gcp(
-    data: List[Dict[str, Any]], dataset_name: str, gcp_client: storage.Client
-) -> str:
+def upload_dataset_to_gcp(data: List[Dict[str, Any]], dataset_name: str, gcp_client: storage.Client) -> str:
     with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
         # Write the openai_messages to the temporary file
         for item in data:
@@ -317,9 +313,7 @@ def upload_dataset_to_gcp(
         blob = bucket.blob(dataset_name)
 
         generation_match_precondition = 0
-        blob.upload_from_filename(
-            f.name, if_generation_match=generation_match_precondition
-        )
+        blob.upload_from_filename(f.name, if_generation_match=generation_match_precondition)
 
 
 gcp_client = storage.Client(project=os.environ["GCP_PROJECT_ID"])
