@@ -111,10 +111,7 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn count_feedback_by_target_id(
-        &self,
-        params: String,
-    ) -> Result<String, napi::Error> {
+    pub async fn count_feedback_by_target_id(&self, params: String) -> Result<String, napi::Error> {
         let CountFeedbackByTargetIdParams { target_id } =
             serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let result = self

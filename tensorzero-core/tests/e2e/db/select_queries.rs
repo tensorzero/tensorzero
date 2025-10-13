@@ -827,10 +827,18 @@ async fn test_query_feedback_bounds_by_target_id() {
         .unwrap();
 
     if feedback_count > 0 {
-        assert!(bounds.first_id.is_some(), "Should have first_id when feedback exists");
-        assert!(bounds.last_id.is_some(), "Should have last_id when feedback exists");
-        assert!(bounds.first_id.unwrap() <= bounds.last_id.unwrap(),
-                "first_id should be <= last_id");
+        assert!(
+            bounds.first_id.is_some(),
+            "Should have first_id when feedback exists"
+        );
+        assert!(
+            bounds.last_id.is_some(),
+            "Should have last_id when feedback exists"
+        );
+        assert!(
+            bounds.first_id.unwrap() <= bounds.last_id.unwrap(),
+            "first_id should be <= last_id"
+        );
     }
 }
 
@@ -856,8 +864,11 @@ async fn test_count_feedback_by_target_id() {
         .await
         .unwrap();
 
-    assert_eq!(count as usize, feedback.len(),
-               "Count should match actual feedback items");
+    assert_eq!(
+        count as usize,
+        feedback.len(),
+        "Count should match actual feedback items"
+    );
 }
 
 #[tokio::test]
@@ -874,7 +885,10 @@ async fn test_query_feedback_by_target_id_empty() {
         .await
         .unwrap();
 
-    assert!(feedback.is_empty(), "Should have no feedback for nonexistent target");
+    assert!(
+        feedback.is_empty(),
+        "Should have no feedback for nonexistent target"
+    );
 
     let count = clickhouse
         .count_feedback_by_target_id(nonexistent_id)

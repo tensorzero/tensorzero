@@ -1,8 +1,8 @@
 use crate::db::{
     clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
     BooleanMetricFeedbackRow, CommentFeedbackRow, DemonstrationFeedbackRow, EpisodeByIdRow,
-    FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant, FeedbackRow,
-    FloatMetricFeedbackRow, TableBounds, TableBoundsWithCount,
+    FeedbackBounds, FeedbackBoundsByType, FeedbackByVariant, FeedbackRow, FloatMetricFeedbackRow,
+    TableBounds, TableBoundsWithCount,
 };
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -530,7 +530,8 @@ impl ClickHouseConnectionInfo {
             )
         };
 
-        let mut params_vec: Vec<(&str, String)> = params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let mut params_vec: Vec<(&str, String)> =
+            params.iter().map(|(k, v)| (*k, v.clone())).collect();
         params_vec.push(("target_id", target_id.to_string()));
         params_vec.push(("page_size", page_size.to_string()));
 
@@ -599,7 +600,8 @@ impl ClickHouseConnectionInfo {
             )
         };
 
-        let mut params_vec: Vec<(&str, String)> = params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let mut params_vec: Vec<(&str, String)> =
+            params.iter().map(|(k, v)| (*k, v.clone())).collect();
         params_vec.push(("target_id", target_id.to_string()));
         params_vec.push(("page_size", page_size.to_string()));
 
@@ -668,7 +670,8 @@ impl ClickHouseConnectionInfo {
             )
         };
 
-        let mut params_vec: Vec<(&str, String)> = params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let mut params_vec: Vec<(&str, String)> =
+            params.iter().map(|(k, v)| (*k, v.clone())).collect();
         params_vec.push(("target_id", target_id.to_string()));
         params_vec.push(("page_size", page_size.to_string()));
 
@@ -734,7 +737,8 @@ impl ClickHouseConnectionInfo {
             )
         };
 
-        let mut params_vec: Vec<(&str, String)> = params.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let mut params_vec: Vec<(&str, String)> =
+            params.iter().map(|(k, v)| (*k, v.clone())).collect();
         params_vec.push(("inference_id", inference_id.to_string()));
         params_vec.push(("page_size", page_size.to_string()));
 
@@ -937,13 +941,11 @@ fn parse_count(response: &str) -> Result<u64, Error> {
         count: u64,
     }
 
-    let line = response
-        .trim()
-        .lines()
-        .next()
-        .ok_or_else(|| Error::new(ErrorDetails::ClickHouseDeserialization {
+    let line = response.trim().lines().next().ok_or_else(|| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
             message: "No count result returned from database".to_string(),
-        }))?;
+        })
+    })?;
 
     let result: CountResult = serde_json::from_str(line).map_err(|e| {
         Error::new(ErrorDetails::ClickHouseDeserialization {
@@ -953,4 +955,3 @@ fn parse_count(response: &str) -> Result<u64, Error> {
 
     Ok(result.count)
 }
-
