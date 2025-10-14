@@ -95,9 +95,7 @@ t0 = TensorZeroGateway.build_embedded(
 #
 
 # %%
-filters = FloatMetricFilter(
-    metric_name=METRIC_NAME, value=FLOAT_METRIC_THRESHOLD, comparison_operator=">"
-)
+filters = FloatMetricFilter(metric_name=METRIC_NAME, value=FLOAT_METRIC_THRESHOLD, comparison_operator=">")
 # from tensorzero import BooleanMetricFilter
 # filters = BooleanMetricFilter(metric_name=METRIC_NAME, value=True)
 # You could also train on demonstrations by changing the output_source to "demonstration"
@@ -173,9 +171,7 @@ model_config = {
     "models": {
         fine_tuned_model: {
             "routing": ["fireworks"],
-            "providers": {
-                "fireworks": {"type": "fireworks", "model_name": fine_tuned_model}
-            },
+            "providers": {"fireworks": {"type": "fireworks", "model_name": fine_tuned_model}},
         }
     }
 }

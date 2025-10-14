@@ -5,9 +5,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def main(gateway_url: str):
-    async with await AsyncTensorZeroGateway.build_http(
-        gateway_url=gateway_url
-    ) as client:
+    async with await AsyncTensorZeroGateway.build_http(gateway_url=gateway_url) as client:
         stream = await client.inference(
             function_name="chatbot",
             input={

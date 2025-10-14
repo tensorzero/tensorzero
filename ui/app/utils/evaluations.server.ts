@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { z } from "zod";
 import {
   EvaluationErrorSchema,
@@ -6,13 +5,8 @@ import {
 } from "./evaluations";
 import { logger } from "~/utils/logger";
 import { getEnv } from "./env.server";
-/**
- * Get the path to the evaluations binary from environment variables.
- * Defaults to 'evaluations' if not specified.
- */
-function getEvaluationsPath(): string {
-  return getEnv().TENSORZERO_EVALUATIONS_PATH || "evaluations";
-}
+import { runNativeEvaluationStreaming } from "./tensorzero/native_client.server";
+import type { EvaluationRunEvent } from "tensorzero-node";
 function getConfigPath(): string {
   const configPath = getEnv().TENSORZERO_UI_CONFIG_PATH;
   if (!configPath) {
@@ -80,194 +74,130 @@ export function runEvaluation(
   concurrency: number,
   inferenceCache: InferenceCacheSetting,
 ): Promise<EvaluationStartInfo> {
-  const evaluationsPath = getEvaluationsPath();
-  const gatewayURL = getEnv().TENSORZERO_GATEWAY_URL;
-  // Construct the command to run the evaluations binary
-  // Example: evaluations --gateway-url http://localhost:3000 --name entity_extraction --variant-name llama_8b_initial_prompt --concurrency 10 --format jsonl
-  // We do not need special escaping for the evaluation name or variant name because
-  // Node's spawn() does not use the shell to run the command.
-  const command = [
-    evaluationsPath,
-    "--gateway-url",
-    gatewayURL,
-    "--config-file",
-    getConfigPath(),
-    "--evaluation-name",
+  const env = getEnv();
+  const startTime = new Date();
+  let evaluationRunId: string | null = null;
+  let startResolved = false;
+
+  let resolveStart: (value: EvaluationStartInfo) => void = () => {};
+  let rejectStart: (reason?: unknown) => void = () => {};
+
+  const startPromise = new Promise<EvaluationStartInfo>((resolve, reject) => {
+    resolveStart = resolve;
+    rejectStart = reject;
+  });
+
+  const handleEvent = (event: EvaluationRunEvent) => {
+    switch (event.type) {
+      case "start": {
+        const startInfo = evaluationStartInfoSchema.safeParse({
+          evaluation_run_id: event.evaluation_run_id,
+          num_datapoints: event.num_datapoints,
+        });
+        if (!startInfo.success) {
+          rejectStart(startInfo.error);
+          return;
+        }
+
+        evaluationRunId = startInfo.data.evaluation_run_id;
+        runningEvaluations.set(evaluationRunId, {
+          variantName,
+          errors: [],
+          started: startTime,
+        });
+        startResolved = true;
+        resolveStart(startInfo.data);
+        break;
+      }
+      case "error": {
+        if (!evaluationRunId) {
+          return;
+        }
+        const parsedError = EvaluationErrorSchema.safeParse({
+          datapoint_id: event.datapoint_id,
+          message: event.message,
+        });
+        if (!parsedError.success) {
+          logger.warn("Received malformed evaluation error", parsedError.error);
+          return;
+        }
+        runningEvaluations
+          .get(evaluationRunId)
+          ?.errors.unshift(parsedError.data);
+        break;
+      }
+      case "fatal_error": {
+        if (!startResolved) {
+          rejectStart(new Error(event.message));
+          startResolved = true;
+        }
+        if (evaluationRunId) {
+          const evaluation = runningEvaluations.get(evaluationRunId);
+          if (evaluation) {
+            evaluation.errors.unshift({ message: event.message });
+            evaluation.completed = new Date();
+          }
+        }
+        break;
+      }
+      case "complete": {
+        if (evaluationRunId) {
+          const evaluation = runningEvaluations.get(evaluationRunId);
+          if (evaluation && !evaluation.completed) {
+            evaluation.completed = new Date();
+          }
+        }
+        break;
+      }
+      case "success": {
+        // We don't currently surface success payloads in the UI.
+        break;
+      }
+    }
+  };
+
+  const nativePromise = runNativeEvaluationStreaming({
+    gatewayUrl: env.TENSORZERO_GATEWAY_URL,
+    clickhouseUrl: env.TENSORZERO_CLICKHOUSE_URL,
+    configPath: getConfigPath(),
     evaluationName,
-    "--dataset-name",
     datasetName,
-    "--variant-name",
     variantName,
-    "--concurrency",
-    concurrency.toString(),
-    "--format",
-    "jsonl",
-    "--inference-cache",
+    concurrency,
     inferenceCache,
-  ];
+    onEvent: handleEvent,
+  });
 
-  return new Promise<EvaluationStartInfo>((resolve, reject) => {
-    // Spawn a child process to run the evaluations command
-    const child = spawn(command[0], command.slice(1));
-    // We also want to forward stderr to the parent process
-    // so it shows up in container logs.
-    child.stderr.pipe(process.stderr);
-
-    // Variables to track state
-    let evaluationRunId: string | null = null;
-    let initialDataReceived = false;
-
-    // Buffer for incomplete lines
-    let stdoutBuffer = "";
-    let stderrBuffer = "";
-
-    // Record the start time of the evaluation
-    const startTime = new Date();
-
-    // Process a complete line from stdout
-    const processCompleteLine = (line: string) => {
-      if (!line.trim()) return; // Skip empty lines
-
-      try {
-        // Try to parse the line as JSON
-        const parsedLine = JSON.parse(line);
-
-        // Check if this is the initial data containing evaluation_run_id
-        if (
-          !initialDataReceived &&
-          parsedLine.evaluation_run_id &&
-          parsedLine.num_datapoints
-        ) {
-          const evaluationStartInfo =
-            evaluationStartInfoSchema.safeParse(parsedLine);
-          if (!evaluationStartInfo.success) {
-            return reject(evaluationStartInfo.error);
-          }
-
-          evaluationRunId = evaluationStartInfo.data.evaluation_run_id;
-
-          // Initialize the tracking entry in our runningEvaluations map
-          runningEvaluations.set(evaluationRunId, {
-            variantName,
-            errors: [],
-            started: startTime,
-          });
-
-          // Mark that we've received the initial data
-          initialDataReceived = true;
-
-          // Resolve the promise with the evaluation start info
-          return resolve(evaluationStartInfo.data);
+  void nativePromise
+    .then(() => {
+      if (evaluationRunId) {
+        const evaluation = runningEvaluations.get(evaluationRunId);
+        if (evaluation && !evaluation.completed) {
+          evaluation.completed = new Date();
         }
-        // Check if this is an EvaluationError using the Zod schema
-        else if (
-          evaluationRunId &&
-          parsedLine.datapoint_id &&
-          parsedLine.message
-        ) {
-          // Parse using the Zod schema to validate
-          const evaluationError = EvaluationErrorSchema.safeParse(parsedLine);
-          if (evaluationError.success) {
-            // Add to the beginning of the errors list
-            runningEvaluations
-              .get(evaluationRunId)
-              ?.errors.unshift(evaluationError.data);
-          }
-        }
-        // We're ignoring other types of output that don't match these patterns
-      } catch {
-        logger.warn(`Bad JSON line: ${line}`);
       }
-    };
-
-    // Handle stdout data from the process
-    child.stdout.on("data", (data) => {
-      // Add new data to our buffer
-      stdoutBuffer += data.toString();
-
-      // Process complete lines
-      let newlineIndex;
-      while ((newlineIndex = stdoutBuffer.indexOf("\n")) !== -1) {
-        // Extract a complete line
-        const line = stdoutBuffer.substring(0, newlineIndex);
-        // Remove the processed line from the buffer
-        stdoutBuffer = stdoutBuffer.substring(newlineIndex + 1);
-        // Process the complete line
-        processCompleteLine(line);
+    })
+    .catch((error) => {
+      if (!startResolved) {
+        rejectStart(error);
+        startResolved = true;
+        return;
       }
-      // stdoutBuffer now contains any incomplete line (or nothing)
-    });
-
-    // Handle stderr data and process it line-by-line
-    child.stderr.on("data", (data) => {
-      // Add new data to our buffer
-      stderrBuffer += data.toString();
-      const evaluation = evaluationRunId
-        ? runningEvaluations.get(evaluationRunId)
-        : undefined;
-
-      // Process complete lines
-      let newlineIndex;
-      while ((newlineIndex = stderrBuffer.indexOf("\n")) !== -1) {
-        // Extract a complete line
-        const line = stderrBuffer.substring(0, newlineIndex).trim();
-        // Remove the processed line from the buffer
-        stderrBuffer = stderrBuffer.substring(newlineIndex + 1);
-        // Accumulate the error
+      if (evaluationRunId) {
+        const evaluation = runningEvaluations.get(evaluationRunId);
         if (evaluation) {
           evaluation.errors.unshift({
-            message: `Process error: ${line}`,
+            message:
+              error instanceof Error
+                ? error.message
+                : String(error ?? "Unknown error"),
           });
+          evaluation.completed = new Date();
         }
       }
-      // stderrBuffer now contains any incomplete line (or nothing)
     });
 
-    // Handle process errors (e.g., if the process couldn't be spawned)
-    child.on("error", (error) => {
-      if (!initialDataReceived) {
-        reject(error);
-      }
-    });
-
-    // Handle process completion
-    child.on("close", (code) => {
-      // Process any remaining data in the stdout buffer
-      if (stdoutBuffer.trim()) {
-        processCompleteLine(stdoutBuffer.trim());
-      }
-
-      const evaluation = evaluationRunId
-        ? runningEvaluations.get(evaluationRunId)
-        : undefined;
-      if (evaluation) {
-        // Mark the evaluation as completed
-        evaluation.completed = new Date();
-
-        // Add exit code info if not successful
-        if (code !== 0) {
-          if (stderrBuffer.trim()) {
-            evaluation.errors.push({
-              message: `Error: ${stderrBuffer.trim()}`,
-            });
-          } else {
-            evaluation.errors.push({
-              message: `Process exited with code ${code}`,
-            });
-          }
-        }
-      }
-
-      if (!initialDataReceived) {
-        reject(
-          new Error(
-            stderrBuffer.trim() ||
-              `Process exited with code ${code} without producing output`,
-          ),
-        );
-      }
-    });
-  });
+  return startPromise;
 }
 
 const evaluationStartInfoSchema = z.object({

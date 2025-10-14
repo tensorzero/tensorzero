@@ -222,12 +222,8 @@ train_samples, eval_samples = train_val_split(
 # Convert the rendered samples to openai format
 
 # %%
-train_conversations = tensorzero_rendered_samples_to_conversations(
-    train_samples, conversation_key="messages"
-)
-eval_conversations = tensorzero_rendered_samples_to_conversations(
-    eval_samples, conversation_key="messages"
-)
+train_conversations = tensorzero_rendered_samples_to_conversations(train_samples, conversation_key="messages")
+eval_conversations = tensorzero_rendered_samples_to_conversations(eval_samples, conversation_key="messages")
 
 # %% [markdown]
 # Set up distributed computing using [DeepSpeed](https://www.deepspeed.ai) if specified. See Axolotl for [distributed computing guidance](https://docs.axolotl.ai/docs/multi-gpu.html).
@@ -392,9 +388,7 @@ model_config = {
     "models": {
         model_identifier: {
             "routing": ["fireworks"],
-            "providers": {
-                "fireworks": {"type": "fireworks", "model_name": model_identifier}
-            },
+            "providers": {"fireworks": {"type": "fireworks", "model_name": model_identifier}},
         }
     }
 }

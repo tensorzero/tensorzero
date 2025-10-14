@@ -310,9 +310,7 @@ def sample_to_openai_messages(sample: RenderedSample) -> List[Dict[str, Any]]:
                     }
                 )
             elif part.type == "tool_result":
-                content.append(
-                    {"type": "tool_result", "name": part.name, "result": part.result}
-                )
+                content.append({"type": "tool_result", "name": part.name, "result": part.result})
             elif part.type == "thought":
                 content.append({"type": "text", "text": f"<think>{part.text}</think>"})
             else:
@@ -321,9 +319,7 @@ def sample_to_openai_messages(sample: RenderedSample) -> List[Dict[str, Any]]:
 
     # Add the output to the messages
     if sample.output:
-        rendered_messages.append(
-            {"role": "assistant", "content": prepare_output(sample.output)}
-        )
+        rendered_messages.append({"role": "assistant", "content": prepare_output(sample.output)})
 
     return rendered_messages
 
@@ -336,12 +332,8 @@ def sample_to_openai_messages(sample: RenderedSample) -> List[Dict[str, Any]]:
 
 # %%
 # Create training and validation DataFrames based on episode_ids
-train_examples = [
-    (sample_to_openai_messages(example), example) for example in train_samples
-]
-val_examples = [
-    (sample_to_openai_messages(example), example) for example in val_samples
-]
+train_examples = [(sample_to_openai_messages(example), example) for example in train_samples]
+val_examples = [(sample_to_openai_messages(example), example) for example in val_samples]
 
 # %% [markdown]
 # ## Generate Candidate Instructions
@@ -454,12 +446,8 @@ def format_response(response: Optional[InferenceResponse]) -> str:
 
 async def objective(trial: optuna.Trial):
     # Sample an instruction and a demonstration set
-    instruction_index = trial.suggest_categorical(
-        "instruction_index", range(num_instructions)
-    )
-    demonstration_index = trial.suggest_categorical(
-        "demonstration_index", range(num_demonstrations)
-    )
+    instruction_index = trial.suggest_categorical("instruction_index", range(num_instructions))
+    demonstration_index = trial.suggest_categorical("demonstration_index", range(num_demonstrations))
     # Format the candidate prompt
     candidate_system_prompt = env.render_template(
         "candidate",
@@ -514,9 +502,7 @@ async def objective(trial: optuna.Trial):
 #
 
 # %%
-study_random = optuna.create_study(
-    sampler=optuna.samplers.RandomSampler(seed=SEED), direction=OPTIMIZER_DIRECTION
-)
+study_random = optuna.create_study(sampler=optuna.samplers.RandomSampler(seed=SEED), direction=OPTIMIZER_DIRECTION)
 
 for iteration in range(MAX_ITERATIONS):
     trial = study_random.ask()
@@ -534,9 +520,7 @@ for iteration in range(MAX_ITERATIONS):
 #
 
 # %%
-study_tpe = optuna.create_study(
-    sampler=TPESampler(seed=SEED), direction=OPTIMIZER_DIRECTION
-)
+study_tpe = optuna.create_study(sampler=TPESampler(seed=SEED), direction=OPTIMIZER_DIRECTION)
 
 for iteration in range(MAX_ITERATIONS):
     trial = study_tpe.ask()
@@ -558,9 +542,7 @@ for iteration in range(MAX_ITERATIONS):
 optimized_system_template = env.render_template(
     "candidate",
     instructions=candidate_instructions[study_tpe.best_params["instruction_index"]],
-    demonstrations=candidate_demonstrations[
-        study_tpe.best_params["demonstration_index"]
-    ],
+    demonstrations=candidate_demonstrations[study_tpe.best_params["demonstration_index"]],
 )
 print(optimized_system_template)
 

@@ -26,8 +26,6 @@ def invocations():
 def ping():
     try:
         resp = requests.get("http://localhost:8081/ping")
-        return flask.Response(
-            response=resp.text, status=resp.status_code, mimetype="application/json"
-        )
+        return flask.Response(response=resp.text, status=resp.status_code, mimetype="application/json")
     except Exception:
         return flask.Response(response="\n", status=500, mimetype="application/json")

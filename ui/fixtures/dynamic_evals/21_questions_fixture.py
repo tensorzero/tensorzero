@@ -43,9 +43,7 @@ async def play_21_questions(
         short_answer = full_answer.split()[-1].lower()
         if "solved" in short_answer:
             elapsed_ms = (time.time() - start_time) * 1000
-            client.feedback(
-                episode_id=episode_id, metric_name="elapsed_ms", value=elapsed_ms
-            )
+            client.feedback(episode_id=episode_id, metric_name="elapsed_ms", value=elapsed_ms)
             client.feedback(episode_id=episode_id, metric_name="solved", value=True)
             return True
         message_history.append({"role": "assistant", "content": short_answer})
@@ -58,9 +56,7 @@ async def play_21_questions(
 async def safe_play_21_questions(
     client: AsyncTensorZeroGateway, semaphore: asyncio.Semaphore, run_id: str
 ) -> Optional[bool]:
-    run_episode_response = await client.dynamic_evaluation_run_episode(
-        run_id=run_id, tags={"baz": "bat"}
-    )
+    run_episode_response = await client.dynamic_evaluation_run_episode(run_id=run_id, tags={"baz": "bat"})
     episode_id = run_episode_response.episode_id
     try:
         return await play_21_questions(client, semaphore, episode_id)
@@ -84,10 +80,7 @@ async def run_dynamic_evaluation(
     result = [
         x
         for x in await asyncio.gather(
-            *[
-                safe_play_21_questions(t0, semaphore, run_info.run_id)
-                for _ in range(num_games)
-            ]
+            *[safe_play_21_questions(t0, semaphore, run_info.run_id) for _ in range(num_games)]
         )
         if x is not None
     ]

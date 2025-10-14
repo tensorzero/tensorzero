@@ -4,9 +4,7 @@ from tensorzero import AsyncTensorZeroGateway
 
 
 async def main():
-    async with await AsyncTensorZeroGateway.build_http(
-        gateway_url="http://localhost:3000"
-    ) as client:
+    async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost:3000") as client:
         inference_result = await client.inference(
             function_name="draft_email",
             input={

@@ -80,9 +80,7 @@ def tensorzero_message_to_openai(
                 warnings.warn(warning_message(message.role), UserWarning)
                 chatml_message["content"] = "\n".join(content)
             else:
-                chatml_message["content"] = [
-                    {"type": "text", "text": c} for c in content
-                ]
+                chatml_message["content"] = [{"type": "text", "text": c} for c in content]
         if tool_calls:
             chatml_message["tool_calls"] = tool_calls
         chatml_messages.append(chatml_message)
@@ -90,9 +88,7 @@ def tensorzero_message_to_openai(
     return chatml_messages
 
 
-def tensorzero_output_to_openai(
-    output: List[ContentBlock], join_text_blocks: bool = True
-) -> Optional[Dict[str, Any]]:
+def tensorzero_output_to_openai(output: List[ContentBlock], join_text_blocks: bool = True) -> Optional[Dict[str, Any]]:
     content: List[str] = []
     tool_calls: List[Dict[str, Any]] = []
 
@@ -150,18 +146,14 @@ def tensorzero_rendered_samples_to_conversations(
                 UserWarning,
             )
             continue
-        output_message = tensorzero_output_to_openai(
-            model_output, join_text_blocks=join_text_blocks
-        )
+        output_message = tensorzero_output_to_openai(model_output, join_text_blocks=join_text_blocks)
         if output_message is None:
             continue
         model_input = rendered_inference.input
         if model_input.system is not None:
             messages.append({"role": "system", "content": model_input.system})
         for message in model_input.messages:
-            chatml_message = tensorzero_message_to_openai(
-                message, join_text_blocks=join_text_blocks
-            )
+            chatml_message = tensorzero_message_to_openai(message, join_text_blocks=join_text_blocks)
             if chatml_message:
                 messages.extend(chatml_message)
         messages.append(output_message)
@@ -170,9 +162,7 @@ def tensorzero_rendered_samples_to_conversations(
             conversation_key: messages,
         }
         if rendered_inference.tool_params:
-            tools = tensorzero_to_openai_tools(
-                rendered_inference.tool_params.tools_available
-            )
+            tools = tensorzero_to_openai_tools(rendered_inference.tool_params.tools_available)
             payload["tools"] = tools
         conversations.append(payload)
 
