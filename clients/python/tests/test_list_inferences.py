@@ -347,9 +347,7 @@ def test_not_filter(embedded_sync_client: TensorZeroGateway):
 
 def test_simple_time_filter(embedded_sync_client: TensorZeroGateway):
     filters = TimeFilter(
-        time=datetime.fromtimestamp(
-            1672531200, tz=timezone.utc
-        ).isoformat(),  # 2023-01-01 00:00:00 UTC
+        time=datetime.fromtimestamp(1672531200, tz=timezone.utc).isoformat(),  # 2023-01-01 00:00:00 UTC
         comparison_operator=">",
     )
     order_by = [
@@ -505,9 +503,7 @@ async def test_simple_list_json_inferences_async(
         episode_id = inference.episode_id
         assert isinstance(episode_id, UUID)
         # StoredJsonInference has output_schema, StoredChatInference doesn't
-        assert (
-            hasattr(inference, "output_schema") and inference.output_schema is not None
-        )
+        assert hasattr(inference, "output_schema") and inference.output_schema is not None
 
     # ORDER BY timestamp DESC is applied - verify timestamps are in descending order
     timestamps = [inference.timestamp for inference in inferences]
@@ -733,9 +729,7 @@ async def test_simple_time_filter_async(
     embedded_async_client: AsyncTensorZeroGateway,
 ):
     filters = TimeFilter(
-        time=datetime.fromtimestamp(
-            1672531200, tz=timezone.utc
-        ).isoformat(),  # 2023-01-01 00:00:00 UTC
+        time=datetime.fromtimestamp(1672531200, tz=timezone.utc).isoformat(),  # 2023-01-01 00:00:00 UTC
         comparison_operator=">",
     )
     order_by = [

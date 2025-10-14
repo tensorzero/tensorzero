@@ -36,7 +36,7 @@ export default function DynamicEvaluationRunBadge({
       <Tooltip>
         <TooltipTrigger asChild>
           <Badge
-            className={`${variantColor} flex cursor-help items-center gap-1.5 px-2 py-1`}
+            className={`${variantColor} flex cursor-help items-center gap-1.5 px-2 py-1 font-mono`}
           >
             <span>{runInfo.name}</span>
             <span className="border-l border-white/30 pl-1.5 text-xs opacity-80">

@@ -1,4 +1,9 @@
-#![expect(clippy::expect_used, clippy::panic, clippy::unwrap_used)]
+#![expect(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::print_stdout,
+    clippy::unwrap_used
+)]
 mod batch;
 mod best_of_n;
 mod cache;
@@ -23,6 +28,7 @@ mod object_storage;
 mod openai_compatible;
 mod optimization;
 mod otel;
+mod otel_config_headers;
 mod otel_export;
 mod prometheus;
 mod providers;

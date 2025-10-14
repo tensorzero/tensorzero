@@ -116,9 +116,7 @@ async def test_async_inference_cache(async_openai_client):
             "content": [
                 {
                     "type": "text",
-                    "tensorzero::arguments": {
-                        "assistant_name": f"Alfred Pennyworth ({uuid})"
-                    },
+                    "tensorzero::arguments": {"assistant_name": f"Alfred Pennyworth ({uuid})"},
                 }
             ],
         },
@@ -170,9 +168,7 @@ async def test_async_inference_streaming_with_cache(async_openai_client):
             "content": [
                 {
                     "type": "text",
-                    "tensorzero::arguments": {
-                        "assistant_name": f"Alfred Pennyworth ({uuid})"
-                    },
+                    "tensorzero::arguments": {"assistant_name": f"Alfred Pennyworth ({uuid})"},
                 }
             ],
         },
@@ -330,9 +326,7 @@ async def test_async_inference_streaming(async_openai_client):
             assert chunk.episode_id == previous_episode_id
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
-        assert (
-            chunk.model == "tensorzero::function_name::basic_test::variant_name::test"
-        )
+        assert chunk.model == "tensorzero::function_name::basic_test::variant_name::test"
         if i + 2 < len(chunks):
             assert len(chunk.choices) == 1
             assert chunk.choices[0].delta.content == expected_text[i]
@@ -358,9 +352,7 @@ async def test_async_inference_streaming_nonexistent_function(async_openai_clien
                 "content": [
                     {
                         "type": "text",
-                        "tensorzero::arguments": {
-                            "assistant_name": "Alfred Pennyworth"
-                        },
+                        "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
                     }
                 ],
             },
@@ -392,9 +384,7 @@ async def test_async_inference_streaming_missing_function(async_openai_client):
                 "content": [
                     {
                         "type": "text",
-                        "tensorzero::arguments": {
-                            "assistant_name": "Alfred Pennyworth"
-                        },
+                        "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
                     }
                 ],
             },
@@ -426,9 +416,7 @@ async def test_async_inference_streaming_malformed_function(async_openai_client)
                 "content": [
                     {
                         "type": "text",
-                        "tensorzero::arguments": {
-                            "assistant_name": "Alfred Pennyworth"
-                        },
+                        "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
                     }
                 ],
             },
@@ -460,9 +448,7 @@ async def test_async_inference_streaming_missing_model(async_openai_client):
                 "content": [
                     {
                         "type": "text",
-                        "tensorzero::arguments": {
-                            "assistant_name": "Alfred Pennyworth"
-                        },
+                        "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
                     }
                 ],
             },
@@ -487,9 +473,7 @@ async def test_async_inference_streaming_malformed_input(async_openai_client):
                 "content": [
                     {
                         "type": "text",
-                        "tensorzero::arguments": {
-                            "name_of_assistant": "Alfred Pennyworth"
-                        },
+                        "tensorzero::arguments": {"name_of_assistant": "Alfred Pennyworth"},
                     }
                 ],
             },
@@ -528,10 +512,7 @@ async def test_async_tool_call_inference(async_openai_client):
         model="tensorzero::function_name::weather_helper",
         top_p=0.5,
     )
-    assert (
-        result.model
-        == "tensorzero::function_name::weather_helper::variant_name::variant"
-    )
+    assert result.model == "tensorzero::function_name::weather_helper::variant_name::variant"
     assert result.choices[0].message.content is None
     assert result.choices[0].message.tool_calls is not None
     tool_calls = result.choices[0].message.tool_calls
@@ -572,10 +553,7 @@ async def test_async_malformed_tool_call_inference(async_openai_client):
         model="tensorzero::function_name::weather_helper",
         presence_penalty=0.5,
     )
-    assert (
-        result.model
-        == "tensorzero::function_name::weather_helper::variant_name::bad_tool"
-    )
+    assert result.model == "tensorzero::function_name::weather_helper::variant_name::bad_tool"
     assert result.choices[0].message.content is None
     assert result.choices[0].message.tool_calls is not None
     tool_calls = result.choices[0].message.tool_calls
@@ -630,10 +608,7 @@ async def test_async_tool_call_streaming(async_openai_client):
             assert chunk.episode_id == previous_episode_id
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
-        assert (
-            chunk.model
-            == "tensorzero::function_name::weather_helper::variant_name::variant"
-        )
+        assert chunk.model == "tensorzero::function_name::weather_helper::variant_name::variant"
         if i + 1 < len(chunks):
             assert len(chunk.choices) == 1
             assert chunk.choices[0].delta.content is None
@@ -669,9 +644,7 @@ async def test_async_json_streaming(async_openai_client):
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     stream = await async_openai_client.chat.completions.create(
@@ -711,10 +684,7 @@ async def test_async_json_streaming(async_openai_client):
             assert chunk.episode_id == previous_episode_id
         previous_inference_id = chunk.id
         previous_episode_id = chunk.episode_id
-        assert (
-            chunk.model
-            == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
-        )
+        assert chunk.model == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
         if i + 1 < len(chunks):
             assert chunk.choices[0].delta.content == expected_text[i]
         else:
@@ -773,9 +743,7 @@ async def test_async_json_success_developer(async_openai_client):
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     episode_id = str(uuid7())
@@ -806,9 +774,7 @@ async def test_async_json_success_non_deprecated(async_openai_client):
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     episode_id = str(uuid7())
@@ -839,9 +805,7 @@ async def test_async_json_success(async_openai_client):
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     episode_id = str(uuid7())
@@ -872,9 +836,7 @@ async def test_async_json_success_strict(async_openai_client):
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     episode_id = str(uuid7())
@@ -901,10 +863,7 @@ async def test_async_json_success_strict(async_openai_client):
         model="tensorzero::function_name::json_success",
         response_format=response_format,
     )
-    assert (
-        result.model
-        == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
-    )
+    assert result.model == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
     assert result.episode_id == episode_id
     assert result.choices[0].message.content == '{"response":"Hello"}'
     assert result.choices[0].message.tool_calls is None
@@ -926,9 +885,7 @@ async def test_async_json_success_json_object(async_openai_client):
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     episode_id = str(uuid7())
@@ -944,10 +901,7 @@ async def test_async_json_success_json_object(async_openai_client):
         model="tensorzero::function_name::json_success",
         response_format=response_format,
     )
-    assert (
-        result.model
-        == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
-    )
+    assert result.model == "tensorzero::function_name::json_success::variant_name::test-diff-schema"
     assert result.episode_id == episode_id
     assert result.choices[0].message.content == '{"response":"Hello"}'
     assert result.choices[0].message.tool_calls is None
@@ -972,9 +926,7 @@ async def test_async_json_success_override(async_openai_client):
         {"role": "user", "content": [{"type": "text", "text": "Hi how are you?"}]},
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     episode_id = str(uuid7())
@@ -1001,9 +953,7 @@ async def test_async_json_invalid_system(async_openai_client):
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     episode_id = str(uuid7())
@@ -1013,9 +963,8 @@ async def test_async_json_invalid_system(async_openai_client):
             messages=messages,
             model="tensorzero::function_name::json_success",
         )
-    assert (
-        "Invalid request to OpenAI-compatible endpoint: System message must be a text content block"
-        in str(exc_info.value)
+    assert "Invalid request to OpenAI-compatible endpoint: System message must be a text content block" in str(
+        exc_info.value
     )
 
 
@@ -1318,9 +1267,7 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_openai_client
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     result = await async_openai_client.chat.completions.create(
@@ -1332,9 +1279,7 @@ async def test_dynamic_json_mode_inference_body_param_openai(async_openai_client
         model="tensorzero::function_name::dynamic_json",
         response_format=response_format,
     )
-    assert (
-        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
-    )
+    assert result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
     assert result.episode_id == body_episode_id
     json_content = json.loads(result.choices[0].message.content)
     assert "tokyo" in json_content["response"].lower()
@@ -1376,9 +1321,7 @@ async def test_dynamic_json_mode_inference_openai(async_openai_client):
         },
         {
             "role": "user",
-            "content": [
-                {"type": "text", "tensorzero::arguments": {"country": "Japan"}}
-            ],
+            "content": [{"type": "text", "tensorzero::arguments": {"country": "Japan"}}],
         },
     ]
     result = await async_openai_client.chat.completions.create(
@@ -1390,9 +1333,7 @@ async def test_dynamic_json_mode_inference_openai(async_openai_client):
         model="tensorzero::function_name::dynamic_json",
         response_format=response_format,
     )
-    assert (
-        result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
-    )
+    assert result.model == "tensorzero::function_name::dynamic_json::variant_name::openai"
     assert result.episode_id == episode_id
     json_content = json.loads(result.choices[0].message.content)
     assert "tokyo" in json_content["response"].lower()
@@ -1479,9 +1420,7 @@ async def test_async_multi_block_image_url(async_openai_client):
 @pytest.mark.asyncio
 async def test_async_multi_block_image_base64(async_openai_client):
     basepath = os.path.dirname(__file__)
-    with open(
-        f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb"
-    ) as f:
+    with open(f"{basepath}/../../../tensorzero-core/tests/e2e/providers/ferris.png", "rb") as f:
         ferris_png = base64.b64encode(f.read()).decode("ascii")
 
     messages = [
@@ -1732,10 +1671,7 @@ async def test_async_inference_tensorzero_raw_text(async_openai_client):
     )
 
     assert "tokyo" not in response.choices[0].message.content.lower()
-    assert (
-        response.model
-        == "tensorzero::function_name::openai_with_assistant_schema::variant_name::openai"
-    )
+    assert response.model == "tensorzero::function_name::openai_with_assistant_schema::variant_name::openai"
 
 
 @pytest.mark.asyncio

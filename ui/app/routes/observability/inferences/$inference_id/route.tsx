@@ -61,7 +61,7 @@ import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 
 export const handle: RouteHandle = {
-  crumb: (match) => [match.params.inference_id!],
+  crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {

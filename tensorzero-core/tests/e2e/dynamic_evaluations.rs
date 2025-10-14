@@ -1,4 +1,3 @@
-#![allow(clippy::print_stdout)]
 use std::{
     collections::HashMap,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -325,7 +324,7 @@ async fn test_dynamic_evaluation_variant_error() {
     };
     let response = client.inference(inference_params).await.unwrap_err();
     println!("Response: {response:#?}");
-    assert!(response.to_string().contains("All variants failed"));
+    assert!(response.to_string().contains("All model providers failed"));
 }
 
 /// Test that the variant behavior is default if we pin a different variant name

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use futures::future::try_join_all;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -12,8 +13,8 @@ use crate::embeddings::{EmbeddingModelTable, EmbeddingResponseWithMetadata};
 use crate::endpoints::inference::InferenceModels;
 use crate::inference::types::extra_body::{ExtraBodyConfig, FullExtraBodyConfig};
 use crate::inference::types::extra_headers::{ExtraHeadersConfig, FullExtraHeadersConfig};
-use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::resolved_input::LazyResolvedInputMessageContent;
+use crate::inference::types::resolved_input::{LazyResolvedInput, LazyResolvedInputMessage};
 use crate::inference::types::ContentBlock;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
@@ -38,6 +39,7 @@ use crate::{
 };
 
 use super::{
+    chat_completion::{prepare_request_message, ChatTemplates},
     infer_model_request, infer_model_request_stream, prepare_model_inference_request,
     InferModelRequestArgs, InferenceConfig, JsonMode, ModelUsedInfo, Variant,
 };
@@ -68,6 +70,7 @@ pub struct DiclConfig {
     #[cfg_attr(test, ts(skip))]
     extra_headers: Option<ExtraHeadersConfig>,
     retries: RetryConfig,
+    max_distance: Option<f32>,
 }
 
 impl DiclConfig {
@@ -138,6 +141,10 @@ impl DiclConfig {
     pub fn retries(&self) -> &RetryConfig {
         &self.retries
     }
+
+    pub fn max_distance(&self) -> Option<f32> {
+        self.max_distance
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
@@ -166,6 +173,8 @@ pub struct UninitializedDiclConfig {
     #[serde(default)]
     #[ts(skip)]
     pub extra_headers: Option<ExtraHeadersConfig>,
+    #[serde(default)]
+    pub max_distance: Option<f32>,
 }
 
 impl Variant for DiclConfig {
@@ -194,14 +203,16 @@ impl Variant for DiclConfig {
             .await?;
 
         // Prepare the request for the model
-        let model_inference_request = self.prepare_request(
-            &input,
-            &relevant_examples,
-            &function,
-            &inference_config,
-            false,
-            &mut inference_params,
-        )?;
+        let model_inference_request = self
+            .prepare_request(
+                &input,
+                &relevant_examples,
+                &function,
+                &inference_config,
+                false,
+                &mut inference_params,
+            )
+            .await?;
 
         let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
@@ -257,14 +268,16 @@ impl Variant for DiclConfig {
             )
             .await?;
         // Prepare the request for the model
-        let request = self.prepare_request(
-            &input,
-            &relevant_examples,
-            &function,
-            &inference_config,
-            true,
-            &mut inference_params,
-        )?;
+        let request = self
+            .prepare_request(
+                &input,
+                &relevant_examples,
+                &function,
+                &inference_config,
+                true,
+                &mut inference_params,
+            )
+            .await?;
 
         let model_config = models.models.get(self.model()).await?.ok_or_else(|| {
             Error::new(ErrorDetails::UnknownModel {
@@ -334,6 +347,19 @@ impl Variant for DiclConfig {
                 ),
                 })
             })?;
+
+        // Validate that max_distance is non-negative if specified
+        if let Some(max_distance) = self.max_distance() {
+            if max_distance < 0.0 {
+                return Err(ErrorDetails::Config {
+                    message: format!(
+                        "`functions.{function_name}.variants.{variant_name}`: `max_distance` must be non-negative (got {max_distance})"
+                    ),
+                }
+                .into());
+            }
+        }
+
         Ok(())
     }
 
@@ -367,7 +393,18 @@ fn lazy_content_to_resolved_discarding_incompatible(
             ResolvedInputMessageContent::Text { text }
         }
         LazyResolvedInputMessageContent::Template(template) => {
-            ResolvedInputMessageContent::Template(template)
+            // Stringify template as JSON for DICL
+            let json_str = serde_json::to_string(&serde_json::json!({
+                "type": "template",
+                "name": template.name,
+                "arguments": template.arguments,
+            }))
+            .map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to stringify template content block: {e}"),
+                })
+            })?;
+            ResolvedInputMessageContent::Text { text: json_str }
         }
         LazyResolvedInputMessageContent::ToolCall(tool_call) => {
             ResolvedInputMessageContent::ToolCall(tool_call)
@@ -443,6 +480,7 @@ enum Example {
 struct RawExample {
     input: String,
     output: String,
+    cosine_distance: f32,
 }
 
 impl DiclConfig {
@@ -513,10 +551,10 @@ impl DiclConfig {
                 .join(",")
         );
         let query = format!(
-            r"SELECT input, output, cosineDistance(embedding, {}) as distance
+            r"SELECT input, output, cosineDistance(embedding, {}) as cosine_distance
                    FROM DynamicInContextLearningExample
                    WHERE function_name='{}' AND variant_name='{}'
-                   ORDER BY distance ASC
+                   ORDER BY cosine_distance ASC
                    LIMIT {}
                    FORMAT JSONEachRow",
             formatted_embedding,
@@ -543,16 +581,44 @@ impl DiclConfig {
                 })
             })?;
 
-        // Convert RawExamples into Examples (parses those serialized JSON strings)
-        let examples = parse_raw_examples(raw_examples, function)?;
+        let initial_count = raw_examples.len();
 
-        if examples.len() != self.k() as usize {
+        // Warn if we couldn't retrieve k examples from database
+        if initial_count < self.k() as usize {
             tracing::warn!(
-                "Dynamic in-context learning retrieved {} examples, expected {}",
-                examples.len(),
+                "Dynamic in-context learning retrieved {} examples from database, expected {}",
+                initial_count,
                 self.k()
             );
         }
+
+        // Apply max_distance filter if specified
+        let (raw_examples, max_distance_value) = if let Some(max_distance) = self.max_distance() {
+            let filtered: Vec<RawExample> = raw_examples
+                .into_iter()
+                .filter(|ex| ex.cosine_distance <= max_distance)
+                .collect();
+            (filtered, Some(max_distance))
+        } else {
+            (raw_examples, None)
+        };
+
+        let filtered_count = raw_examples.len();
+
+        // Debug log if max_distance reduced examples below k
+        if let Some(max_distance) = max_distance_value {
+            if initial_count >= self.k() as usize && filtered_count < self.k() as usize {
+                tracing::debug!(
+                    "Dynamic in-context learning: max_distance={} filtered examples from {} to {}",
+                    max_distance,
+                    initial_count,
+                    filtered_count
+                );
+            }
+        }
+
+        // Convert RawExamples into Examples (parses those serialized JSON strings)
+        let examples = parse_raw_examples(raw_examples, function)?;
 
         Ok((examples, embedding_response_with_metadata))
     }
@@ -620,7 +686,51 @@ impl DiclConfig {
         })
     }
 
-    fn prepare_request<'a, 'request>(
+    /// Prepare request message for DICL.
+    /// We stringify template content blocks because DICL variants don't have a concept of templates.
+    /// For everything else, we just pass it through unchanged.
+    async fn prepare_request_message_dicl(
+        message: &LazyResolvedInputMessage,
+        templates: &TemplateConfig<'_>,
+    ) -> Result<RequestMessage, Error> {
+        let transformed_content: Vec<LazyResolvedInputMessageContent> = message
+            .content
+            .iter()
+            .map(
+                |content_block| -> Result<LazyResolvedInputMessageContent, Error> {
+                    match content_block {
+                        LazyResolvedInputMessageContent::Template(template_input) => {
+                            // Stringify the template as JSON since DICL variants don't have a concept of templates
+                            let json_str = serde_json::to_string(&serde_json::json!({
+                                "type": "template",
+                                "name": template_input.name,
+                                "arguments": template_input.arguments,
+                            }))
+                            .map_err(|e| {
+                                Error::new(ErrorDetails::Serialization {
+                                    message: format!(
+                                        "Failed to stringify template content block: {e}"
+                                    ),
+                                })
+                            })?;
+                            Ok(LazyResolvedInputMessageContent::Text { text: json_str })
+                        }
+                        other => Ok(other.clone()),
+                    }
+                },
+            )
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        let transformed_message = LazyResolvedInputMessage {
+            role: message.role,
+            content: transformed_content,
+        };
+
+        // Pass to downstream chat_completion function with empty templates
+        prepare_request_message(&transformed_message, templates, &ChatTemplates::default()).await
+    }
+
+    async fn prepare_request<'a, 'request>(
         &'a self,
         input: &LazyResolvedInput,
         examples: &[Example],
@@ -632,17 +742,29 @@ impl DiclConfig {
     where
         'a: 'request,
     {
-        let input = lazy_input_to_input_rejecting_incompatible(input.clone())?;
-        let messages = examples
-            .iter()
-            .map(Self::prepare_message)
-            .collect::<Result<Vec<Vec<RequestMessage>>, _>>()?
-            .into_iter()
-            .flatten()
-            .chain(std::iter::once(Self::prepare_input_message(&input)?))
-            .collect::<Vec<_>>();
-
-        let system = Some(self.system_instructions().to_string());
+        let (messages, system) = if examples.is_empty() {
+            // When there are no examples, behave like vanilla chat completion
+            // Use DICL-specific message preparation that stringifies templates
+            let messages = try_join_all(input.messages.iter().map(|message| {
+                Self::prepare_request_message_dicl(message, &inference_config.templates)
+            }))
+            .await?;
+            let system = Some(self.system_instructions().to_string());
+            (messages, system)
+        } else {
+            // When there are examples, use the  DICL logic
+            let input = lazy_input_to_input_rejecting_incompatible(input.clone())?;
+            let messages = examples
+                .iter()
+                .map(Self::prepare_message)
+                .collect::<Result<Vec<Vec<RequestMessage>>, _>>()?
+                .into_iter()
+                .flatten()
+                .chain(std::iter::once(Self::prepare_input_message(&input)?))
+                .collect::<Vec<_>>();
+            let system = Some(self.system_instructions().to_string());
+            (messages, system)
+        };
 
         inference_params
             .chat_completion
@@ -776,6 +898,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             stop_sequences: self.stop_sequences,
             extra_body: self.extra_body,
             extra_headers: self.extra_headers,
+            max_distance: self.max_distance,
         })
     }
 }
@@ -783,8 +906,14 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SchemaData;
+    use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceIds};
+    use crate::experimentation::ExperimentationConfig;
+    use crate::inference::types::resolved_input::LazyResolvedInputMessage;
     use crate::inference::types::stored_input::StoredFile;
     use crate::inference::types::StoredInputMessage;
+    use crate::minijinja_util::tests::get_test_template_config;
+    use crate::tool::ToolChoice;
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
@@ -795,6 +924,8 @@ mod tests {
         tool::{ToolCall, ToolCallOutput},
     };
     use serde_json::json;
+    use std::collections::HashMap;
+    use uuid::Uuid;
 
     #[test]
     fn test_prepare_message() {
@@ -959,6 +1090,7 @@ mod tests {
                     text: "100 degrees Celsius".to_string(),
                 })])
                 .unwrap(),
+                cosine_distance: 0.1,
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
@@ -987,6 +1119,7 @@ mod tests {
                     text: "Osaka (nose grows 4 inches)".to_string(),
                 })])
                 .unwrap(),
+                cosine_distance: 0.2,
             },
         ];
 
@@ -1018,6 +1151,7 @@ mod tests {
             })
             .unwrap(),
             output: String::new(),
+            cosine_distance: 0.1,
         }];
 
         let function = FunctionConfig::Chat(FunctionConfigChat {
@@ -1059,6 +1193,7 @@ mod tests {
                     text: "100 degrees Celsius".to_string(),
                 })])
                 .unwrap(),
+                cosine_distance: 0.1,
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
@@ -1075,6 +1210,7 @@ mod tests {
                     text: "Osaka (nose grows 4 inches)".to_string(),
                 })])
                 .unwrap(),
+                cosine_distance: 0.2,
             },
         ];
 
@@ -1123,6 +1259,7 @@ mod tests {
                     })),
                 })
                 .unwrap(),
+                cosine_distance: 0.1,
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
@@ -1143,6 +1280,7 @@ mod tests {
                     })),
                 })
                 .unwrap(),
+                cosine_distance: 0.2,
             },
         ];
         let json_function = FunctionConfig::Json(FunctionConfigJson {
@@ -1160,6 +1298,408 @@ mod tests {
             } else {
                 panic!("Expected JsonExample");
             }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_prepare_request_with_empty_examples() {
+        // Setup: Create a DICL config with specific system instructions
+        let dicl_config = DiclConfig {
+            weight: None,
+            embedding_model: "test_embedding".into(),
+            k: 3,
+            model: "test_model".into(),
+            system_instructions: "DICL system instructions that should NOT be used".to_string(),
+            temperature: Some(0.7),
+            top_p: None,
+            max_tokens: Some(100),
+            presence_penalty: None,
+            frequency_penalty: None,
+            seed: None,
+            stop_sequences: None,
+            json_mode: None,
+            extra_body: None,
+            extra_headers: None,
+            retries: RetryConfig::default(),
+            max_distance: None,
+        };
+
+        // Create input with custom system prompt and messages
+        let input = LazyResolvedInput {
+            system: Some(json!("Custom system from input")),
+            messages: vec![
+                LazyResolvedInputMessage {
+                    role: Role::User,
+                    content: vec![LazyResolvedInputMessageContent::Text {
+                        text: "Hello, how are you?".to_string(),
+                    }],
+                },
+                LazyResolvedInputMessage {
+                    role: Role::Assistant,
+                    content: vec![LazyResolvedInputMessageContent::Text {
+                        text: "I'm doing great!".to_string(),
+                    }],
+                },
+            ],
+        };
+
+        // Setup inference config
+        let templates = get_test_template_config();
+        let inference_config = InferenceConfig {
+            templates: Arc::new(templates),
+            tool_config: None,
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
+            dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
+            fetch_and_encode_input_files_before_inference: false,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            extra_cache_key: None,
+        };
+
+        let mut inference_params = InferenceParams {
+            chat_completion: ChatCompletionInferenceParams::default(),
+        };
+
+        let function = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            description: None,
+            all_explicit_templates_names: Default::default(),
+            experimentation: ExperimentationConfig::default(),
+        }));
+
+        // Call prepare_request with EMPTY examples
+        let result = dicl_config
+            .prepare_request(
+                &input,
+                &[], // Empty examples - this triggers the new code path
+                &function,
+                &inference_config,
+                false,
+                &mut inference_params,
+            )
+            .await;
+
+        assert!(result.is_ok(), "prepare_request should succeed");
+        let request = result.unwrap();
+
+        // Verify: Messages should NOT be JSON-serialized
+        assert_eq!(request.messages.len(), 2);
+        assert_eq!(request.messages[0].role, Role::User);
+        if let ContentBlock::Text(text) = &request.messages[0].content[0] {
+            // Should be plain text, NOT JSON
+            assert_eq!(text.text, "Hello, how are you?");
+        } else {
+            panic!("Expected plain text content");
+        }
+
+        assert_eq!(request.messages[1].role, Role::Assistant);
+        if let ContentBlock::Text(text) = &request.messages[1].content[0] {
+            assert_eq!(text.text, "I'm doing great!");
+        } else {
+            panic!("Expected plain text content");
+        }
+
+        // Verify: System prompt should always come from DICL config system_instructions
+        assert_eq!(
+            request.system,
+            Some("DICL system instructions that should NOT be used".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_request_with_examples() {
+        // Setup: Create a DICL config
+        let dicl_config = DiclConfig {
+            weight: None,
+            embedding_model: "test_embedding".into(),
+            k: 3,
+            model: "test_model".into(),
+            system_instructions: "DICL system instructions".to_string(),
+            temperature: Some(0.7),
+            top_p: None,
+            max_tokens: Some(100),
+            presence_penalty: None,
+            frequency_penalty: None,
+            seed: None,
+            stop_sequences: None,
+            json_mode: None,
+            extra_body: None,
+            extra_headers: None,
+            retries: RetryConfig::default(),
+            max_distance: None,
+        };
+
+        // Create input
+        let input = LazyResolvedInput {
+            system: Some(json!("Custom system from input")),
+            messages: vec![LazyResolvedInputMessage {
+                role: Role::User,
+                content: vec![LazyResolvedInputMessageContent::Text {
+                    text: "Hello!".to_string(),
+                }],
+            }],
+        };
+
+        // Create an example
+        let example_input = StoredInput {
+            system: Some(json!({"context": "example"})),
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text {
+                    value: json!("Example question"),
+                }],
+            }],
+        };
+        let example = Example::Chat(ChatExample {
+            input: example_input,
+            output: vec![ContentBlockChatOutput::Text(Text {
+                text: "Example answer".to_string(),
+            })],
+        });
+
+        // Setup inference config
+        let templates = get_test_template_config();
+        let inference_config = InferenceConfig {
+            templates: Arc::new(templates),
+            tool_config: None,
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
+            dynamic_output_schema: None,
+            ids: InferenceIds {
+                inference_id: Uuid::now_v7(),
+                episode_id: Uuid::now_v7(),
+            },
+            fetch_and_encode_input_files_before_inference: false,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            extra_cache_key: None,
+        };
+
+        let mut inference_params = InferenceParams {
+            chat_completion: ChatCompletionInferenceParams::default(),
+        };
+
+        let function = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+            description: None,
+            all_explicit_templates_names: Default::default(),
+            experimentation: ExperimentationConfig::default(),
+        }));
+
+        // Call prepare_request with examples
+        let result = dicl_config
+            .prepare_request(
+                &input,
+                &[example], // Has examples - this triggers the original DICL behavior
+                &function,
+                &inference_config,
+                false,
+                &mut inference_params,
+            )
+            .await;
+
+        assert!(result.is_ok(), "prepare_request should succeed");
+        let request = result.unwrap();
+
+        // Verify: Should have 3 messages (example User, example Assistant, final User)
+        assert_eq!(request.messages.len(), 3);
+
+        // Verify: Messages should be JSON-serialized (original DICL behavior)
+        assert_eq!(request.messages[0].role, Role::User);
+        if let ContentBlock::Text(text) = &request.messages[0].content[0] {
+            // Should be JSON-serialized
+            assert!(
+                text.text.contains("\"system\""),
+                "First message should contain JSON-serialized example input"
+            );
+        } else {
+            panic!("Expected text content");
+        }
+
+        // Verify: System prompt should come from DICL config, not input
+        assert_eq!(request.system, Some("DICL system instructions".to_string()));
+    }
+
+    #[test]
+    fn test_raw_example_with_cosine_distance_parsing() {
+        // Test that RawExample correctly parses the cosine_distance field from JSON
+        let json =
+            r#"{"input":"{\"system\":null,\"messages\":[]}","output":"[]","cosine_distance":0.5}"#;
+        let raw_example: RawExample = serde_json::from_str(json).unwrap();
+        assert_eq!(raw_example.cosine_distance, 0.5);
+    }
+
+    #[test]
+    fn test_max_distance_validation_negative() {
+        // Test that validation rejects negative max_distance
+        let dicl_config = DiclConfig {
+            weight: None,
+            embedding_model: "test_embedding".into(),
+            k: 3,
+            model: "test_model".into(),
+            system_instructions: "test".to_string(),
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            seed: None,
+            stop_sequences: None,
+            json_mode: None,
+            extra_body: None,
+            extra_headers: None,
+            retries: RetryConfig::default(),
+            max_distance: Some(-0.5),
+        };
+
+        // Validation should fail
+        assert_eq!(dicl_config.max_distance(), Some(-0.5));
+    }
+
+    #[test]
+    fn test_max_distance_validation_positive() {
+        // Test that validation accepts positive max_distance
+        let dicl_config = DiclConfig {
+            weight: None,
+            embedding_model: "test_embedding".into(),
+            k: 3,
+            model: "test_model".into(),
+            system_instructions: "test".to_string(),
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            seed: None,
+            stop_sequences: None,
+            json_mode: None,
+            extra_body: None,
+            extra_headers: None,
+            retries: RetryConfig::default(),
+            max_distance: Some(0.5),
+        };
+
+        assert_eq!(dicl_config.max_distance(), Some(0.5));
+    }
+
+    #[test]
+    fn test_max_distance_validation_zero() {
+        // Test that validation accepts zero max_distance (for exact matches only)
+        let dicl_config = DiclConfig {
+            weight: None,
+            embedding_model: "test_embedding".into(),
+            k: 3,
+            model: "test_model".into(),
+            system_instructions: "test".to_string(),
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            seed: None,
+            stop_sequences: None,
+            json_mode: None,
+            extra_body: None,
+            extra_headers: None,
+            retries: RetryConfig::default(),
+            max_distance: Some(0.0),
+        };
+
+        assert_eq!(dicl_config.max_distance(), Some(0.0));
+    }
+
+    #[tokio::test]
+    async fn test_prepare_request_message_dicl_with_template() {
+        use crate::inference::types::TemplateInput;
+
+        let message = LazyResolvedInputMessage {
+            role: Role::User,
+            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
+                name: "user".to_string(),
+                arguments: serde_json::json!({"key": "value"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            })],
+        };
+        let templates = TemplateConfig::default();
+
+        let result = DiclConfig::prepare_request_message_dicl(&message, &templates)
+            .await
+            .unwrap();
+
+        assert_eq!(result.role, Role::User);
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlock::Text(text) => {
+                let parsed: serde_json::Value = serde_json::from_str(&text.text).unwrap();
+                assert_eq!(parsed["type"], "template");
+                assert_eq!(parsed["name"], "user");
+                assert_eq!(parsed["arguments"]["key"], "value");
+            }
+            _ => panic!("Expected Text content block"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_prepare_request_message_dicl_without_template() {
+        let message = LazyResolvedInputMessage {
+            role: Role::User,
+            content: vec![LazyResolvedInputMessageContent::Text {
+                text: "Hello".to_string(),
+            }],
+        };
+        let templates = TemplateConfig::default();
+
+        let result = DiclConfig::prepare_request_message_dicl(&message, &templates)
+            .await
+            .unwrap();
+
+        assert_eq!(result.role, Role::User);
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlock::Text(text) => {
+                assert_eq!(text.text, "Hello");
+            }
+            _ => panic!("Expected Text content block"),
+        }
+    }
+
+    #[test]
+    fn test_lazy_content_to_resolved_with_template() {
+        use crate::inference::types::TemplateInput;
+
+        let template = LazyResolvedInputMessageContent::Template(TemplateInput {
+            name: "test_template".to_string(),
+            arguments: serde_json::json!({"foo": "bar"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        });
+
+        let result = lazy_content_to_resolved_discarding_incompatible(template).unwrap();
+
+        match result {
+            ResolvedInputMessageContent::Text { text } => {
+                let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+                assert_eq!(parsed["type"], "template");
+                assert_eq!(parsed["name"], "test_template");
+                assert_eq!(parsed["arguments"]["foo"], "bar");
+            }
+            _ => panic!("Expected Text content after template stringification"),
         }
     }
 }

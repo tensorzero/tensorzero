@@ -3,6 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
+use futures::StreamExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -412,7 +413,7 @@ fn make_stream_from_non_stream(
             finish_reason: json.finish_reason,
         })),
     };
-    Ok(Box::pin(tokio_stream::once(chunk)))
+    Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
 }
 
 impl fmt::Debug for InferenceOrStreamResult {
@@ -905,6 +906,7 @@ mod tests {
         config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
+        experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
@@ -1292,6 +1294,7 @@ mod tests {
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
@@ -1387,7 +1390,7 @@ mod tests {
         )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
             http_client: client.clone(),
@@ -1596,6 +1599,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
 
         let models_arc = Arc::new(models);

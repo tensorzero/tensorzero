@@ -7,7 +7,9 @@ use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
     db::{
-        clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
+        clickhouse::{
+            clickhouse_client::ClickHouseClientType, ClickHouseConnectionInfo, ExternalDataInfo,
+        },
         postgres::PostgresConnectionInfo,
     },
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
@@ -247,10 +249,7 @@ impl Optimizer for DiclOptimizationConfig {
         }
 
         // Check if ClickHouse is available (required for DICL)
-        if matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ) {
+        if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
             return Err(Error::new(ErrorDetails::AppState {
                 message: "DICL optimization requires ClickHouse to be enabled to store examples"
                     .to_string(),
@@ -401,6 +400,7 @@ impl JobHandle for DiclOptimizationJobHandle {
                     extra_body: None,
                     extra_headers: None,
                     retries: RetryConfig::default(),
+                    max_distance: None,
                 },
             ))),
         })
@@ -535,7 +535,7 @@ async fn process_embedding_batch(
     let clients = InferenceClients {
         http_client: client.clone(),
         credentials: Arc::new(credentials.clone()),
-        clickhouse_connection_info: ClickHouseConnectionInfo::Disabled,
+        clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         cache_options: CacheOptions::default(),
         tags: Arc::new(HashMap::default()),
@@ -797,6 +797,7 @@ mod tests {
             EmbeddingProviderInfo,
         },
         endpoints::inference::InferenceCredentials,
+        experimentation::ExperimentationConfig,
     };
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
@@ -1236,6 +1237,7 @@ mod tests {
             description: None,
 
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1251,6 +1253,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1280,6 +1283,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1316,6 +1320,7 @@ mod tests {
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 

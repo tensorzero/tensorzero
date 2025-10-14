@@ -345,7 +345,7 @@ pub async fn prepare_model_input(
     })
 }
 
-fn prepare_system_message(
+pub fn prepare_system_message(
     system: Option<&Value>,
     templates: &TemplateConfig,
     template: Option<&TemplateWithSchema>,
@@ -391,7 +391,7 @@ fn prepare_system_message(
     }})
 }
 
-async fn prepare_request_message(
+pub async fn prepare_request_message(
     message: &LazyResolvedInputMessage,
     templates_config: &TemplateConfig<'_>,
     chat_templates: &ChatTemplates,
@@ -779,6 +779,7 @@ mod tests {
     use crate::endpoints::inference::{
         ChatCompletionInferenceParams, InferenceCredentials, InferenceIds,
     };
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::TemplateInput;
@@ -1158,7 +1159,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion() {
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -1217,6 +1218,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let good_provider_config = ProviderConfig::Dummy(DummyProvider {
             model_name: "good".into(),
@@ -1715,6 +1717,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let inference_config = InferenceConfig {
             templates: templates.clone(),
@@ -1896,6 +1899,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let inference_params = InferenceParams {
             chat_completion: ChatCompletionInferenceParams {
@@ -2027,6 +2031,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let inference_params = InferenceParams::default();
         // Will dynamically set "response" instead of "answer"
@@ -2139,7 +2144,7 @@ mod tests {
     #[tokio::test]
     async fn test_infer_chat_completion_stream() {
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
             http_client: client.clone(),
@@ -2171,6 +2176,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
 
         let system_template = get_system_template();
@@ -2458,6 +2464,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let mut inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
@@ -2571,6 +2578,7 @@ mod tests {
             },
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {

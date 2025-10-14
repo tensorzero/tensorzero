@@ -23,12 +23,9 @@ use tensorzero::{
 use tensorzero_core::inference::types::StoredInput;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
-    db::clickhouse::{
-        test_helpers::{
-            select_all_model_inferences_by_chat_episode_id_clickhouse,
-            select_chat_inferences_clickhouse,
-        },
-        ClickHouseConnectionInfo,
+    db::clickhouse::test_helpers::{
+        select_all_model_inferences_by_chat_episode_id_clickhouse,
+        select_chat_inferences_clickhouse,
     },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
@@ -43,13 +40,14 @@ use tensorzero_core::{
     tool::{ToolCall, ToolCallInput},
 };
 use tokio::task::JoinSet;
+use tokio::time::{sleep, Duration};
 use tracing_test::traced_test;
 use url::Url;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-    select_model_inference_clickhouse,
+    get_clickhouse, select_chat_inference_clickhouse, select_inference_tags_clickhouse,
+    select_json_inference_clickhouse, select_model_inference_clickhouse,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -2669,7 +2667,7 @@ pub async fn e2e_test_dynamic_api_key() {
         .await
         .unwrap();
     // Check that the API response is an error since we didn't provide the right key
-    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     let response_json = response.json::<Value>().await.unwrap();
     let error_message = response_json.get("error").unwrap().as_str().unwrap();
     assert!(
@@ -3927,17 +3925,33 @@ async fn test_clickhouse_bulk_insert_off_default() {
         .await,
     );
 
-    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
-        .get_app_state_data()
-        .unwrap()
-        .clickhouse_connection_info
-        .clone()
-    else {
-        panic!("Clickhouse client was not production!");
-    };
+    // TODO(shuyangli): I think this is testing at the wrong level.
+    // "batching" is currently structured as an implementation detail of the
+    // ClickHouseConnectionInfo / ClickHouseClient - if batching is not enabled,
+    // write_batched doesn't fail and just uses the non-batched implementation,
+    // and no production code is calling write_non_batched.
+    // The current E2E test is testing internal implementation detail
+    // (checks if the batch_handle is present when batch is enabled/disabled)
+    // which I would argue is too low level.
+
+    // I think the right way to test this:
+
+    // At unit test level, we check
+    // - if batching config sets up batch_sender correctly (presence and absence)
+    // - if batch_sender writes correctly
+    // - if the write() calls use batch_sender correctly
+    //
+    // At the E2e level, we check
+    // - with batching on, do we write to clickhouse
+    // - with batching off, do we write to clickhouse
+
     assert!(
-        batch_sender.is_none(),
-        "Batching should not have been enabled!"
+        !client
+            .get_app_state_data()
+            .unwrap()
+            .clickhouse_connection_info
+            .is_batching_enabled(),
+        "Batching is enabled, but should be disabled with default config!"
     );
 }
 
@@ -3956,15 +3970,14 @@ async fn test_clickhouse_bulk_insert() {
         .await,
     );
 
-    let ClickHouseConnectionInfo::Production { batch_sender, .. } = client
-        .get_app_state_data()
-        .unwrap()
-        .clickhouse_connection_info
-        .clone()
-    else {
-        panic!("Clickhouse client was not production!");
-    };
-    assert!(batch_sender.is_some(), "Batching was not enabled!");
+    assert!(
+        client
+            .get_app_state_data()
+            .unwrap()
+            .clickhouse_connection_info
+            .is_batching_enabled(),
+        "Batching should be enabled with config, but is disabled!"
+    );
 
     let mut join_set = JoinSet::new();
     let episode_id = Uuid::now_v7();
@@ -4003,7 +4016,6 @@ async fn test_clickhouse_bulk_insert() {
     assert_eq!(expected_inference_ids.len(), inference_count);
 
     assert_eq!(Arc::strong_count(&client), 1);
-    drop(batch_sender);
     eprintln!("Dropping client");
     // Drop the last client, which will drop all of our `ClickhouseConnectionInfo`s
     // and allow the batch writer to shut down.
@@ -4049,4 +4061,71 @@ async fn test_clickhouse_bulk_insert() {
         .collect::<HashSet<_>>();
     assert_eq!(actual_model_inference_ids.len(), inference_count);
     assert_eq!(actual_model_inference_ids, expected_inference_ids);
+}
+
+#[tokio::test]
+async fn test_internal_tag_auto_injection() {
+    let client = Client::new();
+
+    // Make an inference request with internal=true and a custom tag
+    // We should NOT manually set tensorzero::internal - it should be auto-injected
+    let payload = json!({
+        "function_name": "basic_test",
+        "input": {
+            "system": {"assistant_name": "Alfred"},
+            "messages": [{"role": "user", "content": "Hello!"}]
+        },
+        "internal": true,
+        "tags": {
+            "custom_tag": "custom_value"
+        },
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(response.status().is_success());
+    let response_json = response.json::<Value>().await.unwrap();
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    sleep(Duration::from_millis(200)).await;
+
+    // Check ClickHouse to verify both tags are present
+    let clickhouse = get_clickhouse().await;
+
+    // Verify custom tag is present
+    let result = select_inference_tags_clickhouse(
+        &clickhouse,
+        "basic_test",
+        "custom_tag",
+        "custom_value",
+        inference_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        result.get("inference_id").unwrap().as_str().unwrap(),
+        inference_id.to_string()
+    );
+
+    // Verify auto-injected tensorzero::internal tag is present
+    let result = select_inference_tags_clickhouse(
+        &clickhouse,
+        "basic_test",
+        "tensorzero::internal",
+        "true",
+        inference_id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        result.get("inference_id").unwrap().as_str().unwrap(),
+        inference_id.to_string()
+    );
 }

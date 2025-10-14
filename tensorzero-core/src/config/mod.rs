@@ -1,3 +1,4 @@
+use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
@@ -389,6 +390,9 @@ pub struct OtlpTracesConfig {
     pub enabled: bool,
     #[serde(default)]
     pub format: OtlpTracesFormat,
+    /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
+    #[serde(default)]
+    pub extra_headers: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -543,28 +547,29 @@ impl ConfigFileGlob {
     }
 
     pub fn new(glob: String) -> Result<Self, Error> {
-        let mut glob_paths = glob::glob(&glob)
+        // Build a matcher from the glob pattern
+        let matcher = globset::Glob::new(&glob)
             .map_err(|e| {
                 Error::new(ErrorDetails::Glob {
                     glob: glob.to_string(),
                     message: e.to_string(),
                 })
             })?
-            .map(|path_res| {
-                path_res.map_err(|e| {
-                    Error::new(ErrorDetails::Glob {
-                        glob: glob.to_string(),
-                        message: format!("Error processing globbed path: `{e}`"),
-                    })
-                })
-            })
-            .collect::<Result<Vec<PathBuf>, Error>>()?;
+            .compile_matcher();
+
+        // Extract the base path to start walking from
+        let base_path = extract_base_path_from_glob(&glob);
+
+        // Find all files matching the glob pattern
+        let mut glob_paths = find_matching_files(&base_path, &matcher);
+
         if glob_paths.is_empty() {
             return Err(Error::new(ErrorDetails::Glob {
                 glob: glob.to_string(),
                 message: "No files matched the glob pattern. Ensure that the path exists, and contains at least one file.".to_string(),
             }));
         }
+
         // Sort the paths to avoid depending on the filesystem iteration order
         // when we merge configs. This should only affect the precise error message we display,
         // not whether or not the config parses successfully (or the final `Config`
@@ -576,6 +581,78 @@ impl ConfigFileGlob {
             _private: (),
         })
     }
+}
+
+/// Extract the base path from a glob pattern.
+///
+/// This finds the longest literal path prefix before any glob metacharacters,
+/// following the same approach as the glob crate. It works at the path component
+/// level (not character level) for better handling of path separators.
+///
+/// # Examples
+/// - `/tmp/config/tensorzero.toml` → `/tmp/config/tensorzero.toml`
+/// - `/tmp/config/**/*.toml` → `/tmp/config`
+/// - `config/**/*.toml` → `config`
+/// - `*.toml` → `.`
+fn extract_base_path_from_glob(glob: &str) -> PathBuf {
+    let path = Path::new(glob);
+    let mut base_components = Vec::new();
+
+    for component in path.components() {
+        let component_str = component.as_os_str().to_string_lossy();
+        // Stop at the first component containing glob metacharacters
+        if component_str.contains(['*', '?', '[', ']', '{', '}']) {
+            break;
+        }
+        base_components.push(component);
+    }
+
+    if base_components.is_empty() {
+        PathBuf::from(".")
+    } else {
+        base_components.iter().collect()
+    }
+}
+/// Check which files match the glob pattern.
+/// If the base path is a file, check it directly against the matcher.
+/// If the base path is a directory, walk it.
+fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<PathBuf> {
+    let mut matched_files = Vec::new();
+
+    // If base_path is a file, check it directly against the matcher
+    if base_path.is_file() {
+        if matcher.is_match(base_path) {
+            matched_files.push(base_path.to_path_buf());
+        }
+        return matched_files;
+    }
+
+    // If base_path is a directory, walk it
+    for entry in walkdir::WalkDir::new(base_path)
+        .follow_links(false)
+        .into_iter()
+    {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() && matcher.is_match(path) {
+                    matched_files.push(path.to_path_buf());
+                }
+            }
+            Err(e) => {
+                let error_path = e
+                    .path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| base_path.to_string_lossy().into_owned());
+                tracing::warn!(
+                    "Skipping `{}` while scanning for configuration files: {e}",
+                    error_path
+                );
+            }
+        }
+    }
+
+    matched_files
 }
 
 impl Config {
@@ -911,6 +988,7 @@ impl Config {
                     parallel_tool_calls: None,
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::default(),
                 },
             ))))
         } else {
@@ -1160,6 +1238,7 @@ pub struct UninitializedFunctionConfigChat {
     parallel_tool_calls: Option<bool>,
     #[serde(default)]
     description: Option<String>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1174,6 +1253,7 @@ pub struct UninitializedFunctionConfigJson {
     output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -1309,6 +1389,10 @@ impl UninitializedFunctionConfig {
                         }
                     }
                 }
+                let experimentation = params
+                    .experimentation
+                    .map(UninitializedExperimentationConfig::load)
+                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     schemas: schema_data,
@@ -1317,6 +1401,7 @@ impl UninitializedFunctionConfig {
                     parallel_tool_calls: params.parallel_tool_calls,
                     description: params.description,
                     all_explicit_templates_names: all_template_names,
+                    experimentation,
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
@@ -1397,6 +1482,10 @@ impl UninitializedFunctionConfig {
                         .into());
                     }
                 }
+                let experimentation = params
+                    .experimentation
+                    .map(UninitializedExperimentationConfig::load)
+                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: schema_data,
@@ -1404,6 +1493,7 @@ impl UninitializedFunctionConfig {
                     implicit_tool_call_config,
                     description: params.description,
                     all_explicit_template_names: all_template_names,
+                    experimentation,
                 }))
             }
         }

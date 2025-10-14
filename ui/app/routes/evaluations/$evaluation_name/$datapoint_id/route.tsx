@@ -20,6 +20,7 @@ import {
   isRouteErrorResponse,
   Link,
   redirect,
+  useFetcher,
   type RouteHandle,
 } from "react-router";
 import { Output } from "~/components/inference/Output";
@@ -55,14 +56,19 @@ import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbac
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import { addEvaluationHumanFeedback } from "~/utils/tensorzero.server";
 import { handleAddToDatasetAction } from "~/utils/dataset.server";
+import { renameDatapoint } from "~/routes/datasets/$dataset_name/datapoint/$id/datapointOperations.server";
 import { Toaster } from "~/components/ui/toaster";
 import { useToast } from "~/hooks/use-toast";
 import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
+import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 
 export const handle: RouteHandle = {
-  crumb: (match) => ["Datapoints", match.params.datapoint_id!],
+  crumb: (match) => [
+    "Datapoints",
+    { label: match.params.datapoint_id!, isIdentifier: true },
+  ],
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -177,6 +183,35 @@ export async function action({ request }: Route.ActionArgs) {
       }
       return redirect(url.toString());
     }
+    case "renameDatapoint": {
+      const datapoint_id = formData.get("datapoint_id") as string;
+      const dataset_name = formData.get("dataset_name") as string;
+      const newName = formData.get("newName") as string;
+
+      // We need to get the datapoint to pass to renameDatapoint
+      const datapoint = await getDatapoint(dataset_name, datapoint_id);
+      if (!datapoint) {
+        return data(
+          {
+            success: false,
+            error:
+              "Datapoint not found; please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports",
+          },
+          { status: 404 },
+        );
+      }
+
+      // A bit of a hack in the evaluation page, we don't have the function type in the datapoint, so we check if the datapoint contains an output schema (which indicates it's JSON).
+      const functionType = "output_schema" in datapoint ? "json" : "chat";
+      await renameDatapoint({
+        functionType,
+        datasetName: dataset_name,
+        datapoint,
+        newName,
+      });
+
+      return data({ success: true });
+    }
     case null:
       logger.error("No action provided");
       return null;
@@ -199,6 +234,7 @@ export default function EvaluationDatapointPage({
     newFeedbackId,
     newJudgeDemonstrationId,
   } = loaderData;
+  const fetcher = useFetcher();
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
   if (!evaluation_config) {
@@ -238,6 +274,18 @@ export default function EvaluationDatapointPage({
     }
   }, [newFeedbackId, newJudgeDemonstrationId, toast]);
 
+  const handleRenameDatapoint = async (newName: string) => {
+    const formData = new FormData();
+    formData.append("_action", "renameDatapoint");
+    formData.append("datapoint_id", datapoint_id);
+    formData.append(
+      "dataset_name",
+      consolidatedEvaluationResults[0].dataset_name,
+    );
+    formData.append("newName", newName);
+    await fetcher.submit(formData, { method: "post", action: "." });
+  };
+
   return (
     // Provider remains here
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
@@ -247,7 +295,8 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             dataset_name={consolidatedEvaluationResults[0].dataset_name}
-            task_name={consolidatedEvaluationResults[0].name}
+            datapoint_name={consolidatedEvaluationResults[0].name}
+            onRenameDatapoint={handleRenameDatapoint}
           />
           <EvalRunSelector
             evaluationName={evaluation_name}
@@ -302,6 +351,7 @@ const MetricsDisplay = ({
 
           return (
             <MetricRow
+              // TODO(shuyangli): This may be the same across different rows.
               key={metricObj.evaluator_name}
               evaluation_name={evaluation_name}
               evaluatorName={metricObj.evaluator_name}

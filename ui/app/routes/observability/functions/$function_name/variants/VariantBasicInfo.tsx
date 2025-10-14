@@ -247,6 +247,19 @@ export default function BasicInfo({
                 </BasicInfoItemContent>
               </BasicInfoItem>
 
+              <BasicInfoItem>
+                <BasicInfoItemTitle>Max Distance</BasicInfoItemTitle>
+                <BasicInfoItemContent>
+                  <Chip
+                    label={
+                      config.max_distance !== null
+                        ? config.max_distance.toString()
+                        : "-"
+                    }
+                  />
+                </BasicInfoItemContent>
+              </BasicInfoItem>
+
               {config.temperature && (
                 <BasicInfoItem>
                   <BasicInfoItemTitle>Temperature</BasicInfoItemTitle>

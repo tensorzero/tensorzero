@@ -196,6 +196,16 @@ pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub enum OpenAIAPIType {
+    #[default]
+    ChatCompletions,
+    Responses,
+}
+
 impl ModelConfig {
     fn filter_content_blocks<'a>(
         request: &'a ModelInferenceRequest<'a>,
@@ -1012,6 +1022,8 @@ pub enum UninitializedProviderConfig {
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocation>,
+        #[serde(default)]
+        api_type: OpenAIAPIType,
     },
     OpenRouter {
         model_name: String,
@@ -1108,12 +1120,15 @@ impl UninitializedProviderConfig {
                         HostedProviderKind::OpenAI => Box::new(OpenAIProvider::new(
                             model_name,
                             None,
+
                             OpenAIKind
                                 .get_defaulted_credential(
                                     Some(&CredentialLocation::None),
                                     provider_type_default_credentials,
                                 )
                                 .await?,
+                            // TODO - decide how to expose the responses api for wrapped providers
+                            false
                         )),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
@@ -1245,6 +1260,7 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
+                api_type,
             } => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 api_base,
@@ -1254,6 +1270,10 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
+                match api_type {
+                    OpenAIAPIType::ChatCompletions => false,
+                    OpenAIAPIType::Responses => true,
+                },
             )),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
@@ -2131,6 +2151,7 @@ impl ShorthandModelConfig for ModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                false,
             )),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
@@ -2287,7 +2308,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -2399,7 +2420,7 @@ mod tests {
         };
 
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let postgres_mock = PostgresConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let tags = HashMap::new();
@@ -2497,7 +2518,7 @@ mod tests {
         });
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -2650,7 +2671,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::Disabled,
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
                     cache_options: CacheOptions {
@@ -2718,7 +2739,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::Disabled,
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
                     cache_options: CacheOptions {
@@ -2833,7 +2854,7 @@ mod tests {
                 &request,
                 &InferenceClients {
                     http_client: TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::Disabled,
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                     postgres_connection_info: PostgresConnectionInfo::Disabled,
                     credentials: Arc::new(api_keys.clone()),
                     cache_options: CacheOptions {
@@ -2911,7 +2932,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -3029,7 +3050,7 @@ mod tests {
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
             http_client: http_client.clone(),
             clickhouse_connection_info: clickhouse_connection_info.clone(),

@@ -74,9 +74,7 @@ async def ask_question(
         for content_block in response.content:
             if isinstance(content_block, ToolCall):
                 if verbose:
-                    print(
-                        f"[Tool Call] {content_block.name}: {content_block.arguments}"
-                    )
+                    print(f"[Tool Call] {content_block.name}: {content_block.arguments}")
 
                 if content_block.name is None or content_block.arguments is None:
                     output_content_blocks.append(
@@ -110,9 +108,7 @@ async def ask_question(
         approx_message_length = len(str(messages))
         if approx_message_length > MAX_MESSAGE_LENGTH:
             try:
-                messages = await compact_context(
-                    t0, semaphore, question, messages, episode_id, verbose
-                )
+                messages = await compact_context(t0, semaphore, question, messages, episode_id, verbose)
             except Exception as e:
                 print(f"Error compacting context: {e}")
                 messages = messages[:-2]

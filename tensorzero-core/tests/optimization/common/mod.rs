@@ -196,7 +196,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
             };
             let clients = InferenceClients {
                 http_client: client.clone(),
-                clickhouse_connection_info: ClickHouseConnectionInfo::Disabled,
+                clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
                 postgres_connection_info: PostgresConnectionInfo::Disabled,
                 credentials: Arc::new(HashMap::new()),
                 cache_options: CacheOptions::default(),

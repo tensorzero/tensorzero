@@ -16,6 +16,7 @@ import type {
   Tool,
   ResolvedTomlPath,
   ChatTemplates,
+  StaticToolConfig,
 } from "tensorzero-node";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -305,9 +306,9 @@ interface ClickHouseDatapointActionArgs {
   output_schema?: JsonValue;
   variant?: string;
   cache_options: CacheParamsOptions;
-  dryrun: boolean;
   editedVariantInfo?: VariantInfo;
   functionConfig: FunctionConfig;
+  toolsConfig: { [key in string]?: StaticToolConfig };
 }
 
 type ActionArgs =
@@ -349,8 +350,10 @@ export function prepareInferenceActionRequest(
     },
     variant_name: null,
     dryrun: null,
-    internal: false,
-    tags: {},
+    internal: true,
+    tags: {
+      "tensorzero::ui": "true",
+    },
     output_schema: null,
     credentials: new Map(),
     cache_options: {
@@ -383,6 +386,7 @@ export function prepareInferenceActionRequest(
       ? subtractStaticToolsFromInferenceInput(
           args.tool_params?.tools_available,
           args.functionConfig,
+          args.toolsConfig,
         )
       : null;
 
@@ -393,7 +397,6 @@ export function prepareInferenceActionRequest(
       variant_name: args.variant || null,
       output_schema: args.output_schema || null,
       tool_choice: tool_choice || null,
-      dryrun: args.dryrun,
       parallel_tool_calls: parallel_tool_calls || null,
       additional_tools,
       cache_options: args.cache_options,
@@ -418,7 +421,6 @@ export function prepareInferenceActionRequest(
       function_name: args.resource.function_name,
       input: clientInput,
       variant_name: args.variant,
-      dryrun: true,
     };
   }
 }
@@ -435,7 +437,6 @@ function prepareDefaultFunctionRequest(
     return {
       model_name: selectedVariant,
       input: clientInput,
-      dryrun: true,
       tool_choice: tool_choice,
       parallel_tool_calls: parallel_tool_calls,
       // We need to add all tools as additional for the default function
@@ -447,7 +448,6 @@ function prepareDefaultFunctionRequest(
     return {
       model_name: selectedVariant,
       input: clientInput,
-      dryrun: true,
       output_schema: output_schema || null,
     };
   }
@@ -456,7 +456,6 @@ function prepareDefaultFunctionRequest(
   return {
     model_name: selectedVariant,
     input: clientInput,
-    dryrun: true,
   };
 }
 
@@ -739,6 +738,7 @@ function variantInfoToUninitializedVariantInfo(
         seed: inner.seed,
         json_mode: inner.json_mode,
         retries: inner.retries,
+        max_distance: inner.max_distance,
       };
 
     case "mixture_of_n": {
@@ -817,11 +817,23 @@ function variantInfoToUninitializedVariantInfo(
 function subtractStaticToolsFromInferenceInput(
   datapointTools: Tool[],
   functionConfig: FunctionConfig,
+  toolsConfig: { [key in string]?: StaticToolConfig },
 ): Tool[] {
   if (functionConfig.type === "json") {
     return datapointTools;
   }
-  return datapointTools.filter(
-    (tool) => !functionConfig.tools.some((t) => t === tool.name),
-  );
+
+  // We can't differentiate between static and dynamic tools.
+  // We also can't differentiate between tool IDs and tool names.
+  // TODO: #3880, #3879 would allow us to remove this workaround entirely
+  const toolNames = new Set<string>();
+  for (const toolConfigId of functionConfig.tools) {
+    const toolConfig = toolsConfig?.[toolConfigId];
+    if (toolConfig) {
+      toolNames.add(toolConfig.name);
+    }
+  }
+
+  // Filter out static tools
+  return datapointTools.filter((tool) => !toolNames.has(tool.name));
 }

@@ -114,7 +114,7 @@ pub async fn feedback(
         clickhouse_connection_info,
         ..
     }: AppStateData,
-    params: Params,
+    mut params: Params,
 ) -> Result<FeedbackResponse, Error> {
     let span = tracing::Span::current();
     if let Some(inference_id) = params.inference_id {
@@ -123,6 +123,14 @@ pub async fn feedback(
     if let Some(episode_id) = params.episode_id {
         span.record("episode_id", episode_id.to_string());
     }
+
+    // Automatically add internal tag when internal=true
+    if params.internal {
+        params
+            .tags
+            .insert("tensorzero::internal".to_string(), "true".to_string());
+    }
+
     for (tag_key, tag_value) in &params.tags {
         span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
     }
@@ -889,6 +897,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::config::{Config, MetricConfig, MetricConfigOptimize, SchemaData};
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
@@ -1302,6 +1311,7 @@ mod tests {
                 parallel_tool_calls: None,
                 description: None,
                 all_explicit_templates_names: HashSet::new(),
+                experimentation: ExperimentationConfig::default(),
             })));
 
         // Case 1: a string passed to a chat function
@@ -1429,6 +1439,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })));
 
         // Case 5: a JSON function with correct output

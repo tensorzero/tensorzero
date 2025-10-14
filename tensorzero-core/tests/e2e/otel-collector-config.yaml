@@ -15,6 +15,12 @@ processors:
       - key: tensorzero.custom_key # Attribute name to be created
         from_context: x-dummy-tensorzero # Source of the value from incoming HTTP header
         action: upsert
+      - key: tensorzero.config_static_header
+        from_context: x-config-static-header
+        action: upsert
+      - key: tensorzero.config_override_header
+        from_context: x-config-override-header
+        action: upsert
 
 exporters:
   otlp:
