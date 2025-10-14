@@ -3,6 +3,7 @@ use std::{collections::HashMap, pin::Pin};
 use crate::{
     error::IMPOSSIBLE_ERROR_MESSAGE,
     http::{TensorZeroEventSource, TensorzeroRequestBuilder},
+    inference::types::resolved_input::{FileUrl, LazyFile},
 };
 use axum::http;
 use bytes::Bytes;
@@ -29,6 +30,30 @@ pub struct JsonlBatchFileInfo {
     pub raw_request: String,
     pub raw_response: String,
     pub file_id: String,
+}
+
+// If we could have forwarded an file/image (except for the fact that we're missing the mime_type), log a warning.
+pub fn warn_cannot_forward_url_if_missing_mime_type(
+    file: &LazyFile,
+    fetch_and_encode_input_files_before_inference: bool,
+    provider_type: &str,
+) {
+    // We're not forwarding any urls, so it doesn't matter whether or not we have a mime type
+    if fetch_and_encode_input_files_before_inference {
+        return;
+    }
+    if matches!(
+        file,
+        LazyFile::Url {
+            file_url: FileUrl {
+                url: _,
+                mime_type: None,
+            },
+            future: _
+        }
+    ) {
+        tracing::warn!("Cannot forward image_url to {provider_type} because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding.");
+    }
 }
 
 /// A helper function to parse lines from a JSONL file into a batch response.

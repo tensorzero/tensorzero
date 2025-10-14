@@ -56,6 +56,7 @@ use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+    warn_cannot_forward_url_if_missing_mime_type,
 };
 
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -1502,20 +1503,11 @@ pub(super) async fn prepare_file_message(
             })
         }
         _ => {
-            // If we could have forwarded an image_url (except for the fact that we're missing the mime_type), log a warning.
-            if matches!(
+            warn_cannot_forward_url_if_missing_mime_type(
                 file,
-                LazyFile::Url {
-                    file_url: FileUrl {
-                        url: _,
-                        mime_type: None,
-                    },
-                    future: _
-                }
-            ) && !messages_config.fetch_and_encode_input_files_before_inference
-            {
-                tracing::warn!("Cannot forward image_url to OpenAI because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding to OpenAI.");
-            }
+                messages_config.fetch_and_encode_input_files_before_inference,
+                messages_config.provider_type,
+            );
 
             let resolved_file = file.resolve().await?;
             let FileWithPath {
