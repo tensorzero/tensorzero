@@ -1,5 +1,5 @@
 import {
-  getDatasetCounts,
+  getDatasetMetadata,
   getNumberOfDatasets,
 } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
@@ -23,12 +23,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
-  const counts = await getDatasetCounts({
+  const datasetMetadata = await getDatasetMetadata({
     page_size: pageSize,
     offset,
   });
   const numberOfDatasets = await getNumberOfDatasets();
-  return { counts, pageSize, offset, numberOfDatasets };
+  return { counts: datasetMetadata, pageSize, offset, numberOfDatasets };
 }
 
 export async function action({ request }: Route.ActionArgs) {

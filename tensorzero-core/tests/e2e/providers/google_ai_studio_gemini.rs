@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use futures::StreamExt;
 use http::StatusCode;
 use reqwest::Client;

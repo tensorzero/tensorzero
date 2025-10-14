@@ -74,9 +74,9 @@ use std::str::FromStr;
 use tokio_util::task::TaskTracker;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
-use tower_http::trace::{DefaultOnEos, DefaultOnFailure, DefaultOnRequest, TraceLayer};
 use tracing::level_filters::LevelFilter;
-use tracing::{Level, Span};
+use tracing::Span;
+use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use tracing_opentelemetry::PreSampledTracer;
 use tracing_subscriber::layer::Filter;
@@ -537,22 +537,82 @@ fn extract_tensorzero_headers(headers: &HeaderMap) -> Result<Option<CustomTracer
     Ok(None)
 }
 
-// This needs to be a separate middleware function (and not part of our `make_span` function in `apply_otel_http_trace_layer`),
-// since we need to be able to reject the request if the headers fail to parse.
-async fn tensorzero_otlp_headers_middleware(
-    mut req: axum::extract::Request,
-    next: Next,
-) -> Response {
-    match extract_tensorzero_headers(req.headers()) {
-        Ok(Some(custom_tracer_key)) => {
-            req.extensions_mut().insert(custom_tracer_key);
+/// Creates the top-level span for an incoming HTTP request, with the correct
+/// OpenTelemetry context attached
+fn make_span<B>(req: &http::Request<B>, key: Option<CustomTracerKey>) -> Span {
+    // Based on `OtelAxumLayer`.
+    // If we need to use a custom otel `Tracer`, then attach an `CustomTracerKey` to the OTEL context.
+    // We check for a `CustomTracerKey` in `TracerWrapper`, and use it to dispatch to a
+    // dynamically-created `SdkTracer` with additional headers set.
+    let mut in_context = None;
+    if let Some(custom_tracer_key) = key {
+        in_context = Some(Context::current_with_value(custom_tracer_key).attach());
+    }
+    let span =
+        tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(req);
+    span.set_parent(
+        tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers()),
+    );
+    // We need our custom context to be active for both the span creation and setting the span parent.
+    // This ensures that `tracing-opentelemetry` will record our custom Context (with the `CustomTracerKey`)
+    // for the newly created span, and all of its descendants.
+    drop(in_context);
+
+    let route = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str);
+    if let Some(route) = route {
+        span.record("http.route", route);
+    }
+
+    let method = tracing_opentelemetry_instrumentation_sdk::http::http_method(req.method());
+    span.record(
+        "otel.name",
+        format!("{method} {}", route.unwrap_or_default()).trim(),
+    );
+    span
+}
+
+/// Attach information from our HTTP response to the original span for the overall
+/// HTTP request processing
+fn handle_response<B>(res: &Response<B>, span: &Span) {
+    // We cast this to an i64, so that tracing-opentelemetry will record it as an integer
+    // rather than a string
+    span.record("http.response.status_code", res.status().as_u16() as i64);
+    if res.status().is_server_error() {
+        if let Some(error) = res.extensions().get::<Error>() {
+            span.set_status(Status::Error {
+                description: Cow::Owned(error.to_string()),
+            });
+        } else {
+            // Don't set a description for non-TensorZero errors,
+            // since we don't know what a nice description should look like
+            span.set_status(Status::Error {
+                description: Cow::Owned(String::new()),
+            });
         }
-        Ok(None) => {}
+    }
+}
+
+/// Applies a span to an incoming HTTP request.
+/// Also handles OTLP-related headers (`traceparent`/`tracestate`) and custom TensorZero OTLP headers
+async fn tensorzero_tracing_middleware(req: axum::extract::Request, next: Next) -> Response {
+    let custom_tracer_key = match extract_tensorzero_headers(req.headers()) {
+        Ok(key) => key,
         Err(e) => {
             return e.into_response();
         }
-    }
-    next.run(req).await
+    };
+
+    // Note - we intentionally create this span this *after* `extract_tensorzero_headers`
+    // As a result, if we reject a request due to a failure to parse custom OTLP headers,
+    // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
+    // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
+    let span = make_span(&req, custom_tracer_key);
+    let response = next.run(req).instrument(span.clone()).await;
+    handle_response(&response, &span);
+    response
 }
 
 impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
@@ -560,81 +620,7 @@ impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
     /// This is only applied to certain routes (e.g. `/inference`), and
     /// is *not* used to log requests to the console.
     fn apply_otel_http_trace_layer(self) -> Self {
-        fn make_span<B>(req: &http::Request<B>) -> Span {
-            // Based on `OtelAxumLayer`. We use `TraceLayer` from `tower-http` instead, as it extends
-            // the span to cover the entire response (including sending the full SSE stream).`
-
-            // If we need to use a custom otel `Tracer`, then attach an `CustomTracerKey` to the OTEL context.
-            // We check for a `CustomTracerKey` `TracerWrapper`, and use it to dispatch to a
-            // dynamically-created `SdkTracer` with additional headers set.
-            let mut in_context = None;
-            if let Some(custom_tracer_key) = req.extensions().get::<CustomTracerKey>() {
-                in_context = Some(Context::current_with_value(custom_tracer_key.clone()).attach());
-            }
-            let span =
-                tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(
-                    req,
-                );
-            span.set_parent(
-                tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers()),
-            );
-            // We need our custom context to be active for both the span creation and setting the span parent.
-            // This ensures that `tracing-opentelemetry` will record our custom Context (with the `CustomTracerKey`)
-            // for the newly created span, and all of its descendants.
-            drop(in_context);
-
-            let route = req
-                .extensions()
-                .get::<MatchedPath>()
-                .map(MatchedPath::as_str);
-            if let Some(route) = route {
-                span.record("http.route", route);
-            }
-
-            let method = tracing_opentelemetry_instrumentation_sdk::http::http_method(req.method());
-            span.record(
-                "otel.name",
-                format!("{method} {}", route.unwrap_or_default()).trim(),
-            );
-            span
-        }
-
-        // This cannot be a closure due to an annoying closure lifetime inference issue
-        fn handle_response<B>(res: &Response<B>, _duration: Duration, span: &Span) {
-            // We cast this to an i64, so that tracing-opentelemetry will record it as an integer
-            // rather than a string
-            span.record("http.response.status_code", res.status().as_u16() as i64);
-            if res.status().is_server_error() {
-                if let Some(error) = res.extensions().get::<Error>() {
-                    span.set_status(Status::Error {
-                        description: Cow::Owned(error.to_string()),
-                    });
-                } else {
-                    // Don't set a description for non-TensorZero errors,
-                    // since we don't know what a nice description should look like
-                    span.set_status(Status::Error {
-                        description: Cow::Owned(String::new()),
-                    });
-                }
-            }
-        }
-
-        self.layer(
-            TraceLayer::new_for_http()
-                .make_span_with(make_span)
-                // We only care about the wrapping span, not the actual events logged.
-                // Set these to `TRACE` to prevent them from showing up in our stdout logs
-                // (this will also suppress them from OTEL in production, which is fine)
-                .on_request(DefaultOnRequest::new().level(Level::TRACE))
-                .on_failure(DefaultOnFailure::new().level(Level::TRACE))
-                .on_response(handle_response)
-                .on_eos(DefaultOnEos::new().level(Level::TRACE)),
-        )
-        // Note - we intentionally apply this layer *after* the `TraceLayer`
-        // As a result, if we reject a request due to a failure to parse custom OTLP headers,
-        // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
-        // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
-        .layer(middleware::from_fn(tensorzero_otlp_headers_middleware))
+        self.layer(middleware::from_fn(tensorzero_tracing_middleware))
     }
 }
 
