@@ -551,7 +551,7 @@ impl Text {
 
 /// Struct that represents Chain of Thought reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
     pub text: Option<String>,
@@ -802,6 +802,7 @@ pub enum ContentBlockChatOutput {
     Thought(Thought),
     Unknown {
         data: Value,
+        #[cfg_attr(test, ts(optional))]
         model_provider_name: Option<String>,
     },
 }
@@ -1191,7 +1192,7 @@ pub struct JsonInferenceResult {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
     pub raw: Option<String>,

@@ -20,6 +20,7 @@ pub fn get_gateway_endpoint(endpoint: &str) -> Url {
     base_url.join(endpoint).unwrap()
 }
 
+// TODO(shuyangli): I don't think this is being used, delete when confirmed.
 pub async fn delete_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
     datapoint_kind: DatapointKind,

@@ -14,4 +14,4 @@ export type StoredInputMessageContent =
   | { type: "raw_text"; value: string }
   | ({ type: "thought" } & Thought)
   | ({ type: "file" } & StoredFile)
-  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };
+  | { type: "unknown"; data: JsonValue; model_provider_name?: string };

@@ -10,7 +10,9 @@ use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
 pub use tensorzero_core::db::clickhouse::dataset_queries::{
-    DatasetDetailRow, DatasetQueryParams, GetDatasetMetadataParams, GetDatasetRowsParams,
+    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
+    DatasetDetailRow, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
+    GetDatapointParams, GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams,
 };
 pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
@@ -63,7 +65,7 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeComparisonOperator, TimeFilter,
 };
 pub use tensorzero_core::endpoints::datasets::{
-    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+    ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
 };
 pub use tensorzero_core::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunParams, DynamicEvaluationRunResponse,
@@ -942,13 +944,18 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::datasets::get_datapoint(
-                        dataset_name,
-                        datapoint_id,
-                        &gateway.handle.app_state.clickhouse_connection_info,
-                    )
-                    .await
-                    .map_err(err_to_http)
+                    gateway
+                        .handle
+                        .app_state
+                        .clickhouse_connection_info
+                        .get_datapoint(&GetDatapointParams {
+                            dataset_name,
+                            datapoint_id,
+                            // By default, we don't return stale datapoints.
+                            allow_stale: None,
+                        })
+                        .await
+                        .map_err(err_to_http)
                 })
                 .await?)
             }
