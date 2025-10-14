@@ -178,13 +178,13 @@ pub struct UninitializedDiclConfig {
 }
 
 impl Variant for DiclConfig {
-    async fn infer<'a: 'request, 'request>(
+    async fn infer(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'a>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         // So this can be mutably borrowed by the prepare_request function
@@ -193,22 +193,22 @@ impl Variant for DiclConfig {
         // Embed the input and grab the relevant examples from the database
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
-                input,
-                models.embedding_models,
-                clients,
-                inference_config.function_name,
-                inference_config.variant_name,
-                function,
+                &input,
+                &models.embedding_models,
+                &clients,
+                &inference_config.function_name,
+                &inference_config.variant_name,
+                &function,
             )
             .await?;
 
         // Prepare the request for the model
         let model_inference_request = self
             .prepare_request(
-                input,
+                &input,
                 &relevant_examples,
-                function,
-                inference_config,
+                &function,
+                &inference_config,
                 false,
                 &mut inference_params,
             )
@@ -225,8 +225,8 @@ impl Variant for DiclConfig {
             request: model_inference_request,
             model_name: self.model().clone(),
             model_config: &model_config,
-            function,
-            inference_config,
+            function: function.as_ref(),
+            inference_config: Arc::clone(&inference_config),
             clients,
             inference_params,
             retry_config: self.retries(),
@@ -244,13 +244,13 @@ impl Variant for DiclConfig {
         Ok(inference_response)
     }
 
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'_>,
-        function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // So this can be mutably borrowed by the prepare_request function
@@ -259,21 +259,21 @@ impl Variant for DiclConfig {
         // Embed the input and grab the relevant examples from the database
         let (relevant_examples, embedding_response) = self
             .retrieve_relevant_examples(
-                input,
-                models.embedding_models,
-                clients,
-                inference_config.function_name,
-                inference_config.variant_name,
-                function,
+                &input,
+                &models.embedding_models,
+                &clients,
+                &inference_config.function_name,
+                &inference_config.variant_name,
+                &function,
             )
             .await?;
         // Prepare the request for the model
         let request = self
             .prepare_request(
-                input,
+                &input,
                 &relevant_examples,
-                function,
-                inference_config,
+                &function,
+                &inference_config,
                 true,
                 &mut inference_params,
             )
@@ -290,7 +290,7 @@ impl Variant for DiclConfig {
             request,
             self.model().clone(),
             &model_config,
-            function,
+            function.as_ref(),
             clients,
             inference_params,
             *self.retries(),
@@ -306,8 +306,8 @@ impl Variant for DiclConfig {
 
     async fn validate(
         &self,
-        _function: &FunctionConfig,
-        models: &mut ModelTable,
+        _function: Arc<FunctionConfig>,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         _templates: &TemplateConfig<'_>,
         function_name: &str,
@@ -374,10 +374,10 @@ impl Variant for DiclConfig {
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[LazyResolvedInput],
-        _models: &'a InferenceModels<'a>,
+        _models: InferenceModels,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a>],
-        _clients: &'a InferenceClients<'a>,
+        _inference_configs: &'a [InferenceConfig],
+        _clients: InferenceClients,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         // TODO (#493): Implement batch inference for Dicl
@@ -488,10 +488,10 @@ impl DiclConfig {
         &'a self,
         input: &LazyResolvedInput,
         embedding_models: &'a EmbeddingModelTable,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
         function_name: &str,
         variant_name: &str,
-        function: &FunctionConfig,
+        function: &Arc<FunctionConfig>,
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
         let serialized_input = serde_json::to_string(
@@ -734,8 +734,8 @@ impl DiclConfig {
         &'a self,
         input: &LazyResolvedInput,
         examples: &[Example],
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        function: &'request Arc<FunctionConfig>,
+        inference_config: &'request InferenceConfig,
         stream: bool,
         inference_params: &mut InferenceParams,
     ) -> Result<ModelInferenceRequest<'request>, Error>
@@ -746,7 +746,7 @@ impl DiclConfig {
             // When there are no examples, behave like vanilla chat completion
             // Use DICL-specific message preparation that stringifies templates
             let messages = try_join_all(input.messages.iter().map(|message| {
-                Self::prepare_request_message_dicl(message, inference_config.templates)
+                Self::prepare_request_message_dicl(message, &inference_config.templates)
             }))
             .await?;
             let system = Some(self.system_instructions().to_string());
@@ -793,13 +793,12 @@ impl DiclConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
-                .into_owned()
-                .filter(inference_config.variant_name),
+                .filter(&inference_config.variant_name),
         };
         prepare_model_inference_request(
             messages,
             system,
-            function,
+            function.as_ref(),
             inference_config,
             stream,
             inference_params,
@@ -1347,10 +1346,10 @@ mod tests {
         // Setup inference config
         let templates = get_test_template_config();
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates: Arc::new(templates),
             tool_config: None,
-            function_name: "test_function",
-            variant_name: "test_variant",
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1366,7 +1365,7 @@ mod tests {
             chat_completion: ChatCompletionInferenceParams::default(),
         };
 
-        let function = FunctionConfig::Chat(FunctionConfigChat {
+        let function = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             tools: vec![],
@@ -1375,7 +1374,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: Default::default(),
             experimentation: ExperimentationConfig::default(),
-        });
+        }));
 
         // Call prepare_request with EMPTY examples
         let result = dicl_config
@@ -1470,10 +1469,10 @@ mod tests {
         // Setup inference config
         let templates = get_test_template_config();
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates: Arc::new(templates),
             tool_config: None,
-            function_name: "test_function",
-            variant_name: "test_variant",
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1489,7 +1488,7 @@ mod tests {
             chat_completion: ChatCompletionInferenceParams::default(),
         };
 
-        let function = FunctionConfig::Chat(FunctionConfigChat {
+        let function = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             tools: vec![],
@@ -1498,7 +1497,7 @@ mod tests {
             description: None,
             all_explicit_templates_names: Default::default(),
             experimentation: ExperimentationConfig::default(),
-        });
+        }));
 
         // Call prepare_request with examples
         let result = dicl_config
