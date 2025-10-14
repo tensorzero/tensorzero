@@ -156,7 +156,7 @@ impl EmbeddingModelConfig {
         &self,
         request: &EmbeddingRequest,
         model_name: &str,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
     ) -> Result<EmbeddingModelResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_embedding_models = async {
@@ -170,12 +170,12 @@ impl EmbeddingModelConfig {
                     request,
                     model_name,
                     provider_name,
-                    otlp_config: clients.otlp_config,
+                    otlp_config: &clients.otlp_config,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
                     let cache_lookup = embedding_cache_lookup(
-                        clients.clickhouse_connection_info,
+                        &clients.clickhouse_connection_info,
                         &provider_request,
                         clients.cache_options.max_age_s,
                     )
@@ -203,7 +203,7 @@ impl EmbeddingModelConfig {
                             .into());
                             };
                             let _ = start_cache_write(
-                                clients.clickhouse_connection_info,
+                                &clients.clickhouse_connection_info,
                                 provider_request.get_cache_key()?,
                                 CacheData {
                                     output: EmbeddingCacheData {
@@ -562,18 +562,18 @@ impl EmbeddingProviderInfo {
     pub async fn embed(
         &self,
         request: &EmbeddingRequest,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
         scope_info: &ScopeInfo<'_>,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
             .rate_limiting_config
-            .consume_tickets(clients.postgres_connection_info, scope_info, request)
+            .consume_tickets(&clients.postgres_connection_info, scope_info, request)
             .await?;
         let response_fut = self.inner.embed(
             request,
-            clients.http_client,
-            clients.credentials,
+            &clients.http_client,
+            &clients.credentials,
             model_provider_data,
         );
         let response = if let Some(timeout_ms) = self.timeout_ms {
@@ -809,17 +809,17 @@ mod tests {
                 &request,
                 "fallback",
                 &InferenceClients {
-                    http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                    credentials: &InferenceCredentials::default(),
-                    cache_options: &CacheOptions {
+                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: PostgresConnectionInfo::Disabled,
+                    credentials: Arc::new(InferenceCredentials::default()),
+                    cache_options: CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: &Default::default(),
-                    rate_limiting_config: &Default::default(),
-                    otlp_config: &Default::default(),
+                    tags: Arc::new(Default::default()),
+                    rate_limiting_config: Arc::new(Default::default()),
+                    otlp_config: Default::default(),
                 },
             )
             .await;
