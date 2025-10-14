@@ -37,7 +37,6 @@ impl UninitializedExperimentationConfig {
         }
     }
 }
-
 pub trait VariantSampler {
     // TODO, when we add bandits: pass CH and PG clients here (but use opaque trait types)
     async fn setup(&self) -> Result<(), Error>;
@@ -47,6 +46,8 @@ pub trait VariantSampler {
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error>;
+
+    fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_;
 }
 
 impl ExperimentationConfig {
@@ -82,24 +83,22 @@ impl ExperimentationConfig {
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
-        match match self {
+        match self {
             Self::StaticWeights(config) => {
                 config
                     .sample(function_name, episode_id, active_variants)
                     .await
             }
             Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
-        } {
-            Ok((variant_name, variant_info)) => Ok((variant_name, variant_info)),
-            Err(e) => {
-                // If the sampler fails but there are active variants, we sample one at uniform
-                if !active_variants.is_empty() {
-                    sample_uniform(function_name, &episode_id, active_variants)
-                } else {
-                    Err(e)
-                }
-            }
         }
+        // If the sampler fails but there are active variants we sample one at uniform
+        .or_else(|e| {
+            if !active_variants.is_empty() {
+                sample_uniform(function_name, &episode_id, active_variants)
+            } else {
+                Err(e)
+            }
+        })
     }
 }
 
