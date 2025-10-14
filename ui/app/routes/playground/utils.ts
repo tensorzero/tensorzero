@@ -178,7 +178,7 @@ export function preparePlaygroundInferenceRequest(
   return {
     ...request,
     ...extraOptions,
-    dryrun: true,
+    dryrun: variant.type === "edited",
   };
 }
 

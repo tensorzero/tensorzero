@@ -1,5 +1,4 @@
-import { Loader2 } from "lucide-react";
-import { Refresh } from "~/components/icons/Icons";
+import { Loader2, RefreshCw } from "lucide-react";
 import { Output } from "~/components/inference/Output";
 import { Button } from "~/components/ui/button";
 import { CodeEditor } from "~/components/ui/code-editor";
@@ -11,6 +10,14 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { isErrorLike } from "~/utils/common";
 import { memo } from "react";
+import { Link } from "react-router";
+import { toInferenceUrl } from "~/utils/urls";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "~/components/ui/tooltip";
 
 const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
   function DatapointPlaygroundOutput(props) {
@@ -36,12 +43,12 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
       <Button
         aria-label={`Reload ${props.variant.name} inference`}
         variant="ghost"
-        size="icon"
-        className="absolute top-1 right-1 z-5 cursor-pointer opacity-25 transition-opacity hover:opacity-100"
+        size="iconSm"
+        className="absolute top-1 right-1 z-5 h-6 w-6 cursor-pointer text-xs opacity-25 transition-opacity hover:opacity-100"
         data-testid="datapoint-playground-output-refresh-button"
         onClick={() => query.refetch()}
       >
-        <Refresh />
+        <RefreshCw className="h-3 w-3" />
       </Button>
     );
 
@@ -73,9 +80,49 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
       "content" in query.data ? query.data.content : query.data.output;
 
     return (
-      <div className="group relative" data-testid="datapoint-playground-output">
-        {refreshButton}
-        <Output output={output} maxHeight={480} />
+      <div
+        className="flex flex-col gap-2"
+        data-testid="datapoint-playground-output"
+      >
+        <div className="relative">
+          {refreshButton}
+          {props.variant.type === "builtin" && (
+            <div className="mt-2 text-xs">
+              Inference ID:{" "}
+              <Link
+                to={toInferenceUrl(query.data.inference_id)}
+                className="font-mono text-xs text-blue-600 hover:text-blue-800 hover:underline"
+              >
+                {query.data.inference_id}
+              </Link>
+            </div>
+          )}
+          {props.variant.type === "edited" && (
+            <div className="mt-2 text-xs">
+              Inference ID:{" "}
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="text-muted-foreground cursor-help underline decoration-dotted">
+                      none
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">
+                    <p className="text-xs">
+                      Edited variants currently run with{" "}
+                      <span className="font-mono text-xs">dryrun</span> set to{" "}
+                      <span className="font-mono text-xs">true</span>, so the
+                      inference was not stored.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+        </div>
+        <div>
+          <Output output={output} maxHeight={480} />
+        </div>
       </div>
     );
   },
