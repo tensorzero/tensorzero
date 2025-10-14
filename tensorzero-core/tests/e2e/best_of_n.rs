@@ -1,4 +1,3 @@
-#![allow(clippy::print_stdout)]
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
