@@ -38,6 +38,10 @@ pub fn warn_cannot_forward_url_if_missing_mime_type(
     fetch_and_encode_input_files_before_inference: bool,
     provider_type: &str,
 ) {
+    // We're not forwarding any urls, so it doesn't matter whether or not we have a mime type
+    if fetch_and_encode_input_files_before_inference {
+        return;
+    }
     if matches!(
         file,
         LazyFile::Url {
@@ -47,8 +51,7 @@ pub fn warn_cannot_forward_url_if_missing_mime_type(
             },
             future: _
         }
-    ) && !fetch_and_encode_input_files_before_inference
-    {
+    ) {
         tracing::warn!("Cannot forward image_url to {provider_type} because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding.");
     }
 }
