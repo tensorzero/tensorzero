@@ -34,6 +34,7 @@ use tensorzero::{
     ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
@@ -61,7 +62,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 use tensorzero_core::model::CredentialLocation;
 
-use super::helpers::get_extra_headers;
+use super::helpers::{get_extra_headers, get_test_model_extra_headers};
 
 #[derive(Clone, Debug)]
 pub struct E2ETestProvider {
@@ -72,6 +73,14 @@ pub struct E2ETestProvider {
     pub credentials: HashMap<String, String>,
 
     pub supports_batch_inference: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModelTestProvider {
+    pub provider_type: String,
+    // These are keys and values that we would put into the model block for that provider
+    pub model_info: HashMap<String, String>,
+    pub use_modal_headers: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +107,7 @@ pub struct E2ETestProviders {
 
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
+    pub credential_fallbacks: Vec<ModelTestProvider>,
 
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
@@ -289,9 +299,11 @@ macro_rules! generate_provider_tests {
         #[tokio::test]
         async fn test_provider_type_fallback_credentials() {
             // We just need a longhand model
-            let providers = $func().await.provider_type_default_credentials;
+            let all_providers = $func().await;
+            let providers = all_providers.credential_fallbacks;
+            let supports_dynamic_credentials = !all_providers.provider_type_default_credentials.is_empty();
             for provider in providers {
-                test_provider_type_fallback_credentials_with_provider(provider).await;
+                test_provider_type_fallback_credentials_with_provider(provider, supports_dynamic_credentials).await;
             }
         }
 
@@ -1118,12 +1130,15 @@ defaults.{}
 /// 5. Infers with the default credential
 /// 6. Asserts that the logs contain exactly one message about falling back
 #[traced_test]
-pub async fn test_provider_type_fallback_credentials_with_provider(provider: E2ETestProvider) {
+pub async fn test_provider_type_fallback_credentials_with_provider(
+    provider: ModelTestProvider,
+    supports_dynamic_credentials_test: bool,
+) {
     // Get the default credential location for this provider
-    let default_location = get_default_credential_location(&provider.model_provider_name);
+    let default_location = get_default_credential_location(&provider.provider_type);
 
     // Create the credential location config based on the type
-    let credential_location_key = if uses_credential_location(&provider.model_provider_name) {
+    let credential_location_key = if uses_credential_location(&provider.provider_type) {
         "credential_location"
     } else {
         "api_key_location"
@@ -1140,13 +1155,21 @@ pub async fn test_provider_type_fallback_credentials_with_provider(provider: E2E
         _ => {
             println!(
                 "Skipping test for {} - unsupported credential location type",
-                provider.model_provider_name
+                provider.provider_type
             );
             return;
         }
     };
 
     // Create a config with the custom credential location
+    // Build the model_info config lines
+    let model_info_config = provider
+        .model_info
+        .iter()
+        .map(|(key, value)| format!("{key} = \"{value}\""))
+        .collect::<Vec<_>>()
+        .join("\n");
+
     let config = format!(
         r#"
 [models."test-model"]
@@ -1155,7 +1178,7 @@ routing = ["test-provider"]
 [models."test-model".providers.test-provider]
 {}
 type = "{}"
-model_name = "{}"
+{}
 
 [functions.basic_test]
 type = "chat"
@@ -1164,12 +1187,12 @@ type = "chat"
 type = "chat_completion"
 model = "test-model"
 "#,
-        credential_location_config, provider.model_provider_name, provider.model_name
+        credential_location_config, provider.provider_type, model_info_config
     );
 
     println!(
         "Testing provider type fallback credentials for {}",
-        provider.model_provider_name
+        provider.provider_type
     );
     println!("Config:\n{config}");
 
@@ -1178,42 +1201,52 @@ model = "test-model"
 
     // Save the original credential value if it exists
     let original_value = std::env::var(&original_env_var).unwrap();
+    let extra_headers = if provider.use_modal_headers {
+        get_test_model_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders {
+            extra_headers: vec![],
+        }
+    };
 
-    // Make a simple inference request with primary credentials to verify it works
-    let episode_id = Uuid::now_v7();
-    let result = client
-        .inference(ClientInferenceParams {
-            function_name: Some("basic_test".to_string()),
-            variant_name: Some("default".to_string()),
-            episode_id: Some(episode_id),
-            input: ClientInput {
-                system: None,
-                messages: vec![ClientInputMessage {
-                    role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: "Say hello".to_string(),
-                    })],
-                }],
-            },
-            stream: Some(false),
-            credentials: HashMap::from([(
-                "test_credential".to_string(),
-                ClientSecretString(SecretString::new(original_value.clone().into())),
-            )]),
-            // pass dynamic credentials here
-            ..Default::default()
-        })
-        .await;
+    if supports_dynamic_credentials_test {
+        // Make a simple inference request with primary credentials to verify it works
+        let episode_id = Uuid::now_v7();
+        let result = client
+            .inference(ClientInferenceParams {
+                function_name: Some("basic_test".to_string()),
+                variant_name: Some("default".to_string()),
+                episode_id: Some(episode_id),
+                input: ClientInput {
+                    system: None,
+                    messages: vec![ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Say hello".to_string(),
+                        })],
+                    }],
+                },
+                stream: Some(false),
+                credentials: HashMap::from([(
+                    "test_credential".to_string(),
+                    ClientSecretString(SecretString::new(original_value.clone().into())),
+                )]),
+                extra_headers: extra_headers.clone(),
+                // pass dynamic credentials here
+                ..Default::default()
+            })
+            .await;
 
-    // Assert the inference succeeded
-    assert!(
-        result.is_ok(),
-        "Inference failed for {}: {:?}",
-        provider.model_provider_name,
-        result.err()
-    );
+        // Assert the inference succeeded
+        assert!(
+            result.is_ok(),
+            "Inference failed for {}: {:?}",
+            provider.provider_type,
+            result.err()
+        );
 
-    assert!(!logs_contain("attempting fallback"));
+        assert!(!logs_contain("attempting fallback"));
+    }
 
     // Make a simple inference request without primary credentials to verify it works
     // with a fallback
@@ -1237,6 +1270,7 @@ model = "test-model"
                 "test_credentials".to_string(),
                 ClientSecretString(SecretString::new(original_value.into())),
             )]),
+            extra_headers,
             // pass dynamic credentials here
             ..Default::default()
         })
@@ -1246,7 +1280,7 @@ model = "test-model"
     assert!(
         result.is_ok(),
         "Inference failed for {}: {:?}",
-        provider.model_provider_name,
+        provider.provider_type,
         result.err()
     );
 
