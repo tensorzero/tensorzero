@@ -47,6 +47,8 @@ pub trait VariantSampler {
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     ) -> Result<(String, Arc<VariantInfo>), Error>;
 
+    // Return all variant names that are allowed to be used by this experimentation config
+    // Used to enforce that we don't fall back to a disallowed variant.
     fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_;
 }
 
@@ -91,7 +93,12 @@ impl ExperimentationConfig {
                     .or_else(|e| {
                         if !active_variants.is_empty() {
                             let allowed: Vec<&str> = config.allowed_variants().collect();
-                            sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
+                            sample_uniform(
+                                function_name,
+                                &episode_id,
+                                active_variants,
+                                Some(&allowed),
+                            )
                         } else {
                             Err(e)
                         }
