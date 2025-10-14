@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use uuid::Uuid;
 
 use crate::{
@@ -15,17 +17,16 @@ use super::{
     ClickHouseConnectionInfo,
 };
 
-// Query builder functions - these are testable production code
 pub(crate) fn build_boolean_metrics_query(
-    target_id: uuid::Uuid,
-    before: Option<uuid::Uuid>,
-    after: Option<uuid::Uuid>,
+    target_id: Uuid,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
     page_size: u32,
-) -> (String, std::collections::HashMap<String, String>) {
+) -> (String, HashMap<String, String>) {
     let (where_clause, params) = build_pagination_clause(before, after, "target_id");
     let order_clause = if after.is_some() { "ASC" } else { "DESC" };
 
-    let mut params_map: std::collections::HashMap<String, String> = params
+    let mut params_map: HashMap<String, String> = params
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
@@ -82,15 +83,15 @@ pub(crate) fn build_boolean_metrics_query(
 }
 
 pub(crate) fn build_float_metrics_query(
-    target_id: uuid::Uuid,
-    before: Option<uuid::Uuid>,
-    after: Option<uuid::Uuid>,
+    target_id: Uuid,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
     page_size: u32,
-) -> (String, std::collections::HashMap<String, String>) {
+) -> (String, HashMap<String, String>) {
     let (where_clause, params) = build_pagination_clause(before, after, "target_id");
     let order_clause = if after.is_some() { "ASC" } else { "DESC" };
 
-    let mut params_map: std::collections::HashMap<String, String> = params
+    let mut params_map: HashMap<String, String> = params
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
@@ -147,15 +148,15 @@ pub(crate) fn build_float_metrics_query(
 }
 
 pub(crate) fn build_comment_feedback_query(
-    target_id: uuid::Uuid,
-    before: Option<uuid::Uuid>,
-    after: Option<uuid::Uuid>,
+    target_id: Uuid,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
     page_size: u32,
-) -> (String, std::collections::HashMap<String, String>) {
+) -> (String, HashMap<String, String>) {
     let (where_clause, params) = build_pagination_clause(before, after, "target_id");
     let order_clause = if after.is_some() { "ASC" } else { "DESC" };
 
-    let mut params_map: std::collections::HashMap<String, String> = params
+    let mut params_map: HashMap<String, String> = params
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
@@ -212,15 +213,15 @@ pub(crate) fn build_comment_feedback_query(
 }
 
 pub(crate) fn build_demonstration_feedback_query(
-    inference_id: uuid::Uuid,
-    before: Option<uuid::Uuid>,
-    after: Option<uuid::Uuid>,
+    inference_id: Uuid,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
     page_size: u32,
-) -> (String, std::collections::HashMap<String, String>) {
+) -> (String, HashMap<String, String>) {
     let (where_clause, params) = build_pagination_clause(before, after, "inference_id");
     let order_clause = if after.is_some() { "ASC" } else { "DESC" };
 
-    let mut params_map: std::collections::HashMap<String, String> = params
+    let mut params_map: HashMap<String, String> = params
         .into_iter()
         .map(|(k, v)| (k.to_string(), v))
         .collect();
@@ -276,9 +277,9 @@ pub(crate) fn build_demonstration_feedback_query(
 pub(crate) fn build_bounds_query(
     table_name: &str,
     id_column: &str,
-    target_id: uuid::Uuid,
-) -> (String, std::collections::HashMap<String, String>) {
-    let mut params_map = std::collections::HashMap::new();
+    target_id: Uuid,
+) -> (String, HashMap<String, String>) {
+    let mut params_map = HashMap::new();
     params_map.insert(id_column.to_string(), target_id.to_string());
 
     let query = format!(
@@ -296,9 +297,9 @@ pub(crate) fn build_bounds_query(
 pub(crate) fn build_count_query(
     table_name: &str,
     id_column: &str,
-    target_id: uuid::Uuid,
-) -> (String, std::collections::HashMap<String, String>) {
-    let mut params_map = std::collections::HashMap::new();
+    target_id: Uuid,
+) -> (String, HashMap<String, String>) {
+    let mut params_map = HashMap::new();
     params_map.insert(id_column.to_string(), target_id.to_string());
 
     let query = format!(
@@ -320,7 +321,7 @@ impl ClickHouseConnectionInfo {
         let (query, params_owned) =
             build_boolean_metrics_query(target_id, before, after, page_size);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -339,7 +340,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<Vec<FloatMetricFeedbackRow>, Error> {
         let (query, params_owned) = build_float_metrics_query(target_id, before, after, page_size);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -359,7 +360,7 @@ impl ClickHouseConnectionInfo {
         let (query, params_owned) =
             build_comment_feedback_query(target_id, before, after, page_size);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -376,7 +377,7 @@ impl ClickHouseConnectionInfo {
         let (query, params_owned) =
             build_bounds_query("BooleanMetricFeedbackByTargetId", "target_id", target_id);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -392,7 +393,7 @@ impl ClickHouseConnectionInfo {
         let (query, params_owned) =
             build_bounds_query("FloatMetricFeedbackByTargetId", "target_id", target_id);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -408,7 +409,7 @@ impl ClickHouseConnectionInfo {
         let (query, params_owned) =
             build_bounds_query("CommentFeedbackByTargetId", "target_id", target_id);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -427,7 +428,7 @@ impl ClickHouseConnectionInfo {
             inference_id,
         );
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -440,7 +441,7 @@ impl ClickHouseConnectionInfo {
         let (query, params_owned) =
             build_count_query("BooleanMetricFeedbackByTargetId", "target_id", target_id);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -453,7 +454,7 @@ impl ClickHouseConnectionInfo {
         let (query, params_owned) =
             build_count_query("FloatMetricFeedbackByTargetId", "target_id", target_id);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -466,7 +467,7 @@ impl ClickHouseConnectionInfo {
         let (query, params_owned) =
             build_count_query("CommentFeedbackByTargetId", "target_id", target_id);
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -485,7 +486,7 @@ impl ClickHouseConnectionInfo {
             inference_id,
         );
 
-        let query_params: std::collections::HashMap<&str, &str> = params_owned
+        let query_params: HashMap<&str, &str> = params_owned
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
@@ -498,7 +499,7 @@ impl ClickHouseConnectionInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
+    use Uuid;
 
     /// Normalize whitespace and newlines in a query for comparison
     fn normalize_whitespace(s: &str) -> String {

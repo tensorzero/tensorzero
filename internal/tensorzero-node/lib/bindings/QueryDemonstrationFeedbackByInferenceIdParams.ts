@@ -2,7 +2,7 @@
 
 export type QueryDemonstrationFeedbackByInferenceIdParams = {
   inference_id: string;
-  before: string | null;
-  after: string | null;
-  page_size: number | null;
+  before?: string;
+  after?: string;
+  page_size?: number;
 };

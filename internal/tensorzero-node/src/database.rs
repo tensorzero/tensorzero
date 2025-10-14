@@ -164,7 +164,9 @@ struct GetModelLatencyQuantilesParams {
 #[ts(export, optional_fields)]
 struct QueryEpisodeTableParams {
     pub page_size: u32,
+    #[ts(optional)]
     pub before: Option<Uuid>,
+    #[ts(optional)]
     pub after: Option<Uuid>,
 }
 
@@ -172,7 +174,9 @@ struct QueryEpisodeTableParams {
 #[ts(export, optional_fields)]
 struct QueryFeedbackByTargetIdParams {
     target_id: Uuid,
+    #[ts(optional)]
     before: Option<Uuid>,
+    #[ts(optional)]
     after: Option<Uuid>,
     page_size: Option<u32>,
 }
@@ -181,8 +185,11 @@ struct QueryFeedbackByTargetIdParams {
 #[ts(export)]
 struct QueryDemonstrationFeedbackByInferenceIdParams {
     inference_id: Uuid,
+    #[ts(optional)]
     before: Option<Uuid>,
+    #[ts(optional)]
     after: Option<Uuid>,
+    #[ts(optional)]
     page_size: Option<u32>,
 }
 
