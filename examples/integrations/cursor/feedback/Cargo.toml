@@ -27,7 +27,7 @@ chrono.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-regex = "1.11.2"
+regex = "1.12.1"
 url.workspace = true
 rayon = "1.11.0"
 futures = { workspace = true }

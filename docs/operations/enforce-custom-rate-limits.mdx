@@ -18,6 +18,16 @@ Let's start with a brief tutorial on the concepts behind custom rate limits in T
 You can define custom rate limiting _rules_ in your TensorZero configuration using `[[rate_limiting.rules]]`.
 Your configuration can have multiple rules.
 
+Rate limit state is stored in Postgres, so restarting the gateway preserves existing limits and multiple gateway instances automatically share the same limits.
+
+<Warning>
+
+Tracking begins when a rate limit rule is first applied to a request.
+Requests made before a rule was configured do not count towards its limit.
+Modifying a rate limit rule resets its usage.
+
+</Warning>
+
 ### Resources
 
 Each rate limiting rule can have one or more _resource limits_.
@@ -32,6 +42,10 @@ tokens_per_second = 1_000_000
 # ...
 ```
 
+Time windows are sequential and non-overlapping (i.e. not a sliding window).
+They are aligned to when each rate limit bucket is first initialized (not sliding windows).
+For example, if a rule with a `RESOURCE_per_minute` limit is first used at 10:30:15, it'll be refilled at 10:31:15, 10:32:15, and so on.
+
 <Note>
 
 You must specify `max_tokens` for a request if a token limit applies to it.
@@ -45,10 +59,10 @@ Each rate limiting rule can optionally have a _scope_.
 The scope restricts the rule to certain requests only.
 If you don't specify a scope, the rule will apply to all requests.
 
-#### Tags
+#### By tags
 
-At the moment, only user-defined `tags` are supported.
-You can limit the scope to specific values, to each individual value (`tensorzero::each`), or to every value collectively (`tensorzero::total`).
+At the moment, only scoping by user-defined `tags` are supported.
+You can limit the scope to a specific value, to each individual value (`tensorzero::each`), or to every value collectively (`tensorzero::total`).
 
 For example, the following rule would only apply to inference requests with the tag `user_id` set to `intern`:
 
@@ -111,7 +125,7 @@ The rule above does _not_ apply to requests that do not specify any `user_id` va
 ### Priority
 
 Each rate limiting rule must have a _priority_ (e.g. `priority = 1`).
-The gateway iterates through the rules in order of priority, starting with the highest priority, until it finds a matching rate limit; once it does, it enforces all rules with that priority number and disregards any lower priority rules.
+The gateway iterates through the rules in order of priority, starting with the highest priority, until it finds a matching rate limit; once it does, it enforces all rules with that priority number and disregards any rules with lower priority.
 
 For example, the configuration below would enforce the first rule for requests with `user_id = "intern"` and the second rule for all other `user_id` values:
 
@@ -198,7 +212,7 @@ Make sure to reload your gateway.
 <Step title="Make inference requests">
 
 If we make two consecutive inference requests with `user_id = "intern"`, the second one should fail because of rule `[B]`.
-However, if we make two consecutive inference requests with `user_id = "ceo"`, the second one should succeed because rule `[C]` will override rule `[B]`.
+However, if we make two consecutive inference requests with `user_id = "ceo"`, both should succeed because rule `[C]` will override rule `[B]`.
 
 <Tabs>
 
