@@ -80,6 +80,10 @@ pub enum OpenRouterCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<OpenRouterCredentials>,
+        fallback: Box<OpenRouterCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for OpenRouterCredentials {
@@ -91,6 +95,12 @@ impl TryFrom<Credential> for OpenRouterCredentials {
             Credential::Dynamic(key_name) => Ok(OpenRouterCredentials::Dynamic(key_name)),
             Credential::None => Ok(OpenRouterCredentials::None),
             Credential::Missing => Ok(OpenRouterCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(OpenRouterCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenRouter provider".to_string(),
             })),
@@ -116,6 +126,16 @@ impl OpenRouterCredentials {
                 .transpose()
             }
             OpenRouterCredentials::None => Ok(None),
+            OpenRouterCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
+            }
         }
     }
 }

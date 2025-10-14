@@ -13,7 +13,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     http::TensorzeroHttpClient,
-    model::CredentialLocation,
+    model::CredentialLocationWithFallback,
     model_table::{GCPVertexGeminiKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::gcp_vertex_gemini::{
@@ -50,7 +50,7 @@ pub struct GCPVertexGeminiSFTConfig {
     #[serde(skip)]
     pub credentials: GCPVertexCredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
     pub seed: Option<u64>,
     pub api_base: Option<Url>,
     pub service_account: Option<String>,
@@ -73,7 +73,7 @@ pub struct UninitializedGCPVertexGeminiSFTConfig {
     pub n_epochs: Option<usize>,
     pub export_last_checkpoint_only: Option<bool>,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credentials: Option<CredentialLocation>,
+    pub credentials: Option<CredentialLocationWithFallback>,
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
     pub service_account: Option<String>,
@@ -219,7 +219,7 @@ impl UninitializedGCPVertexGeminiSFTConfig {
 pub struct GCPVertexGeminiSFTJobHandle {
     pub job_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
     pub region: String,
     pub project_id: String,
 }

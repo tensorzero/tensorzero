@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -55,6 +55,21 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "sglang".to_string(),
+        model_info: HashMap::from([
+            (
+                "model_name".to_string(),
+                "Qwen/Qwen2.5-1.5B-Instruct".to_string(),
+            ),
+            (
+                "api_base".to_string(),
+                "https://tensorzero--sglang-inference-sglang-inference.modal.run/v1/".to_string(),
+            ),
+        ]),
+        use_modal_headers: true,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -74,5 +89,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
         pdf_inference: vec![],
         shorthand_inference: vec![],
+        credential_fallbacks,
     }
 }

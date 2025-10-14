@@ -136,6 +136,10 @@ pub enum OpenAICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<OpenAICredentials>,
+        fallback: Box<OpenAICredentials>,
+    },
 }
 
 impl TryFrom<Credential> for OpenAICredentials {
@@ -147,6 +151,10 @@ impl TryFrom<Credential> for OpenAICredentials {
             Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
             Credential::None => Ok(OpenAICredentials::None),
             Credential::Missing => Ok(OpenAICredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(OpenAICredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenAI provider".to_string(),
             })),
@@ -170,6 +178,16 @@ impl OpenAICredentials {
                     .into()
                 }))
                 .transpose()
+            }
+            OpenAICredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             OpenAICredentials::None => Ok(None),
         }
