@@ -1637,4 +1637,51 @@ mod tests {
             "fallback variants should not appear in bandit probabilities"
         );
     }
+
+    #[tokio::test]
+    async fn test_setup_prevents_duplicate_task_spawning() {
+        use crate::db::clickhouse::ClickHouseConnectionInfo;
+        use std::sync::atomic::AtomicBool;
+
+        // Create a TrackAndStopConfig instance
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec!["C".to_string()],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.1,
+            update_period: Duration::from_secs(60),
+            state: Arc::new(ArcSwap::new(Arc::new(
+                TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
+            ))),
+            task_spawned: AtomicBool::new(false),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn SelectQueries + Send + Sync>;
+        let cancel_token = CancellationToken::new();
+
+        // First call to setup should succeed
+        let result1 = config
+            .setup(db.clone(), "test_function", cancel_token.clone())
+            .await;
+        assert!(result1.is_ok(), "First setup call should succeed");
+
+        // Second call to setup should fail with an error
+        let result2 = config
+            .setup(db, "test_function", cancel_token.clone())
+            .await;
+        assert!(result2.is_err(), "Second setup call should fail");
+
+        // Verify the error message mentions the task has already been spawned
+        let err = result2.unwrap_err();
+        assert!(
+            err.to_string().contains("already been spawned"),
+            "Error should mention task already spawned, got: {err}"
+        );
+
+        // Clean up: cancel the spawned task
+        cancel_token.cancel();
+    }
 }
