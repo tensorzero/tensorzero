@@ -63,7 +63,7 @@ use crate::{
     db::{
         postgres::PostgresConnectionInfo, ExperimentationQueries, FeedbackByVariant, SelectQueries,
     },
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     variant::VariantInfo,
 };
 
@@ -128,10 +128,9 @@ impl Nursery {
         }
     }
 
-    // increments the index and returns the variant name corresponding to the index
-    fn get_variant_round_robin(&self) -> &str {
-        let index = self.index.fetch_add(1, Ordering::Relaxed) % self.variants.len() as u64;
-        &self.variants[index as usize]
+    // increments the index at which to start searching for an active variant
+    fn get_variant_round_robin(&self) -> u64 {
+        self.index.fetch_add(1, Ordering::Relaxed) % self.variants.len() as u64
     }
 
     /// Try to sample an active variant from the nursery using round-robin.
@@ -141,9 +140,16 @@ impl Nursery {
         &'a self,
         active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
     ) -> Option<&'a str> {
+        // Handle empty nursery case
+        if self.variants.is_empty() {
+            return None;
+        }
+
         // Try up to N times to find an active variant
-        for _ in 0..self.variants.len() {
-            let variant = self.get_variant_round_robin();
+        let start_idx = self.get_variant_round_robin();
+        for idx in start_idx..(start_idx + self.variants.len() as u64) {
+            let index = idx % (self.variants.len() as u64);
+            let variant = &self.variants[index as usize];
             if active_variants.contains_key(variant) {
                 return Some(variant);
             }
@@ -321,9 +327,9 @@ impl VariantSampler for TrackAndStopConfig {
 
         // Remove and return the sampled variant
         active_variants.remove_entry(&variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::Inference {
+            Error::new(ErrorDetails::InternalError {
                 message: format!(
-                    "Sampled variant {variant_name} not found in active_variants. This should never happen."
+                    "Sampled variant {variant_name} not found in active_variants. {IMPOSSIBLE_ERROR_MESSAGE}."
                 ),
             })
         })
@@ -483,11 +489,8 @@ fn fallback_sample(
     intersection
         .get(random_index)
         .ok_or_else(|| {
-            Error::new(ErrorDetails::Inference {
-                message:
-                    "Failed to sample variant from nonempty intersection. This should never happen."
-                        .to_string(),
-            })
+            Error::new(ErrorDetails::InternalError { message:
+                format!("Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}.")})
         })
         .map(std::string::ToString::to_string)
 }
@@ -1091,9 +1094,9 @@ mod tests {
     fn test_nursery_get_variant_round_robin_single() {
         let nursery = Nursery::new(vec!["A".to_string()]);
 
-        // Should always return "A" regardless of how many times called
+        // Should always return index 0 (which maps to "A") regardless of how many times called
         for _ in 0..10 {
-            assert_eq!(nursery.get_variant_round_robin(), "A");
+            assert_eq!(nursery.get_variant_round_robin(), 0);
         }
     }
 
@@ -1101,25 +1104,25 @@ mod tests {
     fn test_nursery_get_variant_round_robin_multiple() {
         let nursery = Nursery::new(vec!["A".to_string(), "B".to_string(), "C".to_string()]);
 
-        // First cycle
-        assert_eq!(nursery.get_variant_round_robin(), "A");
-        assert_eq!(nursery.get_variant_round_robin(), "B");
-        assert_eq!(nursery.get_variant_round_robin(), "C");
+        // First cycle - returns indices 0, 1, 2
+        assert_eq!(nursery.get_variant_round_robin(), 0); // "A"
+        assert_eq!(nursery.get_variant_round_robin(), 1); // "B"
+        assert_eq!(nursery.get_variant_round_robin(), 2); // "C"
 
         // Second cycle - should wrap around
-        assert_eq!(nursery.get_variant_round_robin(), "A");
-        assert_eq!(nursery.get_variant_round_robin(), "B");
-        assert_eq!(nursery.get_variant_round_robin(), "C");
+        assert_eq!(nursery.get_variant_round_robin(), 0); // "A"
+        assert_eq!(nursery.get_variant_round_robin(), 1); // "B"
+        assert_eq!(nursery.get_variant_round_robin(), 2); // "C"
     }
 
     #[test]
     fn test_nursery_get_variant_round_robin_two_variants() {
         let nursery = Nursery::new(vec!["X".to_string(), "Y".to_string()]);
 
-        assert_eq!(nursery.get_variant_round_robin(), "X");
-        assert_eq!(nursery.get_variant_round_robin(), "Y");
-        assert_eq!(nursery.get_variant_round_robin(), "X");
-        assert_eq!(nursery.get_variant_round_robin(), "Y");
+        assert_eq!(nursery.get_variant_round_robin(), 0); // "X"
+        assert_eq!(nursery.get_variant_round_robin(), 1); // "Y"
+        assert_eq!(nursery.get_variant_round_robin(), 0); // "X"
+        assert_eq!(nursery.get_variant_round_robin(), 1); // "Y"
     }
 
     #[test]
