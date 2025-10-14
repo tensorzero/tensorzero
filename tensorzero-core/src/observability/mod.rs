@@ -172,6 +172,20 @@ pub struct TracerWrapper {
     shutdown_tasks: TaskTracker,
 }
 
+// Adds our self-signed certificate to the TLS config for Tonic
+// This is used in e2e test mode so that we can test gRPC export over TLS to
+// our local OTLP collector.
+#[cfg(feature = "e2e_tests")]
+fn add_local_self_signed_cert(
+    tls_config: tonic::transport::ClientTlsConfig,
+) -> tonic::transport::ClientTlsConfig {
+    static CERT: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/e2e/self-signed-certs/otlp-collector.crt"
+    ));
+    tls_config.ca_certificate(tonic::transport::Certificate::from_pem(CERT))
+}
+
 impl TracerWrapper {
     fn get_or_create_custom_tracer(&self, key: &CustomTracerKey, context: Context) -> Context {
         // This is the potentially expensive part - we need to dynamically create a new `SdkTracer`.
@@ -208,10 +222,14 @@ fn build_tracer<T: SpanExporter + 'static>(
     metadata: MetadataMap,
     override_exporter: Option<T>,
 ) -> Result<(SdkTracerProvider, SdkTracer), Error> {
+    let tls_config = tonic::transport::ClientTlsConfig::new().with_enabled_roots();
+    #[cfg(feature = "e2e_tests")]
+    let tls_config = add_local_self_signed_cert(tls_config);
+
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_metadata(metadata)
-        .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots())
+        .with_tls_config(tls_config)
         .build()
         .map_err(|e| {
             Error::new(ErrorDetails::Observability {

@@ -4,6 +4,15 @@ receivers:
       grpc:
         endpoint: 0.0.0.0:4317
         include_metadata: true
+  otlp/tls:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4316
+        include_metadata: true
+        tls:
+          cert_file: /self-signed-certs/otlp-collector.crt
+          key_file: /self-signed-certs/otlp-collector.key
+
 
 extensions:
   zpages:
@@ -35,6 +44,6 @@ service:
   extensions: [zpages]
   pipelines:
     traces:
-      receivers: [otlp]
+      receivers: [otlp, otlp/tls]
       processors: [attributes]
       exporters: [otlp]
