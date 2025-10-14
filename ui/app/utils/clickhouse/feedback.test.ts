@@ -106,8 +106,6 @@ test("pollForFeedbackItem should find feedback when it exists", async () => {
   // Run the queryFeedbackByTargetId function to return feedback with the target ID
   const originalQueryFeedback = await dbClient.queryFeedbackByTargetId({
     target_id: targetId,
-    before: undefined,
-    after: undefined,
     page_size: pageSize,
   });
 
