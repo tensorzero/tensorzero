@@ -12,9 +12,6 @@ use crate::{
     variant::VariantInfo,
 };
 
-#[cfg(test)]
-use crate::db::clickhouse::ClickHouseConnectionInfo;
-
 use super::VariantSampler;
 
 /// Pure function for static weights sampling logic.
@@ -178,6 +175,7 @@ mod tests {
 
     use super::*;
     use crate::config::{Config, ConfigFileGlob, ErrorContext, SchemaData, TimeoutsConfig};
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::variant::chat_completion::ChatCompletionConfig;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
     use tempfile::NamedTempFile;

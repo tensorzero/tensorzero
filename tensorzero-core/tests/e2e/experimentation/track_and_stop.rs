@@ -1,3 +1,4 @@
+use crate::clickhouse::{get_clean_clickhouse, DeleteDbOnDrop};
 use futures::future::join_all;
 use rand::{Rng, SeedableRng};
 use rand_distr::Distribution;
@@ -26,15 +27,11 @@ use uuid::Uuid;
 /// Returns the client, the ClickHouse connection, and a guard that drops the database.
 async fn make_embedded_gateway_with_clean_clickhouse(
     config: &str,
-) -> (
-    Client,
-    ClickHouseConnectionInfo,
-    crate::clickhouse::DeleteDbOnDrop,
-) {
+) -> (Client, ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
 
-    let (clickhouse, guard) = crate::clickhouse::get_clean_clickhouse(false).await;
+    let (clickhouse, guard) = get_clean_clickhouse(false).await;
 
     clickhouse
         .create_database_and_migrations_table()
