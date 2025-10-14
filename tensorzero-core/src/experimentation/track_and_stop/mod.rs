@@ -51,6 +51,7 @@ use std::{
     },
     time::Duration,
 };
+use tokio_util::sync::CancellationToken;
 
 use estimate_optimal_probabilities::{
     estimate_optimal_probabilities, EstimateOptimalProbabilitiesArgs,
@@ -266,6 +267,7 @@ impl VariantSampler for TrackAndStopConfig {
         &self,
         db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
+        cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         // Check if a task has already been spawned for this function
         // Use compare_exchange to atomically check and set the flag
@@ -298,6 +300,7 @@ impl VariantSampler for TrackAndStopConfig {
             min_samples_per_variant: self.min_samples_per_variant,
             epsilon: self.epsilon,
             delta: self.delta,
+            cancel_token,
         }));
         Ok(())
     }
@@ -363,6 +366,7 @@ struct ProbabilityUpdateTaskArgs {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
+    cancel_token: CancellationToken,
 }
 
 /// Background task that continuously updates sampling probabilities for track-and-stop experiments.
@@ -386,9 +390,18 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
         min_samples_per_variant,
         epsilon,
         delta,
+        cancel_token,
     } = args;
 
+    let mut interval = tokio::time::interval(update_period);
     loop {
+        tokio::select! {
+            () = cancel_token.cancelled() => {
+                break;
+            }
+            _ = interval.tick() => {}
+        }
+
         let result = update_probabilities(UpdateProbabilitiesArgs {
             db: db.as_ref(),
             candidate_variants: &candidate_variants,
@@ -407,8 +420,6 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
                 tracing::warn!("Failed to update probabilities for {function_name}: {e}");
             }
         }
-
-        tokio::time::sleep(update_period).await;
     }
 }
 

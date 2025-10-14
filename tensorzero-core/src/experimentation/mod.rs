@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::db::postgres::PostgresConnectionInfo;
@@ -58,6 +59,7 @@ pub trait VariantSampler {
         &self,
         db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
+        cancel_token: CancellationToken,
     ) -> Result<(), Error>;
     async fn sample(
         &self,
@@ -93,11 +95,12 @@ impl VariantSampler for ExperimentationConfig {
         &self,
         db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
+        cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         match self {
-            Self::StaticWeights(config) => config.setup(db, function_name).await,
+            Self::StaticWeights(config) => config.setup(db, function_name, cancel_token).await,
             Self::Uniform => Ok(()),
-            Self::TrackAndStop(config) => config.setup(db, function_name).await,
+            Self::TrackAndStop(config) => config.setup(db, function_name, cancel_token).await,
         }
     }
 

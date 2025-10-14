@@ -3,6 +3,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
 };
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{
@@ -126,6 +127,7 @@ impl VariantSampler for StaticWeightsConfig {
         &self,
         _db: Arc<dyn SelectQueries + Send + Sync>,
         _function_name: &str,
+        _cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         // We just assert that all weights are non-negative
         for weight in self.candidate_variants.values() {
@@ -356,6 +358,7 @@ mod tests {
                 Arc::new(ClickHouseConnectionInfo::new_disabled())
                     as Arc<dyn SelectQueries + Send + Sync>,
                 "test",
+                CancellationToken::new(),
             )
             .await
             .unwrap();
