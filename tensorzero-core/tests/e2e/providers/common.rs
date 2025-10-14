@@ -9491,9 +9491,10 @@ pub async fn check_parallel_tool_use_inference_response(
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
 
     let is_openrouter = provider.model_provider_name == "openrouter";
-    if is_openrouter {
-        // For OpenRouter, check that there are at least 2 tool calls
-        // (OpenRouter may include an empty text block)
+    let is_groq = provider.model_provider_name == "groq";
+    if is_openrouter || is_groq {
+        // For Groq and OpenRouter, check that there are at least 2 tool calls
+        // (these providers may include an empty text block)
         let tool_calls = output
             .iter()
             .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -9523,8 +9524,12 @@ pub async fn check_parallel_tool_use_inference_response(
                 // Skip empty text blocks for OpenRouter
                 continue;
             }
+            StoredContentBlock::Text(text) if text.text.trim().is_empty() && is_groq => {
+                // Skip empty text blocks for Groq
+                continue;
+            }
             _ => {
-                panic!("Expected a tool call or empty text (for OpenRouter), got {block:?}");
+                panic!("Expected a tool call or empty text (for OpenRouter/Groq), got {block:?}");
             }
         }
     }
@@ -11144,6 +11149,17 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
             }
         }
 
+        // Special handling for groq text blocks
+        if content_block_type == "text" && provider.model_provider_name == "groq" {
+            let text = content_block.get("text").unwrap().as_str().unwrap();
+            // Groq produces a text block containing '\n'
+            if text.trim().is_empty() {
+                continue;
+            } else {
+                panic!("Unexpected text block with non-empty content: {text}");
+            }
+        }
+
         assert_eq!(
             content_block_type, "tool_call",
             "Expected tool_call, got {content_block_type}"
@@ -11430,6 +11446,17 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             // For OpenRouter, skip empty text blocks
             let text = content_block.get("text").unwrap().as_str().unwrap();
             if text.is_empty() {
+                continue;
+            } else {
+                panic!("Unexpected text block with non-empty content: {text}");
+            }
+        }
+
+        // Special handling for groq text blocks
+        if content_block_type == "text" && provider.model_provider_name == "groq" {
+            let text = content_block.get("text").unwrap().as_str().unwrap();
+            // Groq produces a text block containing '\n'
+            if text.trim().is_empty() {
                 continue;
             } else {
                 panic!("Unexpected text block with non-empty content: {text}");
