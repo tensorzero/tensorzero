@@ -137,7 +137,7 @@ pub struct TrackAndStopTestConfig<'a> {
     pub update_period_s: u64,
 }
 
-impl<'a> Default for TrackAndStopTestConfig<'a> {
+impl Default for TrackAndStopTestConfig<'static> {
     fn default() -> Self {
         Self {
             metric_name: "test_metric",
