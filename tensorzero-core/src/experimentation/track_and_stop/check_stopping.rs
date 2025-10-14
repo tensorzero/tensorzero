@@ -929,4 +929,132 @@ mod tests {
             "Should stop with large sample and clear difference"
         );
     }
+
+    // ============================================================================
+    // Tests for optimize=min
+    // ============================================================================
+
+    #[test]
+    fn test_check_stopping_two_arms_optimize_min() {
+        // Test that with optimize=min, the arm with the lowest mean wins
+        let feedback = make_feedback(vec![100, 100], vec![0.3, 0.8], vec![0.1, 0.1]);
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: crate::config::MetricConfigOptimize::Min,
+        })
+        .unwrap();
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(
+                name, "variant_0",
+                "Should recommend arm with lowest mean when optimize=min"
+            );
+        } else {
+            panic!("Expected variant_0 to be labeled the winner");
+        }
+    }
+
+    #[test]
+    fn test_check_stopping_many_arms_optimize_min() {
+        // Test with 5 arms, optimize=min selects the one with lowest mean
+        let feedback = make_feedback(
+            vec![200, 200, 200, 200, 200],
+            vec![0.9, 0.1, 0.5, 0.4, 0.6],
+            vec![0.1, 0.1, 0.1, 0.1, 0.1],
+        );
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 50,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: crate::config::MetricConfigOptimize::Min,
+        })
+        .unwrap();
+        // variant_1 has the lowest mean, so it should win
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(
+                name, "variant_1",
+                "Should recommend arm with lowest mean when optimize=min"
+            );
+        } else {
+            panic!("Expected variant_1 to be labeled the winne");
+        }
+    }
+
+    #[test]
+    fn test_check_stopping_tie_breaking_optimize_min() {
+        // Test that ties are broken correctly with optimize=min
+        // Create three arms with identical means but different variances
+        let feedback = make_feedback(
+            vec![100, 100, 100],
+            vec![0.5, 0.5, 0.5], // All tied at 0.5
+            vec![0.1, 0.3, 0.2], // Different variances
+        );
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: crate::config::MetricConfigOptimize::Min,
+        })
+        .unwrap();
+
+        // Even with optimize=min, tie-breaking should work the same way
+        // Should select variant_1 which has highest variance/pull_count (0.3/100 = 0.003)
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(
+                name, "variant_1",
+                "Should break tie by selecting arm with highest variance/pull_count, even with optimize=min"
+            );
+        }
+    }
+
+    #[test]
+    fn test_check_stopping_min_vs_max_different_winners() {
+        // Verify that the same data produces different winners for min vs max
+        let feedback = make_feedback(
+            vec![200, 200, 200],
+            vec![0.3, 0.7, 0.5], // variant_0 lowest, variant_1 highest
+            vec![0.1, 0.1, 0.1],
+        );
+
+        let result_max = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 50,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: crate::config::MetricConfigOptimize::Max,
+        })
+        .unwrap();
+
+        let result_min = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 50,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: crate::config::MetricConfigOptimize::Min,
+        })
+        .unwrap();
+
+        // With optimize=max, variant_1 (highest mean 0.7) should win
+        if let StoppingResult::Winner(name_max) = result_max {
+            assert_eq!(name_max, "variant_1", "Max should pick highest mean");
+        } else {
+            panic!("Expected winner for optimize=max");
+        }
+
+        // With optimize=min, variant_0 (lowest mean 0.3) should win
+        if let StoppingResult::Winner(name_min) = result_min {
+            assert_eq!(name_min, "variant_0", "Min should pick lowest mean");
+        } else {
+            panic!("Expected winner for optimize=min");
+        }
+    }
 }
