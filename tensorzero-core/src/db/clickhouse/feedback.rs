@@ -599,7 +599,11 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
     use Uuid;
+
+    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::db::clickhouse::{ClickHouseResponse, ClickHouseResponseMetadata};
 
     /// Normalize whitespace and newlines in a query for comparison
     fn normalize_whitespace(s: &str) -> String {
@@ -872,5 +876,630 @@ mod tests {
         // Test comment feedback query
         let (comment_query, _) = build_comment_feedback_query(target_id, None, None, 100);
         assert_query_does_not_contain(&comment_query, "'comment' AS type");
+    }
+
+    // Query execution tests with mocks
+
+    #[tokio::test]
+    async fn test_query_boolean_metrics_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "SELECT id, target_id, metric_name, value, tags");
+                assert_query_contains(query, "FROM BooleanMetricFeedbackByTargetId");
+                assert_query_contains(query, "WHERE target_id = {target_id:UUID}");
+                assert_query_contains(query, "FORMAT JSONEachRow");
+
+                assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
+                assert_eq!(parameters.get("page_size"), Some(&"100"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"id":"0199cff5-3130-7e90-815c-91219e1a2dae","target_id":"0199cff5-3130-7e90-815c-91219e1a2dae","metric_name":"test_metric","value":true,"tags":{},"timestamp":"2021-01-01T00:00:00Z"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_boolean_metrics_by_target_id(target_id, None, None, 100)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].metric_name, "test_metric");
+        assert!(result[0].value);
+    }
+
+    #[tokio::test]
+    async fn test_query_float_metrics_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "SELECT id, target_id, metric_name, value, tags");
+                assert_query_contains(query, "FROM FloatMetricFeedbackByTargetId");
+                assert_query_contains(query, "WHERE target_id = {target_id:UUID}");
+                assert_query_contains(query, "FORMAT JSONEachRow");
+
+                assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
+                assert_eq!(parameters.get("page_size"), Some(&"100"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"id":"0199cff5-3130-7e90-815c-91219e1a2dae","target_id":"0199cff5-3130-7e90-815c-91219e1a2dae","metric_name":"accuracy","value":0.95,"tags":{},"timestamp":"2021-01-01T00:00:00Z"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_float_metrics_by_target_id(target_id, None, None, 100)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].metric_name, "accuracy");
+        assert_eq!(result[0].value, 0.95);
+    }
+
+    #[tokio::test]
+    async fn test_query_comment_feedback_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "SELECT id, target_id, target_type, value, tags");
+                assert_query_contains(query, "FROM CommentFeedbackByTargetId");
+                assert_query_contains(query, "WHERE target_id = {target_id:UUID}");
+                assert_query_contains(query, "FORMAT JSONEachRow");
+
+                assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
+                assert_eq!(parameters.get("page_size"), Some(&"100"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"id":"0199cff5-3130-7e90-815c-91219e1a2dae","target_id":"0199cff5-3130-7e90-815c-91219e1a2dae","target_type":"inference","value":"Great response!","tags":{},"timestamp":"2021-01-01T00:00:00Z"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_comment_feedback_by_target_id(target_id, None, None, 100)
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].value, "Great response!");
+        // CommentTargetType is an enum, so we need to compare it properly
+        assert!(matches!(
+            result[0].target_type,
+            crate::db::feedback::CommentTargetType::Inference
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_query_demonstration_feedback_by_inference_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let inference_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "SELECT id, inference_id, value, tags");
+                assert_query_contains(query, "FROM DemonstrationFeedbackByInferenceId");
+                assert_query_contains(query, "WHERE inference_id = {inference_id:UUID}");
+                assert_query_contains(query, "FORMAT JSONEachRow");
+
+                assert_eq!(parameters.get("inference_id"), Some(&inference_id.to_string().as_str()));
+                assert_eq!(parameters.get("page_size"), Some(&"100"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"id":"0199cff5-3130-7e90-815c-91219e1a2dae","inference_id":"0199cff5-3130-7e90-815c-91219e1a2dae","value":"demonstration value","tags":{},"timestamp":"2021-01-01T00:00:00Z"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_demonstration_feedback_by_inference_id(inference_id, None, None, Some(100))
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].value, "demonstration value");
+    }
+
+    // Bounds query tests with mocks
+
+    #[tokio::test]
+    async fn test_query_boolean_metric_bounds_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+        let first_id = Uuid::now_v7();
+        let last_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "(SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id");
+                assert_query_contains(query, "(SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id");
+                assert_query_contains(query, "FORMAT JSONEachRow");
+
+                assert_eq!(parameters.get("target_id"), Some(&target_id.to_string().as_str()));
+
+                true
+            })
+            .returning(move |_, _| {
+                Ok(ClickHouseResponse {
+                    response: format!(r#"{{"first_id":"{first_id}","last_id":"{last_id}"}}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_boolean_metric_bounds_by_target_id(target_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result.first_id, Some(first_id));
+        assert_eq!(result.last_id, Some(last_id));
+    }
+
+    #[tokio::test]
+    async fn test_query_float_metric_bounds_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "FROM FloatMetricFeedbackByTargetId");
+                assert_eq!(
+                    parameters.get("target_id"),
+                    Some(&target_id.to_string().as_str())
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"first_id":null,"last_id":null}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_float_metric_bounds_by_target_id(target_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result.first_id, None);
+        assert_eq!(result.last_id, None);
+    }
+
+    #[tokio::test]
+    async fn test_query_comment_feedback_bounds_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+        let first_id = Uuid::now_v7();
+        let last_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "FROM CommentFeedbackByTargetId");
+                assert_eq!(
+                    parameters.get("target_id"),
+                    Some(&target_id.to_string().as_str())
+                );
+                true
+            })
+            .returning(move |_, _| {
+                Ok(ClickHouseResponse {
+                    response: format!(r#"{{"first_id":"{first_id}","last_id":"{last_id}"}}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_comment_feedback_bounds_by_target_id(target_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result.first_id, Some(first_id));
+        assert_eq!(result.last_id, Some(last_id));
+    }
+
+    #[tokio::test]
+    async fn test_query_demonstration_feedback_bounds_by_inference_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let inference_id = Uuid::now_v7();
+        let first_id = Uuid::now_v7();
+        let last_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "FROM DemonstrationFeedbackByInferenceId");
+                assert_eq!(
+                    parameters.get("inference_id"),
+                    Some(&inference_id.to_string().as_str())
+                );
+                true
+            })
+            .returning(move |_, _| {
+                Ok(ClickHouseResponse {
+                    response: format!(r#"{{"first_id":"{first_id}","last_id":"{last_id}"}}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_demonstration_feedback_bounds_by_inference_id(inference_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result.first_id, Some(first_id));
+        assert_eq!(result.last_id, Some(last_id));
+    }
+
+    // Count query tests with mocks
+
+    #[tokio::test]
+    async fn test_count_boolean_metrics_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "SELECT toUInt64(COUNT()) AS count");
+                assert_query_contains(query, "FROM BooleanMetricFeedbackByTargetId");
+                assert_query_contains(query, "WHERE target_id = {target_id:UUID}");
+                assert_query_contains(query, "FORMAT JSONEachRow");
+
+                assert_eq!(
+                    parameters.get("target_id"),
+                    Some(&target_id.to_string().as_str())
+                );
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"count":"5"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 5,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .count_boolean_metrics_by_target_id(target_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result, 5);
+    }
+
+    #[tokio::test]
+    async fn test_count_float_metrics_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "FROM FloatMetricFeedbackByTargetId");
+                assert_eq!(
+                    parameters.get("target_id"),
+                    Some(&target_id.to_string().as_str())
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"count":"10"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 10,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .count_float_metrics_by_target_id(target_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result, 10);
+    }
+
+    #[tokio::test]
+    async fn test_count_comment_feedback_by_target_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "FROM CommentFeedbackByTargetId");
+                assert_eq!(
+                    parameters.get("target_id"),
+                    Some(&target_id.to_string().as_str())
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"count":"0"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .count_comment_feedback_by_target_id(target_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result, 0);
+    }
+
+    #[tokio::test]
+    async fn test_count_demonstration_feedback_by_inference_id_executes() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let inference_id = Uuid::now_v7();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "FROM DemonstrationFeedbackByInferenceId");
+                assert_eq!(
+                    parameters.get("inference_id"),
+                    Some(&inference_id.to_string().as_str())
+                );
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"count":"3"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 3,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .count_demonstration_feedback_by_inference_id(inference_id)
+            .await
+            .unwrap();
+
+        assert_eq!(result, 3);
+    }
+
+    // FeedbackQueries trait method tests
+
+    #[tokio::test]
+    async fn test_query_feedback_by_target_id_rejects_both_before_and_after() {
+        let mock_clickhouse_client = MockClickHouseClient::new();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let target_id = Uuid::now_v7();
+        let before = Uuid::now_v7();
+        let after = Uuid::now_v7();
+
+        let result = conn
+            .query_feedback_by_target_id(target_id, Some(before), Some(after), None)
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("Cannot specify both before and after"));
+    }
+
+    #[tokio::test]
+    async fn test_count_feedback_by_target_id_sums_all_types() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        // Expect 4 queries (one for each feedback type)
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(4)
+            .returning(|query, _| {
+                // Return different counts based on the table being queried
+                let count = if query.contains("BooleanMetricFeedbackByTargetId") {
+                    "2"
+                } else if query.contains("FloatMetricFeedbackByTargetId") {
+                    "3"
+                } else if query.contains("CommentFeedbackByTargetId") {
+                    "1"
+                } else if query.contains("DemonstrationFeedbackByInferenceId") {
+                    "4"
+                } else {
+                    "0"
+                };
+
+                Ok(ClickHouseResponse {
+                    response: format!(r#"{{"count":"{count}"}}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn.count_feedback_by_target_id(target_id).await.unwrap();
+
+        // Should sum all counts: 2 + 3 + 1 + 4 = 10
+        assert_eq!(result, 10);
+    }
+
+    #[tokio::test]
+    async fn test_query_feedback_bounds_by_target_id_aggregates_correctly() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let target_id = Uuid::now_v7();
+
+        // Create UUIDs for bounds - we'll make the first_id from boolean metrics the earliest
+        // and the last_id from float metrics the latest
+        let boolean_first = Uuid::from_u128(100);
+        let boolean_last = Uuid::from_u128(200);
+        let float_first = Uuid::from_u128(150);
+        let float_last = Uuid::from_u128(300);
+        let comment_first = Uuid::from_u128(120);
+        let comment_last = Uuid::from_u128(250);
+        let demo_first = Uuid::from_u128(110);
+        let demo_last = Uuid::from_u128(280);
+
+        // Expect 4 queries (one for each feedback type bounds)
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(4)
+            .returning(move |query, _| {
+                let (first, last) = if query.contains("BooleanMetricFeedbackByTargetId") {
+                    (boolean_first, boolean_last)
+                } else if query.contains("FloatMetricFeedbackByTargetId") {
+                    (float_first, float_last)
+                } else if query.contains("CommentFeedbackByTargetId") {
+                    (comment_first, comment_last)
+                } else if query.contains("DemonstrationFeedbackByInferenceId") {
+                    (demo_first, demo_last)
+                } else {
+                    panic!("Unexpected table in bounds query");
+                };
+
+                Ok(ClickHouseResponse {
+                    response: format!(r#"{{"first_id":"{first}","last_id":"{last}"}}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let result = conn
+            .query_feedback_bounds_by_target_id(target_id)
+            .await
+            .unwrap();
+
+        // Should have the minimum first_id and maximum last_id across all feedback types
+        assert_eq!(result.first_id, Some(boolean_first)); // 100 is the smallest
+        assert_eq!(result.last_id, Some(float_last)); // 300 is the largest
+
+        // Check individual bounds
+        assert_eq!(result.by_type.boolean.first_id, Some(boolean_first));
+        assert_eq!(result.by_type.boolean.last_id, Some(boolean_last));
+        assert_eq!(result.by_type.float.first_id, Some(float_first));
+        assert_eq!(result.by_type.float.last_id, Some(float_last));
+    }
+
+    #[tokio::test]
+    async fn test_get_feedback_by_variant_with_no_variants() {
+        let mock_clickhouse_client = MockClickHouseClient::new();
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        // Empty variant list should return empty result immediately without querying
+        let result = conn
+            .get_feedback_by_variant("test_metric", "test_function", Some(&vec![]))
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_feedback_by_variant_filters_variants() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, params| {
+                // Should filter by the specified variants
+                assert!(query.contains("AND variant_name IN ('variant1', 'variant2')"));
+                assert!(params.is_empty());
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(
+                        r#"{"variant_name":"variant1","mean":0.85,"variance":0.01,"count":100}
+{"variant_name":"variant2","mean":0.90,"variance":0.005,"count":50}"#,
+                    ),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 2,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+        let variants = vec!["variant1".to_string(), "variant2".to_string()];
+        let result = conn
+            .get_feedback_by_variant("test_metric", "test_function", Some(&variants))
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].variant_name, "variant1");
+        assert_eq!(result[0].mean, 0.85);
+        assert_eq!(result[1].variant_name, "variant2");
+        assert_eq!(result[1].mean, 0.90);
     }
 }
