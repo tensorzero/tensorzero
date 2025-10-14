@@ -1,5 +1,5 @@
 #![expect(clippy::print_stdout)]
-use tensorzero_core::db::{clickhouse::test_helpers::get_clickhouse, SelectQueries};
+use tensorzero_core::db::{clickhouse::test_helpers::get_clickhouse, FeedbackQueries};
 
 fn assert_float_eq(actual: f32, expected: f32, epsilon: Option<f32>) {
     let epsilon = epsilon.unwrap_or(1e-4);

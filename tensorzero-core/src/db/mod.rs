@@ -16,7 +16,7 @@ pub mod postgres;
 
 #[async_trait]
 pub trait ClickHouseConnection:
-    SelectQueries + DatasetQueries + HealthCheckable + Send + Sync
+    SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync
 {
 }
 
@@ -51,7 +51,10 @@ pub trait SelectQueries {
     ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
+}
 
+#[async_trait]
+pub trait FeedbackQueries {
     /// Retrieves cumulative feedback statistics for a given metric and function, optionally filtered by variant names.
     async fn get_feedback_by_variant(
         &self,
@@ -142,7 +145,10 @@ pub struct TableBoundsWithCount {
     pub count: u64,
 }
 
-impl<T: SelectQueries + DatasetQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
+impl<T: SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync>
+    ClickHouseConnection for T
+{
+}
 
 pub trait RateLimitQueries {
     /// This function will fail if any of the requests individually fail.
