@@ -85,8 +85,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     dbClient.queryDemonstrationFeedbackByInferenceId({
       inference_id,
       page_size: 1, // Only need to know if *any* exist
-      before: null,
-      after: null,
     });
   const feedbackBoundsPromise = dbClient.queryFeedbackBoundsByTargetId({
     target_id: inference_id,
