@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use std::collections::HashMap;
 
 use http::StatusCode;
