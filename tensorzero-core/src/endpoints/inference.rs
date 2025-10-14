@@ -627,10 +627,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 let _: () = write_inference(
                     &clickhouse_connection_info,
                     &config,
-                    Arc::try_unwrap(resolved_input)
-                        .unwrap_or_else(|arc| (*arc).clone())
-                        .resolve()
-                        .await?,
+                    Arc::unwrap_or_clone(resolved_input).resolve().await?,
                     result_to_write,
                     write_metadata,
                 )
@@ -875,7 +872,7 @@ fn create_stream(
                         extra_headers,
                     };
                     let config = config.clone();
-                        match Arc::try_unwrap(Arc::clone(&input)).unwrap_or_else(|arc| (*arc).clone()).resolve().await {
+                        match Arc::unwrap_or_clone(input).resolve().await {
                             Ok(input) => {
                                 let clickhouse_connection_info = clickhouse_connection_info.clone();
                                 write_inference(

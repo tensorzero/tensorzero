@@ -734,6 +734,9 @@ async fn infer_model_request(
 }
 
 #[instrument(fields(model_name = %model_name), skip_all)]
+// Note: this is due to a bug in Clippy 1.86 which runs on CI
+// when we upgrate it we should be able to remove this attribute
+#[allow(clippy::needless_lifetimes, clippy::allow_attributes)]
 async fn infer_model_request_stream<'request>(
     request: ModelInferenceRequest<'request>,
     model_name: Arc<str>,
