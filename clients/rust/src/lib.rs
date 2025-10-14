@@ -9,6 +9,9 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
+pub use tensorzero_core::db::clickhouse::dataset_queries::{
+    DatasetDetailRow, DatasetQueryParams, GetDatasetMetadataParams, GetDatasetRowsParams,
+};
 pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
 pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
@@ -717,6 +720,10 @@ impl Client {
         }
         // Set internal to true so we don't validate the tags again
         params.internal = true;
+        // Automatically add internal tag when internal=true
+        params
+            .tags
+            .insert("tensorzero::internal".to_string(), "true".to_string());
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
