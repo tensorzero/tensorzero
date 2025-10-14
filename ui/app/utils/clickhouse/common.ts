@@ -3,6 +3,12 @@ import type {
   FunctionConfig,
   JsonInferenceOutput,
   JsonValue,
+  StoredInputMessageContent,
+  StoredInputMessage,
+  StoredInput,
+  StoragePath as BackendStoragePath,
+  StorageKind as BackendStorageKind,
+  Datapoint,
 } from "tensorzero-node";
 
 /**
@@ -25,7 +31,7 @@ export type Role = z.infer<typeof roleSchema>;
 
 export const textInputSchema = z.object({
   type: z.literal("text"),
-  value: z.any(), // Value type from Rust maps to any in TS
+  value: z.any(), // JsonValueSchema, // Value type from Rust maps to JsonValue
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 
@@ -126,7 +132,7 @@ export const toolResultContentSchema = z
 export type ToolResultContent = z.infer<typeof toolResultContentSchema>;
 
 export const base64FileSchema = z.object({
-  url: z.string().url().nullable(),
+  url: z.string().url().nullish(),
   mime_type: z.string(),
 });
 export type Base64File = z.infer<typeof base64FileSchema>;
@@ -146,7 +152,7 @@ export const storageKindSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("s3_compatible"),
-      bucket_name: z.string(),
+      bucket_name: z.string().nullish(),
       region: z.string().nullish(),
       endpoint: z.string().nullish(),
       allow_http: z.boolean().nullish(),
@@ -426,72 +432,96 @@ export const CountSchema = z.object({
 export type Count = z.infer<typeof CountSchema>;
 
 /**
- * Converts the display input message content to the input message content.
+ * Converts frontend StorageKind to backend StorageKind.
+ * Handles differences in nullish vs optional fields.
+ */
+function storageKindToBackendStorageKind(
+  kind: StorageKind,
+): BackendStorageKind {
+  if (kind.type === "s3_compatible") {
+    return {
+      type: "s3_compatible",
+      bucket_name: kind.bucket_name ?? undefined,
+      region: kind.region ?? undefined,
+      endpoint: kind.endpoint ?? undefined,
+      allow_http: kind.allow_http ?? undefined,
+    };
+  }
+  return kind;
+}
+
+/**
+ * Converts frontend StoragePath to backend StoragePath.
+ */
+function storagePathToBackendStoragePath(
+  path: StoragePath,
+): BackendStoragePath {
+  return {
+    kind: storageKindToBackendStorageKind(path.kind),
+    path: path.path,
+  };
+}
+
+/**
+ * Converts the display input message content to the stored input message content.
  * This is useful for the case where we've edited a datapoint and need to convert
  * the display form back into something we can write to ClickHouse.
  */
-
-function displayInputMessageContentToInputMessageContent(
+function displayInputMessageContentToStoredInputMessageContent(
   content: DisplayInputMessageContent,
-): InputMessageContent {
+): StoredInputMessageContent {
   switch (content.type) {
     case "text":
       return { type: "text", value: content.text };
     case "missing_function_text":
       return { type: "text", value: content.value };
-    case "tool_call":
-      return content;
-    case "tool_result":
-      return content;
     case "file":
       return {
-        ...content,
+        type: "file",
         file: {
           url: content.file.dataUrl,
           mime_type: content.file.mime_type,
         },
-        type: "file",
+        storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
     case "file_error":
       return {
-        ...content,
         type: "file",
+        file: {
+          url: content.file.url ?? undefined,
+          mime_type: content.file.mime_type,
+        },
+        storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
-    case "raw_text":
-      return content;
-    case "thought":
-      return content;
-    case "unknown":
-      return content;
-    case "template":
+    default:
       return content;
   }
 }
 
-/**
- * Converts the display input message to the input message.
- * This is useful for the case where we've edited a datapoint and need to convert
- * the display form back into something we can write to ClickHouse.
- */
-function displayInputMessageToInputMessage(
+function displayInputMessageToStoredInputMessage(
   message: DisplayInputMessage,
-): InputMessage {
+): StoredInputMessage {
   return {
     role: message.role,
     content: message.content.map(
-      displayInputMessageContentToInputMessageContent,
+      displayInputMessageContentToStoredInputMessageContent,
     ),
   };
 }
-
 /**
- * Converts the display input to the input.
- * This is useful for the case where we've edited a datapoint and need to convert
- * the display form back into something we can write to ClickHouse.
+ * Converts DisplayInput to StoredInput before we save the datapoints. This is mostly to handle:
+ * 1. DisplayInput has { type: "text", "text": "..." } https://github.com/tensorzero/tensorzero/blob/b018a80797912fef0a86ec0115d9973378fde186/ui/app/utils/clickhouse/common.ts#L41-L44
+ *    but StoredInput has { type: "text", "value": "..." } https://github.com/tensorzero/tensorzero/blob/b018a80797912fef0a86ec0115d9973378fde186/tensorzero-core/src/inference/types/stored_input.rs#L107-L109
+ * 2. missing_function_text and file_error are Fronend-only types, and we convert them back to text and file types for storage.
+ * 3. StorageKind currently has a null / undefined mismatch, so we convert everything to undefined before going to the backend.
  */
-export function displayInputToInput(displayInput: DisplayInput): Input {
+export function displayInputToStoredInput(
+  displayInput: DisplayInput,
+): StoredInput {
   return {
     system: displayInput.system,
-    messages: displayInput.messages.map(displayInputMessageToInputMessage),
+    messages: displayInput.messages.map(
+      displayInputMessageToStoredInputMessage,
+    ),
   };
 }

@@ -5,6 +5,7 @@ import type {
   DatasetDetailRow,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
+  JsonValue,
   GetDatapointParams,
   Datapoint,
   AdjacentDatapointIds,
@@ -15,8 +16,9 @@ import type {
   ParsedChatInferenceDatapointRow,
   ParsedJsonInferenceDatapointRow,
 } from "./datasets";
-import { displayInputToInput } from "./common";
+import { displayInputToStoredInput } from "./common";
 import { getConfig, getFunctionConfig } from "../config/index.server";
+import { resolveInput } from "../resolve.server";
 
 // TODO(shuyangli): Consider removing this file and fully use DatabaseClient from tensorzero-node/lib.
 
@@ -82,9 +84,11 @@ export async function getDatasetRows(
 
 export async function getDatapoint(
   params: GetDatapointParams,
-): Promise<Datapoint> {
+): Promise<ParsedDatasetRow> {
   const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getDatapoint(params);
+  const datapoint = await dbClient.getDatapoint(params);
+  // TODO(shuyangli): Remove this type conversion.
+  return await datapointToParsedDatasetRow(datapoint);
 }
 
 export async function staleDatapoint(
@@ -104,7 +108,8 @@ export async function insertDatapoint(
   datapoint: ParsedDatasetRow,
 ): Promise<void> {
   const dbClient = await getNativeDatabaseClient();
-  const input = displayInputToInput(datapoint.input);
+
+  const input = displayInputToStoredInput(datapoint.input); // inputToStoredInput(displayInputToInput(datapoint.input));
 
   if ("tool_params" in datapoint) {
     // Chat inference datapoint
@@ -114,14 +119,14 @@ export async function insertDatapoint(
       dataset_name: chatDatapoint.dataset_name,
       function_name: chatDatapoint.function_name,
       id: chatDatapoint.id,
-      name: chatDatapoint.name,
-      episode_id: chatDatapoint.episode_id,
+      name: chatDatapoint.name ?? undefined,
+      episode_id: chatDatapoint.episode_id ?? undefined,
       input,
       output: chatDatapoint.output,
       // TODO(shuyangli): Fix this type conversion. This was serialized and deserialized across TypeScript and Rust boundaries with different types.
       tool_params:
         chatDatapoint.tool_params as unknown as ToolCallConfigDatabaseInsert,
-      tags: chatDatapoint.tags,
+      tags: chatDatapoint.tags ?? undefined,
       auxiliary: chatDatapoint.auxiliary,
       staled_at: chatDatapoint.staled_at ?? undefined,
       source_inference_id: chatDatapoint.source_inference_id ?? undefined,
@@ -135,12 +140,12 @@ export async function insertDatapoint(
       dataset_name: jsonDatapoint.dataset_name,
       function_name: jsonDatapoint.function_name,
       id: jsonDatapoint.id,
-      name: jsonDatapoint.name,
-      episode_id: jsonDatapoint.episode_id,
+      name: jsonDatapoint.name ?? undefined,
+      episode_id: jsonDatapoint.episode_id ?? undefined,
       input,
       output: jsonDatapoint.output,
       output_schema: jsonDatapoint.output_schema,
-      tags: jsonDatapoint.tags,
+      tags: jsonDatapoint.tags ?? undefined,
       auxiliary: jsonDatapoint.auxiliary,
       staled_at: jsonDatapoint.staled_at ?? undefined,
       source_inference_id: jsonDatapoint.source_inference_id ?? undefined,
@@ -176,4 +181,62 @@ export async function getAdjacentDatapointIds(
     dataset_name,
     datapoint_id,
   });
+}
+
+/**
+ * Converts a backend Datapoint to a frontend ParsedDatasetRow.
+ * This is used when receiving data from the backend API.
+ * TODO(shuyangli): Remove soon!
+ */
+export async function datapointToParsedDatasetRow(
+  datapoint: Datapoint,
+): Promise<ParsedDatasetRow> {
+  const config = await getConfig();
+  const functionConfig = await getFunctionConfig(
+    datapoint.function_name,
+    config,
+  );
+  const resolvedInput = await resolveInput(datapoint.input, functionConfig);
+
+  if (datapoint.type === "chat") {
+    const chatDatapoint: ParsedChatInferenceDatapointRow = {
+      dataset_name: datapoint.dataset_name,
+      function_name: datapoint.function_name,
+      id: datapoint.id,
+      name: datapoint.name,
+      episode_id: datapoint.episode_id ?? null,
+      input: resolvedInput,
+      output: datapoint.output,
+      tool_params: datapoint.tool_params as unknown as
+        | Record<string, JsonValue>
+        | undefined,
+      tags: datapoint.tags ?? null,
+      auxiliary: datapoint.auxiliary,
+      is_deleted: datapoint.is_deleted,
+      is_custom: datapoint.is_custom,
+      staled_at: datapoint.staled_at ?? null,
+      source_inference_id: datapoint.source_inference_id ?? null,
+      updated_at: datapoint.updated_at,
+    };
+    return chatDatapoint;
+  } else {
+    const jsonDatapoint: ParsedJsonInferenceDatapointRow = {
+      dataset_name: datapoint.dataset_name,
+      function_name: datapoint.function_name,
+      id: datapoint.id,
+      name: datapoint.name,
+      episode_id: datapoint.episode_id ?? null,
+      input: resolvedInput,
+      output: datapoint.output,
+      output_schema: datapoint.output_schema,
+      tags: datapoint.tags ?? null,
+      auxiliary: datapoint.auxiliary,
+      is_deleted: datapoint.is_deleted,
+      is_custom: datapoint.is_custom,
+      staled_at: datapoint.staled_at ?? null,
+      source_inference_id: datapoint.source_inference_id ?? null,
+      updated_at: datapoint.updated_at,
+    };
+    return jsonDatapoint;
+  }
 }

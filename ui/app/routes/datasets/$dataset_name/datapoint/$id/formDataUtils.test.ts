@@ -143,7 +143,6 @@ describe("parseDatapointFormData", () => {
       updated_at: "2024-02-01T12:00:00.000Z",
       source_inference_id: "00000000-0000-0000-0000-000000000012",
       is_custom: true,
-      name: undefined,
     });
     expect(parsed.staled_at).toBeNull();
     expect("output" in parsed).toBe(false);

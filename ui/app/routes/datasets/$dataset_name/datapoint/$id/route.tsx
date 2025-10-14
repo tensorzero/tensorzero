@@ -208,7 +208,7 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getDatapoint(dataset_name, id);
+  const datapoint = await getDatapoint({ dataset_name, datapoint_id: id });
   if (!datapoint) {
     throw data(`No datapoint found for id ${id}.`, {
       status: 404,

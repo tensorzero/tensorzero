@@ -151,8 +151,6 @@ export async function saveDatapoint(params: {
   datapoint.episode_id = undefined;
   datapoint.staled_at = undefined;
 
-  console.log("datapoint", datapoint);
-
   // For future reference:
   // These two calls would be a transaction but ClickHouse isn't transactional.
   //

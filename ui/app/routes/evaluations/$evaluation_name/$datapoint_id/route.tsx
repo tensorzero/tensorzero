@@ -111,11 +111,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // In this case, we poll for the evaluation results until the feedback is found.
   const evaluationResultsPromise = newFeedbackId
     ? pollForEvaluations(
-      evaluation_name,
-      datapoint_id,
-      selectedRunIds,
-      newFeedbackId,
-    )
+        evaluation_name,
+        datapoint_id,
+        selectedRunIds,
+        newFeedbackId,
+      )
     : getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds);
 
   // Execute all promises concurrently
@@ -247,15 +247,15 @@ export default function EvaluationDatapointPage({
   const outputsToDisplay = [
     ...(consolidatedEvaluationResults[0].reference_output !== null
       ? [
-        {
-          id: "Reference",
-          output: consolidatedEvaluationResults[0].reference_output,
-          metrics: [],
-          variant_name: "Reference",
-          inferenceId: null,
-          episodeId: null,
-        },
-      ]
+          {
+            id: "Reference",
+            output: consolidatedEvaluationResults[0].reference_output,
+            metrics: [],
+            variant_name: "Reference",
+            inferenceId: null,
+            episodeId: null,
+          },
+        ]
       : []),
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
@@ -303,7 +303,7 @@ export default function EvaluationDatapointPage({
             evaluationName={evaluation_name}
             selectedRunIdInfos={selected_evaluation_run_infos}
             allowedRunInfos={allowedEvaluationRunInfos}
-          // This must be passed so the component can filter by datapoint_id in search
+            // This must be passed so the component can filter by datapoint_id in search
           />
         </PageHeader>
 
