@@ -22,69 +22,133 @@ use super::{
     ClickHouseConnectionInfo,
 };
 
+// Configuration for feedback table queries
+struct FeedbackTableConfig {
+    table_name: &'static str,
+    id_column: &'static str,
+    columns: &'static [&'static str],
+}
+
+impl FeedbackTableConfig {
+    const BOOLEAN_METRICS: Self = Self {
+        table_name: "BooleanMetricFeedbackByTargetId",
+        id_column: "target_id",
+        columns: &["id", "target_id", "metric_name", "value", "tags"],
+    };
+
+    const FLOAT_METRICS: Self = Self {
+        table_name: "FloatMetricFeedbackByTargetId",
+        id_column: "target_id",
+        columns: &["id", "target_id", "metric_name", "value", "tags"],
+    };
+
+    const COMMENT_FEEDBACK: Self = Self {
+        table_name: "CommentFeedbackByTargetId",
+        id_column: "target_id",
+        columns: &["id", "target_id", "target_type", "value", "tags"],
+    };
+
+    const DEMONSTRATION_FEEDBACK: Self = Self {
+        table_name: "DemonstrationFeedbackByInferenceId",
+        id_column: "inference_id",
+        columns: &["id", "inference_id", "value", "tags"],
+    };
+}
+
+// Helper function to build parameter map
+fn build_params_map(
+    id_column: &str,
+    id_value: Uuid,
+    pagination_params: Vec<(&str, String)>,
+    page_size: u32,
+) -> HashMap<String, String> {
+    let mut params_map: HashMap<String, String> = pagination_params
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+    params_map.insert(id_column.to_string(), id_value.to_string());
+    params_map.insert("page_size".to_string(), page_size.to_string());
+    params_map
+}
+
+// Generic query builder for feedback tables
+fn build_feedback_query(
+    config: &FeedbackTableConfig,
+    id_value: Uuid,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
+    page_size: u32,
+) -> (String, HashMap<String, String>) {
+    let (where_clause, params) = build_pagination_clause(before, after, config.id_column);
+    let order_clause = if after.is_some() { "ASC" } else { "DESC" };
+
+    let params_map = build_params_map(config.id_column, id_value, params, page_size);
+
+    let columns_str = config.columns.join(", ");
+    let id_param = format!("{{{id_column}:UUID}}", id_column = config.id_column);
+
+    let query = if after.is_some() {
+        format!(
+            r"
+            SELECT
+                {columns_str},
+                timestamp
+            FROM (
+                SELECT
+                    {columns_str},
+                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+                FROM {table_name}
+                WHERE {id_column} = {id_param} {where_clause}
+                ORDER BY toUInt128(id) {order_clause}
+                LIMIT {{page_size:UInt32}}
+            )
+            ORDER BY toUInt128(id) DESC
+            FORMAT JSONEachRow
+            ",
+            columns_str = columns_str,
+            table_name = config.table_name,
+            id_column = config.id_column,
+            id_param = id_param,
+            where_clause = where_clause,
+            order_clause = order_clause,
+        )
+    } else {
+        format!(
+            r"
+            SELECT
+                {columns_str},
+                formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+            FROM {table_name}
+            WHERE {id_column} = {id_param} {where_clause}
+            ORDER BY toUInt128(id) {order_clause}
+            LIMIT {{page_size:UInt32}}
+            FORMAT JSONEachRow
+            ",
+            columns_str = columns_str,
+            table_name = config.table_name,
+            id_column = config.id_column,
+            id_param = id_param,
+            where_clause = where_clause,
+            order_clause = order_clause,
+        )
+    };
+
+    (query, params_map)
+}
+
 pub(crate) fn build_boolean_metrics_query(
     target_id: Uuid,
     before: Option<Uuid>,
     after: Option<Uuid>,
     page_size: u32,
 ) -> (String, HashMap<String, String>) {
-    let (where_clause, params) = build_pagination_clause(before, after, "target_id");
-    let order_clause = if after.is_some() { "ASC" } else { "DESC" };
-
-    let mut params_map: HashMap<String, String> = params
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
-        .collect();
-    params_map.insert("target_id".to_string(), target_id.to_string());
-    params_map.insert("page_size".to_string(), page_size.to_string());
-
-    let query = if after.is_some() {
-        format!(
-            r"
-            SELECT
-                id,
-                target_id,
-                metric_name,
-                value,
-                tags,
-                timestamp
-            FROM (
-                SELECT
-                    id,
-                    target_id,
-                    metric_name,
-                    value,
-                    tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-                FROM BooleanMetricFeedbackByTargetId
-                WHERE target_id = {{target_id:UUID}} {where_clause}
-                ORDER BY toUInt128(id) {order_clause}
-                LIMIT {{page_size:UInt32}}
-            )
-            ORDER BY toUInt128(id) DESC
-            FORMAT JSONEachRow
-            "
-        )
-    } else {
-        format!(
-            r"
-            SELECT
-                id,
-                target_id,
-                metric_name,
-                value,
-                tags,
-                formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-            FROM BooleanMetricFeedbackByTargetId
-            WHERE target_id = {{target_id:UUID}} {where_clause}
-            ORDER BY toUInt128(id) {order_clause}
-            LIMIT {{page_size:UInt32}}
-            FORMAT JSONEachRow
-            "
-        )
-    };
-
-    (query, params_map)
+    build_feedback_query(
+        &FeedbackTableConfig::BOOLEAN_METRICS,
+        target_id,
+        before,
+        after,
+        page_size,
+    )
 }
 
 pub(crate) fn build_float_metrics_query(
@@ -93,63 +157,13 @@ pub(crate) fn build_float_metrics_query(
     after: Option<Uuid>,
     page_size: u32,
 ) -> (String, HashMap<String, String>) {
-    let (where_clause, params) = build_pagination_clause(before, after, "target_id");
-    let order_clause = if after.is_some() { "ASC" } else { "DESC" };
-
-    let mut params_map: HashMap<String, String> = params
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
-        .collect();
-    params_map.insert("target_id".to_string(), target_id.to_string());
-    params_map.insert("page_size".to_string(), page_size.to_string());
-
-    let query = if after.is_some() {
-        format!(
-            r"
-            SELECT
-                id,
-                target_id,
-                metric_name,
-                value,
-                tags,
-                timestamp
-            FROM (
-                SELECT
-                    id,
-                    target_id,
-                    metric_name,
-                    value,
-                    tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-                FROM FloatMetricFeedbackByTargetId
-                WHERE target_id = {{target_id:UUID}} {where_clause}
-                ORDER BY toUInt128(id) {order_clause}
-                LIMIT {{page_size:UInt32}}
-            )
-            ORDER BY toUInt128(id) DESC
-            FORMAT JSONEachRow
-            "
-        )
-    } else {
-        format!(
-            r"
-            SELECT
-                id,
-                target_id,
-                metric_name,
-                value,
-                tags,
-                formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-            FROM FloatMetricFeedbackByTargetId
-            WHERE target_id = {{target_id:UUID}} {where_clause}
-            ORDER BY toUInt128(id) {order_clause}
-            LIMIT {{page_size:UInt32}}
-            FORMAT JSONEachRow
-            "
-        )
-    };
-
-    (query, params_map)
+    build_feedback_query(
+        &FeedbackTableConfig::FLOAT_METRICS,
+        target_id,
+        before,
+        after,
+        page_size,
+    )
 }
 
 pub(crate) fn build_comment_feedback_query(
@@ -158,63 +172,13 @@ pub(crate) fn build_comment_feedback_query(
     after: Option<Uuid>,
     page_size: u32,
 ) -> (String, HashMap<String, String>) {
-    let (where_clause, params) = build_pagination_clause(before, after, "target_id");
-    let order_clause = if after.is_some() { "ASC" } else { "DESC" };
-
-    let mut params_map: HashMap<String, String> = params
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
-        .collect();
-    params_map.insert("target_id".to_string(), target_id.to_string());
-    params_map.insert("page_size".to_string(), page_size.to_string());
-
-    let query = if after.is_some() {
-        format!(
-            r"
-            SELECT
-                id,
-                target_id,
-                target_type,
-                value,
-                tags,
-                timestamp
-            FROM (
-                SELECT
-                    id,
-                    target_id,
-                    target_type,
-                    value,
-                    tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-                FROM CommentFeedbackByTargetId
-                WHERE target_id = {{target_id:UUID}} {where_clause}
-                ORDER BY toUInt128(id) {order_clause}
-                LIMIT {{page_size:UInt32}}
-            )
-            ORDER BY toUInt128(id) DESC
-            FORMAT JSONEachRow
-            "
-        )
-    } else {
-        format!(
-            r"
-            SELECT
-                id,
-                target_id,
-                target_type,
-                value,
-                tags,
-                formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-            FROM CommentFeedbackByTargetId
-            WHERE target_id = {{target_id:UUID}} {where_clause}
-            ORDER BY toUInt128(id) {order_clause}
-            LIMIT {{page_size:UInt32}}
-            FORMAT JSONEachRow
-            "
-        )
-    };
-
-    (query, params_map)
+    build_feedback_query(
+        &FeedbackTableConfig::COMMENT_FEEDBACK,
+        target_id,
+        before,
+        after,
+        page_size,
+    )
 }
 
 pub(crate) fn build_demonstration_feedback_query(
@@ -223,60 +187,13 @@ pub(crate) fn build_demonstration_feedback_query(
     after: Option<Uuid>,
     page_size: u32,
 ) -> (String, HashMap<String, String>) {
-    let (where_clause, params) = build_pagination_clause(before, after, "inference_id");
-    let order_clause = if after.is_some() { "ASC" } else { "DESC" };
-
-    let mut params_map: HashMap<String, String> = params
-        .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
-        .collect();
-    params_map.insert("inference_id".to_string(), inference_id.to_string());
-    params_map.insert("page_size".to_string(), page_size.to_string());
-
-    let query = if after.is_some() {
-        format!(
-            r"
-            SELECT
-                id,
-                inference_id,
-                value,
-                tags,
-                timestamp
-            FROM (
-                SELECT
-                    id,
-                    inference_id,
-                    value,
-                    tags,
-                    formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-                FROM DemonstrationFeedbackByInferenceId
-                WHERE inference_id = {{inference_id:UUID}} {where_clause}
-                ORDER BY toUInt128(id) {order_clause}
-                LIMIT {{page_size:UInt32}}
-            )
-            ORDER BY toUInt128(id) DESC
-            FORMAT JSONEachRow
-            "
-        )
-    } else {
-        format!(
-            r"
-            SELECT
-                id,
-                inference_id,
-                value,
-                tags,
-                formatDateTime(UUIDv7ToDateTime(id), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
-            FROM DemonstrationFeedbackByInferenceId
-            WHERE inference_id = {{inference_id:UUID}} {where_clause}
-            ORDER BY toUInt128(id) {order_clause}
-            LIMIT {{page_size:UInt32}}
-            FORMAT JSONEachRow
-            "
-        )
-    };
-
-    (query, params_map)
+    build_feedback_query(
+        &FeedbackTableConfig::DEMONSTRATION_FEEDBACK,
+        inference_id,
+        before,
+        after,
+        page_size,
+    )
 }
 
 pub(crate) fn build_bounds_query(
@@ -314,6 +231,52 @@ pub(crate) fn build_count_query(
     (query, params_map)
 }
 
+// Generic query executor helper
+async fn execute_feedback_query<T>(
+    conn: &ClickHouseConnectionInfo,
+    query: String,
+    params_owned: HashMap<String, String>,
+) -> Result<Vec<T>, Error>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let query_params: HashMap<&str, &str> = params_owned
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+
+    let response = conn.run_query_synchronous(query, &query_params).await?;
+    parse_feedback_rows(response.response.as_str())
+}
+
+async fn execute_bounds_query(
+    conn: &ClickHouseConnectionInfo,
+    query: String,
+    params_owned: HashMap<String, String>,
+) -> Result<TableBounds, Error> {
+    let query_params: HashMap<&str, &str> = params_owned
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+
+    let response = conn.run_query_synchronous(query, &query_params).await?;
+    parse_table_bounds(&response.response)
+}
+
+async fn execute_count_query(
+    conn: &ClickHouseConnectionInfo,
+    query: String,
+    params_owned: HashMap<String, String>,
+) -> Result<u64, Error> {
+    let query_params: HashMap<&str, &str> = params_owned
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+
+    let response = conn.run_query_synchronous(query, &query_params).await?;
+    parse_count(&response.response)
+}
+
 // Helper implementations for individual feedback table queries
 impl ClickHouseConnectionInfo {
     pub async fn query_boolean_metrics_by_target_id(
@@ -325,15 +288,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<Vec<BooleanMetricFeedbackRow>, Error> {
         let (query, params_owned) =
             build_boolean_metrics_query(target_id, before, after, page_size);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-
-        parse_feedback_rows(response.response.as_str())
+        execute_feedback_query(self, query, params_owned).await
     }
 
     pub async fn query_float_metrics_by_target_id(
@@ -344,15 +299,7 @@ impl ClickHouseConnectionInfo {
         page_size: u32,
     ) -> Result<Vec<FloatMetricFeedbackRow>, Error> {
         let (query, params_owned) = build_float_metrics_query(target_id, before, after, page_size);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-
-        parse_feedback_rows(response.response.as_str())
+        execute_feedback_query(self, query, params_owned).await
     }
 
     pub async fn query_comment_feedback_by_target_id(
@@ -364,15 +311,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<Vec<CommentFeedbackRow>, Error> {
         let (query, params_owned) =
             build_comment_feedback_query(target_id, before, after, page_size);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-
-        parse_feedback_rows(response.response.as_str())
+        execute_feedback_query(self, query, params_owned).await
     }
 
     pub async fn query_boolean_metric_bounds_by_target_id(
@@ -381,14 +320,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<TableBounds, Error> {
         let (query, params_owned) =
             build_bounds_query("BooleanMetricFeedbackByTargetId", "target_id", target_id);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-        parse_table_bounds(&response.response)
+        execute_bounds_query(self, query, params_owned).await
     }
 
     pub async fn query_float_metric_bounds_by_target_id(
@@ -397,14 +329,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<TableBounds, Error> {
         let (query, params_owned) =
             build_bounds_query("FloatMetricFeedbackByTargetId", "target_id", target_id);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-        parse_table_bounds(&response.response)
+        execute_bounds_query(self, query, params_owned).await
     }
 
     pub async fn query_comment_feedback_bounds_by_target_id(
@@ -413,14 +338,7 @@ impl ClickHouseConnectionInfo {
     ) -> Result<TableBounds, Error> {
         let (query, params_owned) =
             build_bounds_query("CommentFeedbackByTargetId", "target_id", target_id);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-        parse_table_bounds(&response.response)
+        execute_bounds_query(self, query, params_owned).await
     }
 
     pub async fn query_demonstration_feedback_bounds_by_inference_id(
@@ -432,53 +350,25 @@ impl ClickHouseConnectionInfo {
             "inference_id",
             inference_id,
         );
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-        parse_table_bounds(&response.response)
+        execute_bounds_query(self, query, params_owned).await
     }
 
     pub async fn count_boolean_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let (query, params_owned) =
             build_count_query("BooleanMetricFeedbackByTargetId", "target_id", target_id);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-        parse_count(&response.response)
+        execute_count_query(self, query, params_owned).await
     }
 
     pub async fn count_float_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let (query, params_owned) =
             build_count_query("FloatMetricFeedbackByTargetId", "target_id", target_id);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-        parse_count(&response.response)
+        execute_count_query(self, query, params_owned).await
     }
 
     pub async fn count_comment_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let (query, params_owned) =
             build_count_query("CommentFeedbackByTargetId", "target_id", target_id);
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-        parse_count(&response.response)
+        execute_count_query(self, query, params_owned).await
     }
 
     pub async fn count_demonstration_feedback_by_inference_id(
@@ -490,14 +380,7 @@ impl ClickHouseConnectionInfo {
             "inference_id",
             inference_id,
         );
-
-        let query_params: HashMap<&str, &str> = params_owned
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
-        let response = self.run_query_synchronous(query, &query_params).await?;
-        parse_count(&response.response)
+        execute_count_query(self, query, params_owned).await
     }
 }
 
@@ -742,364 +625,235 @@ mod tests {
         );
     }
 
-    // Boolean Metric Feedback Tests - testing production query builder
-    #[test]
-    fn test_build_boolean_metrics_query_no_pagination() {
-        let target_id = Uuid::now_v7();
-        let (query, params) = build_boolean_metrics_query(target_id, None, None, 100);
+    // Parameterized test helpers
+    fn test_feedback_query_no_pagination(
+        build_fn: impl Fn(Uuid, Option<Uuid>, Option<Uuid>, u32) -> (String, HashMap<String, String>),
+        table_name: &str,
+        id_column: &str,
+        expected_columns: &str,
+    ) {
+        let id = Uuid::now_v7();
+        let (query, params) = build_fn(id, None, None, 100);
 
-        assert_query_contains(&query, "SELECT id, target_id, metric_name, value, tags");
-        assert_query_contains(&query, "FROM BooleanMetricFeedbackByTargetId");
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
+        assert_query_contains(&query, &format!("SELECT {expected_columns}"));
+        assert_query_contains(&query, &format!("FROM {table_name}"));
+        assert_query_contains(&query, &format!("WHERE {id_column} = {{{id_column}:UUID}}"));
         assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
         assert_query_contains(&query, "LIMIT {page_size:UInt32}");
-        assert_query_does_not_contain(&query, "AND toUInt128(id)"); // No pagination clause
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
+        assert_query_does_not_contain(&query, "AND toUInt128(id)");
+        assert_eq!(params.get(id_column), Some(&id.to_string()));
         assert_eq!(params.get("page_size"), Some(&"100".to_string()));
         assert!(!params.contains_key("before"));
         assert!(!params.contains_key("after"));
+    }
+
+    fn test_feedback_query_before_pagination(
+        build_fn: impl Fn(Uuid, Option<Uuid>, Option<Uuid>, u32) -> (String, HashMap<String, String>),
+        id_column: &str,
+    ) {
+        let id = Uuid::now_v7();
+        let before = Uuid::now_v7();
+        let (query, params) = build_fn(id, Some(before), None, 50);
+
+        assert_query_contains(&query, &format!("WHERE {id_column} = {{{id_column}:UUID}}"));
+        assert_query_contains(
+            &query,
+            "AND toUInt128(id) < toUInt128(toUUID({before:UUID}))",
+        );
+        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
+        assert_eq!(params.get(id_column), Some(&id.to_string()));
+        assert_eq!(params.get("before"), Some(&before.to_string()));
+        assert_eq!(params.get("page_size"), Some(&"50".to_string()));
+    }
+
+    fn test_feedback_query_after_pagination(
+        build_fn: impl Fn(Uuid, Option<Uuid>, Option<Uuid>, u32) -> (String, HashMap<String, String>),
+        table_name: &str,
+        id_column: &str,
+    ) {
+        let id = Uuid::now_v7();
+        let after = Uuid::now_v7();
+        let (query, params) = build_fn(id, None, Some(after), 25);
+
+        assert_query_contains(
+            &query,
+            &format!("FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}}"),
+        );
+        assert_query_contains(
+            &query,
+            "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))",
+        );
+        assert_query_contains(
+            &query,
+            "ORDER BY toUInt128(id) ASC LIMIT {page_size:UInt32} )",
+        );
+        assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
+        assert_eq!(params.get(id_column), Some(&id.to_string()));
+        assert_eq!(params.get("after"), Some(&after.to_string()));
+        assert_eq!(params.get("page_size"), Some(&"25".to_string()));
+    }
+
+    fn test_bounds_query(table_name: &str, id_column: &str) {
+        let id = Uuid::now_v7();
+        let (query, params) = build_bounds_query(table_name, id_column, id);
+
+        assert_query_contains(&query, &format!("(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id"));
+        assert_query_contains(&query, &format!("(SELECT id FROM {table_name} WHERE {id_column} = {{{id_column}:UUID}} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id"));
+        assert_query_contains(&query, "FORMAT JSONEachRow");
+        assert_eq!(params.get(id_column), Some(&id.to_string()));
+    }
+
+    fn test_count_query(table_name: &str, id_column: &str) {
+        let id = Uuid::now_v7();
+        let (query, params) = build_count_query(table_name, id_column, id);
+
+        assert_query_contains(&query, "SELECT toUInt64(COUNT()) AS count");
+        assert_query_contains(&query, &format!("FROM {table_name}"));
+        assert_query_contains(&query, &format!("WHERE {id_column} = {{{id_column}:UUID}}"));
+        assert_query_contains(&query, "FORMAT JSONEachRow");
+        assert_eq!(params.get(id_column), Some(&id.to_string()));
+    }
+
+    // Boolean Metric Feedback Tests
+    #[test]
+    fn test_build_boolean_metrics_query_no_pagination() {
+        test_feedback_query_no_pagination(
+            build_boolean_metrics_query,
+            "BooleanMetricFeedbackByTargetId",
+            "target_id",
+            "id, target_id, metric_name, value, tags",
+        );
     }
 
     #[test]
     fn test_build_boolean_metrics_query_before_pagination() {
-        let target_id = Uuid::now_v7();
-        let before = Uuid::now_v7();
-        let (query, params) = build_boolean_metrics_query(target_id, Some(before), None, 50);
-
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_query_contains(
-            &query,
-            "AND toUInt128(id) < toUInt128(toUUID({before:UUID}))",
-        );
-        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
-        assert_eq!(params.get("before"), Some(&before.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"50".to_string()));
+        test_feedback_query_before_pagination(build_boolean_metrics_query, "target_id");
     }
 
     #[test]
     fn test_build_boolean_metrics_query_after_pagination() {
-        let target_id = Uuid::now_v7();
-        let after = Uuid::now_v7();
-        let (query, params) = build_boolean_metrics_query(target_id, None, Some(after), 25);
-
-        // Inner subquery should have ASC ordering
-        assert_query_contains(
-            &query,
-            "FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID}",
+        test_feedback_query_after_pagination(
+            build_boolean_metrics_query,
+            "BooleanMetricFeedbackByTargetId",
+            "target_id",
         );
-        assert_query_contains(
-            &query,
-            "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))",
-        );
-        assert_query_contains(
-            &query,
-            "ORDER BY toUInt128(id) ASC LIMIT {page_size:UInt32} )",
-        );
-
-        // Outer query should reverse to DESC
-        assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
-
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
-        assert_eq!(params.get("after"), Some(&after.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"25".to_string()));
     }
 
-    // Float Metric Feedback Tests - testing production query builder
+    // Float Metric Feedback Tests
     #[test]
     fn test_build_float_metrics_query_no_pagination() {
-        let target_id = Uuid::now_v7();
-        let (query, params) = build_float_metrics_query(target_id, None, None, 100);
-
-        assert_query_contains(&query, "SELECT id, target_id, metric_name, value, tags");
-        assert_query_contains(&query, "FROM FloatMetricFeedbackByTargetId");
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_query_contains(&query, "LIMIT {page_size:UInt32}");
-        assert_query_does_not_contain(&query, "AND toUInt128(id)"); // No pagination clause
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"100".to_string()));
-        assert!(!params.contains_key("before"));
-        assert!(!params.contains_key("after"));
+        test_feedback_query_no_pagination(
+            build_float_metrics_query,
+            "FloatMetricFeedbackByTargetId",
+            "target_id",
+            "id, target_id, metric_name, value, tags",
+        );
     }
 
     #[test]
     fn test_build_float_metrics_query_before_pagination() {
-        let target_id = Uuid::now_v7();
-        let before = Uuid::now_v7();
-        let (query, params) = build_float_metrics_query(target_id, Some(before), None, 50);
-
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_query_contains(
-            &query,
-            "AND toUInt128(id) < toUInt128(toUUID({before:UUID}))",
-        );
-        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
-        assert_eq!(params.get("before"), Some(&before.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"50".to_string()));
+        test_feedback_query_before_pagination(build_float_metrics_query, "target_id");
     }
 
     #[test]
     fn test_build_float_metrics_query_after_pagination() {
-        let target_id = Uuid::now_v7();
-        let after = Uuid::now_v7();
-        let (query, params) = build_float_metrics_query(target_id, None, Some(after), 25);
-
-        // Inner subquery should have ASC ordering
-        assert_query_contains(
-            &query,
-            "FROM FloatMetricFeedbackByTargetId WHERE target_id = {target_id:UUID}",
+        test_feedback_query_after_pagination(
+            build_float_metrics_query,
+            "FloatMetricFeedbackByTargetId",
+            "target_id",
         );
-        assert_query_contains(
-            &query,
-            "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))",
-        );
-        assert_query_contains(
-            &query,
-            "ORDER BY toUInt128(id) ASC LIMIT {page_size:UInt32} )",
-        );
-
-        // Outer query should reverse to DESC
-        assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
-
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
-        assert_eq!(params.get("after"), Some(&after.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"25".to_string()));
     }
 
-    // Comment Feedback Tests - testing production query builder
+    // Comment Feedback Tests
     #[test]
     fn test_build_comment_feedback_query_no_pagination() {
-        let target_id = Uuid::now_v7();
-        let (query, params) = build_comment_feedback_query(target_id, None, None, 100);
-
-        assert_query_contains(&query, "SELECT id, target_id, target_type, value, tags");
-        assert_query_contains(&query, "FROM CommentFeedbackByTargetId");
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_query_contains(&query, "LIMIT {page_size:UInt32}");
-        assert_query_does_not_contain(&query, "AND toUInt128(id)"); // No pagination clause
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"100".to_string()));
-        assert!(!params.contains_key("before"));
-        assert!(!params.contains_key("after"));
+        test_feedback_query_no_pagination(
+            build_comment_feedback_query,
+            "CommentFeedbackByTargetId",
+            "target_id",
+            "id, target_id, target_type, value, tags",
+        );
     }
 
     #[test]
     fn test_build_comment_feedback_query_before_pagination() {
-        let target_id = Uuid::now_v7();
-        let before = Uuid::now_v7();
-        let (query, params) = build_comment_feedback_query(target_id, Some(before), None, 50);
-
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_query_contains(
-            &query,
-            "AND toUInt128(id) < toUInt128(toUUID({before:UUID}))",
-        );
-        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
-        assert_eq!(params.get("before"), Some(&before.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"50".to_string()));
+        test_feedback_query_before_pagination(build_comment_feedback_query, "target_id");
     }
 
     #[test]
     fn test_build_comment_feedback_query_after_pagination() {
-        let target_id = Uuid::now_v7();
-        let after = Uuid::now_v7();
-        let (query, params) = build_comment_feedback_query(target_id, None, Some(after), 25);
-
-        // Inner subquery should have ASC ordering
-        assert_query_contains(
-            &query,
-            "FROM CommentFeedbackByTargetId WHERE target_id = {target_id:UUID}",
+        test_feedback_query_after_pagination(
+            build_comment_feedback_query,
+            "CommentFeedbackByTargetId",
+            "target_id",
         );
-        assert_query_contains(
-            &query,
-            "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))",
-        );
-        assert_query_contains(
-            &query,
-            "ORDER BY toUInt128(id) ASC LIMIT {page_size:UInt32} )",
-        );
-
-        // Outer query should reverse to DESC
-        assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
-
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
-        assert_eq!(params.get("after"), Some(&after.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"25".to_string()));
     }
 
-    // Demonstration Feedback Tests - testing production query builder
+    // Demonstration Feedback Tests
     #[test]
     fn test_build_demonstration_feedback_query_no_pagination() {
-        let inference_id = Uuid::now_v7();
-        let (query, params) = build_demonstration_feedback_query(inference_id, None, None, 100);
-
-        assert_query_contains(&query, "SELECT id, inference_id, value, tags");
-        assert_query_contains(&query, "FROM DemonstrationFeedbackByInferenceId");
-        assert_query_contains(&query, "WHERE inference_id = {inference_id:UUID}");
-        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_query_contains(&query, "LIMIT {page_size:UInt32}");
-        assert_query_does_not_contain(&query, "AND toUInt128(id)"); // No pagination clause
-        assert_eq!(params.get("inference_id"), Some(&inference_id.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"100".to_string()));
-        assert!(!params.contains_key("before"));
-        assert!(!params.contains_key("after"));
+        test_feedback_query_no_pagination(
+            build_demonstration_feedback_query,
+            "DemonstrationFeedbackByInferenceId",
+            "inference_id",
+            "id, inference_id, value, tags",
+        );
     }
 
     #[test]
     fn test_build_demonstration_feedback_query_before_pagination() {
-        let inference_id = Uuid::now_v7();
-        let before = Uuid::now_v7();
-        let (query, params) =
-            build_demonstration_feedback_query(inference_id, Some(before), None, 50);
-
-        assert_query_contains(&query, "WHERE inference_id = {inference_id:UUID}");
-        assert_query_contains(
-            &query,
-            "AND toUInt128(id) < toUInt128(toUUID({before:UUID}))",
-        );
-        assert_query_contains(&query, "ORDER BY toUInt128(id) DESC");
-        assert_eq!(params.get("inference_id"), Some(&inference_id.to_string()));
-        assert_eq!(params.get("before"), Some(&before.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"50".to_string()));
+        test_feedback_query_before_pagination(build_demonstration_feedback_query, "inference_id");
     }
 
     #[test]
     fn test_build_demonstration_feedback_query_after_pagination() {
-        let inference_id = Uuid::now_v7();
-        let after = Uuid::now_v7();
-        let (query, params) =
-            build_demonstration_feedback_query(inference_id, None, Some(after), 25);
-
-        // Inner subquery should have ASC ordering
-        assert_query_contains(
-            &query,
-            "FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID}",
+        test_feedback_query_after_pagination(
+            build_demonstration_feedback_query,
+            "DemonstrationFeedbackByInferenceId",
+            "inference_id",
         );
-        assert_query_contains(
-            &query,
-            "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))",
-        );
-        assert_query_contains(
-            &query,
-            "ORDER BY toUInt128(id) ASC LIMIT {page_size:UInt32} )",
-        );
-
-        // Outer query should reverse to DESC
-        assert_query_contains(&query, ") ORDER BY toUInt128(id) DESC");
-
-        assert_eq!(params.get("inference_id"), Some(&inference_id.to_string()));
-        assert_eq!(params.get("after"), Some(&after.to_string()));
-        assert_eq!(params.get("page_size"), Some(&"25".to_string()));
     }
 
-    // Bounds Query Tests - testing production query builder
+    // Bounds Query Tests
     #[test]
     fn test_build_bounds_query_boolean_metrics() {
-        let target_id = Uuid::now_v7();
-        let (query, params) =
-            build_bounds_query("BooleanMetricFeedbackByTargetId", "target_id", target_id);
-
-        assert_query_contains(&query, "(SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id");
-        assert_query_contains(&query, "(SELECT id FROM BooleanMetricFeedbackByTargetId WHERE target_id = {target_id:UUID} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id");
-        assert_query_contains(&query, "FORMAT JSONEachRow");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
+        test_bounds_query("BooleanMetricFeedbackByTargetId", "target_id");
     }
 
     #[test]
     fn test_build_bounds_query_float_metrics() {
-        let target_id = Uuid::now_v7();
-        let (query, params) =
-            build_bounds_query("FloatMetricFeedbackByTargetId", "target_id", target_id);
-
-        assert_query_contains(&query, "(SELECT id FROM FloatMetricFeedbackByTargetId");
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
+        test_bounds_query("FloatMetricFeedbackByTargetId", "target_id");
     }
 
     #[test]
     fn test_build_bounds_query_comment_feedback() {
-        let target_id = Uuid::now_v7();
-        let (query, params) =
-            build_bounds_query("CommentFeedbackByTargetId", "target_id", target_id);
-
-        assert_query_contains(&query, "(SELECT id FROM CommentFeedbackByTargetId");
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
+        test_bounds_query("CommentFeedbackByTargetId", "target_id");
     }
 
     #[test]
     fn test_build_bounds_query_demonstration_feedback() {
-        let inference_id = Uuid::now_v7();
-        let (query, params) = build_bounds_query(
-            "DemonstrationFeedbackByInferenceId",
-            "inference_id",
-            inference_id,
-        );
-
-        assert_query_contains(&query, "(SELECT id FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID} ORDER BY toUInt128(id) ASC LIMIT 1) AS first_id");
-        assert_query_contains(&query, "(SELECT id FROM DemonstrationFeedbackByInferenceId WHERE inference_id = {inference_id:UUID} ORDER BY toUInt128(id) DESC LIMIT 1) AS last_id");
-        assert_query_contains(&query, "FORMAT JSONEachRow");
-        assert_eq!(params.get("inference_id"), Some(&inference_id.to_string()));
+        test_bounds_query("DemonstrationFeedbackByInferenceId", "inference_id");
     }
 
-    // Count Query Tests - testing production query builder
+    // Count Query Tests
     #[test]
     fn test_build_count_query_boolean_metrics() {
-        let target_id = Uuid::now_v7();
-        let (query, params) =
-            build_count_query("BooleanMetricFeedbackByTargetId", "target_id", target_id);
-
-        assert_query_contains(&query, "SELECT toUInt64(COUNT()) AS count");
-        assert_query_contains(&query, "FROM BooleanMetricFeedbackByTargetId");
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_query_contains(&query, "FORMAT JSONEachRow");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
+        test_count_query("BooleanMetricFeedbackByTargetId", "target_id");
     }
 
     #[test]
     fn test_build_count_query_float_metrics() {
-        let target_id = Uuid::now_v7();
-        let (query, params) =
-            build_count_query("FloatMetricFeedbackByTargetId", "target_id", target_id);
-
-        assert_query_contains(&query, "SELECT toUInt64(COUNT()) AS count");
-        assert_query_contains(&query, "FROM FloatMetricFeedbackByTargetId");
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_query_contains(&query, "FORMAT JSONEachRow");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
+        test_count_query("FloatMetricFeedbackByTargetId", "target_id");
     }
 
     #[test]
     fn test_build_count_query_comment_feedback() {
-        let target_id = Uuid::now_v7();
-        let (query, params) =
-            build_count_query("CommentFeedbackByTargetId", "target_id", target_id);
-
-        assert_query_contains(&query, "SELECT toUInt64(COUNT()) AS count");
-        assert_query_contains(&query, "FROM CommentFeedbackByTargetId");
-        assert_query_contains(&query, "WHERE target_id = {target_id:UUID}");
-        assert_query_contains(&query, "FORMAT JSONEachRow");
-        assert_eq!(params.get("target_id"), Some(&target_id.to_string()));
+        test_count_query("CommentFeedbackByTargetId", "target_id");
     }
 
     #[test]
     fn test_build_count_query_demonstration_feedback() {
-        let inference_id = Uuid::now_v7();
-        let (query, params) = build_count_query(
-            "DemonstrationFeedbackByInferenceId",
-            "inference_id",
-            inference_id,
-        );
-
-        assert_query_contains(&query, "SELECT toUInt64(COUNT()) AS count");
-        assert_query_contains(&query, "FROM DemonstrationFeedbackByInferenceId");
-        assert_query_contains(&query, "WHERE inference_id = {inference_id:UUID}");
-        assert_query_contains(&query, "FORMAT JSONEachRow");
-        assert_eq!(params.get("inference_id"), Some(&inference_id.to_string()));
+        test_count_query("DemonstrationFeedbackByInferenceId", "inference_id");
     }
 
     // Test that 'type' field is not in queries (serde handles it) - testing production code
