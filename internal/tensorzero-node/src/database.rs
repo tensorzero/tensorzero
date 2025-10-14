@@ -86,8 +86,10 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn count_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
-        napi_call_no_deserializing!(&self, count_rows_for_dataset, params, DatasetQueryParams)
+    pub async fn count_rows_for_dataset(&self, params: String) -> Result<String, napi::Error> {
+        let count =
+            napi_call_no_deserializing!(&self, count_rows_for_dataset, params, DatasetQueryParams)?;
+        Ok(count.to_string())
     }
 
     #[napi]

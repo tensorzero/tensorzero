@@ -18,7 +18,7 @@ use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
 impl DatasetQueries for ClickHouseConnectionInfo {
-    async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
+    async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u64, Error> {
         // Validate that no limit or offset is provided
         if params.limit.is_some() || params.offset.is_some() {
             return Err(Error::new(ErrorDetails::InvalidRequest {
@@ -35,13 +35,13 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
 
-        let count_query = format!("SELECT toUInt32(count()) as count FROM ({query})");
+        let count_query = format!("SELECT toUInt64(count()) as count FROM ({query})");
         let response = self
             .run_query_synchronous(count_query, &query_params)
             .await?;
 
         let count_str = response.response.trim();
-        let count: u32 = count_str.parse().map_err(|e: ParseIntError| {
+        let count: u64 = count_str.parse().map_err(|e: ParseIntError| {
             Error::new(ErrorDetails::ClickHouseDeserialization {
                 message: e.to_string(),
             })
@@ -227,12 +227,12 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             r"
             SELECT
                 dataset_name,
-                toUInt32(sum(count)) AS count,
+                toUInt64(sum(count)) AS count,
                 formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
             FROM (
                 SELECT
                     dataset_name,
-                    toUInt32(count()) AS count,
+                    toUInt64(count()) AS count,
                     max(updated_at) AS last_updated
                 FROM ChatInferenceDatapoint
                 FINAL
@@ -242,7 +242,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 UNION ALL
                 SELECT
                     dataset_name,
-                    toUInt32(count()) AS count,
+                    toUInt64(count()) AS count,
                     max(updated_at) AS last_updated
                 FROM JsonInferenceDatapoint
                 FINAL
@@ -1480,7 +1480,7 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
-                assert_query_contains(query, "SELECT toUInt32(count()) as count FROM (SELECT");
+                assert_query_contains(query, "SELECT toUInt64(count()) as count FROM (SELECT");
                 // Not asserting on the subquery
                 assert_query_contains(query, "WHERE function_name = {function_name:String})");
                 assert_query_does_not_contain(query, "FORMAT JSONEachRow");
@@ -1776,12 +1776,12 @@ mod tests {
                 assert_query_contains(query, "
                     SELECT
                     dataset_name,
-                    toUInt32(sum(count)) AS count,
+                    toUInt64(sum(count)) AS count,
                     formatDateTime(max(last_updated), '%Y-%m-%dT%H:%i:%SZ') AS last_updated
                     FROM (
                         SELECT
                             dataset_name,
-                            toUInt32(count()) AS count,
+                            toUInt64(count()) AS count,
                             max(updated_at) AS last_updated
                         FROM ChatInferenceDatapoint
                         FINAL
@@ -1791,7 +1791,7 @@ mod tests {
                         UNION ALL
                         SELECT
                             dataset_name,
-                            toUInt32(count()) AS count,
+                            toUInt64(count()) AS count,
                             max(updated_at) AS last_updated
                         FROM JsonInferenceDatapoint
                         FINAL

@@ -237,7 +237,7 @@ pub struct DatasetDetailRow {
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatasetMetadata {
     pub dataset_name: String,
-    pub count: u32,
+    pub count: u64,
     pub last_updated: String,
 }
 

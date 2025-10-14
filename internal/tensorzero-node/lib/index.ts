@@ -370,7 +370,7 @@ export class DatabaseClient {
     const paramsString = safeStringify(params);
     const result =
       await this.nativeDatabaseClient.countRowsForDataset(paramsString);
-    return result;
+    return Number(result);
   }
 
   async insertRowsForDataset(params: DatasetQueryParams): Promise<number> {
