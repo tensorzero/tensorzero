@@ -56,6 +56,7 @@
     "react-router": "^7.9.1",
     "recharts": "^2.15.4",
     "smol-toml": "^1.4.1",
+    "tailwindcss-animate": "^1.0.7",
     "tailwind-merge": "^3.3.1",
     "tensorzero-node": "file:../internal/tensorzero-node",
     "type-fest": "^4.41.0",
