@@ -48,7 +48,7 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
         data-testid="datapoint-playground-output-refresh-button"
         onClick={() => query.refetch()}
       >
-        <RefreshCw className="h-3 w-3" />
+        <RefreshCw />
       </Button>
     );
 
