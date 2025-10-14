@@ -1,3 +1,5 @@
+use crate::error::Error;
+use async_trait::async_trait;
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
@@ -6,6 +8,43 @@ use uuid::Uuid;
 
 use super::TableBounds;
 use crate::serde_util::deserialize_u64;
+
+#[async_trait]
+pub trait FeedbackQueries {
+    /// Retrieves cumulative feedback statistics for a given metric and function, optionally filtered by variant names.
+    async fn get_feedback_by_variant(
+        &self,
+        metric_name: &str,
+        function_name: &str,
+        variant_names: Option<&Vec<String>>,
+    ) -> Result<Vec<FeedbackByVariant>, Error>;
+
+    /// Queries all feedback (boolean metrics, float metrics, comments, demonstrations) for a given target ID
+    async fn query_feedback_by_target_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        page_size: Option<u32>,
+    ) -> Result<Vec<FeedbackRow>, Error>;
+
+    /// Queries feedback bounds for a given target ID
+    async fn query_feedback_bounds_by_target_id(
+        &self,
+        target_id: Uuid,
+    ) -> Result<FeedbackBounds, Error>;
+
+    /// Counts total feedback items for a given target ID
+    async fn count_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error>;
+
+    async fn query_demonstration_feedback_by_inference_id(
+        &self,
+        target_id: Uuid,
+        before: Option<Uuid>,
+        after: Option<Uuid>,
+        page_size: Option<u32>,
+    ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
+}
 
 #[derive(Debug, Deserialize)]
 pub struct FeedbackByVariant {
