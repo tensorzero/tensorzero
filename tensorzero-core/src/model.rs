@@ -286,12 +286,12 @@ impl ModelConfig {
         &self,
         model_provider_request: ModelProviderRequest<'request>,
         provider: &'request ModelProvider,
-        clients: &'request InferenceClients<'request>,
+        clients: &InferenceClients,
     ) -> Result<ModelInferenceResponse, Error> {
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup(
-                clients.clickhouse_connection_info,
+                &clients.clickhouse_connection_info,
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
@@ -302,7 +302,9 @@ impl ModelConfig {
                 return Ok(cache_lookup);
             }
         }
-        let scope_info = ScopeInfo { tags: clients.tags };
+        let scope_info = ScopeInfo {
+            tags: &clients.tags,
+        };
         let response = provider
             .infer(model_provider_request, clients, &scope_info)
             .instrument(span!(
@@ -330,12 +332,12 @@ impl ModelConfig {
         &self,
         model_provider_request: ModelProviderRequest<'request>,
         provider: &'request ModelProvider,
-        clients: &'request InferenceClients<'request>,
+        clients: &InferenceClients,
     ) -> Result<StreamResponseAndMessages, Error> {
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup_streaming(
-                clients.clickhouse_connection_info,
+                &clients.clickhouse_connection_info,
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
@@ -349,7 +351,9 @@ impl ModelConfig {
                 });
             }
         }
-        let scope_info = ScopeInfo { tags: clients.tags };
+        let scope_info = ScopeInfo {
+            tags: &clients.tags,
+        };
 
         let StreamAndRawRequest {
             stream,
@@ -397,7 +401,7 @@ impl ModelConfig {
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
-        clients: &'request InferenceClients<'request>,
+        clients: &InferenceClients,
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
@@ -413,7 +417,7 @@ impl ModelConfig {
                     request: &request,
                     model_name,
                     provider_name,
-                    otlp_config: clients.otlp_config,
+                    otlp_config: &clients.otlp_config,
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -441,7 +445,7 @@ impl ModelConfig {
                         // (in case we ever add a blocking cache write option)
                         if !response.cached && clients.cache_options.enabled.write() {
                             let _ = start_cache_write(
-                                clients.clickhouse_connection_info,
+                                &clients.clickhouse_connection_info,
                                 cache_key,
                                 CacheData {
                                     output: NonStreamingCacheData {
@@ -499,7 +503,7 @@ impl ModelConfig {
     pub async fn infer_stream<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
-        clients: &'request InferenceClients<'request>,
+        clients: &InferenceClients,
         model_name: &'request str,
     ) -> Result<StreamResponseAndMessages, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
@@ -515,7 +519,7 @@ impl ModelConfig {
                     request: &request,
                     model_name,
                     provider_name,
-                    otlp_config: clients.otlp_config,
+                    otlp_config: &clients.otlp_config,
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -616,7 +620,7 @@ async fn wrap_provider_stream(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
     ticket_borrow: TicketBorrows,
-    clients: &InferenceClients<'_>,
+    clients: &InferenceClients,
     stream: Instrumented<PeekableProviderInferenceResponseStream>,
     write_to_cache: bool,
 ) -> Result<PeekableProviderInferenceResponseStream, Error> {
@@ -1464,7 +1468,7 @@ impl ModelProvider {
     async fn infer(
         &self,
         request: ModelProviderRequest<'_>,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
@@ -1472,7 +1476,7 @@ impl ModelProvider {
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
-                clients.postgres_connection_info,
+                &clients.postgres_connection_info,
                 scope_info,
                 request.request,
             )
@@ -1480,103 +1484,103 @@ impl ModelProvider {
         let res = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::AWSBedrock(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::AWSSagemaker(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Azure(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Fireworks(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::GCPVertexAnthropic(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Groq(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Hyperbolic(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Mistral(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::OpenRouter(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Together(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::SGLang(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::VLLM(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::XAI(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::TGI(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::DeepSeek(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
-                    .infer(request, clients.http_client, clients.credentials, self)
+                    .infer(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
         };
@@ -1600,14 +1604,14 @@ impl ModelProvider {
     async fn infer_stream(
         &self,
         request: ModelProviderRequest<'_>,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
-                clients.postgres_connection_info,
+                &clients.postgres_connection_info,
                 scope_info,
                 request.request,
             )
@@ -1615,103 +1619,103 @@ impl ModelProvider {
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::AWSBedrock(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::AWSSagemaker(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Azure(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Fireworks(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::GCPVertexAnthropic(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Groq(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Hyperbolic(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Mistral(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::OpenRouter(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::Together(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::SGLang(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::XAI(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::VLLM(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::TGI(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             ProviderConfig::DeepSeek(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
-                    .infer_stream(request, clients.http_client, clients.credentials, self)
+                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
                     .await
             }
         }?;
@@ -2306,17 +2310,17 @@ mod tests {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: &http_client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: http_client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
 
         // Try inferring the good model only
@@ -2433,17 +2437,17 @@ mod tests {
         let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let clients = InferenceClients {
-            http_client: &http_client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &postgres_mock,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: http_client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: postgres_mock.clone(),
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &tags,
-            rate_limiting_config: &rate_limit_config,
-            otlp_config: &Default::default(),
+            tags: Arc::new(tags.clone()),
+            rate_limiting_config: Arc::new(rate_limit_config.clone()),
+            otlp_config: Default::default(),
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2516,17 +2520,17 @@ mod tests {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: &http_client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: http_client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2666,17 +2670,17 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                    credentials: &api_keys,
-                    cache_options: &CacheOptions {
+                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: PostgresConnectionInfo::Disabled,
+                    credentials: Arc::new(api_keys.clone()),
+                    cache_options: CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: &Default::default(),
-                    rate_limiting_config: &Default::default(),
-                    otlp_config: &Default::default(),
+                    tags: Arc::new(Default::default()),
+                    rate_limiting_config: Arc::new(Default::default()),
+                    otlp_config: Default::default(),
                 },
                 "my_model",
             )
@@ -2734,17 +2738,17 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                    credentials: &api_keys,
-                    cache_options: &CacheOptions {
+                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: PostgresConnectionInfo::Disabled,
+                    credentials: Arc::new(api_keys.clone()),
+                    cache_options: CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: &Default::default(),
-                    rate_limiting_config: &Default::default(),
-                    otlp_config: &Default::default(),
+                    tags: Arc::new(Default::default()),
+                    rate_limiting_config: Arc::new(Default::default()),
+                    otlp_config: Default::default(),
                 },
                 "my_model",
             )
@@ -2849,17 +2853,17 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                    credentials: &api_keys,
-                    cache_options: &CacheOptions {
+                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: PostgresConnectionInfo::Disabled,
+                    credentials: Arc::new(api_keys.clone()),
+                    cache_options: CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: &Default::default(),
-                    rate_limiting_config: &Default::default(),
-                    otlp_config: &Default::default(),
+                    tags: Arc::new(Default::default()),
+                    rate_limiting_config: Arc::new(Default::default()),
+                    otlp_config: Default::default(),
                 },
                 "my_model",
             )
@@ -2930,17 +2934,17 @@ mod tests {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: &http_client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: http_client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -2986,17 +2990,17 @@ mod tests {
             SecretString::from("notgoodkey".to_string()),
         )]);
         let clients = InferenceClients {
-            http_client: &http_client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: http_client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3048,17 +3052,17 @@ mod tests {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: &http_client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: http_client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -3103,17 +3107,17 @@ mod tests {
             SecretString::from("good_key".to_string()),
         )]);
         let clients = InferenceClients {
-            http_client: &http_client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: http_client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)

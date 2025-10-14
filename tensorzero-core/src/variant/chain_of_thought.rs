@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -50,16 +51,16 @@ impl UninitializedChainOfThoughtConfig {
 }
 
 impl Variant for ChainOfThoughtConfig {
-    async fn infer<'a: 'request, 'request>(
+    async fn infer(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'a>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
-        let FunctionConfig::Json(json_config) = function else {
+        let FunctionConfig::Json(json_config) = function.as_ref() else {
             // This should never happen, because we check this in `validate`
             return Err(ErrorDetails::Inference {
                 message: format!(
@@ -68,31 +69,31 @@ impl Variant for ChainOfThoughtConfig {
             }
             .into());
         };
-        let original_output_schema = match inference_config.dynamic_output_schema {
+        let original_output_schema = match &inference_config.dynamic_output_schema {
             Some(schema) => &schema.value,
             None => &json_config.output_schema.value,
         };
         let augmented_output_schema = prepare_thinking_output_schema(original_output_schema);
-        let augmented_inference_config = InferenceConfig {
-            dynamic_output_schema: Some(&augmented_output_schema),
+        let augmented_inference_config = Arc::new(InferenceConfig {
+            dynamic_output_schema: Some(Arc::new(augmented_output_schema)),
             tool_config: None, // Dynamic tool configs are handled farther down, we don't need to set that here
-            templates: inference_config.templates,
-            function_name: inference_config.function_name,
-            variant_name: inference_config.variant_name,
+            templates: Arc::clone(&inference_config.templates),
+            function_name: Arc::clone(&inference_config.function_name),
+            variant_name: Arc::clone(&inference_config.variant_name),
             ids: inference_config.ids,
             fetch_and_encode_input_files_before_inference: inference_config
                 .fetch_and_encode_input_files_before_inference,
             extra_body: inference_config.extra_body.clone(),
             extra_cache_key: inference_config.extra_cache_key.clone(),
             extra_headers: inference_config.extra_headers.clone(),
-        };
+        });
         let inference_result = self
             .inner
             .infer(
-                input,
-                models,
-                function,
-                &augmented_inference_config,
+                Arc::clone(&input),
+                models.clone(),
+                Arc::clone(&function),
+                augmented_inference_config,
                 clients,
                 inference_params,
             )
@@ -118,13 +119,13 @@ impl Variant for ChainOfThoughtConfig {
         }))
     }
 
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
-        _input: &LazyResolvedInput,
-        _models: &'request InferenceModels<'_>,
-        _function: &FunctionConfig,
-        _inference_config: &'request InferenceConfig<'request>,
-        _clients: &'request InferenceClients<'request>,
+        _input: Arc<LazyResolvedInput>,
+        _models: InferenceModels,
+        _function: Arc<FunctionConfig>,
+        _inference_config: Arc<InferenceConfig>,
+        _clients: InferenceClients,
         _inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         Err(ErrorDetails::UnsupportedVariantForStreamingInference {
@@ -136,14 +137,14 @@ impl Variant for ChainOfThoughtConfig {
 
     async fn validate(
         &self,
-        function: &FunctionConfig,
-        models: &mut ModelTable,
+        function: Arc<FunctionConfig>,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
         variant_name: &str,
     ) -> Result<(), Error> {
-        if !matches!(function, FunctionConfig::Json(_)) {
+        if !matches!(function.as_ref(), FunctionConfig::Json(_)) {
             return Err(ErrorDetails::UnsupportedVariantForFunctionType {
                 function_name: function_name.to_string(),
                 variant_name: variant_name.to_string(),
@@ -154,7 +155,7 @@ impl Variant for ChainOfThoughtConfig {
         }
         self.inner
             .validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,
@@ -175,10 +176,10 @@ impl Variant for ChainOfThoughtConfig {
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[LazyResolvedInput],
-        _models: &'a InferenceModels<'a>,
+        _models: InferenceModels,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a>],
-        _clients: &'a InferenceClients<'a>,
+        _inference_configs: &'a [InferenceConfig],
+        _clients: InferenceClients,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
