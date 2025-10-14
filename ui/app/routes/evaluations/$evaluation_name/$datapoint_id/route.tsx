@@ -63,7 +63,6 @@ import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
-import { datapointToParsedDatasetRow } from "~/utils/clickhouse/common";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -112,11 +111,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // In this case, we poll for the evaluation results until the feedback is found.
   const evaluationResultsPromise = newFeedbackId
     ? pollForEvaluations(
-        evaluation_name,
-        datapoint_id,
-        selectedRunIds,
-        newFeedbackId,
-      )
+      evaluation_name,
+      datapoint_id,
+      selectedRunIds,
+      newFeedbackId,
+    )
     : getEvaluationsForDatapoint(evaluation_name, datapoint_id, selectedRunIds);
 
   // Execute all promises concurrently
@@ -190,10 +189,7 @@ export async function action({ request }: Route.ActionArgs) {
       const newName = formData.get("newName") as string;
 
       // We need to get the datapoint to pass to renameDatapoint
-      const datapoint = await getDatapoint({
-        dataset_name,
-        datapoint_id,
-      });
+      const datapoint = await getDatapoint({ dataset_name, datapoint_id });
       if (!datapoint) {
         return data(
           {
@@ -210,7 +206,8 @@ export async function action({ request }: Route.ActionArgs) {
       await renameDatapoint({
         functionType,
         datasetName: dataset_name,
-        datapoint: datapointToParsedDatasetRow(datapoint),
+        // TODO: convert to Rust-generated bindings
+        datapoint,
         newName,
       });
 
@@ -250,15 +247,15 @@ export default function EvaluationDatapointPage({
   const outputsToDisplay = [
     ...(consolidatedEvaluationResults[0].reference_output !== null
       ? [
-          {
-            id: "Reference",
-            output: consolidatedEvaluationResults[0].reference_output,
-            metrics: [],
-            variant_name: "Reference",
-            inferenceId: null,
-            episodeId: null,
-          },
-        ]
+        {
+          id: "Reference",
+          output: consolidatedEvaluationResults[0].reference_output,
+          metrics: [],
+          variant_name: "Reference",
+          inferenceId: null,
+          episodeId: null,
+        },
+      ]
       : []),
     ...consolidatedEvaluationResults.map((result) => ({
       id: result.evaluation_run_id,
@@ -306,7 +303,7 @@ export default function EvaluationDatapointPage({
             evaluationName={evaluation_name}
             selectedRunIdInfos={selected_evaluation_run_infos}
             allowedRunInfos={allowedEvaluationRunInfos}
-            // This must be passed so the component can filter by datapoint_id in search
+          // This must be passed so the component can filter by datapoint_id in search
           />
         </PageHeader>
 
