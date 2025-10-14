@@ -246,7 +246,7 @@ async fn main() {
         // Everything above this layer has OpenTelemetry tracing enabled
         // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
         // (the only response header is `traceresponse` for a completed trace)
-        .apply_otel_http_trace_layer()
+        .apply_otel_http_trace_layer(delayed_log_config.otel_tracer.clone())
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
