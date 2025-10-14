@@ -44,7 +44,7 @@ use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{
     prefill_json_chunk_response, prefill_json_response, AnthropicDocumentSource,
-    AnthropicDocumentType, AnthropicMessageDelta, AnthropicStopReason,
+    AnthropicMessageDelta, AnthropicStopReason,
 };
 use super::gcp_vertex_gemini::{parse_shorthand_url, GCPVertexCredentials, ShorthandUrl};
 use super::helpers::peek_first_chunk;
@@ -563,8 +563,7 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
-                        source: AnthropicDocumentSource {
-                            r#type: AnthropicDocumentType::Base64,
+                        source: AnthropicDocumentSource::Base64 {
                             media_type: file.mime_type.clone(),
                             data: file.data()?.clone(),
                         },
