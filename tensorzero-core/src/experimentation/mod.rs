@@ -68,15 +68,15 @@ impl ExperimentationConfig {
     }
 }
 
-impl VariantSampler for ExperimentationConfig {
-    async fn setup(&self) -> Result<(), Error> {
+impl ExperimentationConfig {
+    pub async fn setup(&self) -> Result<(), Error> {
         match self {
             Self::StaticWeights(config) => config.setup().await,
             Self::Uniform => Ok(()),
         }
     }
 
-    async fn sample(
+    pub async fn sample(
         &self,
         function_name: &str,
         episode_id: Uuid,
