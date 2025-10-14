@@ -1,7 +1,7 @@
 use crate::{
     db::{
         clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
-        EpisodeByIdRow, TableBounds, TableBoundsWithCount,
+        EpisodeByIdRow, TableBoundsWithCount,
     },
     serde_util::deserialize_u64,
 };
@@ -309,7 +309,7 @@ pub(crate) fn build_pagination_clause(
     }
 }
 
-pub(crate) fn parse_feedback_rows<T: serde::de::DeserializeOwned>(
+pub(crate) fn parse_json_rows<T: serde::de::DeserializeOwned>(
     response: &str,
 ) -> Result<Vec<T>, Error> {
     response
@@ -318,27 +318,11 @@ pub(crate) fn parse_feedback_rows<T: serde::de::DeserializeOwned>(
         .map(|row| {
             serde_json::from_str(row).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseDeserialization {
-                    message: format!("Failed to deserialize feedback row: {e}"),
+                    message: format!("Failed to deserialize row: {e}"),
                 })
             })
         })
         .collect()
-}
-
-pub(crate) fn parse_table_bounds(response: &str) -> Result<TableBounds, Error> {
-    let line = response.trim();
-    if line.is_empty() {
-        return Ok(TableBounds {
-            first_id: None,
-            last_id: None,
-        });
-    }
-
-    serde_json::from_str(line).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: format!("Failed to deserialize table bounds: {e}"),
-        })
-    })
 }
 
 pub(crate) fn parse_count(response: &str) -> Result<u64, Error> {

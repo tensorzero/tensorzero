@@ -11,14 +11,12 @@ use crate::{
         },
         FeedbackQueries, TableBounds,
     },
-    error::Error,
+    error::{Error, ErrorDetails},
 };
 
 use super::{
     escape_string_for_clickhouse_literal,
-    select_queries::{
-        build_pagination_clause, parse_count, parse_feedback_rows, parse_table_bounds,
-    },
+    select_queries::{build_pagination_clause, parse_count, parse_json_rows},
     ClickHouseConnectionInfo,
 };
 
@@ -246,7 +244,7 @@ where
         .collect();
 
     let response = conn.run_query_synchronous(query, &query_params).await?;
-    parse_feedback_rows(response.response.as_str())
+    parse_json_rows(response.response.as_str())
 }
 
 async fn execute_bounds_query(
@@ -279,7 +277,7 @@ async fn execute_count_query(
 
 // Helper implementations for individual feedback table queries
 impl ClickHouseConnectionInfo {
-    pub async fn query_boolean_metrics_by_target_id(
+    async fn query_boolean_metrics_by_target_id(
         &self,
         target_id: Uuid,
         before: Option<Uuid>,
@@ -291,7 +289,7 @@ impl ClickHouseConnectionInfo {
         execute_feedback_query(self, query, params_owned).await
     }
 
-    pub async fn query_float_metrics_by_target_id(
+    async fn query_float_metrics_by_target_id(
         &self,
         target_id: Uuid,
         before: Option<Uuid>,
@@ -302,7 +300,7 @@ impl ClickHouseConnectionInfo {
         execute_feedback_query(self, query, params_owned).await
     }
 
-    pub async fn query_comment_feedback_by_target_id(
+    async fn query_comment_feedback_by_target_id(
         &self,
         target_id: Uuid,
         before: Option<Uuid>,
@@ -314,7 +312,7 @@ impl ClickHouseConnectionInfo {
         execute_feedback_query(self, query, params_owned).await
     }
 
-    pub async fn query_boolean_metric_bounds_by_target_id(
+    async fn query_boolean_metric_bounds_by_target_id(
         &self,
         target_id: Uuid,
     ) -> Result<TableBounds, Error> {
@@ -323,7 +321,7 @@ impl ClickHouseConnectionInfo {
         execute_bounds_query(self, query, params_owned).await
     }
 
-    pub async fn query_float_metric_bounds_by_target_id(
+    async fn query_float_metric_bounds_by_target_id(
         &self,
         target_id: Uuid,
     ) -> Result<TableBounds, Error> {
@@ -332,7 +330,7 @@ impl ClickHouseConnectionInfo {
         execute_bounds_query(self, query, params_owned).await
     }
 
-    pub async fn query_comment_feedback_bounds_by_target_id(
+    async fn query_comment_feedback_bounds_by_target_id(
         &self,
         target_id: Uuid,
     ) -> Result<TableBounds, Error> {
@@ -341,7 +339,7 @@ impl ClickHouseConnectionInfo {
         execute_bounds_query(self, query, params_owned).await
     }
 
-    pub async fn query_demonstration_feedback_bounds_by_inference_id(
+    async fn query_demonstration_feedback_bounds_by_inference_id(
         &self,
         inference_id: Uuid,
     ) -> Result<TableBounds, Error> {
@@ -353,25 +351,25 @@ impl ClickHouseConnectionInfo {
         execute_bounds_query(self, query, params_owned).await
     }
 
-    pub async fn count_boolean_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
+    async fn count_boolean_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let (query, params_owned) =
             build_count_query("BooleanMetricFeedbackByTargetId", "target_id", target_id);
         execute_count_query(self, query, params_owned).await
     }
 
-    pub async fn count_float_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
+    async fn count_float_metrics_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let (query, params_owned) =
             build_count_query("FloatMetricFeedbackByTargetId", "target_id", target_id);
         execute_count_query(self, query, params_owned).await
     }
 
-    pub async fn count_comment_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
+    async fn count_comment_feedback_by_target_id(&self, target_id: Uuid) -> Result<u64, Error> {
         let (query, params_owned) =
             build_count_query("CommentFeedbackByTargetId", "target_id", target_id);
         execute_count_query(self, query, params_owned).await
     }
 
-    pub async fn count_demonstration_feedback_by_inference_id(
+    async fn count_demonstration_feedback_by_inference_id(
         &self,
         inference_id: Uuid,
     ) -> Result<u64, Error> {
@@ -393,9 +391,6 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         function_name: &str,
         variant_names: Option<&Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, Error> {
-        let escaped_function_name = escape_string_for_clickhouse_literal(function_name);
-        let escaped_metric_name = escape_string_for_clickhouse_literal(metric_name);
-
         // If None we don't filter at all;
         // If empty, we'll return an empty vector for consistency
         // If there are variants passed, we'll filter by them
@@ -421,12 +416,22 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                 varSampStableMerge(feedback_variance) as variance,
                 sum(count) as count
             FROM FeedbackByVariantStatistics
-            WHERE function_name = '{escaped_function_name}' and metric_name = '{escaped_metric_name}'{variant_filter}
+            WHERE function_name = {{function_name:String}} and metric_name = {{metric_name:String}}{variant_filter}
             GROUP BY variant_name
             FORMAT JSONEachRow"
         );
+
+        let mut params_map = HashMap::new();
+        params_map.insert("function_name".to_string(), function_name.to_string());
+        params_map.insert("metric_name".to_string(), metric_name.to_string());
+
+        let query_params: HashMap<&str, &str> = params_map
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+
         // Each row is a JSON encoded FeedbackByVariant struct
-        let res = self.run_query_synchronous_no_params(query).await?;
+        let res = self.run_query_synchronous(query, &query_params).await?;
 
         res.response
             .lines()
@@ -592,8 +597,24 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
 
         let response = self.run_query_synchronous(query, &query_params).await?;
 
-        parse_feedback_rows(response.response.as_str())
+        parse_json_rows(response.response.as_str())
     }
+}
+
+fn parse_table_bounds(response: &str) -> Result<TableBounds, Error> {
+    let line = response.trim();
+    if line.is_empty() {
+        return Ok(TableBounds {
+            first_id: None,
+            last_id: None,
+        });
+    }
+
+    serde_json::from_str(line).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize table bounds: {e}"),
+        })
+    })
 }
 
 #[cfg(test)]
@@ -1473,7 +1494,9 @@ mod tests {
             .withf(|query, params| {
                 // Should filter by the specified variants
                 assert!(query.contains("AND variant_name IN ('variant1', 'variant2')"));
-                assert!(params.is_empty());
+                // Should use query parameters for function_name and metric_name
+                assert_eq!(params.get("function_name"), Some(&"test_function"));
+                assert_eq!(params.get("metric_name"), Some(&"test_metric"));
                 true
             })
             .returning(|_, _| {
