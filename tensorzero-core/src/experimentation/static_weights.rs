@@ -6,11 +6,14 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
+    db::{postgres::PostgresConnectionInfo, SelectQueries},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     experimentation::get_uniform_value,
     variant::VariantInfo,
 };
+
+#[cfg(test)]
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 
 use super::VariantSampler;
 
@@ -124,7 +127,7 @@ impl StaticWeightsConfig {
 impl VariantSampler for StaticWeightsConfig {
     async fn setup(
         &self,
-        _clickhouse: &ClickHouseConnectionInfo,
+        _db: Arc<dyn SelectQueries + Send + Sync>,
         _function_name: &str,
     ) -> Result<(), Error> {
         // We just assert that all weights are non-negative
@@ -351,7 +354,11 @@ mod tests {
         let experiment = config.functions.get("test").unwrap().experimentation();
         // no-op but we call it for completeness
         experiment
-            .setup(&ClickHouseConnectionInfo::new_disabled(), "test")
+            .setup(
+                Arc::new(ClickHouseConnectionInfo::new_disabled())
+                    as Arc<dyn SelectQueries + Send + Sync>,
+                "test",
+            )
             .await
             .unwrap();
 
