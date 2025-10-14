@@ -3,6 +3,8 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+#[cfg(feature = "pyo3")]
+use crate::model::CredentialLocation;
 use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
@@ -17,7 +19,7 @@ use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
-    model::CredentialLocation,
+    model::CredentialLocationWithFallback,
     model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::OpenAICredentials,
@@ -66,7 +68,7 @@ pub struct DiclOptimizationConfig {
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -89,7 +91,7 @@ pub struct UninitializedDiclOptimizationConfig {
     #[serde(default = "default_append_to_existing_variants")]
     pub append_to_existing_variants: bool,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credentials: Option<CredentialLocation>,
+    pub credentials: Option<CredentialLocationWithFallback>,
 }
 
 impl Default for UninitializedDiclOptimizationConfig {
@@ -139,9 +141,12 @@ impl UninitializedDiclOptimizationConfig {
         append_to_existing_variants: Option<bool>,
         credentials: Option<String>,
     ) -> PyResult<Self> {
-        // Use Deserialize to convert the string to a CredentialLocation
-        let credentials =
-            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        // Use Deserialize to convert the string to a CredentialLocationWithFallback
+        let credentials = credentials.map(|s| {
+            serde_json::from_str(&s).unwrap_or(CredentialLocationWithFallback::Single(
+                CredentialLocation::Env(s),
+            ))
+        });
         Ok(Self {
             embedding_model,
             variant_name,

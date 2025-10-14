@@ -94,6 +94,10 @@ pub enum GoogleAIStudioCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<GoogleAIStudioCredentials>,
+        fallback: Box<GoogleAIStudioCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for GoogleAIStudioCredentials {
@@ -104,10 +108,16 @@ impl TryFrom<Credential> for GoogleAIStudioCredentials {
             Credential::Static(key) => Ok(GoogleAIStudioCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(GoogleAIStudioCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(GoogleAIStudioCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(GoogleAIStudioCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Google AI Studio Gemini provider"
                     .to_string(),
-            }))?,
+            })),
         }
     }
 }
@@ -128,10 +138,21 @@ impl GoogleAIStudioCredentials {
                     .into()
                 })
             }
+            GoogleAIStudioCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
+            }
             GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            })?,
+            }
+            .into()),
         }
     }
 }

@@ -20,7 +20,7 @@ use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    model::CredentialLocation,
+    model::CredentialLocationWithFallback,
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
         optimization::{
@@ -32,6 +32,9 @@ use crate::{
     },
     stored_inference::RenderedSample,
 };
+
+#[cfg(feature = "pyo3")]
+use crate::model::CredentialLocation;
 
 const OPENAI_FINE_TUNE_PURPOSE: &str = "fine-tune";
 
@@ -52,7 +55,7 @@ pub struct OpenAIRFTConfig {
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,
@@ -74,7 +77,7 @@ pub struct UninitializedOpenAIRFTConfig {
     pub n_epochs: Option<usize>,
     pub reasoning_effort: Option<String>,
     #[serde(skip)]
-    pub credentials: Option<CredentialLocation>,
+    pub credentials: Option<CredentialLocationWithFallback>,
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,
@@ -137,9 +140,12 @@ impl UninitializedOpenAIRFTConfig {
             None
         };
 
-        // Use Deserialize to convert the string to a CredentialLocation
-        let credentials =
-            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        // Use Deserialize to convert the string to a CredentialLocationWithFallback
+        let credentials = credentials.map(|s| {
+            serde_json::from_str(&s).unwrap_or(CredentialLocationWithFallback::Single(
+                CredentialLocation::Env(s),
+            ))
+        });
         let api_base = api_base
             .map(|s| {
                 Url::parse(&s)
@@ -240,7 +246,7 @@ pub struct OpenAIRFTJobHandle {
     pub job_url: Url,
     pub job_api_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
 }
 
 impl std::fmt::Display for OpenAIRFTJobHandle {

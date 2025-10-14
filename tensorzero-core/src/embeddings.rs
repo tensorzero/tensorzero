@@ -848,7 +848,9 @@ mod tests {
             config: crate::model::UninitializedProviderConfig::OpenAI {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
-                api_key_location: Some(crate::model::CredentialLocation::None),
+                api_key_location: Some(crate::model::CredentialLocationWithFallback::Single(
+                    crate::model::CredentialLocation::None,
+                )),
                 api_type: Default::default(),
             },
             timeout_ms: None,

@@ -14,6 +14,8 @@ use crate::{
     providers::common::{E2ETestProvider, E2ETestProviders},
 };
 
+use super::common::ModelTestProvider;
+
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
@@ -158,6 +160,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "google_ai_studio_gemini".to_string(),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "gemini-2.0-flash-lite".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -178,6 +189,7 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: image_providers.clone(),
         shorthand_inference: shorthand_providers.clone(),
         pdf_inference: image_providers,
+        credential_fallbacks,
     }
 }
 

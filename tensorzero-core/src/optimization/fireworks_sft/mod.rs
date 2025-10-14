@@ -50,7 +50,7 @@ use crate::{
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
     inference::types::ContentBlock,
-    model::CredentialLocation,
+    model::CredentialLocationWithFallback,
     providers::{
         fireworks::{FireworksCredentials, FireworksTool, PROVIDER_TYPE},
         openai::OpenAIRequestMessage,
@@ -163,7 +163,7 @@ pub struct FireworksSFTConfig {
     #[serde(skip)]
     pub credentials: FireworksCredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
     pub account_id: String,
     pub api_base: Url,
 }
@@ -190,7 +190,7 @@ pub struct UninitializedFireworksSFTConfig {
     pub mtp_num_draft_tokens: Option<usize>,
     pub mtp_freeze_base_model: Option<bool>,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credentials: Option<CredentialLocation>,
+    pub credentials: Option<CredentialLocationWithFallback>,
     pub account_id: String,
     pub api_base: Option<Url>,
 }
@@ -694,7 +694,7 @@ pub struct FireworksSFTJobHandle {
     pub job_url: Url,
     pub job_path: String,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
 }
 
 impl std::fmt::Display for FireworksSFTJobHandle {

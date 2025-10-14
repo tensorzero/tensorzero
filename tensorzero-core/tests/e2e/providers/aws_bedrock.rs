@@ -104,6 +104,8 @@ async fn get_providers() -> E2ETestProviders {
         pdf_inference: standard_providers.clone(),
 
         shorthand_inference: vec![],
+        // AWS bedrock only works with SDK credentials
+        credential_fallbacks: vec![],
     }
 }
 

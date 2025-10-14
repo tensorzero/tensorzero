@@ -65,6 +65,10 @@ impl VLLMProvider {
 pub enum VLLMCredentials {
     Static(SecretString),
     Dynamic(String),
+    WithFallback {
+        default: Box<VLLMCredentials>,
+        fallback: Box<VLLMCredentials>,
+    },
     None,
 }
 
@@ -76,6 +80,10 @@ impl TryFrom<Credential> for VLLMCredentials {
             Credential::Static(key) => Ok(VLLMCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(VLLMCredentials::Dynamic(key_name)),
             Credential::None => Ok(VLLMCredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(VLLMCredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             #[cfg(any(test, feature = "e2e_tests"))]
             Credential::Missing => Ok(VLLMCredentials::None),
             _ => Err(Error::new(ErrorDetails::Config {
@@ -84,7 +92,6 @@ impl TryFrom<Credential> for VLLMCredentials {
         }
     }
 }
-
 impl VLLMCredentials {
     fn get_api_key<'a>(
         &'a self,
@@ -99,6 +106,16 @@ impl VLLMCredentials {
                         message: format!("Dynamic api key `{key_name}` is missing"),
                     })
                 })?))
+            }
+            VLLMCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             VLLMCredentials::None => Ok(None),
         }

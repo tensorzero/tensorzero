@@ -18,7 +18,7 @@ use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
-    model::CredentialLocation,
+    model::CredentialLocationWithFallback,
     optimization::{JobHandle, OptimizationJobInfo, Optimizer},
     providers::openai::{
         optimization::{
@@ -43,7 +43,7 @@ pub struct OpenAISFTConfig {
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,
     pub api_base: Option<Url>,
@@ -59,7 +59,7 @@ pub struct UninitializedOpenAISFTConfig {
     pub learning_rate_multiplier: Option<f64>,
     pub n_epochs: Option<usize>,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credentials: Option<CredentialLocation>,
+    pub credentials: Option<CredentialLocationWithFallback>,
     pub api_base: Option<Url>,
     pub seed: Option<u64>,
     pub suffix: Option<String>,
@@ -176,7 +176,7 @@ pub struct OpenAISFTJobHandle {
     pub job_url: Url,
     pub job_api_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
 }
 
 impl std::fmt::Display for OpenAISFTJobHandle {

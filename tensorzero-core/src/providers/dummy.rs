@@ -30,7 +30,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
-use crate::model::{CredentialLocation, ModelProvider};
+use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
 use crate::providers::helpers::inject_extra_request_data;
 use crate::rate_limiting::ActiveRateLimitKey;
 use crate::rate_limiting::FailedRateLimit;
@@ -51,9 +51,11 @@ pub struct DummyProvider {
 impl DummyProvider {
     pub fn new(
         model_name: String,
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or_else(default_api_key_location);
+        let api_key_location = api_key_location
+            .map(|loc| loc.default_location().clone())
+            .unwrap_or_else(default_api_key_location);
         match api_key_location {
             CredentialLocation::Dynamic(key_name) => Ok(DummyProvider {
                 model_name,

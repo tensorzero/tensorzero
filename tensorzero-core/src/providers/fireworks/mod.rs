@@ -100,6 +100,10 @@ pub enum FireworksCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<FireworksCredentials>,
+        fallback: Box<FireworksCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for FireworksCredentials {
@@ -110,6 +114,12 @@ impl TryFrom<Credential> for FireworksCredentials {
             Credential::Static(key) => Ok(FireworksCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(FireworksCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(FireworksCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(FireworksCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Fireworks provider".to_string(),
             })),
@@ -131,6 +141,16 @@ impl FireworksCredentials {
                         message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
+                })
+            }
+            FireworksCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
                 })
             }
             &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {

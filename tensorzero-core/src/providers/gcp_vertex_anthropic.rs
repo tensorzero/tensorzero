@@ -37,7 +37,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, RequestMessage, Usage,
 };
 use crate::inference::InferenceProvider;
-use crate::model::CredentialLocation;
+use crate::model::CredentialLocationWithFallback;
 use crate::model::{fully_qualified_name, ModelProvider};
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
@@ -155,7 +155,7 @@ impl GCPVertexAnthropicProvider {
         model_id: String,
         location: String,
         project_id: String,
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
         default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self, Error> {
         let credentials = GCPVertexAnthropicKind

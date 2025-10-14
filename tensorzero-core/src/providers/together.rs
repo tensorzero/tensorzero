@@ -90,6 +90,10 @@ pub enum TogetherCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<TogetherCredentials>,
+        fallback: Box<TogetherCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for TogetherCredentials {
@@ -100,6 +104,12 @@ impl TryFrom<Credential> for TogetherCredentials {
             Credential::Static(key) => Ok(TogetherCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(TogetherCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(TogetherCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(TogetherCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Together provider".to_string(),
             })),
@@ -121,6 +131,16 @@ impl TogetherCredentials {
                         message: format!("Dynamic api key `{key_name}` is missing"),
                     },
                 )?))
+            }
+            TogetherCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
