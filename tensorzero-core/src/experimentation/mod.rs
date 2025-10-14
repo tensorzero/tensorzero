@@ -67,9 +67,7 @@ impl ExperimentationConfig {
         }
         Self::Uniform
     }
-}
 
-impl ExperimentationConfig {
     pub async fn setup(&self) -> Result<(), Error> {
         match self {
             Self::StaticWeights(config) => config.setup().await,
@@ -88,17 +86,19 @@ impl ExperimentationConfig {
                 config
                     .sample(function_name, episode_id, active_variants)
                     .await
+                    // If the sampler fails but there are active variants we sample one at uniform
+                    // from the allowed variants
+                    .or_else(|e| {
+                        if !active_variants.is_empty() {
+                            let allowed: Vec<&str> = config.allowed_variants().collect();
+                            sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
+                        } else {
+                            Err(e)
+                        }
+                    })
             }
-            Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
+            Self::Uniform => sample_uniform(function_name, &episode_id, active_variants, None),
         }
-        // If the sampler fails but there are active variants we sample one at uniform
-        .or_else(|e| {
-            if !active_variants.is_empty() {
-                sample_uniform(function_name, &episode_id, active_variants)
-            } else {
-                Err(e)
-            }
-        })
     }
 }
 
@@ -106,14 +106,38 @@ fn sample_uniform(
     function_name: &str,
     episode_id: &Uuid,
     active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+    allowed_variants: Option<&[&str]>,
 ) -> Result<(String, Arc<VariantInfo>), Error> {
-    let random_index = (get_uniform_value(function_name, episode_id) * active_variants.len() as f64)
+    // Filter active_variants to only include allowed variants if specified
+    let sampling_pool: Vec<String> = match allowed_variants {
+        Some(allowed) => active_variants
+            .keys()
+            .filter(|k| allowed.contains(&k.as_str()))
+            .cloned()
+            .collect(),
+        None => active_variants.keys().cloned().collect(),
+    };
+
+    if sampling_pool.is_empty() {
+        return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
+            message: format!(
+                "No valid variants to sample from for function `{function_name}`{}",
+                if allowed_variants.is_some() {
+                    " after filtering by allowed variants"
+                } else {
+                    ""
+                }
+            ),
+        }));
+    }
+
+    let random_index = (get_uniform_value(function_name, episode_id) * sampling_pool.len() as f64)
         .floor() as usize;
-    let Some(sampled_variant_name) = active_variants.keys().nth(random_index).cloned() else {
+    let Some(sampled_variant_name) = sampling_pool.get(random_index).cloned() else {
         return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
             message: format!(
                 "Invalid index {random_index} for function `{function_name}` with {} variants. {IMPOSSIBLE_ERROR_MESSAGE}",
-                active_variants.len()
+                sampling_pool.len()
             ),
         }));
     };
@@ -202,7 +226,7 @@ mod tests {
         for i in 0..sample_size {
             let mut active_variants = variants_map.clone();
             let episode_id = Uuid::from_u128(i as u128);
-            let result = sample_uniform("test_function", &episode_id, &mut active_variants);
+            let result = sample_uniform("test_function", &episode_id, &mut active_variants, None);
             let (variant_name, _) = result.unwrap();
             *counts.entry(variant_name).or_insert(0) += 1;
         }
