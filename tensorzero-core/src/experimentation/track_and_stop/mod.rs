@@ -728,13 +728,10 @@ impl TrackAndStopState {
                 let total_variants = num_nursery_variants + num_bandit_variants;
                 let nursery_probability = num_nursery_variants as f64 / total_variants as f64;
 
-                if uniform_sample < nursery_probability {
+                let bandit_mass = 1.0 - nursery_probability;
+                if (bandit_mass <= f64::EPSILON) || (uniform_sample < nursery_probability) {
                     Ok(nursery.sample_active(active_variants))
                 } else {
-                    let bandit_mass = 1.0 - nursery_probability;
-                    if bandit_mass <= f64::EPSILON {
-                        return Ok(None);
-                    }
                     let bandit_sample = (uniform_sample - nursery_probability) / bandit_mass;
                     sample_with_probabilities(
                         active_variants,
