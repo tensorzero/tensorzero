@@ -50,6 +50,7 @@ use crate::model_table::{
 };
 use crate::providers::helpers::peek_first_chunk;
 use crate::providers::hyperbolic::HyperbolicProvider;
+use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
 use crate::rate_limiting::{RateLimitResourceUsage, ScopeInfo, TicketBorrows};
@@ -194,16 +195,6 @@ impl StreamResponse {
 /// the same as the underlying name passed to a specific provider api
 pub fn fully_qualified_name(model_name: &str, provider_name: &str) -> String {
     format!("tensorzero::model_name::{model_name}::provider_name::{provider_name}")
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub enum OpenAIAPIType {
-    #[default]
-    ChatCompletions,
-    Responses,
 }
 
 impl ModelConfig {
@@ -1128,7 +1119,7 @@ impl UninitializedProviderConfig {
                                 )
                                 .await?,
                             // TODO - decide how to expose the responses api for wrapped providers
-                            false
+                            OpenAIAPIType::ChatCompletions
                         )),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
@@ -1270,10 +1261,7 @@ impl UninitializedProviderConfig {
                         provider_type_default_credentials,
                     )
                     .await?,
-                match api_type {
-                    OpenAIAPIType::ChatCompletions => false,
-                    OpenAIAPIType::Responses => true,
-                },
+                api_type,
             )),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
@@ -2151,7 +2139,7 @@ impl ShorthandModelConfig for ModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                false,
+                OpenAIAPIType::ChatCompletions,
             )),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
