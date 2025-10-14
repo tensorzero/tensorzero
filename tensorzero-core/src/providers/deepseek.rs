@@ -56,6 +56,10 @@ pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<DeepSeekCredentials>,
+        fallback: Box<DeepSeekCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for DeepSeekCredentials {
@@ -66,6 +70,12 @@ impl TryFrom<Credential> for DeepSeekCredentials {
             Credential::Static(key) => Ok(DeepSeekCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(DeepSeekCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(DeepSeekCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(DeepSeekCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for DeepSeek provider".to_string(),
             })),
@@ -87,6 +97,16 @@ impl DeepSeekCredentials {
                         message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
+                })
+            }
+            DeepSeekCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
                 })
             }
             DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {

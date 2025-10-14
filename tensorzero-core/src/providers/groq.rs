@@ -63,6 +63,10 @@ pub enum GroqCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<GroqCredentials>,
+        fallback: Box<GroqCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for GroqCredentials {
@@ -74,6 +78,10 @@ impl TryFrom<Credential> for GroqCredentials {
             Credential::Dynamic(key_name) => Ok(GroqCredentials::Dynamic(key_name)),
             Credential::None => Ok(GroqCredentials::None),
             Credential::Missing => Ok(GroqCredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(GroqCredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Groq provider".to_string(),
             })),
@@ -97,6 +105,16 @@ impl GroqCredentials {
                     .into()
                 }))
                 .transpose()
+            }
+            GroqCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             GroqCredentials::None => Ok(None),
         }

@@ -79,6 +79,10 @@ pub enum AnthropicCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<AnthropicCredentials>,
+        fallback: Box<AnthropicCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for AnthropicCredentials {
@@ -89,6 +93,12 @@ impl TryFrom<Credential> for AnthropicCredentials {
             Credential::Static(key) => Ok(AnthropicCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(AnthropicCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(AnthropicCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(AnthropicCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Anthropic provider".to_string(),
             })),
@@ -110,6 +120,16 @@ impl AnthropicCredentials {
                         message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
+                })
+            }
+            AnthropicCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
                 })
             }
             AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
