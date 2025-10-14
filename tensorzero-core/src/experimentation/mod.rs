@@ -107,7 +107,9 @@ impl ExperimentationConfig {
         // If the sampler fails but there are active variants, fall back to uniform sampling
         // from the allowed variants
         result.or_else(|e| {
-            if !active_variants.is_empty() {
+            if active_variants.is_empty() {
+                Err(e)
+            } else {
                 let allowed: Vec<&str> = match self {
                     Self::StaticWeights(config) => config.allowed_variants().collect(),
                     Self::Uniform => return Err(e), // Uniform has no restrictions, so if it failed we just propagate
@@ -115,8 +117,6 @@ impl ExperimentationConfig {
                     Self::AlwaysFails(config) => config.allowed_variants().collect(),
                 };
                 sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
-            } else {
-                Err(e)
             }
         })
     }
@@ -214,7 +214,7 @@ impl VariantSampler for AlwaysFailsConfig {
     }
 
     fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
-        self.allowed_variants.iter().map(|s| s.as_str())
+        self.allowed_variants.iter().map(String::as_str)
     }
 }
 

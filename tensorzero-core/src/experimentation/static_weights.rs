@@ -165,8 +165,8 @@ impl VariantSampler for StaticWeightsConfig {
     fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
         self.candidate_variants
             .keys()
-            .map(|s| s.as_str())
-            .chain(self.fallback_variants.iter().map(|s| s.as_str()))
+            .map(String::as_str)
+            .chain(self.fallback_variants.iter().map(String::as_str))
     }
 }
 
