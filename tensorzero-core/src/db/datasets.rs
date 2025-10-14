@@ -153,7 +153,7 @@ pub struct DatasetDetailRow {
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatasetMetadata {
     pub dataset_name: String,
-    pub count: u32,
+    pub count: u64,
     pub last_updated: String,
 }
 
@@ -205,7 +205,7 @@ pub struct GetDatapointParams {
 #[cfg_attr(test, automock)]
 pub trait DatasetQueries {
     /// Counts rows for a dataset based on query parameters
-    async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
+    async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u64, Error>;
 
     /// Inserts rows into a dataset table by selecting from the inference tables
     /// Returns the number of rows inserted
