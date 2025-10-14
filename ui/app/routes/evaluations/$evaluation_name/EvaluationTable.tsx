@@ -85,7 +85,7 @@ const TruncatedContent = ({
     <TruncatedContentTooltip truncatedLabel={truncatedLabel}>
       {type === "text" ? (
         <div className="flex h-full w-full items-center justify-center p-4">
-          <pre className="w-full text-xs whitespace-pre-wrap">{content}</pre>
+          <pre className="w-full whitespace-pre-wrap text-xs">{content}</pre>
         </div>
       ) : type === "input" ? (
         <InputSnippet {...content} />

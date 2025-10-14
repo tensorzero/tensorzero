@@ -57,10 +57,10 @@ function DirectoryCard({
           />
         </div>
         <div className="flex w-full flex-col overflow-hidden">
-          <h3 className="text-fg-primary overflow-hidden text-sm font-medium text-ellipsis whitespace-nowrap">
+          <h3 className="text-fg-primary overflow-hidden text-ellipsis whitespace-nowrap text-sm font-medium">
             {title}
           </h3>
-          <p className="text-fg-secondary overflow-hidden text-xs text-ellipsis whitespace-nowrap">
+          <p className="text-fg-secondary overflow-hidden text-ellipsis whitespace-nowrap text-xs">
             {typeof description === "string" ? (
               description
             ) : (
@@ -198,7 +198,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <div className="mx-auto flex w-full max-w-240 flex-col gap-12">
+      <div className="max-w-240 mx-auto flex w-full flex-col gap-12">
         <h1 className="text-2xl font-medium">Dashboard</h1>
         <div className="grid w-full grid-cols-1 gap-x-6 gap-y-12 md:grid-cols-2 lg:grid-cols-3">
           <div id="observability" className="flex w-full flex-col gap-2">

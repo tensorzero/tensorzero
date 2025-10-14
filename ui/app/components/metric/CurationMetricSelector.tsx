@@ -157,7 +157,7 @@ export default function CurationMetricSelector<
                     role="combobox"
                     aria-expanded={open}
                     aria-busy={metricsLoading}
-                    className="group border-border hover:border-border-accent hover:bg-bg-primary w-full justify-between border font-normal hover:cursor-pointer"
+                    className="border-border hover:border-border-accent hover:bg-bg-primary group w-full justify-between border font-normal hover:cursor-pointer"
                     disabled={!functionValue || metricsLoading}
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -250,7 +250,7 @@ export default function CurationMetricSelector<
                           <span>None</span>
                           <span
                             className={clsx(
-                              "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                              "min-w-8 flex-shrink-0 whitespace-nowrap text-right text-sm",
                               field.value === null
                                 ? "text-fg-secondary font-medium"
                                 : "text-fg-tertiary font-normal",
@@ -304,7 +304,7 @@ export default function CurationMetricSelector<
                                   <FeedbackBadges metric={metricConfig} />
                                   <span
                                     className={clsx(
-                                      "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                                      "min-w-8 flex-shrink-0 whitespace-nowrap text-right text-sm",
                                       field.value === metricName
                                         ? "text-fg-secondary font-medium"
                                         : "text-fg-tertiary font-normal",

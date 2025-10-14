@@ -175,7 +175,7 @@ export function DatasetSelector({
                         </div>
                         <span
                           className={clsx(
-                            "min-w-8 flex-shrink-0 text-right text-sm whitespace-nowrap",
+                            "min-w-8 flex-shrink-0 whitespace-nowrap text-right text-sm",
                             selected === dataset.name
                               ? "text-fg-secondary font-medium"
                               : "text-fg-tertiary font-normal",

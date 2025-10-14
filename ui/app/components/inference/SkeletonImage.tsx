@@ -11,7 +11,7 @@ export function SkeletonImage({
     return (
       <Skeleton className={`relative aspect-square ${className}`}>
         <div className="absolute inset-0 flex flex-col items-center justify-center p-2">
-          <span className="text-center text-sm text-balance text-red-500/40">
+          <span className="text-balance text-center text-sm text-red-500/40">
             {error}
           </span>
         </div>

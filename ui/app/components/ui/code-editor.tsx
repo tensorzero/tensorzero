@@ -197,7 +197,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
     <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
-      <div className="absolute top-1 right-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
+      <div className="absolute right-1 top-1 z-10 flex gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
         <Button
           variant="secondary"
           size="iconSm"
@@ -221,11 +221,11 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           title="Toggle word wrap"
         >
           <span className="relative flex h-full w-full items-center justify-center">
-            <WrapTextIcon className="absolute top-1/2 left-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2" />
+            <WrapTextIcon className="absolute left-1/2 top-1/2 z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2" />
             {/* If disabled, show an X icon, larger and on top of the wrap icon */}
             {wordWrap ? null : (
               <X
-                className="absolute top-1/2 left-1/2 z-20 !h-7 !w-7 -translate-x-1/2 -translate-y-1/2"
+                className="absolute left-1/2 top-1/2 z-20 !h-7 !w-7 -translate-x-1/2 -translate-y-1/2"
                 strokeWidth={1}
               />
             )}

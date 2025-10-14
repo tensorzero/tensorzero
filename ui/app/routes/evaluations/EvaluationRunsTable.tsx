@@ -44,7 +44,7 @@ function EvaluationRunRow({
           to={toEvaluationUrl(evaluationRun.evaluation_name)}
           className="block no-underline"
         >
-          <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+          <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
             {evaluationRun.evaluation_name}
           </code>
         </Link>
@@ -54,7 +54,7 @@ function EvaluationRunRow({
           to={toDatasetUrl(evaluationRun.dataset_name)}
           className="block no-underline"
         >
-          <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+          <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
             {evaluationRun.dataset_name}
           </code>
         </Link>
@@ -71,7 +71,7 @@ function EvaluationRunRow({
           variantName={evaluationRun.variant_name}
           functionName={evaluationRun.function_name}
         >
-          <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+          <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
             {evaluationRun.variant_name}
           </code>
         </VariantLink>

@@ -310,7 +310,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
   return (
     <PageLayout>
       <PageHeader name="Playground" />
-      <div className="flex max-w-180 flex-col gap-2">
+      <div className="max-w-180 flex flex-col gap-2">
         <Label>Function</Label>
         <FunctionSelector
           selected={functionName}
@@ -326,7 +326,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           functions={useAllFunctionConfigs()}
         />
       </div>
-      <div className="flex max-w-180 flex-col gap-2">
+      <div className="max-w-180 flex flex-col gap-2">
         <Label>Dataset</Label>
         <DatasetSelector
           functionName={functionName ?? undefined}
@@ -336,7 +336,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
           allowCreation={false}
         />
       </div>
-      <div className="flex max-w-180 flex-col gap-2">
+      <div className="max-w-180 flex flex-col gap-2">
         <Label>Variants</Label>
         <BuiltinVariantFilter
           variants={variants}

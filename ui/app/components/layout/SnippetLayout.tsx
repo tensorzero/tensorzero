@@ -76,7 +76,7 @@ export function SnippetContent({
       </div>
 
       {needsExpansion && !expanded && maxHeight !== "Content" && (
-        <div className="from-bg-primary absolute right-0 bottom-0 left-0 flex justify-center bg-gradient-to-t to-transparent pt-8 pb-4">
+        <div className="from-bg-primary absolute bottom-0 left-0 right-0 flex justify-center bg-gradient-to-t to-transparent pb-4 pt-8">
           <Button
             variant="outline"
             size="sm"

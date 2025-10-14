@@ -135,7 +135,7 @@ export function DynamicEvaluationProjectResultsTable({
                           {index === 0 && (
                             <TableCell
                               rowSpan={task_results.length}
-                              className="max-w-[200px] overflow-hidden text-center align-middle text-ellipsis whitespace-nowrap"
+                              className="max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap text-center align-middle"
                             >
                               {result.task_name ?? "-"}
                             </TableCell>

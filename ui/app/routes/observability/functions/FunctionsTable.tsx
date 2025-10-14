@@ -134,13 +134,13 @@ export default function FunctionsTable({
     <div>
       <div className="mb-4">
         <div className="relative">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search functions..."
             value={globalFilter ?? ""}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
+            className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pl-10 pr-4 text-sm focus:border-transparent focus:outline-none focus:ring-2"
           />
         </div>
       </div>

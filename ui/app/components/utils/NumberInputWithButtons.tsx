@@ -48,7 +48,7 @@ export function NumberInputWithButtons({
         }}
         className="focus:ring-primary/20 [appearance:textfield] focus:ring-2 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
       />
-      <div className="absolute top-2 right-3 bottom-2 flex flex-col opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
+      <div className="absolute bottom-2 right-3 top-2 flex flex-col opacity-0 transition-opacity duration-200 group-focus-within:opacity-100 group-hover:opacity-100">
         <button
           type="button"
           className="bg-secondary hover:bg-secondary-foreground/15 flex h-1/2 w-4 cursor-pointer items-center justify-center border-none"

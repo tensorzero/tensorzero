@@ -15,7 +15,7 @@ const PageLayout: React.FC<React.ComponentProps<"div">> = ({
 }) => (
   <div
     className={cn(
-      "container mx-auto flex flex-col gap-12 px-8 pt-16 pb-20",
+      "container mx-auto flex flex-col gap-12 px-8 pb-20 pt-16",
       className,
     )}
     {...props}
@@ -66,7 +66,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
             <h1 className="text-2xl font-medium">{heading}</h1>
           )}
           {name !== undefined && (
-            <span className="font-mono text-2xl leading-none font-medium">
+            <span className="font-mono text-2xl font-medium leading-none">
               {name}
             </span>
           )}

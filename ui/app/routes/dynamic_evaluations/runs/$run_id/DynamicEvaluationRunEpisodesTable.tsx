@@ -64,7 +64,7 @@ export default function DynamicEvaluationRunEpisodesTable({
             episodes.map((episode) => (
               <TableRow key={episode.episode_id}>
                 <TableCell>
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300">
+                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300">
                     {episode.task_name ?? "-"}
                   </code>
                 </TableCell>

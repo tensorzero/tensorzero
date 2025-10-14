@@ -62,7 +62,7 @@ export function TextMessage({
   return content === undefined && !isEditing ? (
     <EmptyMessage message={emptyMessage} />
   ) : (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+    <div className="max-w-240 flex min-w-80 flex-col gap-1">
       <Label icon={<AlignLeftIcon className="text-fg-muted h-3 w-3" />}>
         {label}
       </Label>
@@ -94,7 +94,7 @@ export function TemplateMessage({
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+    <div className="max-w-240 flex min-w-80 flex-col gap-1">
       <Label icon={<FileCode className="text-fg-muted h-3 w-3" />}>
         Template: <span className="font-mono text-xs">{templateName}</span>
       </Label>
@@ -205,7 +205,7 @@ export function ToolCallMessage(
   }
 
   return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+    <div className="max-w-240 flex min-w-80 flex-col gap-1">
       <Label icon={<Terminal className="text-fg-muted h-3 w-3" />}>
         Tool Call
       </Label>
@@ -243,7 +243,7 @@ export function ToolResultMessage({
   onChange,
 }: ToolResultMessageProps) {
   return (
-    <div className="flex max-w-240 min-w-80 flex-col gap-1">
+    <div className="max-w-240 flex min-w-80 flex-col gap-1">
       <Label icon={<ArrowRight className="text-fg-muted h-3 w-3" />}>
         Tool Result
       </Label>

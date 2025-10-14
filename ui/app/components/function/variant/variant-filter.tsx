@@ -129,7 +129,7 @@ export function VariantFilter({
               })}
             </ComboboxList>
           ) : (
-            <div className="relative flex gap-2 px-2 py-1.5 select-none">
+            <div className="relative flex select-none gap-2 px-2 py-1.5">
               No results found
             </div>
           )}
@@ -157,7 +157,7 @@ function VariantFilterItem({
   return (
     <ComboboxItem
       focusOnHover
-      className="data-[active-item]:bg-accent data-[active-item]:text-accent-foreground relative flex h-8 cursor-default items-center justify-between gap-2 rounded-sm px-2 py-1.5 select-none data-[active-item]:outline-none"
+      className="data-[active-item]:bg-accent data-[active-item]:text-accent-foreground relative flex h-8 cursor-default select-none items-center justify-between gap-2 rounded-sm px-2 py-1.5 data-[active-item]:outline-none"
       value={value}
       onClick={() => onClick?.(value)}
     >
@@ -165,7 +165,7 @@ function VariantFilterItem({
         {color && (
           <span
             style={{ "--_bg-color": color } as React.CSSProperties}
-            className="block h-2 w-2 rounded-xs bg-[var(--_bg-color)]"
+            className="rounded-xs block h-2 w-2 bg-[var(--_bg-color)]"
           />
         )}
         <span>{label}</span>

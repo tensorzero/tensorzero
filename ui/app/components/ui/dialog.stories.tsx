@@ -80,7 +80,7 @@ export const WithLongContent: Story = {
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <div className="flex flex-col gap-4 rounded-md bg-gray-100 p-4 font-mono text-xs break-words whitespace-pre-wrap">
+            <div className="flex flex-col gap-4 whitespace-pre-wrap break-words rounded-md bg-gray-100 p-4 font-mono text-xs">
               {Array.from({ length: 16 }).map((_, i) => (
                 <p key={i}>
                   Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed

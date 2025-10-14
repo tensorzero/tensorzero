@@ -43,7 +43,7 @@ export function TagsBadges({ tags }: TagsBadgesProps) {
                 </Badge>
               </TooltipTrigger>
               <TooltipContent>
-                <div className="max-w-xs font-mono break-words">
+                <div className="max-w-xs break-words font-mono">
                   <strong>{key}</strong>={value}
                 </div>
               </TooltipContent>

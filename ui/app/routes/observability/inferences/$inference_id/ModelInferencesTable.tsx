@@ -52,7 +52,7 @@ export function ModelInferencesTable({
                   <TableItemShortUuid id={inference.id} />
                 </TableCell>
                 <TableCell className="max-w-[200px]">
-                  <span className="block overflow-hidden font-mono text-ellipsis whitespace-nowrap">
+                  <span className="block overflow-hidden text-ellipsis whitespace-nowrap font-mono">
                     {inference.model_name}
                   </span>
                 </TableCell>

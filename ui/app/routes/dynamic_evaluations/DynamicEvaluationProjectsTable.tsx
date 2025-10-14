@@ -38,13 +38,13 @@ export default function DynamicEvaluationProjectsTable({
                     to={toDynamicEvaluationProjectUrl(project.name)}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {project.name}
                     </code>
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                  <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                     {project.count}
                   </code>
                 </TableCell>

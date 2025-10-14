@@ -46,7 +46,7 @@ export function TemplateDetailsDialog({
                       return (
                         <div key={templateName} className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <h4 className="font-mono leading-none font-medium">
+                            <h4 className="font-mono font-medium leading-none">
                               {templateName}
                             </h4>
                             {isLegacy && (

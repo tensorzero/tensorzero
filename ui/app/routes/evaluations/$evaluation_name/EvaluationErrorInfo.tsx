@@ -35,7 +35,7 @@ export function EvaluationErrorInfo({ errors }: EvaluationErrorInfoProps) {
             <h3 className="flex items-center gap-2 text-sm font-medium">
               <EvaluationRunBadge runInfo={runInfo} getColor={getColor} />
             </h3>
-            <div className="mt-1 mb-2 max-h-64 overflow-y-auto rounded border p-2">
+            <div className="mb-2 mt-1 max-h-64 overflow-y-auto rounded border p-2">
               {errors.map((error, index) => (
                 <EvaluationError key={index} error={error} />
               ))}

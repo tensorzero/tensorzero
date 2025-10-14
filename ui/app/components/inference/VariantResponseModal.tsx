@@ -198,7 +198,7 @@ export function VariantResponseModal({
                   )}
                 </Button>
                 {showRawResponse && (
-                  <pre className="mt-2 overflow-x-auto rounded-md bg-gray-100 p-4 text-xs break-words whitespace-pre-wrap">
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-gray-100 p-4 text-xs">
                     <code>{JSON.stringify(rawResponse, null, 2)}</code>
                   </pre>
                 )}

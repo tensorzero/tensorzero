@@ -49,7 +49,7 @@ export default function FunctionVariantTable({
             variantName={info.getValue()}
             functionName={function_name}
           >
-            <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+            <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
               {info.getValue()}
             </code>
           </VariantLink>
@@ -93,13 +93,13 @@ export default function FunctionVariantTable({
     <div>
       <div className="mb-4">
         <div className="relative">
-          <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+          <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search variants..."
             value={globalFilter ?? ""}
             onChange={(e) => setGlobalFilter(e.target.value)}
-            className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pr-4 pl-10 text-sm focus:border-transparent focus:ring-2 focus:outline-none"
+            className="border-input bg-background focus:ring-ring w-full rounded-md border py-2 pl-10 pr-4 text-sm focus:border-transparent focus:outline-none focus:ring-2"
           />
         </div>
       </div>

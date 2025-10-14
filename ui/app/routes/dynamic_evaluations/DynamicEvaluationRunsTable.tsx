@@ -43,7 +43,7 @@ export default function DynamicEvaluationRunsTable({
                     to={toDynamicEvaluationRunUrl(run.id)}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {run.name}
                     </code>
                   </Link>
@@ -53,7 +53,7 @@ export default function DynamicEvaluationRunsTable({
                     to={toDynamicEvaluationRunUrl(run.id)}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                    <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                       {run.id}
                     </code>
                   </Link>
@@ -64,7 +64,7 @@ export default function DynamicEvaluationRunsTable({
                       to={`${toDynamicEvaluationProjectUrl(run.project_name)}?run_ids=${run.id}`}
                       className="block no-underline"
                     >
-                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
+                      <code className="block overflow-hidden text-ellipsis whitespace-nowrap rounded font-mono transition-colors duration-300 hover:text-gray-500">
                         {run.project_name}
                       </code>
                     </Link>
