@@ -6,9 +6,9 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * in the form that we return to the client / ClickHouse
  */
 export type ToolCallOutput = {
-  arguments: JsonValue | null;
+  arguments?: JsonValue;
   id: string;
-  name: string | null;
+  name?: string;
   raw_arguments: string;
   raw_name: string;
 };

@@ -79,24 +79,15 @@ export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
-  signature: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
-  _internal_provider_type: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
+  text: z.string().optional(),
+  signature: z.string().optional(),
+  _internal_provider_type: z.string().optional(),
 });
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
   data: JsonValueSchema,
-  model_provider_name: z.string().nullable(),
+  model_provider_name: z.string().optional(),
 });
 export type Unknown = z.infer<typeof unknownSchema>;
 
@@ -156,9 +147,9 @@ export const storageKindSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("s3_compatible"),
       bucket_name: z.string(),
-      region: z.string().nullable(),
-      endpoint: z.string().nullable(),
-      allow_http: z.boolean().nullable(),
+      region: z.string().nullish(),
+      endpoint: z.string().nullish(),
+      allow_http: z.boolean().nullish(),
     })
     .strict(),
   z
@@ -344,16 +335,16 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 ]);
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string().nullable(),
-  parsed: JsonValueSchema,
+  raw: z.string().optional(),
+  parsed: JsonValueSchema.optional(),
 }) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const toolCallOutputSchema = z
   .object({
     type: z.literal("tool_call"),
-    arguments: JsonValueSchema.nullable(),
+    arguments: JsonValueSchema.optional(),
     id: z.string(),
-    name: z.string().nullable(),
+    name: z.string().optional(),
     raw_arguments: z.string(),
     raw_name: z.string(),
   })

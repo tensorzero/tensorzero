@@ -248,7 +248,7 @@ function ChatInferenceOutputComponent({
                     toolArguments={
                       block.arguments
                         ? JSON.stringify(block.arguments, null, 2)
-                        : null
+                        : undefined
                     }
                     toolRawArguments={block.raw_arguments}
                     toolCallId={block.id}

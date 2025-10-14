@@ -599,7 +599,7 @@ export const UnknownAndThoughtContent: Story = {
           {
             type: "unknown",
             data: null,
-            model_provider_name: null,
+            model_provider_name: undefined,
           },
           {
             type: "unknown",
@@ -608,13 +608,13 @@ export const UnknownAndThoughtContent: Story = {
               data: 123,
               structure: ["is", "not", "validated"],
             } as JsonValue,
-            model_provider_name: null,
+            model_provider_name: undefined,
           },
           {
             type: "thought",
             text: "This is a thought content block for testing.",
-            signature: null,
-            _internal_provider_type: null,
+            signature: undefined,
+            _internal_provider_type: undefined,
           },
         ],
       },

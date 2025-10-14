@@ -554,6 +554,7 @@ impl Text {
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
@@ -802,7 +803,8 @@ pub enum ContentBlockChatOutput {
     Thought(Thought),
     Unknown {
         data: Value,
-        #[cfg_attr(test, ts(optional))]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
         model_provider_name: Option<String>,
     },
 }
@@ -1195,7 +1197,9 @@ pub struct JsonInferenceResult {
 #[ts(export, optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub parsed: Option<Value>,
 }
 
