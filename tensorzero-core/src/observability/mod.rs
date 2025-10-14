@@ -158,7 +158,10 @@ pub struct TracerWrapper {
 fn add_local_self_signed_cert(
     tls_config: tonic::transport::ClientTlsConfig,
 ) -> tonic::transport::ClientTlsConfig {
-    static CERT: &[u8] = include_bytes!("../../tests/e2e/self-signed-certs/otlp-collector.crt");
+    static CERT: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/e2e/self-signed-certs/otlp-collector.crt"
+    ));
     tls_config.ca_certificate(tonic::transport::Certificate::from_pem(CERT))
 }
 
