@@ -10,20 +10,6 @@ use crate::variant::VariantInfo;
 
 mod static_weights;
 
-/// Test-only config that always fails during sampling to test fallback logic
-#[cfg(test)]
-#[derive(Debug, Serialize)]
-pub struct AlwaysFailsConfig {
-    allowed_variants: Vec<String>,
-}
-
-#[cfg(test)]
-impl AlwaysFailsConfig {
-    pub fn new(allowed_variants: Vec<String>) -> Self {
-        Self { allowed_variants }
-    }
-}
-
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -67,28 +53,6 @@ pub trait VariantSampler {
     // Return all variant names that are allowed to be used by this experimentation config
     // Used to enforce that we don't fall back to a disallowed variant.
     fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_;
-}
-
-#[cfg(test)]
-impl VariantSampler for AlwaysFailsConfig {
-    async fn setup(&self) -> Result<(), Error> {
-        Ok(())
-    }
-
-    async fn sample(
-        &self,
-        _function_name: &str,
-        _episode_id: Uuid,
-        _active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
-    ) -> Result<(String, Arc<VariantInfo>), Error> {
-        Err(Error::new(ErrorDetails::Inference {
-            message: "AlwaysFails sampler always fails".to_string(),
-        }))
-    }
-
-    fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
-        self.allowed_variants.iter().map(|s| s.as_str())
-    }
 }
 
 impl ExperimentationConfig {
@@ -216,6 +180,42 @@ pub(crate) fn get_uniform_value(function_name: &str, episode_id: &Uuid) -> f64 {
     let truncated_hash =
         u32::from_be_bytes([hash_value[0], hash_value[1], hash_value[2], hash_value[3]]);
     truncated_hash as f64 / u32::MAX as f64
+}
+
+/// Test-only config that always fails during sampling to test fallback logic
+#[cfg(test)]
+#[derive(Debug, Serialize)]
+pub struct AlwaysFailsConfig {
+    allowed_variants: Vec<String>,
+}
+
+#[cfg(test)]
+impl AlwaysFailsConfig {
+    pub fn new(allowed_variants: Vec<String>) -> Self {
+        Self { allowed_variants }
+    }
+}
+
+#[cfg(test)]
+impl VariantSampler for AlwaysFailsConfig {
+    async fn setup(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    async fn sample(
+        &self,
+        _function_name: &str,
+        _episode_id: Uuid,
+        _active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+    ) -> Result<(String, Arc<VariantInfo>), Error> {
+        Err(Error::new(ErrorDetails::Inference {
+            message: "AlwaysFails sampler always fails".to_string(),
+        }))
+    }
+
+    fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
+        self.allowed_variants.iter().map(|s| s.as_str())
+    }
 }
 
 #[cfg(test)]
