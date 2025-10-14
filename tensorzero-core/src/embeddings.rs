@@ -30,6 +30,7 @@ use crate::{
     model::ProviderConfig,
     providers::openai::OpenAIProvider,
 };
+use crate::utils::retries::RetryConfig;
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use tokio::time::error::Elapsed;
@@ -78,6 +79,8 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
             providers: HashMap::from([(provider_type.to_string().into(), provider_info)]),
             timeout_ms: None,
+            timeouts: TimeoutsConfig::default(),
+            retries: RetryConfig::default(),
         })
     }
 
@@ -97,6 +100,8 @@ pub struct UninitializedEmbeddingModelConfig {
     pub timeout_ms: Option<u64>,
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 impl UninitializedEmbeddingModelConfig {
@@ -137,6 +142,8 @@ impl UninitializedEmbeddingModelConfig {
             routing: self.routing,
             providers,
             timeout_ms,
+            timeouts: self.timeouts,
+            retries: self.retries,
         })
     }
 }
@@ -148,6 +155,8 @@ pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
     pub timeout_ms: Option<u64>,
+    pub timeouts: TimeoutsConfig,
+    pub retries: RetryConfig, 
 }
 
 impl EmbeddingModelConfig {
@@ -156,7 +165,7 @@ impl EmbeddingModelConfig {
         &self,
         request: &EmbeddingRequest,
         model_name: &str,
-        clients: &InferenceClients,
+        clients: &InferenceClients<'_>,
     ) -> Result<EmbeddingModelResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_embedding_models = async {
@@ -167,15 +176,15 @@ impl EmbeddingModelConfig {
                     })
                 })?;
                 let provider_request = EmbeddingModelProviderRequest {
-                    request,
                     model_name,
+                    request,
                     provider_name,
-                    otlp_config: &clients.otlp_config,
+                    otlp_config: clients.otlp_config,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
                     let cache_lookup = embedding_cache_lookup(
-                        &clients.clickhouse_connection_info,
+                        clients.clickhouse_connection_info,
                         &provider_request,
                         clients.cache_options.max_age_s,
                     )
@@ -203,7 +212,7 @@ impl EmbeddingModelConfig {
                             .into());
                             };
                             let _ = start_cache_write(
-                                &clients.clickhouse_connection_info,
+                                clients.clickhouse_connection_info,
                                 provider_request.get_cache_key()?,
                                 CacheData {
                                     output: EmbeddingCacheData {
@@ -403,11 +412,6 @@ impl EmbeddingModelResponse {
             cached: true,
         }
     }
-
-    /// We return the actual usage (meaning the number of tokens the user would be billed for)
-    /// in the HTTP response.
-    /// However, we store the number of tokens that would have been used in the database.
-    /// So we need this function to compute the actual usage in order to send it in the HTTP response.
     pub fn usage_considering_cached(&self) -> Usage {
         if self.cached {
             Usage {
@@ -529,6 +533,7 @@ pub struct EmbeddingProviderInfo {
     pub inner: EmbeddingProviderConfig,
     pub timeout_ms: Option<u64>,
     pub provider_name: Arc<str>,
+    //pub retry: Option<RetryConfig>,
     #[cfg_attr(test, ts(skip))]
     pub extra_body: Option<ExtraBodyConfig>,
 }
@@ -562,18 +567,18 @@ impl EmbeddingProviderInfo {
     pub async fn embed(
         &self,
         request: &EmbeddingRequest,
-        clients: &InferenceClients,
+        clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
             .rate_limiting_config
-            .consume_tickets(&clients.postgres_connection_info, scope_info, request)
+            .consume_tickets(clients.postgres_connection_info, scope_info, request)
             .await?;
         let response_fut = self.inner.embed(
             request,
-            &clients.http_client,
-            &clients.credentials,
+            clients.http_client,
+            clients.credentials,
             model_provider_data,
         );
         let response = if let Some(timeout_ms) = self.timeout_ms {
@@ -606,6 +611,7 @@ impl EmbeddingProviderInfo {
         Ok(response)
     }
 }
+
 
 #[derive(Debug, Deserialize)]
 pub struct UninitializedEmbeddingProviderConfig {
@@ -798,6 +804,8 @@ mod tests {
                 ("good".to_string().into(), good_provider_info),
             ]),
             timeout_ms: None,
+            timeouts: TimeoutsConfig::default(),
+            retries: RetryConfig::default(),
         };
         let request = EmbeddingRequest {
             input: "Hello, world!".to_string().into(),
@@ -809,17 +817,17 @@ mod tests {
                 &request,
                 "fallback",
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(InferenceCredentials::default()),
-                    cache_options: CacheOptions {
+                    http_client: &TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
+                    credentials: &InferenceCredentials::default(),
+                    cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
             )
             .await;
@@ -848,9 +856,7 @@ mod tests {
             config: crate::model::UninitializedProviderConfig::OpenAI {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
-                api_key_location: Some(crate::model::CredentialLocationWithFallback::Single(
-                    crate::model::CredentialLocation::None,
-                )),
+                api_key_location: Some(crate::model::CredentialLocation::None),
                 api_type: Default::default(),
             },
             timeout_ms: None,

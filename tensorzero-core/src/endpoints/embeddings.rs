@@ -15,7 +15,6 @@ use crate::{
 };
 
 use super::inference::InferenceCredentials;
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct Params {
     pub input: EmbeddingInput,
@@ -65,16 +64,16 @@ pub async fn embeddings(
     };
     let dryrun = params.dryrun.unwrap_or(false);
     let clients = InferenceClients {
-        http_client: http_client.clone(),
-        credentials: Arc::new(params.credentials.clone()),
-        cache_options: (params.cache_options, dryrun).into(),
-        clickhouse_connection_info: clickhouse_connection_info.clone(),
-        postgres_connection_info: postgres_connection_info.clone(),
+        http_client,
+        credentials: &params.credentials,
+        cache_options: &(params.cache_options, dryrun).into(),
+        clickhouse_connection_info: &clickhouse_connection_info,
+        postgres_connection_info: &postgres_connection_info,
         // NOTE: we do not support tags for embeddings yet
         // we should fix this once the tags are implemented
-        tags: Arc::new(HashMap::default()),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
-        otlp_config: config.gateway.export.otlp.clone(),
+        tags: &HashMap::default(),
+        rate_limiting_config: &config.rate_limiting,
+        otlp_config: &config.gateway.export.otlp,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
@@ -101,6 +100,7 @@ mod tests {
     use crate::embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo};
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;
+    use crate::utils::retries::RetryConfig;
     use std::collections::HashMap;
     use tracing_test::traced_test;
 
@@ -122,6 +122,8 @@ mod tests {
             routing: vec!["dummy".to_string().into()],
             providers: HashMap::from([("dummy".to_string().into(), provider_info)]),
             timeout_ms: None,
+            timeouts: TimeoutsConfig::default(),    
+            retries: RetryConfig::default(),
         };
 
         // Create a minimal config with just the embedding model
@@ -130,13 +132,11 @@ mod tests {
 
         let provider_types = ProviderTypesConfig::default();
         let config = Config {
-            embedding_models: Arc::new(
-                crate::embeddings::EmbeddingModelTable::new(
-                    embedding_models,
-                    Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
-                )
-                .unwrap(),
-            ),
+            embedding_models: crate::embeddings::EmbeddingModelTable::new(
+                embedding_models,
+                Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
+            )
+            .unwrap(),
             ..Default::default()
         };
 

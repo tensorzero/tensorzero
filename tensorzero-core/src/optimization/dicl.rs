@@ -69,6 +69,7 @@ pub struct DiclOptimizationConfig {
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocationWithFallback>,
+    pub retries: RetryConfig,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -90,8 +91,11 @@ pub struct UninitializedDiclOptimizationConfig {
     pub model: String,
     #[serde(default = "default_append_to_existing_variants")]
     pub append_to_existing_variants: bool,
+    #[cfg(feature = "pyo3")]
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credentials: Option<CredentialLocationWithFallback>,
+    pub credentials: Option<CredentialLocation>,
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 impl Default for UninitializedDiclOptimizationConfig {
@@ -106,7 +110,9 @@ impl Default for UninitializedDiclOptimizationConfig {
             k: default_k(),
             model: default_model(),
             append_to_existing_variants: default_append_to_existing_variants(),
+            #[cfg(feature = "pyo3")]
             credentials: None,
+            retries: RetryConfig::default(),    
         }
     }
 }
@@ -141,12 +147,9 @@ impl UninitializedDiclOptimizationConfig {
         append_to_existing_variants: Option<bool>,
         credentials: Option<String>,
     ) -> PyResult<Self> {
-        // Use Deserialize to convert the string to a CredentialLocationWithFallback
-        let credentials = credentials.map(|s| {
-            serde_json::from_str(&s).unwrap_or(CredentialLocationWithFallback::Single(
-                CredentialLocation::Env(s),
-            ))
-        });
+        // Use Deserialize to convert the string to a CredentialLocation
+        let credentials =
+            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
         Ok(Self {
             embedding_model,
             variant_name,
@@ -159,6 +162,7 @@ impl UninitializedDiclOptimizationConfig {
             append_to_existing_variants: append_to_existing_variants
                 .unwrap_or_else(default_append_to_existing_variants),
             credentials,
+            retries: RetryConfig::default(),
         })
     }
 
@@ -208,10 +212,19 @@ impl UninitializedDiclOptimizationConfig {
             k: self.k,
             model: Arc::from(self.model),
             append_to_existing_variants: self.append_to_existing_variants,
+            #[cfg(feature = "pyo3")]
             credentials: OpenAIKind
                 .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
                 .await?,
+            #[cfg(not(feature = "pyo3"))]
+            credentials: OpenAIKind
+                .get_defaulted_credential(None, default_credentials)
+                .await?,
+            #[cfg(feature = "pyo3")]
             credential_location: self.credentials,
+            #[cfg(not(feature = "pyo3"))]
+            credential_location: None,
+            retries: self.retries,  
         })
     }
 }
@@ -538,15 +551,15 @@ async fn process_embedding_batch(
 
     // Create InferenceClients context for the embedding model
     let clients = InferenceClients {
-        http_client: client.clone(),
-        credentials: Arc::new(credentials.clone()),
-        clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-        postgres_connection_info: PostgresConnectionInfo::Disabled,
-        cache_options: CacheOptions::default(),
-        tags: Arc::new(HashMap::default()),
-        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        http_client: &client.clone(),
+        credentials: &Arc::new(credentials.clone()),
+        clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+        postgres_connection_info: &PostgresConnectionInfo::Disabled,
+        cache_options: &CacheOptions::default(),
+        tags: &Arc::new(HashMap::default()),
+        rate_limiting_config: &config.rate_limiting,
         // We don't currently perform any OTLP export in optimization workflows
-        otlp_config: Default::default(),
+        otlp_config: &Default::default(),
     };
 
     let response = embedding_model_config
@@ -820,7 +833,11 @@ mod tests {
     fn create_test_embedding_model_with_name(model_name: &str) -> Config {
         #[cfg(any(test, feature = "e2e_tests"))]
         {
-            use crate::providers::dummy::DummyProvider;
+            use crate::{
+                config::TimeoutsConfig,
+                providers::dummy::DummyProvider,
+                utils::retries::RetryConfig,
+            };
             let mut providers = HashMap::new();
             providers.insert(
                 Arc::from("dummy"),
@@ -837,19 +854,29 @@ mod tests {
             let embedding_model_config = EmbeddingModelConfig {
                 routing: vec![Arc::from("dummy")],
                 providers,
-                timeout_ms: None,
+                timeout_ms: Some(30000),
+                timeouts: TimeoutsConfig::default(),
+                retries: RetryConfig { num_retries: 5, max_delay_s: 0.1 },
             };
-            let provider_types = ProviderTypesConfig::default();
-            Config {
-                embedding_models: Arc::new(
-                    EmbeddingModelTable::new(
-                        HashMap::from([(Arc::from(model_name), embedding_model_config)]),
-                        ProviderTypeDefaultCredentials::new(&provider_types).into(),
-                    )
-                    .unwrap(),
-                ),
-                ..Default::default()
-            }
+
+            let mut embedding_models = std::collections::HashMap::new();
+            embedding_models.insert(Arc::from(model_name), embedding_model_config);
+
+            return Config {
+                gateway: crate::config::gateway::GatewayConfig::default(),
+                models: crate::model::ModelTable::default(),
+                embedding_models: crate::embeddings::EmbeddingModelTable { table: embedding_models, default_credentials: Arc::new(ProviderTypeDefaultCredentials::default()) },
+                functions: std::collections::HashMap::new(),
+                metrics: std::collections::HashMap::new(),
+                tools: std::collections::HashMap::new(),
+                evaluations: std::collections::HashMap::new(),
+                templates: crate::minijinja_util::TemplateConfig::new(),
+                object_store_info: None,
+                provider_types: crate::config::provider_types::ProviderTypesConfig::default(),
+                optimizers: std::collections::HashMap::new(),
+                postgres: crate::config::PostgresConfig::default(),
+                rate_limiting: crate::rate_limiting::RateLimitingConfig::default(),
+            };
         }
         #[cfg(not(any(test, feature = "e2e_tests")))]
         {
