@@ -4,8 +4,9 @@ use tensorzero_core::db::{
     clickhouse::{
         migration_manager::migrations::migration_0037::QUANTILES, test_helpers::get_clickhouse,
     },
+    feedback::FeedbackQueries,
     feedback::FeedbackRow,
-    FeedbackQueries, SelectQueries,
+    SelectQueries,
 };
 
 #[tokio::test]
