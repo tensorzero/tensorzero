@@ -60,11 +60,11 @@ function transformChatDatapointForUpdateRequest(
     output: transformOutputForTensorZero(datapoint.output),
     tags: datapoint.tags || {},
     auxiliary: datapoint.auxiliary,
-    source_inference_id: datapoint.source_inference_id,
+    source_inference_id: datapoint.source_inference_id ?? undefined,
     is_custom: datapoint.is_custom,
     name: datapoint.name,
     tool_params: datapoint.tool_params,
-    staled_at: datapoint.staled_at,
+    staled_at: datapoint.staled_at ?? undefined,
   };
   return transformed;
 }
@@ -83,11 +83,11 @@ function transformJsonDatapointForUpdateRequest(
     output: transformOutputForTensorZero(datapoint.output),
     tags: datapoint.tags || {},
     auxiliary: datapoint.auxiliary,
-    source_inference_id: datapoint.source_inference_id,
+    source_inference_id: datapoint.source_inference_id ?? undefined,
     is_custom: datapoint.is_custom,
     name: datapoint.name,
     output_schema: datapoint.output_schema,
-    staled_at: datapoint.staled_at,
+    staled_at: datapoint.staled_at ?? undefined,
   };
   return transformed;
 }
@@ -148,8 +148,10 @@ export async function saveDatapoint(params: {
   // When saving a datapoint as new, we create a new ID, and mark the data point as "custom".
   datapoint.id = uuid();
   datapoint.is_custom = true;
-  datapoint.episode_id = null;
-  datapoint.staled_at = null;
+  datapoint.episode_id = undefined;
+  datapoint.staled_at = undefined;
+
+  console.log("datapoint", datapoint);
 
   // For future reference:
   // These two calls would be a transaction but ClickHouse isn't transactional.

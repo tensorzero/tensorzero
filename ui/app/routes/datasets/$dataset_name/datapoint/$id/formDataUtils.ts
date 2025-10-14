@@ -49,7 +49,7 @@ export function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
     function_name: formData.get("function_name"),
     id: formData.get("id"),
     episode_id: formData.get("episode_id"),
-    name: formData.get("name") || null,
+    name: formData.get("name") || undefined,
     input: JSON.parse(formData.get("input") as string),
     output: formData.get("output")
       ? JSON.parse(formData.get("output") as string)
@@ -69,6 +69,8 @@ export function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
     is_custom: formData.get("is_custom") === "true",
   };
 
+  // Only filter out undefined values for union-discriminating fields (output, output_schema, tool_params)
+  // Other fields like name should remain even if undefined
   const cleanedData = Object.fromEntries(
     Object.entries(rawData).filter(([, value]) => value !== undefined),
   );

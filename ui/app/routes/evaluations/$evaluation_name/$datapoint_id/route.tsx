@@ -63,6 +63,7 @@ import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
+import { datapointToParsedDatasetRow } from "~/utils/clickhouse/common";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -189,7 +190,10 @@ export async function action({ request }: Route.ActionArgs) {
       const newName = formData.get("newName") as string;
 
       // We need to get the datapoint to pass to renameDatapoint
-      const datapoint = await getDatapoint(dataset_name, datapoint_id);
+      const datapoint = await getDatapoint({
+        dataset_name,
+        datapoint_id,
+      });
       if (!datapoint) {
         return data(
           {
@@ -206,7 +210,7 @@ export async function action({ request }: Route.ActionArgs) {
       await renameDatapoint({
         functionType,
         datasetName: dataset_name,
-        datapoint,
+        datapoint: datapointToParsedDatasetRow(datapoint),
         newName,
       });
 
