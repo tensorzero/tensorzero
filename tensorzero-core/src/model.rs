@@ -286,12 +286,12 @@ impl ModelConfig {
         &self,
         model_provider_request: ModelProviderRequest<'request>,
         provider: &'request ModelProvider,
-        clients: &InferenceClients,
+        clients: &'request InferenceClients<'request>,
     ) -> Result<ModelInferenceResponse, Error> {
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup(
-                &clients.clickhouse_connection_info,
+                clients.clickhouse_connection_info,
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
@@ -302,9 +302,7 @@ impl ModelConfig {
                 return Ok(cache_lookup);
             }
         }
-        let scope_info = ScopeInfo {
-            tags: &clients.tags,
-        };
+        let scope_info = ScopeInfo { tags: clients.tags };
         let response = provider
             .infer(model_provider_request, clients, &scope_info)
             .instrument(span!(
@@ -332,12 +330,12 @@ impl ModelConfig {
         &self,
         model_provider_request: ModelProviderRequest<'request>,
         provider: &'request ModelProvider,
-        clients: &InferenceClients,
+        clients: &'request InferenceClients<'request>,
     ) -> Result<StreamResponseAndMessages, Error> {
         // TODO: think about how to best handle errors here
         if clients.cache_options.enabled.read() {
             let cache_lookup = cache_lookup_streaming(
-                &clients.clickhouse_connection_info,
+                clients.clickhouse_connection_info,
                 model_provider_request,
                 clients.cache_options.max_age_s,
             )
@@ -351,9 +349,7 @@ impl ModelConfig {
                 });
             }
         }
-        let scope_info = ScopeInfo {
-            tags: &clients.tags,
-        };
+        let scope_info = ScopeInfo { tags: clients.tags };
 
         let StreamAndRawRequest {
             stream,
@@ -401,7 +397,7 @@ impl ModelConfig {
     pub async fn infer<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
-        clients: &InferenceClients,
+        clients: &'request InferenceClients<'request>,
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
@@ -417,7 +413,7 @@ impl ModelConfig {
                     request: &request,
                     model_name,
                     provider_name,
-                    otlp_config: &clients.otlp_config,
+                    otlp_config: clients.otlp_config,
                 };
                 let cache_key = model_provider_request.get_cache_key()?;
 
@@ -445,7 +441,7 @@ impl ModelConfig {
                         // (in case we ever add a blocking cache write option)
                         if !response.cached && clients.cache_options.enabled.write() {
                             let _ = start_cache_write(
-                                &clients.clickhouse_connection_info,
+                                clients.clickhouse_connection_info,
                                 cache_key,
                                 CacheData {
                                     output: NonStreamingCacheData {
@@ -503,7 +499,7 @@ impl ModelConfig {
     pub async fn infer_stream<'request>(
         &self,
         request: &'request ModelInferenceRequest<'request>,
-        clients: &InferenceClients,
+        clients: &'request InferenceClients<'request>,
         model_name: &'request str,
     ) -> Result<StreamResponseAndMessages, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
@@ -519,7 +515,7 @@ impl ModelConfig {
                     request: &request,
                     model_name,
                     provider_name,
-                    otlp_config: &clients.otlp_config,
+                    otlp_config: clients.otlp_config,
                 };
 
                 // This future includes a call to `peek_first_chunk`, so applying
@@ -620,7 +616,7 @@ async fn wrap_provider_stream(
     raw_request: String,
     model_request: ModelProviderRequest<'_>,
     ticket_borrow: TicketBorrows,
-    clients: &InferenceClients,
+    clients: &InferenceClients<'_>,
     stream: Instrumented<PeekableProviderInferenceResponseStream>,
     write_to_cache: bool,
 ) -> Result<PeekableProviderInferenceResponseStream, Error> {
@@ -939,7 +935,7 @@ pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "aws_bedrock")]
     #[serde(rename = "aws_bedrock")]
@@ -963,7 +959,7 @@ pub enum UninitializedProviderConfig {
         deployment_id: String,
         endpoint: EndpointLocation,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "gcp_vertex_anthropic")]
     #[serde(rename = "gcp_vertex_anthropic")]
@@ -972,7 +968,7 @@ pub enum UninitializedProviderConfig {
         location: String,
         project_id: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        credential_location: Option<CredentialLocationWithFallback>,
+        credential_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "gcp_vertex_gemini")]
     #[serde(rename = "gcp_vertex_gemini")]
@@ -982,58 +978,58 @@ pub enum UninitializedProviderConfig {
         location: String,
         project_id: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        credential_location: Option<CredentialLocationWithFallback>,
+        credential_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "google_ai_studio_gemini")]
     #[serde(rename = "google_ai_studio_gemini")]
     GoogleAIStudioGemini {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "groq")]
     #[serde(rename = "groq")]
     Groq {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     Hyperbolic {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     #[strum(serialize = "fireworks")]
     #[serde(rename = "fireworks")]
     Fireworks {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
         #[serde(default = "crate::providers::fireworks::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
     Mistral {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     OpenAI {
         model_name: String,
         api_base: Option<Url>,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
         #[serde(default)]
         api_type: OpenAIAPIType,
     },
     OpenRouter {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     Together {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
         #[serde(default = "crate::providers::together::default_parse_think_blocks")]
         parse_think_blocks: bool,
     },
@@ -1041,34 +1037,34 @@ pub enum UninitializedProviderConfig {
         model_name: String,
         api_base: Url,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     XAI {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     TGI {
         api_base: Url,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     SGLang {
         model_name: String,
         api_base: Url,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     DeepSeek {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
     #[cfg(any(test, feature = "e2e_tests"))]
     Dummy {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
-        api_key_location: Option<CredentialLocationWithFallback>,
+        api_key_location: Option<CredentialLocation>,
     },
 }
 
@@ -1123,7 +1119,7 @@ impl UninitializedProviderConfig {
 
                             OpenAIKind
                                 .get_defaulted_credential(
-                                    Some(&CredentialLocationWithFallback::Single(CredentialLocation::None)),
+                                    Some(&CredentialLocation::None),
                                     provider_type_default_credentials,
                                 )
                                 .await?,
@@ -1136,7 +1132,7 @@ impl UninitializedProviderConfig {
                             })?,
                             TGIKind
                                 .get_defaulted_credential(
-                                    Some(&CredentialLocationWithFallback::Single(CredentialLocation::None)),
+                                    Some(&CredentialLocation::None),
                                     provider_type_default_credentials,
                                 )
                                 .await?,
@@ -1468,7 +1464,7 @@ impl ModelProvider {
     async fn infer(
         &self,
         request: ModelProviderRequest<'_>,
-        clients: &InferenceClients,
+        clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
@@ -1476,7 +1472,7 @@ impl ModelProvider {
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
-                &clients.postgres_connection_info,
+                clients.postgres_connection_info,
                 scope_info,
                 request.request,
             )
@@ -1484,103 +1480,103 @@ impl ModelProvider {
         let res = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::AWSBedrock(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::AWSSagemaker(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Azure(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Fireworks(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::GCPVertexAnthropic(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Groq(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Hyperbolic(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Mistral(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::OpenRouter(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Together(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::SGLang(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::VLLM(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::XAI(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::TGI(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::DeepSeek(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
-                    .infer(request, &clients.http_client, &clients.credentials, self)
+                    .infer(request, clients.http_client, clients.credentials, self)
                     .await
             }
         };
@@ -1604,14 +1600,14 @@ impl ModelProvider {
     async fn infer_stream(
         &self,
         request: ModelProviderRequest<'_>,
-        clients: &InferenceClients,
+        clients: &InferenceClients<'_>,
         scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
-                &clients.postgres_connection_info,
+                clients.postgres_connection_info,
                 scope_info,
                 request.request,
             )
@@ -1619,103 +1615,103 @@ impl ModelProvider {
         let (stream, raw_request) = match &self.config {
             ProviderConfig::Anthropic(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::AWSBedrock(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::AWSSagemaker(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Azure(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Fireworks(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::GCPVertexAnthropic(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::GCPVertexGemini(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::GoogleAIStudioGemini(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Groq(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Hyperbolic(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Mistral(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::OpenAI(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::OpenRouter(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::Together(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::SGLang(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::XAI(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::VLLM(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::TGI(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             ProviderConfig::DeepSeek(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
             #[cfg(any(test, feature = "e2e_tests"))]
             ProviderConfig::Dummy(provider) => {
                 provider
-                    .infer_stream(request, &clients.http_client, &clients.credentials, self)
+                    .infer_stream(request, clients.http_client, clients.credentials, self)
                     .await
             }
         }?;
@@ -2000,6 +1996,7 @@ impl CredentialLocationWithFallback {
     }
 }
 
+
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -2086,77 +2083,6 @@ impl Serialize for CredentialLocation {
     }
 }
 
-impl<'de> Deserialize<'de> for CredentialLocationWithFallback {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        use serde::de::{Error, MapAccess, Visitor};
-        use std::fmt;
-
-        struct CredentialLocationWithFallbackVisitor;
-
-        impl<'de> Visitor<'de> for CredentialLocationWithFallbackVisitor {
-            type Value = CredentialLocationWithFallback;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a string or an object with 'default' and 'fallback' fields")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                // Parse as single CredentialLocation
-                let location =
-                    CredentialLocation::deserialize(serde::de::value::StrDeserializer::new(value))?;
-                Ok(CredentialLocationWithFallback::Single(location))
-            }
-
-            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                let mut default = None;
-                let mut fallback = None;
-
-                while let Some(key) = map.next_key::<String>()? {
-                    match key.as_str() {
-                        "default" => {
-                            if default.is_some() {
-                                return Err(Error::duplicate_field("default"));
-                            }
-                            let value: String = map.next_value()?;
-                            default = Some(CredentialLocation::deserialize(
-                                serde::de::value::StrDeserializer::new(&value),
-                            )?);
-                        }
-                        "fallback" => {
-                            if fallback.is_some() {
-                                return Err(Error::duplicate_field("fallback"));
-                            }
-                            let value: String = map.next_value()?;
-                            fallback = Some(CredentialLocation::deserialize(
-                                serde::de::value::StrDeserializer::new(&value),
-                            )?);
-                        }
-                        _ => {
-                            return Err(Error::unknown_field(&key, &["default", "fallback"]));
-                        }
-                    }
-                }
-
-                let default = default.ok_or_else(|| Error::missing_field("default"))?;
-                let fallback = fallback.ok_or_else(|| Error::missing_field("fallback"))?;
-
-                Ok(CredentialLocationWithFallback::WithFallback { default, fallback })
-            }
-        }
-
-        deserializer.deserialize_any(CredentialLocationWithFallbackVisitor)
-    }
-}
-
 #[derive(Clone, Debug)]
 pub enum Credential {
     Static(SecretString),
@@ -2165,10 +2091,6 @@ pub enum Credential {
     Sdk,
     None,
     Missing,
-    WithFallback {
-        default: Box<Credential>,
-        fallback: Box<Credential>,
-    },
 }
 
 const SHORTHAND_MODEL_PREFIXES: &[&str] = &[
@@ -2416,17 +2338,17 @@ mod tests {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: http_client.clone(),
-            clickhouse_connection_info: clickhouse_connection_info.clone(),
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            credentials: Arc::new(api_keys.clone()),
-            cache_options: CacheOptions {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
-            otlp_config: Default::default(),
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
 
         // Try inferring the good model only
@@ -2543,17 +2465,17 @@ mod tests {
         let rate_limit_config: RateLimitingConfig = uninitialized_config.try_into().unwrap();
 
         let clients = InferenceClients {
-            http_client: http_client.clone(),
-            clickhouse_connection_info: clickhouse_connection_info.clone(),
-            postgres_connection_info: postgres_mock.clone(),
-            credentials: Arc::new(api_keys.clone()),
-            cache_options: CacheOptions {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &postgres_mock,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: Arc::new(tags.clone()),
-            rate_limiting_config: Arc::new(rate_limit_config.clone()),
-            otlp_config: Default::default(),
+            tags: &tags,
+            rate_limiting_config: &rate_limit_config,
+            otlp_config: &Default::default(),
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2626,17 +2548,17 @@ mod tests {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: http_client.clone(),
-            clickhouse_connection_info: clickhouse_connection_info.clone(),
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            credentials: Arc::new(api_keys.clone()),
-            cache_options: CacheOptions {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
-            otlp_config: Default::default(),
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2776,17 +2698,17 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
+                    http_client: &TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
+                    credentials: &api_keys,
+                    cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2844,17 +2766,17 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
+                    http_client: &TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
+                    credentials: &api_keys,
+                    cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -2959,17 +2881,17 @@ mod tests {
             .infer_stream(
                 &request,
                 &InferenceClients {
-                    http_client: TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: PostgresConnectionInfo::Disabled,
-                    credentials: Arc::new(api_keys.clone()),
-                    cache_options: CacheOptions {
+                    http_client: &TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
+                    credentials: &api_keys,
+                    cache_options: &CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: Arc::new(Default::default()),
-                    rate_limiting_config: Arc::new(Default::default()),
-                    otlp_config: Default::default(),
+                    tags: &Default::default(),
+                    rate_limiting_config: &Default::default(),
+                    otlp_config: &Default::default(),
                 },
                 "my_model",
             )
@@ -3040,17 +2962,17 @@ mod tests {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: http_client.clone(),
-            clickhouse_connection_info: clickhouse_connection_info.clone(),
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            credentials: Arc::new(api_keys.clone()),
-            cache_options: CacheOptions {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
-            otlp_config: Default::default(),
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -3096,17 +3018,17 @@ mod tests {
             SecretString::from("notgoodkey".to_string()),
         )]);
         let clients = InferenceClients {
-            http_client: http_client.clone(),
-            clickhouse_connection_info: clickhouse_connection_info.clone(),
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            credentials: Arc::new(api_keys.clone()),
-            cache_options: CacheOptions {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
-            otlp_config: Default::default(),
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3158,17 +3080,17 @@ mod tests {
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: http_client.clone(),
-            clickhouse_connection_info: clickhouse_connection_info.clone(),
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            credentials: Arc::new(api_keys.clone()),
-            cache_options: CacheOptions {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
-            otlp_config: Default::default(),
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
 
         let request = ModelInferenceRequest {
@@ -3213,17 +3135,17 @@ mod tests {
             SecretString::from("good_key".to_string()),
         )]);
         let clients = InferenceClients {
-            http_client: http_client.clone(),
-            clickhouse_connection_info: clickhouse_connection_info.clone(),
-            postgres_connection_info: PostgresConnectionInfo::Disabled,
-            credentials: Arc::new(api_keys.clone()),
-            cache_options: CacheOptions {
+            http_client: &http_client,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            postgres_connection_info: &PostgresConnectionInfo::Disabled,
+            credentials: &api_keys,
+            cache_options: &CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: Arc::new(Default::default()),
-            rate_limiting_config: Arc::new(Default::default()),
-            otlp_config: Default::default(),
+            tags: &Default::default(),
+            rate_limiting_config: &Default::default(),
+            otlp_config: &Default::default(),
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3303,208 +3225,6 @@ mod tests {
                 RESERVED_MODEL_PREFIXES.contains(&shorthand.to_string()),
                 "Shorthand prefix '{shorthand}' is not in RESERVED_MODEL_PREFIXES"
             );
-        }
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_serialize_single() {
-        // Test serializing a Single variant (backward compatible)
-        let single =
-            CredentialLocationWithFallback::Single(CredentialLocation::Env("API_KEY".to_string()));
-        let json = serde_json::to_string(&single).unwrap();
-        assert_eq!(json, r#""env::API_KEY""#);
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_serialize_with_fallback() {
-        // Test serializing a WithFallback variant
-        let with_fallback = CredentialLocationWithFallback::WithFallback {
-            default: CredentialLocation::Dynamic("key1".to_string()),
-            fallback: CredentialLocation::Env("FALLBACK_KEY".to_string()),
-        };
-        let json = serde_json::to_string(&with_fallback).unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["default"], "dynamic::key1");
-        assert_eq!(parsed["fallback"], "env::FALLBACK_KEY");
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_single_string() {
-        // Test deserializing from a simple string (backward compatible)
-        let json = r#""env::API_KEY""#;
-        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
-        match result {
-            CredentialLocationWithFallback::Single(CredentialLocation::Env(key)) => {
-                assert_eq!(key, "API_KEY");
-            }
-            _ => panic!("Expected Single(Env)"),
-        }
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_dynamic_string() {
-        // Test deserializing a dynamic credential from a string
-        let json = r#""dynamic::my_key""#;
-        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
-        match result {
-            CredentialLocationWithFallback::Single(CredentialLocation::Dynamic(key)) => {
-                assert_eq!(key, "my_key");
-            }
-            _ => panic!("Expected Single(Dynamic)"),
-        }
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_with_fallback() {
-        // Test deserializing an object with default and fallback fields
-        let json = r#"{"default":"dynamic::key1","fallback":"env::FALLBACK_KEY"}"#;
-        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
-        match result {
-            CredentialLocationWithFallback::WithFallback { default, fallback } => {
-                match default {
-                    CredentialLocation::Dynamic(key) => assert_eq!(key, "key1"),
-                    _ => panic!("Expected Dynamic for default"),
-                }
-                match fallback {
-                    CredentialLocation::Env(key) => assert_eq!(key, "FALLBACK_KEY"),
-                    _ => panic!("Expected Env for fallback"),
-                }
-            }
-            CredentialLocationWithFallback::Single(..) => panic!("Expected WithFallback"),
-        }
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_path_variants() {
-        // Test deserializing path-based credentials
-        let json = r#"{"default":"path::/etc/key","fallback":"path_from_env::KEY_PATH"}"#;
-        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
-        match result {
-            CredentialLocationWithFallback::WithFallback { default, fallback } => {
-                match default {
-                    CredentialLocation::Path(path) => assert_eq!(path, "/etc/key"),
-                    _ => panic!("Expected Path for default"),
-                }
-                match fallback {
-                    CredentialLocation::PathFromEnv(key) => assert_eq!(key, "KEY_PATH"),
-                    _ => panic!("Expected PathFromEnv for fallback"),
-                }
-            }
-            CredentialLocationWithFallback::Single(..) => panic!("Expected WithFallback"),
-        }
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_sdk() {
-        // Test deserializing SDK credential
-        let json = r#""sdk""#;
-        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
-        match result {
-            CredentialLocationWithFallback::Single(CredentialLocation::Sdk) => {}
-            _ => panic!("Expected Single(Sdk)"),
-        }
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_none() {
-        // Test deserializing None credential
-        let json = r#""none""#;
-        let result: CredentialLocationWithFallback = serde_json::from_str(json).unwrap();
-        match result {
-            CredentialLocationWithFallback::Single(CredentialLocation::None) => {}
-            _ => panic!("Expected Single(None)"),
-        }
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_roundtrip_single() {
-        // Test serializing and deserializing a Single variant
-        let original =
-            CredentialLocationWithFallback::Single(CredentialLocation::Env("MY_KEY".to_string()));
-        let json = serde_json::to_string(&original).unwrap();
-        let deserialized: CredentialLocationWithFallback = serde_json::from_str(&json).unwrap();
-        assert_eq!(original, deserialized);
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_roundtrip_with_fallback() {
-        // Test serializing and deserializing a WithFallback variant
-        let original = CredentialLocationWithFallback::WithFallback {
-            default: CredentialLocation::Dynamic("primary".to_string()),
-            fallback: CredentialLocation::Env("SECONDARY".to_string()),
-        };
-        let json = serde_json::to_string(&original).unwrap();
-        let deserialized: CredentialLocationWithFallback = serde_json::from_str(&json).unwrap();
-        assert_eq!(original, deserialized);
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_missing_default() {
-        // Test that missing default field returns an error
-        let json = r#"{"fallback":"env::FALLBACK_KEY"}"#;
-        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("missing field `default`"));
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_missing_fallback() {
-        // Test that missing fallback field returns an error
-        let json = r#"{"default":"env::DEFAULT_KEY"}"#;
-        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("missing field `fallback`"));
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_deserialize_unknown_field() {
-        // Test that unknown fields return an error
-        let json = r#"{"default":"env::KEY","fallback":"env::FALLBACK","unknown":"value"}"#;
-        let result: Result<CredentialLocationWithFallback, _> = serde_json::from_str(json);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("unknown field"));
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_default_location() {
-        // Test the default_location() method
-        let single =
-            CredentialLocationWithFallback::Single(CredentialLocation::Env("KEY".to_string()));
-        match single.default_location() {
-            CredentialLocation::Env(key) => assert_eq!(key, "KEY"),
-            _ => panic!("Expected Env"),
-        }
-
-        let with_fallback = CredentialLocationWithFallback::WithFallback {
-            default: CredentialLocation::Dynamic("primary".to_string()),
-            fallback: CredentialLocation::Env("secondary".to_string()),
-        };
-        match with_fallback.default_location() {
-            CredentialLocation::Dynamic(key) => assert_eq!(key, "primary"),
-            _ => panic!("Expected Dynamic"),
-        }
-    }
-
-    #[test]
-    fn test_credential_location_with_fallback_fallback_location() {
-        // Test the fallback_location() method
-        let single =
-            CredentialLocationWithFallback::Single(CredentialLocation::Env("KEY".to_string()));
-        assert!(single.fallback_location().is_none());
-
-        let with_fallback = CredentialLocationWithFallback::WithFallback {
-            default: CredentialLocation::Dynamic("primary".to_string()),
-            fallback: CredentialLocation::Env("secondary".to_string()),
-        };
-        match with_fallback.fallback_location() {
-            Some(CredentialLocation::Env(key)) => assert_eq!(key, "secondary"),
-            _ => panic!("Expected Some(Env)"),
         }
     }
 }
