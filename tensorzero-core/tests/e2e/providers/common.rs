@@ -2133,7 +2133,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
     }
 
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    client
+    let res = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name),
@@ -2159,8 +2159,15 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
             extra_headers: get_extra_headers(),
             ..Default::default()
         })
-        .await
-        .unwrap();
+        .await;
+
+    if "anthropic" == provider.model_provider_name.as_str() {
+        // Anthropic rejects requests with invalid thought signatures
+        let err = res.unwrap_err();
+        assert!(err.to_string().contains("signature"));
+    } else {
+        let _ = res.unwrap();
+    }
 
     if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
         assert!(
