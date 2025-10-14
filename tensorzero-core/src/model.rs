@@ -1966,7 +1966,8 @@ pub enum CredentialLocation {
 }
 
 /// Credential location with optional fallback support
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
+#[serde(untagged)]
 pub enum CredentialLocationWithFallback {
     /// Single credential location (backward compatible)
     Single(CredentialLocation),
@@ -2149,25 +2150,6 @@ impl<'de> Deserialize<'de> for CredentialLocationWithFallback {
         }
 
         deserializer.deserialize_any(CredentialLocationWithFallbackVisitor)
-    }
-}
-
-impl Serialize for CredentialLocationWithFallback {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-
-        match self {
-            CredentialLocationWithFallback::Single(location) => location.serialize(serializer),
-            CredentialLocationWithFallback::WithFallback { default, fallback } => {
-                let mut state = serializer.serialize_struct("CredentialLocationWithFallback", 2)?;
-                state.serialize_field("default", default)?;
-                state.serialize_field("fallback", fallback)?;
-                state.end()
-            }
-        }
     }
 }
 
