@@ -17,6 +17,7 @@ import type {
 import { TimeWindow } from "./bindings/TimeWindow";
 import { ModelUsageTimePoint } from "./bindings/ModelUsageTimePoint";
 import { ModelLatencyDatapoint } from "./bindings/ModelLatencyDatapoint";
+import { FeedbackTimeSeriesPoint } from "./bindings/FeedbackTimeSeriesPoint";
 
 // Re-export types from bindings
 export * from "./bindings";
@@ -178,5 +179,24 @@ export class DatabaseClient {
   async queryEpisodeTableBounds(): Promise<TableBoundsWithCount> {
     const bounds = await this.nativeDatabaseClient.queryEpisodeTableBounds();
     return JSON.parse(bounds) as TableBoundsWithCount;
+  }
+
+  async getFeedbackTimeseries(
+    functionName: string,
+    metricName: string,
+    variantNames: string[] | undefined,
+    intervalMinutes: number,
+    maxPeriods: number,
+  ): Promise<FeedbackTimeSeriesPoint[]> {
+    const params = safeStringify({
+      function_name: functionName,
+      metric_name: metricName,
+      variant_names: variantNames,
+      interval_minutes: intervalMinutes,
+      max_periods: maxPeriods,
+    });
+    const feedbackTimeseriesString =
+      await this.nativeDatabaseClient.getFeedbackTimeseries(params);
+    return JSON.parse(feedbackTimeseriesString) as FeedbackTimeSeriesPoint[];
   }
 }

@@ -51,6 +51,22 @@ pub trait SelectQueries {
         function_name: &str,
         variant_names: Option<&Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, Error>;
+
+    /// Retrieves a time series of feedback statistics for a given metric and function,
+    /// optionally filtered by variant names. Returns CUMULATIVE statistics
+    /// (mean, variance, count) for each variant at each time point - each time point
+    /// includes all data from the beginning up to that point. This will return max_periods
+    /// complete time periods worth of data if present as well as the current time period's data.
+    /// So there are at most max_periods + 1 time periods worth of data returned.
+    /// The interval_minutes parameter determines the time interval in minutes (e.g., 1, 20, 60, 1440).
+    async fn get_feedback_timeseries(
+        &self,
+        function_name: String,
+        metric_name: String,
+        variant_names: Option<Vec<String>>,
+        interval_minutes: u32,
+        max_periods: u32,
+    ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -164,6 +180,17 @@ pub struct ReturnTicketsReceipt {
 
 #[derive(Debug, Deserialize)]
 pub struct FeedbackByVariant {
+    pub variant_name: String,
+    pub mean: f32,
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
+}
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct FeedbackTimeSeriesPoint {
+    pub period_start: DateTime<Utc>,
     pub variant_name: String,
     pub mean: f32,
     pub variance: f32,

@@ -717,3 +717,329 @@ async fn test_clickhouse_query_episode_table_bounds() {
     // );
     // assert_eq!(bounds.count, 20002095);
 }
+
+#[tokio::test]
+async fn test_clickhouse_get_feedback_timeseries_hourly() {
+    let clickhouse = get_clickhouse().await;
+    let feedback_timeseries = clickhouse
+        .get_feedback_timeseries(
+            "test_function".to_string(),
+            "performance_score".to_string(),
+            None, // All variants
+            60,   // 60 minutes = 1 hour intervals
+            10,
+        )
+        .await
+        .unwrap();
+
+    for point in &feedback_timeseries {
+        println!("{point:?}");
+    }
+
+    // Basic structure assertions
+    assert!(
+        !feedback_timeseries.is_empty(),
+        "Feedback timeseries data should not be empty"
+    );
+
+    // Data quality assertions
+    for point in &feedback_timeseries {
+        // Variant name should not be empty
+        assert!(
+            !point.variant_name.is_empty(),
+            "Variant name should not be empty"
+        );
+
+        // Count should be positive
+        assert!(
+            point.count > 0,
+            "Count should be positive for variant: {}",
+            point.variant_name
+        );
+
+        // Mean and variance should be valid numbers (not NaN)
+        assert!(
+            !point.mean.is_nan(),
+            "Mean should not be NaN for variant: {}",
+            point.variant_name
+        );
+        assert!(
+            !point.variance.is_nan(),
+            "Variance should not be NaN for variant: {}",
+            point.variant_name
+        );
+
+        // Variance should be non-negative
+        assert!(
+            point.variance >= 0.0,
+            "Variance should be non-negative for variant: {}",
+            point.variant_name
+        );
+    }
+
+    // Verify we have expected variants
+    let variant_names: std::collections::HashSet<_> = feedback_timeseries
+        .iter()
+        .map(|p| &p.variant_name)
+        .collect();
+    assert!(
+        !variant_names.is_empty(),
+        "Should have at least one variant"
+    );
+
+    // Verify ordering - should be sorted by period_start ASC, then variant_name
+    for i in 1..feedback_timeseries.len() {
+        let prev = &feedback_timeseries[i - 1];
+        let curr = &feedback_timeseries[i];
+        assert!(
+            prev.period_start <= curr.period_start,
+            "Results should be ordered by period_start ASC"
+        );
+        if prev.period_start == curr.period_start {
+            assert!(
+                prev.variant_name <= curr.variant_name,
+                "Within same period, results should be ordered by variant_name"
+            );
+        }
+    }
+
+    // Verify CUMULATIVE behavior: for each variant, count should be non-decreasing over time
+    let variants: std::collections::HashSet<_> = feedback_timeseries
+        .iter()
+        .map(|p| &p.variant_name)
+        .collect();
+
+    for variant in variants {
+        let variant_data: Vec<_> = feedback_timeseries
+            .iter()
+            .filter(|p| &p.variant_name == variant)
+            .collect();
+
+        for i in 1..variant_data.len() {
+            let prev_count = variant_data[i - 1].count;
+            let curr_count = variant_data[i].count;
+            assert!(
+                curr_count >= prev_count,
+                "Cumulative count should be non-decreasing for variant {}: {} -> {} at times {:?} -> {:?}",
+                variant,
+                prev_count,
+                curr_count,
+                variant_data[i - 1].period_start,
+                variant_data[i].period_start
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_clickhouse_get_feedback_timeseries_cumulative() {
+    let clickhouse = get_clickhouse().await;
+    let feedback_timeseries = clickhouse
+        .get_feedback_timeseries(
+            "test_function".to_string(),
+            "performance_score".to_string(),
+            None,   // All variants
+            525600, // 1 year in minutes (large interval to get all data in one bucket)
+            1,
+        )
+        .await
+        .unwrap();
+
+    for point in &feedback_timeseries {
+        println!("{point:?}");
+    }
+
+    // Basic structure assertions
+    assert!(
+        !feedback_timeseries.is_empty(),
+        "Cumulative feedback timeseries should not be empty"
+    );
+
+    // Cumulative should have exactly one period (all data in one bucket)
+    let unique_periods: std::collections::HashSet<_> =
+        feedback_timeseries.iter().map(|p| p.period_start).collect();
+    assert_eq!(
+        unique_periods.len(),
+        1,
+        "Cumulative mode should have exactly one period"
+    );
+
+    // Data quality assertions
+    for point in &feedback_timeseries {
+        assert!(
+            !point.variant_name.is_empty(),
+            "Variant name should not be empty"
+        );
+        assert!(
+            point.count > 0,
+            "Count should be positive for variant: {}",
+            point.variant_name
+        );
+        assert!(
+            !point.mean.is_nan(),
+            "Mean should not be NaN for variant: {}",
+            point.variant_name
+        );
+        assert!(
+            point.variance >= 0.0,
+            "Variance should be non-negative for variant: {}",
+            point.variant_name
+        );
+    }
+
+    // Verify we have expected variants
+    let variant_names: std::collections::HashSet<_> = feedback_timeseries
+        .iter()
+        .map(|p| &p.variant_name)
+        .collect();
+    assert!(
+        !variant_names.is_empty(),
+        "Should have at least one variant"
+    );
+}
+
+#[tokio::test]
+async fn test_clickhouse_get_feedback_timeseries_with_variant_filter() {
+    let clickhouse = get_clickhouse().await;
+
+    // Test with specific variants
+    let feedback_timeseries = clickhouse
+        .get_feedback_timeseries(
+            "test_function".to_string(),
+            "performance_score".to_string(),
+            Some(vec!["variant_a".to_string(), "variant_b".to_string()]),
+            60, // 60 minutes = 1 hour intervals
+            10,
+        )
+        .await
+        .unwrap();
+
+    for point in &feedback_timeseries {
+        println!("{point:?}");
+    }
+
+    // Should only have the specified variants
+    for point in &feedback_timeseries {
+        assert!(
+            point.variant_name == "variant_a" || point.variant_name == "variant_b",
+            "Should only contain variant_a or variant_b, found: {}",
+            point.variant_name
+        );
+    }
+
+    // Test with empty variant list - should return empty result
+    let empty_result = clickhouse
+        .get_feedback_timeseries(
+            "test_function".to_string(),
+            "performance_score".to_string(),
+            Some(vec![]),
+            60, // 60 minutes = 1 hour intervals
+            10,
+        )
+        .await
+        .unwrap();
+    assert!(
+        empty_result.is_empty(),
+        "Empty variant list should return empty result"
+    );
+}
+
+#[tokio::test]
+async fn test_clickhouse_get_feedback_timeseries_different_time_windows() {
+    let clickhouse = get_clickhouse().await;
+
+    // Test minute-level aggregation (20 minute intervals)
+    let minutes_20 = clickhouse
+        .get_feedback_timeseries(
+            "test_function".to_string(),
+            "performance_score".to_string(),
+            None,
+            20, // 20 minute intervals
+            10,
+        )
+        .await
+        .unwrap();
+
+    if !minutes_20.is_empty() {
+        println!("20-minute interval data points: {}", minutes_20.len());
+        for point in &minutes_20 {
+            println!("{point:?}");
+            // Verify minutes are multiples of 20
+            let minute = point
+                .period_start
+                .format("%M")
+                .to_string()
+                .parse::<u32>()
+                .unwrap();
+            assert_eq!(
+                minute % 20,
+                0,
+                "Minutes should be multiples of 20, found: {minute}"
+            );
+        }
+    }
+
+    // Test daily aggregation
+    let daily = clickhouse
+        .get_feedback_timeseries(
+            "test_function".to_string(),
+            "performance_score".to_string(),
+            None,
+            1440, // 1440 minutes = 1 day
+            7,
+        )
+        .await
+        .unwrap();
+
+    if !daily.is_empty() {
+        println!("Daily data points: {}", daily.len());
+        // Verify daily granularity
+        for point in &daily {
+            println!("{point:?}");
+            // Period start should be at start of day (00:00:00)
+            assert_eq!(
+                point.period_start.format("%H:%M:%S").to_string(),
+                "00:00:00",
+                "Daily periods should start at midnight"
+            );
+        }
+    }
+
+    // Test weekly aggregation
+    let weekly = clickhouse
+        .get_feedback_timeseries(
+            "test_function".to_string(),
+            "performance_score".to_string(),
+            None,
+            10080, // 10080 minutes = 1 week
+            4,
+        )
+        .await
+        .unwrap();
+
+    if !weekly.is_empty() {
+        println!("Weekly data points: {}", weekly.len());
+        for point in &weekly {
+            println!("{point:?}");
+        }
+    }
+
+    // Test monthly aggregation (approximation: 30 days)
+    let monthly = clickhouse
+        .get_feedback_timeseries(
+            "test_function".to_string(),
+            "performance_score".to_string(),
+            None,
+            43200, // 43200 minutes = 30 days
+            3,
+        )
+        .await
+        .unwrap();
+
+    if !monthly.is_empty() {
+        println!("Monthly data points: {}", monthly.len());
+        for point in &monthly {
+            println!("{point:?}");
+        }
+    }
+}

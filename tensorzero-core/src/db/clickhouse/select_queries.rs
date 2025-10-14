@@ -1,6 +1,6 @@
 use crate::db::{
     clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
-    FeedbackByVariant, TableBoundsWithCount,
+    FeedbackByVariant, FeedbackTimeSeriesPoint, TableBoundsWithCount,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -27,23 +27,23 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // NOTE: this filter pattern will likely include some extra data since the current period is likely incomplete.
         let (time_grouping, time_filter) = match time_window {
             TimeWindow::Hour => (
-                "toStartOfHour(minute)",
+                "toStartOfHour(minute)".to_string(),
                 format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
             ),
             TimeWindow::Day => (
-                "toStartOfDay(minute)",
+                "toStartOfDay(minute)".to_string(),
                 format!("minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"),
             ),
             TimeWindow::Week => (
-                "toStartOfWeek(minute)",
+                "toStartOfWeek(minute)".to_string(),
                 format!("minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"),
             ),
             TimeWindow::Month => (
-                "toStartOfMonth(minute)",
+                "toStartOfMonth(minute)".to_string(),
                 format!("minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"),
             ),
             TimeWindow::Cumulative => (
-                "toDateTime('1970-01-01 00:00:00')",
+                "toDateTime('1970-01-01 00:00:00')".to_string(),
                 "1 = 1".to_string(), // No time filter for cumulative
             ),
         };
@@ -336,5 +336,90 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     message: format!("Failed to deserialize FeedbackByVariant: {e}"),
                 })
             })
+    }
+
+    async fn get_feedback_timeseries(
+        &self,
+        function_name: String,
+        metric_name: String,
+        variant_names: Option<Vec<String>>,
+        interval_minutes: u32,
+        max_periods: u32,
+    ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error> {
+        let escaped_function_name = escape_string_for_clickhouse_literal(&function_name);
+        let escaped_metric_name = escape_string_for_clickhouse_literal(&metric_name);
+
+        // Using toEndOfInterval since we're computing cumulative stats "up to" each time point
+        let time_grouping = format!("toEndOfInterval(minute, INTERVAL {interval_minutes} MINUTE)");
+        let time_filter = format!(
+            "minute >= (SELECT max(toEndOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
+        );
+
+        // Build variant filter if provided
+        let variant_filter = match variant_names {
+            None => String::new(),
+            Some(names) if names.is_empty() => {
+                return Ok(vec![]);
+            }
+            Some(names) => {
+                let escaped_names: Vec<String> = names
+                    .iter()
+                    .map(|name| format!("'{}'", escape_string_for_clickhouse_literal(name)))
+                    .collect();
+                format!(" AND variant_name IN ({})", escaped_names.join(", "))
+            }
+        };
+
+        // Query to compute CUMULATIVE statistics: for each time bucket, aggregate ALL data from start up to that bucket
+        let query = format!(
+            r"
+            WITH time_buckets AS (
+                SELECT DISTINCT {time_grouping} as period
+                FROM FeedbackByVariantStatistics
+                WHERE function_name = '{escaped_function_name}'
+                    AND metric_name = '{escaped_metric_name}'
+                    AND {time_filter}
+            ),
+            variant_list AS (
+                SELECT DISTINCT variant_name
+                FROM FeedbackByVariantStatistics
+                WHERE function_name = '{escaped_function_name}'
+                    AND metric_name = '{escaped_metric_name}'
+                    {variant_filter}
+            )
+            SELECT
+                formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_start,
+                vl.variant_name,
+                avgMerge(f.feedback_mean) as mean,
+                varSampStableMerge(f.feedback_variance) as variance,
+                sum(f.count) as count
+            FROM time_buckets tb
+            CROSS JOIN variant_list vl
+            INNER JOIN FeedbackByVariantStatistics f
+                ON f.variant_name = vl.variant_name
+                AND f.function_name = '{escaped_function_name}'
+                AND f.metric_name = '{escaped_metric_name}'
+                AND f.minute <= tb.period
+            GROUP BY tb.period, vl.variant_name
+            ORDER BY tb.period ASC, vl.variant_name
+            FORMAT JSONEachRow
+            ",
+        );
+
+        let response = self.run_query_synchronous_no_params(query).await?;
+
+        // Deserialize the results into FeedbackTimeSeriesPoint
+        response
+            .response
+            .trim()
+            .lines()
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize FeedbackTimeSeriesPoint: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 }
