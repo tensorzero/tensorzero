@@ -52,6 +52,7 @@ env:
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
   VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://localhost:4316
 
 jobs:
   batch-tests:
