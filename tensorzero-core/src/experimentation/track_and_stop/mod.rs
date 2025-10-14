@@ -46,7 +46,7 @@ use error::TrackAndStopError;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     time::Duration,
@@ -87,6 +87,8 @@ pub struct TrackAndStopConfig {
     update_period: Duration,
     #[serde(skip)]
     state: Arc<ArcSwap<TrackAndStopState>>,
+    #[serde(skip)]
+    task_spawned: AtomicBool,
 }
 
 #[derive(Debug)]
@@ -254,6 +256,7 @@ impl UninitializedTrackAndStopConfig {
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(keep_variants),
             ))),
+            task_spawned: AtomicBool::new(false),
         })
     }
 }
@@ -264,6 +267,20 @@ impl VariantSampler for TrackAndStopConfig {
         db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
     ) -> Result<(), Error> {
+        // Check if a task has already been spawned for this function
+        // Use compare_exchange to atomically check and set the flag
+        if self
+            .task_spawned
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Track-and-Stop probability update task has already been spawned for function '{function_name}'"
+                ),
+            }));
+        }
+
         // Spawn a background task that continuously updates sampling probabilities.
         // This task:
         // 1. Runs independently for the lifetime of the application
@@ -498,12 +515,13 @@ fn fallback_sample(
 /// Sample a variant from active_variants using weighted probabilities.
 /// Returns None if no active variant has positive probability.
 /// Returns an error if any probability is negative.
+/// Note: `unform_sample` must be in [0, 1], but `sampling_probabilities`
+/// just need to be non-negative, since they're summed and normalized.
 fn sample_with_probabilities<'a>(
     active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
     sampling_probabilities: &HashMap<String, f64>,
     uniform_sample: f64,
 ) -> Result<Option<&'a str>, TrackAndStopError> {
-    // TODO (?): Check for probabilities > 1, unless we want to allow arbitrary nonnegative weights
     // Check for negative probabilities
     for (variant_name, &prob) in sampling_probabilities {
         if prob < 0.0 {
@@ -746,7 +764,6 @@ impl TrackAndStopState {
                 // Sample from the active bandits using probability sampling
                 sample_with_probabilities(active_variants, sampling_probabilities, uniform_sample)
             }
-            // TODO: log info for the user about winning variant and the set it won among.
             TrackAndStopState::NurseryAndStopped {
                 nursery,
                 stopped_variant_name,
