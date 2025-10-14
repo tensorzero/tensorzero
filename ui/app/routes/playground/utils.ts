@@ -170,7 +170,6 @@ export function preparePlaygroundInferenceRequest(
       max_age_s: null,
       enabled: "off",
     },
-    dryrun: true,
     editedVariantInfo: variantInferenceInfo.editedVariantInfo,
     functionConfig,
     toolsConfig,
@@ -179,6 +178,7 @@ export function preparePlaygroundInferenceRequest(
   return {
     ...request,
     ...extraOptions,
+    dryrun: variant.type === "edited",
   };
 }
 

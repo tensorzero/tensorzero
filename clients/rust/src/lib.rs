@@ -720,6 +720,10 @@ impl Client {
         }
         // Set internal to true so we don't validate the tags again
         params.internal = true;
+        // Automatically add internal tag when internal=true
+        params
+            .tags
+            .insert("tensorzero::internal".to_string(), "true".to_string());
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {

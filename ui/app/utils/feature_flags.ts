@@ -29,7 +29,6 @@ interface ExtraInferenceOptions {
     enabled: "on" | "off" | "write_only";
     max_age_s: number | null;
   };
-  dryrun?: boolean;
 }
 
 /**
@@ -39,13 +38,10 @@ interface ExtraInferenceOptions {
 export function getExtraInferenceOptions(): ExtraInferenceOptions {
   if (getFeatureFlags().FORCE_CACHE_ON) {
     return {
-      // We need to force dryrun off, as it prevents us from writing to the
-      // cache (which we need in order to populate our model inference cache)
       cache_options: {
         enabled: "on",
         max_age_s: null,
       },
-      dryrun: false,
     };
   }
   return {};

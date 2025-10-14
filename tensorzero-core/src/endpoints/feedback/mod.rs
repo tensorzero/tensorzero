@@ -114,7 +114,7 @@ pub async fn feedback(
         clickhouse_connection_info,
         ..
     }: AppStateData,
-    params: Params,
+    mut params: Params,
 ) -> Result<FeedbackResponse, Error> {
     let span = tracing::Span::current();
     if let Some(inference_id) = params.inference_id {
@@ -123,6 +123,14 @@ pub async fn feedback(
     if let Some(episode_id) = params.episode_id {
         span.record("episode_id", episode_id.to_string());
     }
+
+    // Automatically add internal tag when internal=true
+    if params.internal {
+        params
+            .tags
+            .insert("tensorzero::internal".to_string(), "true".to_string());
+    }
+
     for (tag_key, tag_value) in &params.tags {
         span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
     }

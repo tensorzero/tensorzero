@@ -1,4 +1,3 @@
-#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
