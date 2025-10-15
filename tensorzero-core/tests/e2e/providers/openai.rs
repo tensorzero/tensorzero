@@ -26,6 +26,7 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
+use tensorzero_core::tool::ToolCallInput;
 use url::Url;
 use uuid::Uuid;
 
@@ -2324,6 +2325,92 @@ model = "test-model"
     assert!(
         text_content.contains("]("),
         "Expected text content to contain citations in markdown format [text](url), but found none. Text: {text_content}",
+    );
+
+    // Round-trip test: Convert output content blocks back to input and make another inference
+    let assistant_content: Vec<ClientInputMessageContent> = chat_response
+        .content
+        .iter()
+        .map(|block| match block {
+            ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
+                text: text.text.clone(),
+            }),
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                ClientInputMessageContent::ToolCall(ToolCallInput {
+                    id: tool_call.id.clone(),
+                    name: tool_call.name.clone(),
+                    arguments: tool_call.arguments.clone(),
+                    raw_name: None,
+                    raw_arguments: None,
+                })
+            }
+            ContentBlockChatOutput::Thought(thought) => {
+                ClientInputMessageContent::Thought(thought.clone())
+            }
+            ContentBlockChatOutput::Unknown {
+                data,
+                model_provider_name,
+            } => ClientInputMessageContent::Unknown {
+                data: data.clone(),
+                model_provider_name: model_provider_name.clone(),
+            },
+        })
+        .collect();
+
+    // Make a second inference with the assistant's response and a new user question
+    let result2 = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![
+                    ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Tell me some good news that happened today".to_string(),
+                        })],
+                    },
+                    ClientInputMessage {
+                        role: Role::Assistant,
+                        content: assistant_content,
+                    },
+                    ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Can you summarize what you just told me in one sentence?"
+                                .to_string(),
+                        })],
+                    },
+                ],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the round-trip inference succeeded
+    let response2 = result2.unwrap();
+    println!("Round-trip response: {response2:?}");
+
+    let InferenceOutput::NonStreaming(response2) = response2 else {
+        panic!("Expected non-streaming inference response for round-trip");
+    };
+
+    let InferenceResponse::Chat(chat_response2) = response2 else {
+        panic!("Expected chat inference response for round-trip");
+    };
+
+    // Assert that the second response has at least one text block
+    let has_text = chat_response2
+        .content
+        .iter()
+        .any(|block| matches!(block, ContentBlockChatOutput::Text(_)));
+    assert!(
+        has_text,
+        "Expected at least one text content block in round-trip response. Content blocks: {:#?}",
+        chat_response2.content
     );
 }
 

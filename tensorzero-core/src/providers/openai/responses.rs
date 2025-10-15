@@ -419,7 +419,7 @@ pub enum OpenAIResponsesReasoningSummary<'a> {
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum OpenAIResponsesInput<'a> {
+pub enum OpenAIResponsesInputInner<'a> {
     #[serde(borrow)]
     Message(OpenAIResponsesInputMessage<'a>),
     #[serde(borrow)]
@@ -428,10 +428,18 @@ pub enum OpenAIResponsesInput<'a> {
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
 }
 
+#[derive(Clone, Deserialize, Serialize, Debug)]
+#[serde(untagged)]
+pub enum OpenAIResponsesInput<'a> {
+    #[serde(borrow)]
+    Known(OpenAIResponsesInputInner<'a>),
+    Unknown(Cow<'a, Value>),
+}
+
 impl OpenAIResponsesInput<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
-            OpenAIResponsesInput::Message(msg) => {
+            OpenAIResponsesInput::Known(OpenAIResponsesInputInner::Message(msg)) => {
                 for block in &msg.content {
                     if let OpenAIResponsesInputMessageContent::InputText { text } = block {
                         if text.to_lowercase().contains(value) {
@@ -442,9 +450,11 @@ impl OpenAIResponsesInput<'_> {
                 false
             }
             // Don't consider the content of non-text blocks
-            OpenAIResponsesInput::FunctionCallOutput(_) | OpenAIResponsesInput::FunctionCall(_) => {
-                false
-            }
+            OpenAIResponsesInput::Known(
+                OpenAIResponsesInputInner::FunctionCallOutput(_)
+                | OpenAIResponsesInputInner::FunctionCall(_),
+            )
+            | OpenAIResponsesInput::Unknown(_) => false,
         }
     }
 }
@@ -485,9 +495,6 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
     OutputText {
         text: Cow<'a, str>,
     },
-    Unknown {
-        data: Cow<'a, Value>,
-    },
 }
 
 impl Serialize for OpenAIResponsesInputMessageContent<'_> {
@@ -525,7 +532,6 @@ impl Serialize for OpenAIResponsesInputMessageContent<'_> {
             OpenAIResponsesInputMessageContent::OutputText { text } => {
                 Helper::OutputText { text }.serialize(serializer)
             }
-            OpenAIResponsesInputMessageContent::Unknown { data } => data.serialize(serializer),
         }
     }
 }
@@ -592,13 +598,15 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
     for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
-                messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "user",
-                    content: vec![OpenAIResponsesInputMessageContent::InputText {
-                        text: Cow::Borrowed(text),
-                    }],
-                }));
+                messages.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                        id: None,
+                        role: "user",
+                        content: vec![OpenAIResponsesInputMessageContent::InputText {
+                            text: Cow::Borrowed(text),
+                        }],
+                    }),
+                ));
             }
             ContentBlock::ToolCall(_) => {
                 return Err(Error::new(ErrorDetails::InvalidMessage {
@@ -606,31 +614,39 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                 }));
             }
             ContentBlock::ToolResult(tool_result) => {
-                messages.push(OpenAIResponsesInput::FunctionCallOutput(
-                    OpenAIResponsesFunctionCallOutput {
-                        output: Cow::Borrowed(&tool_result.result),
-                        call_id: Cow::Borrowed(&tool_result.id),
-                    },
+                messages.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::FunctionCallOutput(
+                        OpenAIResponsesFunctionCallOutput {
+                            output: Cow::Borrowed(&tool_result.result),
+                            call_id: Cow::Borrowed(&tool_result.id),
+                        },
+                    ),
                 ));
             }
             ContentBlock::File(file) => {
                 let content_block = prepare_file_message(file, messages_config).await?;
                 match content_block {
                     OpenAIContentBlock::ImageUrl { image_url } => {
-                        messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                            id: None,
-                            role: "user",
-                            content: vec![OpenAIResponsesInputMessageContent::InputImage {
-                                image_url: Cow::Owned(image_url.url),
-                            }],
-                        }));
+                        messages.push(OpenAIResponsesInput::Known(
+                            OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                                id: None,
+                                role: "user",
+                                content: vec![OpenAIResponsesInputMessageContent::InputImage {
+                                    image_url: Cow::Owned(image_url.url),
+                                }],
+                            }),
+                        ));
                     }
                     OpenAIContentBlock::File { file } => {
-                        messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                            id: None,
-                            role: "user",
-                            content: vec![OpenAIResponsesInputMessageContent::InputFile { file }],
-                        }));
+                        messages.push(OpenAIResponsesInput::Known(
+                            OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                                id: None,
+                                role: "user",
+                                content: vec![OpenAIResponsesInputMessageContent::InputFile {
+                                    file,
+                                }],
+                            }),
+                        ));
                     }
                     _ => {
                         return Err(Error::new(ErrorDetails::InternalError {
@@ -647,14 +663,8 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                 model_provider_name: _,
             } => {
                 // The user included an 'unknown' content block inside of the user message,
-                // so push a new user message that includes their custom JSON valuei
-                messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "user",
-                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
-                        data: Cow::Borrowed(data),
-                    }],
-                }));
+                // so push a new user message that includes their custom JSON value
+                messages.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
             }
         };
     }
@@ -675,39 +685,43 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
     for block in content_block_cows {
         match block {
             Cow::Borrowed(ContentBlock::Text(Text { text })) => {
-                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "assistant",
-                    content: vec![OpenAIResponsesInputMessageContent::OutputText {
-                        text: Cow::Borrowed(text),
-                    }],
-                }));
+                output.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                        id: None,
+                        role: "assistant",
+                        content: vec![OpenAIResponsesInputMessageContent::OutputText {
+                            text: Cow::Borrowed(text),
+                        }],
+                    }),
+                ));
             }
             Cow::Owned(ContentBlock::Text(Text { text })) => {
-                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "assistant",
-                    content: vec![OpenAIResponsesInputMessageContent::OutputText {
-                        text: Cow::Owned(text),
-                    }],
-                }));
+                output.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                        id: None,
+                        role: "assistant",
+                        content: vec![OpenAIResponsesInputMessageContent::OutputText {
+                            text: Cow::Owned(text),
+                        }],
+                    }),
+                ));
             }
             Cow::Borrowed(ContentBlock::ToolCall(tool_call)) => {
-                output.push(OpenAIResponsesInput::FunctionCall(
-                    OpenAIResponsesFunctionCall {
+                output.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::FunctionCall(OpenAIResponsesFunctionCall {
                         call_id: Cow::Borrowed(&tool_call.id),
                         name: Cow::Borrowed(&tool_call.name),
                         arguments: Cow::Borrowed(&tool_call.arguments),
-                    },
+                    }),
                 ));
             }
             Cow::Owned(ContentBlock::ToolCall(tool_call)) => {
-                output.push(OpenAIResponsesInput::FunctionCall(
-                    OpenAIResponsesFunctionCall {
+                output.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::FunctionCall(OpenAIResponsesFunctionCall {
                         call_id: Cow::Owned(tool_call.id),
                         name: Cow::Owned(tool_call.name),
                         arguments: Cow::Owned(tool_call.arguments),
-                    },
+                    }),
                 ));
             }
             Cow::Borrowed(ContentBlock::ToolResult(_))
@@ -729,25 +743,13 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                 data,
                 model_provider_name: _,
             }) => {
-                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "assistant",
-                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
-                        data: Cow::Borrowed(data),
-                    }],
-                }));
+                output.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
             }
             Cow::Owned(ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             }) => {
-                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "assistant",
-                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
-                        data: Cow::Owned(data),
-                    }],
-                }));
+                output.push(OpenAIResponsesInput::Unknown(Cow::Owned(data)));
             }
         }
     }

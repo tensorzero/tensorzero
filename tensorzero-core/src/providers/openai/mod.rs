@@ -49,8 +49,9 @@ use crate::inference::types::{
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::openai::responses::{
-    get_responses_url, OpenAIResponsesInput, OpenAIResponsesInputMessage,
-    OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
+    get_responses_url, OpenAIResponsesInput, OpenAIResponsesInputInner,
+    OpenAIResponsesInputMessage, OpenAIResponsesInputMessageContent, OpenAIResponsesRequest,
+    OpenAIResponsesResponse,
 };
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -1349,11 +1350,13 @@ impl<'a> SystemOrDeveloper<'a> {
             SystemOrDeveloper::System(msg) => msg,
             SystemOrDeveloper::Developer(msg) => msg,
         };
-        OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-            role,
-            id: None,
-            content: vec![OpenAIResponsesInputMessageContent::InputText { text }],
-        })
+        OpenAIResponsesInput::Known(OpenAIResponsesInputInner::Message(
+            OpenAIResponsesInputMessage {
+                role,
+                id: None,
+                content: vec![OpenAIResponsesInputMessageContent::InputText { text }],
+            },
+        ))
     }
 }
 
