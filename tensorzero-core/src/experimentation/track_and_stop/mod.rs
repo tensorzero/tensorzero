@@ -131,8 +131,8 @@ impl Nursery {
         }
     }
 
-    // increments the index at which to start searching for an active variant
-    fn get_variant_round_robin(&self) -> u64 {
+    // Increments the index at which to start searching for an active variant
+    fn get_variant_idx_round_robin(&self) -> u64 {
         self.index.fetch_add(1, Ordering::Relaxed) % self.variants.len() as u64
     }
 
@@ -148,8 +148,12 @@ impl Nursery {
             return None;
         }
 
-        // Try up to N times to find an active variant
-        let start_idx = self.get_variant_round_robin();
+        // Try up to N times to find an active variant. We choose the starting
+        // index and then search over the variants, wrapping around the array,
+        // as opposed to incrementing self.index within the loop below,
+        // so that the sampling is truly round robin even when there are concurrent
+        // sampling calls.
+        let start_idx = self.get_variant_idx_round_robin();
         for idx in start_idx..(start_idx + self.variants.len() as u64) {
             let index = idx % (self.variants.len() as u64);
             let variant = &self.variants[index as usize];
@@ -1121,7 +1125,7 @@ mod tests {
 
         // Should always return index 0 (which maps to "A") regardless of how many times called
         for _ in 0..10 {
-            assert_eq!(nursery.get_variant_round_robin(), 0);
+            assert_eq!(nursery.get_variant_idx_round_robin(), 0);
         }
     }
 
@@ -1130,24 +1134,24 @@ mod tests {
         let nursery = Nursery::new(vec!["A".to_string(), "B".to_string(), "C".to_string()]);
 
         // First cycle - returns indices 0, 1, 2
-        assert_eq!(nursery.get_variant_round_robin(), 0); // "A"
-        assert_eq!(nursery.get_variant_round_robin(), 1); // "B"
-        assert_eq!(nursery.get_variant_round_robin(), 2); // "C"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 0); // "A"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 1); // "B"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 2); // "C"
 
         // Second cycle - should wrap around
-        assert_eq!(nursery.get_variant_round_robin(), 0); // "A"
-        assert_eq!(nursery.get_variant_round_robin(), 1); // "B"
-        assert_eq!(nursery.get_variant_round_robin(), 2); // "C"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 0); // "A"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 1); // "B"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 2); // "C"
     }
 
     #[test]
     fn test_nursery_get_variant_round_robin_two_variants() {
         let nursery = Nursery::new(vec!["X".to_string(), "Y".to_string()]);
 
-        assert_eq!(nursery.get_variant_round_robin(), 0); // "X"
-        assert_eq!(nursery.get_variant_round_robin(), 1); // "Y"
-        assert_eq!(nursery.get_variant_round_robin(), 0); // "X"
-        assert_eq!(nursery.get_variant_round_robin(), 1); // "Y"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 0); // "X"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 1); // "Y"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 0); // "X"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 1); // "Y"
     }
 
     #[test]
