@@ -174,7 +174,10 @@ pub struct TableBounds {
     pub last_id: Option<Uuid>,
 }
 
-impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}
+impl<T: RateLimitQueries + ExperimentationQueries + HealthCheckable + Send + Sync>
+    PostgresConnection for T
+{
+}
 
 pub trait ExperimentationQueries {
     async fn check_and_set_variant_by_episode(

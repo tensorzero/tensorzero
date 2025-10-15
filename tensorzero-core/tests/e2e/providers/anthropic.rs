@@ -23,6 +23,8 @@ use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, TextKind},
 };
 
+use super::common::ModelTestProvider;
+
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
@@ -136,6 +138,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "anthropic".into(),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "claude-3-haiku-20240307".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         bad_auth_extra_headers,
@@ -156,6 +167,7 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: image_providers,
         pdf_inference: pdf_providers,
         shorthand_inference: shorthand_providers.clone(),
+        credential_fallbacks,
     }
 }
 

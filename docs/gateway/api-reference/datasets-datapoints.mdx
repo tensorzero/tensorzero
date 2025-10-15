@@ -49,8 +49,8 @@ This endpoint returns the datapoint with the given ID, including all the relevan
 This endpoint adds a list of datapoints to a dataset.
 If the dataset does not exist, it will be created with the given name.
 
-- **Gateway Endpoint:** `POST /datasets/{dataset_name}/datapoints/bulk`
-- **Client Method:** `bulk_insert_datapoints`
+- **Gateway Endpoint:** `POST /datasets/{dataset_name}/datapoints`
+- **Client Method:** `create_datapoints`
 - **Parameters:**
   - `dataset_name` (string)
   - `datapoints` (list of objects, see below)

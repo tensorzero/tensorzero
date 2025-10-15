@@ -66,6 +66,10 @@ pub enum HyperbolicCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<HyperbolicCredentials>,
+        fallback: Box<HyperbolicCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for HyperbolicCredentials {
@@ -76,6 +80,12 @@ impl TryFrom<Credential> for HyperbolicCredentials {
             Credential::Static(key) => Ok(HyperbolicCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(HyperbolicCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(HyperbolicCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(HyperbolicCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Hyperbolic provider".to_string(),
             })),
@@ -97,6 +107,16 @@ impl HyperbolicCredentials {
                         message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
+                })
+            }
+            HyperbolicCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
                 })
             }
             HyperbolicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
