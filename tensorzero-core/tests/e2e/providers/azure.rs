@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
-use super::common::EmbeddingTestProvider;
+use super::common::{EmbeddingTestProvider, ModelTestProvider};
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -84,6 +84,21 @@ async fn get_providers() -> E2ETestProviders {
     // azure requires deployment_id and endpoint parameters, so it can't be tested with just default credentials
     let provider_type_default_credentials_providers = vec![];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "azure".to_string(),
+        model_info: HashMap::from([
+            (
+                "deployment_id".to_string(),
+                "gpt4o-mini-20240718".to_string(),
+            ),
+            (
+                "endpoint".to_string(),
+                "https://t0-azure-openai-east.openai.azure.com".to_string(),
+            ),
+        ]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -103,5 +118,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
         pdf_inference: vec![],
         shorthand_inference: vec![],
+        credential_fallbacks,
     }
 }

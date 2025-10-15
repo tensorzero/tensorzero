@@ -79,6 +79,10 @@ pub enum MistralCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<MistralCredentials>,
+        fallback: Box<MistralCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for MistralCredentials {
@@ -89,6 +93,12 @@ impl TryFrom<Credential> for MistralCredentials {
             Credential::Static(key) => Ok(MistralCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(MistralCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(MistralCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(MistralCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Mistral provider".to_string(),
             })),
@@ -110,6 +120,16 @@ impl MistralCredentials {
                         message: format!("Dynamic api key `{key_name}` is missing"),
                     }
                     .into()
+                })
+            }
+            MistralCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
                 })
             }
             MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
