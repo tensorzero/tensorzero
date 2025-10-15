@@ -518,10 +518,10 @@ pub struct InsertDatapointPathParams {
     pub dataset_name: String,
 }
 
-// The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
+// The handler for the POST `/datasets/{dataset_name}/datapoints` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
-pub async fn bulk_insert_datapoints_handler(
+#[tracing::instrument(name = "create_datapoints_handler", skip(app_state, params))]
+pub async fn create_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
@@ -535,6 +535,20 @@ pub async fn bulk_insert_datapoints_handler(
     )
     .await?;
     Ok(Json(datapoint_ids))
+}
+
+/// DEPRECATED: Use the POST `/datasets/{dataset_name}/datapoints` endpoint instead.
+#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+pub async fn bulk_insert_datapoints_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<InsertDatapointPathParams>,
+    StructuredJson(params): StructuredJson<InsertDatapointParams>,
+) -> Result<Json<Vec<Uuid>>, Error> {
+    tracing::warn!(
+        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/datasets/{dataset_name}/datapoints` instead.",
+        dataset_name = path_params.dataset_name
+    );
+    create_datapoints_handler(State(app_state), Path(path_params), StructuredJson(params)).await
 }
 
 pub async fn insert_datapoint(
@@ -1121,8 +1135,9 @@ pub struct ExistingInferenceInfo {
     pub episode_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum DatapointKind {
     Chat,
     Json,

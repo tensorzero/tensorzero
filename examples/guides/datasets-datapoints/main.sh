@@ -70,10 +70,10 @@ cat << 'EOF' > "$TEMP_FILE"
 }
 EOF
 
-# 1. Bulk insert datapoints
-echo -e "POST ${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints/bulk\n"
+# 1. Insert datapoints
+echo -e "POST ${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints\n"
 BULK_INSERT_RESPONSE=$(curl -s -X POST \
-  "${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints/bulk" \
+  "${GATEWAY_URL}/datasets/${DATASET_NAME}/datapoints" \
   -H "Content-Type: application/json" \
   -d @"$TEMP_FILE")
 

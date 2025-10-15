@@ -1,8 +1,7 @@
-#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 use uuid::Uuid;
@@ -104,6 +103,12 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "openrouter".to_string(),
+        model_info: HashMap::from([("model_name".to_string(), "openai/gpt-4o-mini".to_string())]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -124,6 +129,7 @@ async fn get_providers() -> E2ETestProviders {
         pdf_inference: vec![],
         shorthand_inference: shorthand_providers,
         json_mode_off_inference: vec![],
+        credential_fallbacks,
     }
 }
 

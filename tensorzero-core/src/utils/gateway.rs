@@ -186,6 +186,7 @@ impl GatewayHandle {
                     Arc::new(clickhouse_connection_info.clone())
                         as Arc<dyn SelectQueries + Send + Sync>,
                     function_name,
+                    cancel_token.clone(),
                 )
                 .await?;
         }

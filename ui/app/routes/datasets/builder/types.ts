@@ -1,10 +1,13 @@
 import { z, ZodType } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { getComparisonOperator } from "~/utils/config/feedback";
-import type { MetricConfig } from "tensorzero-node";
-import { DatasetQueryParamsSchema } from "~/utils/clickhouse/datasets";
-import type { DatasetQueryParams } from "~/utils/clickhouse/datasets";
-import { getInferenceJoinKey } from "~/utils/clickhouse/curation";
+
+// This MUST be a type-only import; this code lives in the browser, and tensorzero-node should not be browserified.
+import type {
+  MetricConfig,
+  DatasetQueryParams,
+  MetricConfigLevel,
+} from "tensorzero-node";
 
 const MetricConfigSchema: ZodType<MetricConfig> = z.any();
 
@@ -39,29 +42,25 @@ export const serializedFormDataToDatasetQueryParams = (
 ): DatasetQueryParams => {
   const parsedData = JSON.parse(serializedFormData);
   const formData = DatasetBuilderFormValuesSchema.parse(parsedData);
+
   // Build and validate DatasetQueryParams from form data
-  const queryParamsResult = DatasetQueryParamsSchema.safeParse({
-    inferenceType: formData.type,
+  const queryParams: DatasetQueryParams = {
+    inference_type: formData.type,
     function_name: formData.function,
     variant_name: formData.variant,
     dataset_name: formData.dataset,
     output_source: formData.output_source,
-    extra_where: [],
-    extra_params: {},
-    ...(formData.metric_name && formData.threshold
-      ? {
-          metric_filter: {
+    metric_filter:
+      formData.metric_name && formData.threshold
+        ? {
             metric: parsedData.metric_name,
             metric_type: parsedData.metric_config?.type,
             operator: getComparisonOperator(parsedData.metric_config?.optimize),
             threshold: parsedData.threshold,
-            join_on: getInferenceJoinKey(parsedData.metric_config?.level),
-          },
-        }
-      : {}),
-  });
-  if (!queryParamsResult.success) {
-    throw new Error(queryParamsResult.error.message);
-  }
-  return queryParamsResult.data;
+            join_on: parsedData.metric_config?.level as MetricConfigLevel,
+          }
+        : undefined,
+  };
+
+  return queryParams;
 };

@@ -72,6 +72,10 @@ pub enum SGLangCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<SGLangCredentials>,
+        fallback: Box<SGLangCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for SGLangCredentials {
@@ -83,6 +87,10 @@ impl TryFrom<Credential> for SGLangCredentials {
             Credential::Dynamic(key_name) => Ok(SGLangCredentials::Dynamic(key_name)),
             Credential::None => Ok(SGLangCredentials::None),
             Credential::Missing => Ok(SGLangCredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(SGLangCredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for SGLang provider".to_string(),
             })),
@@ -106,6 +114,16 @@ impl SGLangCredentials {
                     .into()
                 }))
                 .transpose()
+            }
+            SGLangCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             SGLangCredentials::None => Ok(None),
         }
