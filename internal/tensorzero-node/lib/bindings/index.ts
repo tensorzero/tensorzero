@@ -244,6 +244,7 @@ export * from "./ToolCallOutput";
 export * from "./ToolChoice";
 export * from "./ToolConfig";
 export * from "./ToolResult";
+export * from "./TrackAndStopConfig";
 export * from "./UninitializedBestOfNEvaluatorConfig";
 export * from "./UninitializedBestOfNSamplingConfig";
 export * from "./UninitializedChainOfThoughtConfig";

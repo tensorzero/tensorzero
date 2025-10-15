@@ -18,6 +18,7 @@ use crate::config::{Config, ConfigFileGlob};
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
+use crate::db::SelectQueries;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
@@ -178,8 +179,16 @@ impl GatewayHandle {
             clickhouse_connection_info.clone(),
             cancel_token.clone(),
         );
-        for function_config in config.functions.values() {
-            function_config.experimentation().setup().await?;
+        for (function_name, function_config) in &config.functions {
+            function_config
+                .experimentation()
+                .setup(
+                    Arc::new(clickhouse_connection_info.clone())
+                        as Arc<dyn SelectQueries + Send + Sync>,
+                    function_name,
+                    cancel_token.clone(),
+                )
+                .await?;
         }
         Ok(Self {
             app_state: AppStateData {

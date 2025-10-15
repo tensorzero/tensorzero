@@ -393,7 +393,12 @@ pub async fn inference(
     while !candidate_variants.is_empty() {
         let result = function
             .experimentation()
-            .sample(&function_name, episode_id, &mut candidate_variants)
+            .sample(
+                &function_name,
+                episode_id,
+                &mut candidate_variants,
+                &postgres_connection_info,
+            )
             .await;
         let (variant_name, variant) = match result {
             Ok((variant_name, variant)) => (variant_name, variant),
