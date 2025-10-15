@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Union, cast
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Union, cast
 
 import pytest
 import pytest_asyncio
@@ -358,18 +358,24 @@ def evaluation_datasets(
     json_fixture_path = fixtures_dir / "json_datapoint_fixture.jsonl"
     json_datapoints = _load_json_datapoints_from_fixture(json_fixture_path, "extract_entities_0.8")
     if json_datapoints:
-        embedded_sync_client.bulk_insert_datapoints(
+        embedded_sync_client.create_datapoints(
             dataset_name=dataset_mapping["extract_entities_0.8"],
-            datapoints=cast(List[Union[ChatDatapointInsert, JsonDatapointInsert]], json_datapoints),
+            datapoints=cast(
+                Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
+                json_datapoints,
+            ),
         )
 
     # Load and insert Chat datapoints (for haiku evaluation)
     chat_fixture_path = fixtures_dir / "chat_datapoint_fixture.jsonl"
     chat_datapoints = _load_chat_datapoints_from_fixture(chat_fixture_path, "good-haikus-no-output")
     if chat_datapoints:
-        embedded_sync_client.bulk_insert_datapoints(
+        embedded_sync_client.create_datapoints(
             dataset_name=dataset_mapping["good-haikus-no-output"],
-            datapoints=cast(List[Union[ChatDatapointInsert, JsonDatapointInsert]], chat_datapoints),
+            datapoints=cast(
+                Sequence[Union[ChatDatapointInsert, JsonDatapointInsert]],
+                chat_datapoints,
+            ),
         )
 
     yield dataset_mapping
