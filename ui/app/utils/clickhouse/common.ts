@@ -31,7 +31,7 @@ export type Role = z.infer<typeof roleSchema>;
 
 export const textInputSchema = z.object({
   type: z.literal("text"),
-  value: z.any(), // JsonValueSchema, // Value type from Rust maps to JsonValue
+  value: z.any(), // Value type from Rust maps to any in TS
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 

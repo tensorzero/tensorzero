@@ -90,7 +90,7 @@ export function hasDatapointChanged(params: {
   const hasSystemChanged =
     "system" in currentInput !== "system" in originalInput ||
     JSON.stringify(currentInput.system) !==
-      JSON.stringify(originalInput.system);
+    JSON.stringify(originalInput.system);
 
   // Check if messages changed
   const hasMessagesChanged =
@@ -208,7 +208,7 @@ export async function loader({
       status: 404,
     });
   }
-  const datapoint = await getDatapoint({ dataset_name, datapoint_id: id });
+  const datapoint = await getDatapoint({ dataset_name, datapoint_id: id, allow_stale: true });
   if (!datapoint) {
     throw data(`No datapoint found for id ${id}.`, {
       status: 404,
