@@ -9,7 +9,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
-pub use tensorzero_core::db::clickhouse::dataset_queries::{
+pub use tensorzero_core::db::datasets::{
     AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetDetailRow, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
     GetDatapointParams, GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams,
@@ -65,7 +65,7 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TimeComparisonOperator, TimeFilter,
 };
 pub use tensorzero_core::endpoints::datasets::{
-    ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
+    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
 };
 pub use tensorzero_core::endpoints::dynamic_evaluation_run::{
     DynamicEvaluationRunParams, DynamicEvaluationRunResponse,

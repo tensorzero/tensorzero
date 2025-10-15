@@ -13,14 +13,14 @@ use std::{collections::HashMap, future::Future, pin::Pin};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::clickhouse::dataset_queries::{DatasetQueries, GetDatapointParams};
-use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo, TableName};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
+use crate::db::datasets::{DatapointKind, DatasetQueries, GetDatapointParams};
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{
-    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
-    JsonInferenceDatabaseInsert, JsonInferenceOutput, Text,
+    ContentBlockChatOutput, FetchContext, Input, JsonInferenceOutput,
+    TaggedInferenceDatabaseInsert, Text,
 };
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::{
@@ -100,13 +100,6 @@ async fn query_demonstration(
         })
     })?;
     Ok(demonstration)
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields, tag = "function_type", rename_all = "snake_case")]
-pub enum TaggedInferenceDatabaseInsert {
-    Chat(ChatInferenceDatabaseInsert),
-    Json(JsonInferenceDatabaseInsert),
 }
 
 async fn query_inference_for_datapoint(
@@ -1076,23 +1069,6 @@ pub struct ExistingInferenceInfo {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
-}
-
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum DatapointKind {
-    Chat,
-    Json,
-}
-
-impl DatapointKind {
-    pub fn table_name(&self) -> TableName {
-        match self {
-            DatapointKind::Chat => TableName::ChatInferenceDatapoint,
-            DatapointKind::Json => TableName::JsonInferenceDatapoint,
-        }
-    }
 }
 
 #[derive(Debug, Serialize)]
