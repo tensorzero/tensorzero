@@ -9,6 +9,6 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * (which can be used to re-fetch the file and produce a `ResolvedInput`).
  */
 export type StoredInput = {
-  system: JsonValue | null;
+  system?: JsonValue;
   messages: Array<StoredInputMessage>;
 };

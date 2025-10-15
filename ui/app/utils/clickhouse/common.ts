@@ -79,18 +79,9 @@ export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
-  signature: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
-  _internal_provider_type: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
+  text: z.string().nullable(),
+  signature: z.string().optional(),
+  _internal_provider_type: z.string().optional(),
 });
 
 export const unknownSchema = z.object({
@@ -156,9 +147,9 @@ export const storageKindSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("s3_compatible"),
       bucket_name: z.string(),
-      region: z.string().nullable(),
-      endpoint: z.string().nullable(),
-      allow_http: z.boolean().nullable(),
+      region: z.string().nullish(),
+      endpoint: z.string().nullish(),
+      allow_http: z.boolean().nullish(),
     })
     .strict(),
   z
@@ -344,8 +335,9 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 ]);
 
 export const jsonInferenceOutputSchema = z.object({
+  // These fields are explicitly nullable, not undefined.
   raw: z.string().nullable(),
-  parsed: JsonValueSchema,
+  parsed: JsonValueSchema.nullable(),
 }) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const toolCallOutputSchema = z
