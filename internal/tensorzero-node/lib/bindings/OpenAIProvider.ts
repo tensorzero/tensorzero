@@ -4,5 +4,6 @@ import type { OpenAIAPIType } from "./OpenAIAPIType";
 export type OpenAIProvider = {
   model_name: string;
   api_base: string | null;
+  include_encrypted_reasoning: boolean;
   api_type: OpenAIAPIType;
 };
