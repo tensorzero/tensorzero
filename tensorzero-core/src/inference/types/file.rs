@@ -38,7 +38,7 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
 
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64File {
     // The original url we used to download the file
@@ -52,7 +52,7 @@ pub struct Base64File {
 /// Like `Base64File`, but without the data field.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     // The original url we used to download the file
@@ -108,7 +108,7 @@ pub enum File {
     Url {
         url: Url,
         #[serde(default)]
-        #[ts(type = "string", optional)]
+        #[ts(type = "string | null")]
         mime_type: Option<MediaType>,
     },
     Base64 {

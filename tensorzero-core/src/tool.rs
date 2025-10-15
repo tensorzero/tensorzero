@@ -415,13 +415,11 @@ impl TryFrom<ToolCallInput> for ToolCall {
 /// A ToolCallOutput is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallOutput {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<Value>,
     pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub raw_arguments: String,
     pub raw_name: String,

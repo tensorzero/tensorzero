@@ -7,12 +7,12 @@ export type ChatInferenceDatapoint = {
   dataset_name: string;
   function_name: string;
   id: string;
-  episode_id?: string;
+  episode_id: string | null;
   input: StoredInput;
   output?: Array<ContentBlockChatOutput>;
   tool_params?: ToolCallConfigDatabaseInsert;
   tags?: Record<string, string>;
-  auxiliary: string;
+  auxiliary?: string;
   is_deleted: boolean;
   is_custom: boolean;
   source_inference_id?: string;

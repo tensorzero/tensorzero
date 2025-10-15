@@ -15,4 +15,4 @@ export type ClientInputMessageContent =
   | { type: "raw_text"; value: string }
   | ({ type: "thought" } & Thought)
   | ({ type: "file" } & File)
-  | { type: "unknown"; data: JsonValue; model_provider_name?: string };
+  | { type: "unknown"; data: JsonValue; model_provider_name: string | null };

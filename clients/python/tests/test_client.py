@@ -371,7 +371,7 @@ async def test_async_thought_signature_only_input(
     assert isinstance(result.content[0], Text)
     assert (
         result.content[0].text
-        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","signature":"my_first_signature"},{"type":"thought","signature":"my_second_signature"}]}]}'
+        == '{"system":null,"messages":[{"role":"user","content":[{"type":"thought","text":null,"signature":"my_first_signature"},{"type":"thought","text":null,"signature":"my_second_signature"}]}]}'
     )
 
 

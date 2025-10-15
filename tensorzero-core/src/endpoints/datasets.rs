@@ -1270,7 +1270,7 @@ pub struct JsonDatapointInsert {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(test, ts(export))]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1281,10 +1281,12 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[cfg_attr(test, ts(optional))]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
 
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
@@ -1299,13 +1301,16 @@ pub struct ChatInferenceDatapoint {
     pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub staled_at: Option<String>,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub name: Option<String>,
 }
 
@@ -1330,6 +1335,7 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[cfg_attr(test, ts(optional))]
     pub output: Option<JsonInferenceOutput>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: serde_json::Value,
@@ -1346,13 +1352,16 @@ pub struct JsonInferenceDatapoint {
     pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub staled_at: Option<String>,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub name: Option<String>,
 }
 

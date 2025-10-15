@@ -551,14 +551,14 @@ impl Text {
 
 /// Struct that represents Chain of Thought reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[ts(export, optional_fields)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub signature: Option<String>,
     /// When set, this 'Thought' block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
@@ -567,6 +567,7 @@ pub struct Thought {
         rename = "_internal_provider_type",
         skip_serializing_if = "Option::is_none"
     )]
+    #[ts(optional)]
     pub provider_type: Option<String>,
 }
 
@@ -803,8 +804,6 @@ pub enum ContentBlockChatOutput {
     Thought(Thought),
     Unknown {
         data: Value,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
         model_provider_name: Option<String>,
     },
 }

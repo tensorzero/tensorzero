@@ -4,7 +4,7 @@
  * Struct that represents Chain of Thought reasoning
  */
 export type Thought = {
-  text?: string;
+  text: string | null;
   /**
    * An optional signature - currently, this is only used with Anthropic,
    * and is ignored by other providers.

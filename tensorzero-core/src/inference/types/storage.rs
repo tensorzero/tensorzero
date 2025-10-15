@@ -17,13 +17,9 @@ use pyo3::prelude::*;
 pub enum StorageKind {
     // ts(optional_fields) is only available for structs, not enums.
     S3Compatible {
-        #[cfg_attr(test, ts(optional))]
         bucket_name: Option<String>,
-        #[cfg_attr(test, ts(optional))]
         region: Option<String>,
-        #[cfg_attr(test, ts(optional))]
         endpoint: Option<String>,
-        #[cfg_attr(test, ts(optional))]
         allow_http: Option<bool>,
         /// An extra prefix to prepend to the object key.
         /// This is only enabled in e2e tests, to prevent clashes between concurrent test runs.
