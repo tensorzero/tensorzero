@@ -510,7 +510,7 @@ model_name = "test"
 
 [metrics.accuracy]
 type = "float"
-optimize = "max"
+optimize = "min"
 level = "inference"
 
 [functions.test_function]
@@ -584,7 +584,7 @@ update_period_s = 300
 async fn test_config_invalid_min_samples() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a"],
         fallback_variants: &["variant_a"],
         min_samples_per_variant: 0, // Invalid: must be >= 1
@@ -622,7 +622,7 @@ async fn test_config_invalid_delta() {
 async fn test_config_invalid_epsilon() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a"],
         fallback_variants: &["variant_a"],
         epsilon: -0.1, // Invalid: must be >= 0
@@ -676,7 +676,7 @@ async fn test_min_pulls() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "float",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &[],
         min_samples_per_variant: min_samples,
@@ -800,6 +800,91 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
     assert_eq!(
         variant_c_count, verification_inferences,
         "Expected 100% of inferences to go to variant_c (winner with highest mean for optimize=max). Distribution: {variant_counts:?}"
+    );
+}
+
+/// Test that after stopping, only the winning arm is pulled, with optimize="min"
+#[tokio::test(flavor = "multi_thread")]
+async fn test_winner_arm_pulled_after_stopping_optimize_min() {
+    // Experiment parameters
+    let num_initial_batches = 2; // Number of batches in Phase 1
+    let inferences_per_batch = 300; // Number of inferences per batch in Phase 1
+    let verification_inferences: usize = 100; // Number of inferences in Phase 2, after stopping
+
+    // Use a very clear winner to ensure stopping happens quickly
+    let config = make_track_and_stop_config(TrackAndStopTestConfig {
+        metric_name: "performance_score",
+        metric_type: "float",
+        optimize: "min",
+        candidate_variants: &["variant_a", "variant_b", "variant_c"],
+        fallback_variants: &[],
+        min_samples_per_variant: 100,
+        delta: 0.05,   // Reasonable confidence level
+        epsilon: 0.01, // Very small epsilon - we want the clear best arm
+        update_period_s: 1,
+    });
+
+    // Set up bandit with very clear winner (variant_a has much lower mean)
+    let bandit_distribution = vec![
+        ("variant_a", 0.30, 0.10), // Clear winner
+        ("variant_b", 0.80, 0.10),
+        ("variant_c", 1.0, 0.10),
+    ];
+
+    let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
+    let bandit = GaussianBandit::new(bandit_distribution.clone(), Some(42));
+    let client = std::sync::Arc::new(client);
+    let bandit = std::sync::Arc::new(bandit);
+
+    // Phase 1: Run enough batches to trigger stopping
+
+    for _batch in 0..num_initial_batches {
+        // Phase 1a: Run all inferences
+        let inference_results = run_inference_batch(&client, inferences_per_batch).await;
+
+        // Wait for ClickHouse to flush inferences
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
+
+        // Phase 1b: Send feedback for all inferences
+        let variant_names = send_feedback(
+            &client,
+            &inference_results,
+            &Bandit::Gaussian(bandit.clone()),
+            "performance_score",
+        )
+        .await;
+
+        // Count variants in this batch
+        let mut variant_counts: HashMap<String, usize> = HashMap::new();
+        for name in &variant_names {
+            *variant_counts.entry(name.clone()).or_insert(0) += 1;
+        }
+
+        // Wait for ClickHouse and background update
+        clickhouse_flush_async_insert(&clickhouse).await;
+        tokio::time::sleep(Duration::from_millis(BACKGROUND_UPDATE_DELAY_MS)).await;
+    }
+
+    // Phase 2: Run additional inferences and verify they all go to the winner
+    let inference_results = run_inference_batch(&client, verification_inferences).await;
+    let verification_variants: Vec<String> = inference_results
+        .into_iter()
+        .map(|(_, variant_name)| variant_name)
+        .collect();
+
+    // Count variants in verification phase
+    let mut variant_counts: HashMap<String, usize> = HashMap::new();
+    for name in &verification_variants {
+        *variant_counts.entry(name.clone()).or_insert(0) += 1;
+    }
+
+    // After stopping, we expect ALL inferences to go to variant_a (lowest mean for optimize=min)
+    let variant_a_count = variant_counts.get("variant_a").copied().unwrap_or(0);
+
+    assert_eq!(
+        variant_a_count, verification_inferences,
+        "Expected 100% of inferences to go to variant_a (winner with lowest mean for optimize=min). Distribution: {variant_counts:?}"
     );
 }
 
@@ -941,7 +1026,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let setup_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b"],
         fallback_variants: &[],
         min_samples_per_variant: 50,
@@ -979,7 +1064,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let config_large = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b"],
         fallback_variants: &[],
         min_samples_per_variant: 50,
@@ -1007,7 +1092,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let config_small = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b"],
         fallback_variants: &[],
         min_samples_per_variant: 50,
@@ -1511,9 +1596,9 @@ async fn test_remove_winner_variant_after_stopping() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_remove_non_winner_variant_after_stopping() {
     let initial_bandit_distribution = vec![
-        ("variant_a", 0.50),
-        ("variant_b", 0.95), // Clear winner
-        ("variant_c", 0.55),
+        ("variant_a", 0.50), // Clear winner
+        ("variant_b", 0.90),
+        ("variant_c", 0.95),
     ];
     let seed = 42;
 
@@ -1523,7 +1608,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
     let initial_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &[],
         min_samples_per_variant: 20,
@@ -1576,7 +1661,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
         "Expected stopping to occur in Phase 1"
     );
 
-    // Phase 2: Remove variant_a (a non-winner) and verify winner still selected
+    // Phase 2: Remove variant_b (a non-winner) and verify winner (variant_a) still selected
 
     drop(client);
     drop(bandit);
@@ -1586,8 +1671,8 @@ async fn test_remove_non_winner_variant_after_stopping() {
     let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
-        candidate_variants: &["variant_b", "variant_c"], // Removed variant_a
+        optimize: "min",
+        candidate_variants: &["variant_a", "variant_c"], // Removed variant_a
         fallback_variants: &[],
         min_samples_per_variant: 20,
         delta: 0.05,
@@ -1613,13 +1698,13 @@ async fn test_remove_non_winner_variant_after_stopping() {
         *variant_counts.entry(name.clone()).or_insert(0) += 1;
     }
 
-    let variant_b_count = *variant_counts.get("variant_b").unwrap_or(&0);
+    let variant_b_count = *variant_counts.get("variant_a").unwrap_or(&0);
     let variant_b_fraction = variant_b_count as f64 / variant_names.len() as f64;
 
     // variant_b should still dominate (at least 80% of pulls)
     assert!(
-        variant_b_fraction >= 0.80,
-        "Expected variant_b (winner) to dominate after non-winner removal, got {:.2}%",
+        variant_b_fraction == 1.0,
+        "Expected variant_a (winner) to dominate after non-winner removal, got {:.2}%",
         variant_b_fraction * 100.0
     );
 
