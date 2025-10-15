@@ -1279,14 +1279,17 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: StoredInput,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
 
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
@@ -1325,6 +1328,7 @@ pub struct JsonInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: StoredInput,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<JsonInferenceOutput>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
@@ -1332,6 +1336,7 @@ pub struct JsonInferenceDatapoint {
 
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object

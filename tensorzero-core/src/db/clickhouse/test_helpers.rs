@@ -104,7 +104,25 @@ pub async fn select_chat_dataset_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM ChatInferenceDatapoint FINAL WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL FORMAT JSONEachRow"
+        "SELECT
+            dataset_name,
+            function_name,
+            id,
+            name,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            tags,
+            auxiliary,
+            is_deleted,
+            is_custom,
+            source_inference_id,
+            staled_at,
+            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
+        FROM ChatInferenceDatapoint FINAL
+        WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL
+        FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
@@ -128,7 +146,25 @@ pub async fn select_json_dataset_clickhouse(
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
     let query = format!(
-        "SELECT * FROM JsonInferenceDatapoint FINAL WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL FORMAT JSONEachRow"
+        "SELECT
+            dataset_name,
+            function_name,
+            id,
+            name,
+            episode_id,
+            input,
+            output,
+            output_schema,
+            tags,
+            auxiliary,
+            is_deleted,
+            is_custom,
+            source_inference_id,
+            staled_at,
+            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
+        FROM JsonInferenceDatapoint FINAL
+        WHERE dataset_name = '{dataset_name}' AND staled_at IS NULL
+        FORMAT JSONEachRow"
     );
 
     let text = clickhouse_connection_info
