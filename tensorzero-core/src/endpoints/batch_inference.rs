@@ -305,6 +305,7 @@ pub async fn start_batch_inference(
                 &params.function_name,
                 *first_episode_id,
                 &mut candidate_variants,
+                &postgres_connection_info,
             )
             .await;
         let (variant_name, variant) = match result {

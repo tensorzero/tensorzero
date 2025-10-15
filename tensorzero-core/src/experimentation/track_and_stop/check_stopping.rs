@@ -310,7 +310,6 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
         .iter()
         .map(|x| (x.variance as f64).max(variance_floor))
         .collect();
-    let variant_names: Vec<String> = feedback.iter().map(|x| x.variant_name.clone()).collect();
     let num_arms: usize = pull_counts.len();
 
     // Can't stop the experiment if any arms haven't been pulled up to the min pull count
@@ -361,7 +360,9 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
     match glr_min {
         Some(min_val) => {
             if min_val > threshold {
-                Ok(StoppingResult::Winner(variant_names[leader_arm].clone()))
+                Ok(StoppingResult::Winner(
+                    feedback[leader_arm].variant_name.clone(),
+                ))
             } else {
                 Ok(StoppingResult::NotStopped)
             }
