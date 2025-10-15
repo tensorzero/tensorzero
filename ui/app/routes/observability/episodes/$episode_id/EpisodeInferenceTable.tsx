@@ -8,9 +8,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { Button } from "~/components/ui/button";
-import { Eye } from "lucide-react";
-import type { InferenceByIdRow, ParsedInferenceRow } from "~/utils/clickhouse/inference";
+import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import {
   TableItemTime,
@@ -18,14 +16,18 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
-import { InferencePeek } from "~/components/inference/InferencePeek";
+import { InferenceHoverCard } from "~/components/inference/InferenceHoverCard";
 
 export default function EpisodeInferenceTable({
   inferences,
-  onInferencePeek,
+  onInferenceHover,
+  getInferenceData,
+  isInferenceLoading,
 }: {
   inferences: InferenceByIdRow[];
-  onInferencePeek?: (inferenceId: string) => void;
+  onInferenceHover?: (inferenceId: string) => void;
+  getInferenceData?: (inferenceId: string) => any;
+  isInferenceLoading?: (inferenceId: string) => boolean;
 }) {
   return (
     <Table>
@@ -35,7 +37,6 @@ export default function EpisodeInferenceTable({
           <TableHead>Function</TableHead>
           <TableHead>Variant</TableHead>
           <TableHead>Time</TableHead>
-          {onInferencePeek && <TableHead className="w-20">Actions</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -45,10 +46,23 @@ export default function EpisodeInferenceTable({
           inferences.map((inference) => (
             <TableRow key={inference.id} id={inference.id}>
               <TableCell className="max-w-[200px]">
-                <TableItemShortUuid
-                  id={inference.id}
-                  link={toInferenceUrl(inference.id)}
-                />
+                {onInferenceHover && getInferenceData && isInferenceLoading ? (
+                  <InferenceHoverCard
+                    inference={getInferenceData(inference.id)}
+                    isLoading={isInferenceLoading(inference.id)}
+                    onHover={() => onInferenceHover(inference.id)}
+                  >
+                    <TableItemShortUuid
+                      id={inference.id}
+                      link={toInferenceUrl(inference.id)}
+                    />
+                  </InferenceHoverCard>
+                ) : (
+                  <TableItemShortUuid
+                    id={inference.id}
+                    link={toInferenceUrl(inference.id)}
+                  />
+                )}
               </TableCell>
               <TableCell>
                 <TableItemFunction
@@ -70,23 +84,6 @@ export default function EpisodeInferenceTable({
               <TableCell>
                 <TableItemTime timestamp={inference.timestamp} />
               </TableCell>
-              {onInferencePeek && (
-                <TableCell>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      onInferencePeek(inference.id);
-                    }}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Eye className="h-4 w-4" />
-                    <span className="sr-only">Peek at inference details</span>
-                  </Button>
-                </TableCell>
-              )}
             </TableRow>
           ))
         )}

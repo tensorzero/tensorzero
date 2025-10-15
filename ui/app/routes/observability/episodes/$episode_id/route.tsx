@@ -39,7 +39,7 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
-import { InferencePeek } from "~/components/inference/InferencePeek";
+import { useInferenceHover } from "~/hooks/useInferenceHover";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 
 export const handle: RouteHandle = {
@@ -179,27 +179,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [peekInference, setPeekInference] = useState<ParsedInferenceRow | null>(null);
-  const [isPeekOpen, setIsPeekOpen] = useState(false);
-  const inferenceFetcher = useFetcherWithReset<ActionData>();
-
-  const handleInferencePeek = (inferenceId: string) => {
-    const formData = new FormData();
-    formData.append("_action", "fetchInference");
-    formData.append("inferenceId", inferenceId);
-    inferenceFetcher.submit(formData, { method: "POST" });
-    setIsPeekOpen(true);
-  };
-
-  // Update peek inference when fetcher data changes
-  useEffect(() => {
-    if (inferenceFetcher.data?.inference && inferenceFetcher.state === "idle") {
-      setPeekInference(inferenceFetcher.data.inference);
-    } else if (inferenceFetcher.data?.error) {
-      console.error('Failed to fetch inference:', inferenceFetcher.data.error);
-      setIsPeekOpen(false);
-    }
-  }, [inferenceFetcher.data, inferenceFetcher.state]);
+  
+  // Use the hover hook for inference previews
+  const { handleInferenceHover, getInferenceData, isLoading } = useInferenceHover(
+    `/observability/episodes/${episode_id}`
+  );
 
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -313,7 +297,9 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
           <SectionHeader heading="Inferences" count={num_inferences} />
           <EpisodeInferenceTable 
             inferences={inferences} 
-            onInferencePeek={handleInferencePeek}
+            onInferenceHover={handleInferenceHover}
+            getInferenceData={getInferenceData}
+            isInferenceLoading={isLoading}
           />
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}
@@ -350,17 +336,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         </SectionLayout>
       </SectionsGroup>
       <Toaster />
-      <InferencePeek
-        inference={peekInference}
-        isOpen={isPeekOpen}
-        onOpenChange={(open) => {
-          setIsPeekOpen(open);
-          if (!open) {
-            setPeekInference(null);
-            inferenceFetcher.reset();
-          }
-        }}
-      />
     </PageLayout>
   );
 }
