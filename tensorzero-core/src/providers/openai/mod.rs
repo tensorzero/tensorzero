@@ -108,8 +108,9 @@ impl OpenAIProvider {
     ) -> Result<Self, Error> {
         if !matches!(api_type, OpenAIAPIType::Responses) && include_encrypted_reasoning {
             return Err(Error::new(ErrorDetails::Config {
-                message: "include_encrypted_reasoning is only supported when api_type = \"responses\""
-                    .to_string(),
+                message:
+                    "include_encrypted_reasoning is only supported when api_type = \"responses\""
+                        .to_string(),
             }));
         }
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
