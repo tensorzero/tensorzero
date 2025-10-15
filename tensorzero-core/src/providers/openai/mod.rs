@@ -105,22 +105,23 @@ impl OpenAIProvider {
         credentials: OpenAICredentials,
         api_type: OpenAIAPIType,
         provider_tools: Vec<Value>,
-    ) -> Self {
+    ) -> Result<Self, Error> {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         if let Some(api_base) = &api_base {
             check_api_base_suffix(api_base);
         }
+
         if !provider_tools.is_empty() && !matches!(api_type, OpenAIAPIType::Responses) {
-            tracing::warn!("`provider_tools` are provided for an OpenAI provider but Responses API is not enabled. These will be ignored.");
+            return Err(ErrorDetails::Config{message: "`provider_tools` are provided for an OpenAI provider but Responses API is not enabled. These will be ignored.".to_string()}.into());
         }
 
-        OpenAIProvider {
+        Ok(OpenAIProvider {
             model_name,
             api_base,
             credentials,
             api_type,
             provider_tools,
-        }
+        })
     }
 
     pub fn model_name(&self) -> &str {

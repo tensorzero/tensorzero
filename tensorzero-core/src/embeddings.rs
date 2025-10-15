@@ -61,7 +61,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 // TODO: handle the fact that there are also embeddings
                 OpenAIAPIType::ChatCompletions,
                 Vec::new(),
-            )),
+            )?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {

@@ -1124,7 +1124,7 @@ impl UninitializedProviderConfig {
                             // TODO - decide how to expose the responses api for wrapped providers
                             OpenAIAPIType::ChatCompletions,
                             Vec::new(),
-                        )),
+                            )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
                                 Error::new(ErrorDetails::InternalError { message: format!("Failed to parse fake TGI endpoint: `{e}`. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new") })
@@ -1268,7 +1268,7 @@ impl UninitializedProviderConfig {
                     .await?,
                 api_type,
                 provider_tools,
-            )),
+            )?),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
@@ -2253,7 +2253,7 @@ impl ShorthandModelConfig for ModelConfig {
                     .await?,
                 OpenAIAPIType::ChatCompletions,
                 Vec::new(),
-            )),
+            )?),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
                 OpenRouterKind
