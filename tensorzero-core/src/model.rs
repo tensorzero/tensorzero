@@ -1,6 +1,7 @@
 use futures::future::try_join_all;
 use futures::StreamExt;
 use secrecy::SecretString;
+use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -1015,6 +1016,8 @@ pub enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
         api_type: OpenAIAPIType,
+        #[serde(default)]
+        provider_tools: Vec<Value>,
     },
     OpenRouter {
         model_name: String,
@@ -1119,8 +1122,9 @@ impl UninitializedProviderConfig {
                                 )
                                 .await?,
                             // TODO - decide how to expose the responses api for wrapped providers
-                            OpenAIAPIType::ChatCompletions
-                        )),
+                            OpenAIAPIType::ChatCompletions,
+                            Vec::new(),
+                            )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
                                 Error::new(ErrorDetails::InternalError { message: format!("Failed to parse fake TGI endpoint: `{e}`. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new") })
@@ -1252,6 +1256,7 @@ impl UninitializedProviderConfig {
                 api_base,
                 api_key_location,
                 api_type,
+                provider_tools,
             } => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 api_base,
@@ -1262,7 +1267,8 @@ impl UninitializedProviderConfig {
                     )
                     .await?,
                 api_type,
-            )),
+                provider_tools,
+            )?),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
@@ -2246,7 +2252,8 @@ impl ShorthandModelConfig for ModelConfig {
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
                 OpenAIAPIType::ChatCompletions,
-            )),
+                Vec::new(),
+            )?),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
                 OpenRouterKind
