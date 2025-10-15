@@ -79,7 +79,7 @@ export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z.string().optional(),
+  text: z.string().nullable(),
   signature: z.string().optional(),
   _internal_provider_type: z.string().optional(),
 });
@@ -87,7 +87,7 @@ export const thoughtContentSchema = z.object({
 export const unknownSchema = z.object({
   type: z.literal("unknown"),
   data: JsonValueSchema,
-  model_provider_name: z.string().optional(),
+  model_provider_name: z.string().nullable(),
 });
 export type Unknown = z.infer<typeof unknownSchema>;
 
@@ -343,9 +343,9 @@ export const jsonInferenceOutputSchema = z.object({
 export const toolCallOutputSchema = z
   .object({
     type: z.literal("tool_call"),
-    arguments: JsonValueSchema.optional(),
+    arguments: JsonValueSchema.nullable(),
     id: z.string(),
-    name: z.string().optional(),
+    name: z.string().nullable(),
     raw_arguments: z.string(),
     raw_name: z.string(),
   })

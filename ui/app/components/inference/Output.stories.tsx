@@ -95,7 +95,7 @@ export const ChatFunctionWithBadToolCallName: Story = {
         id: "tc-1234567890",
         raw_name: "get_temperatu",
         raw_arguments: JSON.stringify(shortToolCallArgumentsFixture),
-        name: undefined,
+        name: null,
         arguments: shortToolCallArgumentsFixture,
       },
     ],
@@ -131,7 +131,7 @@ export const ChatFunctionWithBadToolCallBoth: Story = {
           0,
           -10,
         ),
-        name: undefined,
+        name: null,
         arguments: null,
       },
     ],
@@ -266,7 +266,7 @@ export const ChatFunctionWithUnknownContent: Story = {
       {
         type: "unknown",
         data: null,
-        model_provider_name: undefined,
+        model_provider_name: null,
       },
       {
         type: "unknown",

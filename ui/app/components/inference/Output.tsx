@@ -243,7 +243,7 @@ function ChatInferenceOutputComponent({
                 ) : (
                   <ToolCallMessage
                     key={index}
-                    toolName={block.name}
+                    toolName={block.name ?? undefined}
                     toolRawName={block.raw_name}
                     toolArguments={
                       block.arguments
