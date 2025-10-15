@@ -21,7 +21,8 @@ repos:
         exclude: |
           (?x)^(
               tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
-              ci/dummy-gcp-credentials\.json
+              ci/dummy-gcp-credentials\.json|
+              tensorzero-core/tests/e2e/self-signed-certs/.*
           )$
       - id: end-of-file-fixer
         exclude: \.minijinja$

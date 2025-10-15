@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize, Serializer};
+use sqlx::postgres::types::PgInterval;
 
 use crate::db::{
     ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
@@ -28,7 +29,7 @@ use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
  *      to not add keys which could trample one another.
  */
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct RateLimitingConfig {
@@ -282,7 +283,7 @@ impl ActiveRateLimit {
             key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_duration(),
+            refill_interval: self.limit.interval.to_pg_interval(),
             requested,
         })
     }
@@ -293,7 +294,7 @@ impl ActiveRateLimit {
             key: self.get_key()?,
             capacity: self.limit.capacity,
             refill_amount: self.limit.refill_rate,
-            refill_interval: self.limit.interval.to_duration(),
+            refill_interval: self.limit.interval.to_pg_interval(),
             returned,
         })
     }
@@ -331,7 +332,7 @@ impl ActiveRateLimit {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct RateLimitingConfigRule {
@@ -428,19 +429,43 @@ pub enum RateLimitInterval {
 }
 
 impl RateLimitInterval {
-    pub fn to_duration(self) -> chrono::Duration {
+    pub fn to_pg_interval(self) -> PgInterval {
         match self {
-            RateLimitInterval::Second => chrono::Duration::seconds(1),
-            RateLimitInterval::Minute => chrono::Duration::minutes(1),
-            RateLimitInterval::Hour => chrono::Duration::hours(1),
-            RateLimitInterval::Day => chrono::Duration::days(1),
-            RateLimitInterval::Week => chrono::Duration::weeks(1),
-            RateLimitInterval::Month => chrono::Duration::days(30),
+            RateLimitInterval::Second => PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 1_000_000, // 1 second
+            },
+            RateLimitInterval::Minute => PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 60_000_000, // 60 seconds
+            },
+            RateLimitInterval::Hour => PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 3_600_000_000, // 3600 seconds
+            },
+            RateLimitInterval::Day => PgInterval {
+                months: 0,
+                days: 1,
+                microseconds: 0,
+            },
+            RateLimitInterval::Week => PgInterval {
+                months: 0,
+                days: 7,
+                microseconds: 0,
+            },
+            RateLimitInterval::Month => PgInterval {
+                months: 1,
+                days: 0,
+                microseconds: 0,
+            },
         }
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum RateLimitingConfigPriority {
@@ -1360,30 +1385,54 @@ mod tests {
     }
 
     #[test]
-    fn test_rate_limit_interval_to_duration() {
+    fn test_rate_limit_interval_to_pg_interval() {
         assert_eq!(
-            RateLimitInterval::Second.to_duration(),
-            chrono::Duration::seconds(1)
+            RateLimitInterval::Second.to_pg_interval(),
+            PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 1_000_000
+            }
         );
         assert_eq!(
-            RateLimitInterval::Minute.to_duration(),
-            chrono::Duration::minutes(1)
+            RateLimitInterval::Minute.to_pg_interval(),
+            PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 60_000_000
+            }
         );
         assert_eq!(
-            RateLimitInterval::Hour.to_duration(),
-            chrono::Duration::hours(1)
+            RateLimitInterval::Hour.to_pg_interval(),
+            PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 3_600_000_000
+            }
         );
         assert_eq!(
-            RateLimitInterval::Day.to_duration(),
-            chrono::Duration::days(1)
+            RateLimitInterval::Day.to_pg_interval(),
+            PgInterval {
+                months: 0,
+                days: 1,
+                microseconds: 0
+            }
         );
         assert_eq!(
-            RateLimitInterval::Week.to_duration(),
-            chrono::Duration::weeks(1)
+            RateLimitInterval::Week.to_pg_interval(),
+            PgInterval {
+                months: 0,
+                days: 7,
+                microseconds: 0
+            }
         );
         assert_eq!(
-            RateLimitInterval::Month.to_duration(),
-            chrono::Duration::days(30)
+            RateLimitInterval::Month.to_pg_interval(),
+            PgInterval {
+                months: 1,
+                days: 0,
+                microseconds: 0
+            }
         );
     }
 
@@ -1486,7 +1535,11 @@ mod tests {
         assert_eq!(consume_request.refill_amount, 10);
         assert_eq!(
             consume_request.refill_interval,
-            chrono::Duration::minutes(1)
+            PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 60_000_000
+            }
         );
 
         // Test return tickets request for ModelInference resource
@@ -1510,7 +1563,14 @@ mod tests {
         assert_eq!(return_request.returned, 3);
         assert_eq!(return_request.capacity, 20);
         assert_eq!(return_request.refill_amount, 5);
-        assert_eq!(return_request.refill_interval, chrono::Duration::hours(1));
+        assert_eq!(
+            return_request.refill_interval,
+            PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 3_600_000_000
+            }
+        );
 
         // Test consume tickets request for ModelInference resource
         let inference_consume_request = inference_active_limit
@@ -1521,7 +1581,11 @@ mod tests {
         assert_eq!(inference_consume_request.refill_amount, 5);
         assert_eq!(
             inference_consume_request.refill_interval,
-            chrono::Duration::hours(1)
+            PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 3_600_000_000
+            }
         );
 
         // Test resource usage mapping works correctly
@@ -1566,7 +1630,11 @@ mod tests {
             key: key.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: chrono::Duration::minutes(1),
+            refill_interval: PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 60_000_000,
+            },
             requested: 50,
         };
 
@@ -1617,7 +1685,11 @@ mod tests {
             key: key2.clone(),
             capacity: 20,
             refill_amount: 5,
-            refill_interval: chrono::Duration::hours(1),
+            refill_interval: PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 3_600_000_000,
+            },
             requested: 10,
         };
 
@@ -1636,7 +1708,11 @@ mod tests {
             key: active_limit2.get_key().unwrap(),
             capacity: 20,
             refill_amount: 5,
-            refill_interval: chrono::Duration::hours(1),
+            refill_interval: PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 3_600_000_000,
+            },
             requested: 15,
         };
 
@@ -1748,7 +1824,11 @@ mod tests {
             key: key.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: chrono::Duration::minutes(1),
+            refill_interval: PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 60_000_000,
+            },
             requested: 50,
         };
 
@@ -1787,7 +1867,11 @@ mod tests {
             key: key2.clone(),
             capacity: 100,
             refill_amount: 10,
-            refill_interval: chrono::Duration::minutes(1),
+            refill_interval: PgInterval {
+                months: 0,
+                days: 0,
+                microseconds: 60_000_000,
+            },
             requested: 50,
         };
 
@@ -1908,21 +1992,33 @@ mod tests {
                 key: key_tokens.clone(),
                 capacity: 100,
                 refill_amount: 10,
-                refill_interval: chrono::Duration::minutes(1),
+                refill_interval: PgInterval {
+                    months: 0,
+                    days: 0,
+                    microseconds: 60_000_000,
+                },
                 requested: 80, // More than available (30)
             },
             ConsumeTicketsRequest {
                 key: key_inferences.clone(),
                 capacity: 50,
                 refill_amount: 5,
-                refill_interval: chrono::Duration::minutes(1),
+                refill_interval: PgInterval {
+                    months: 0,
+                    days: 0,
+                    microseconds: 60_000_000,
+                },
                 requested: 10, // Less than available (20)
             },
             ConsumeTicketsRequest {
                 key: key_tokens_user2.clone(),
                 capacity: 1000,
                 refill_amount: 100,
-                refill_interval: chrono::Duration::hours(1),
+                refill_interval: PgInterval {
+                    months: 0,
+                    days: 0,
+                    microseconds: 3_600_000_000,
+                },
                 requested: 80, // Less than available (500)
             },
         ];

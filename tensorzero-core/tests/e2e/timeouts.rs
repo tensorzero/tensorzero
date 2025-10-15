@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use std::time::{Duration, Instant};
 
 use http::StatusCode;
