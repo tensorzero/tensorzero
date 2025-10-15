@@ -160,7 +160,10 @@ impl OpenAIResponsesResponse<'_> {
                     }));
                 }
 
-                FlattenUnknown::Normal(OpenAIResponsesOutputInner::Reasoning { encrypted_content, summary }) => {
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::Reasoning {
+                    encrypted_content,
+                    summary,
+                }) => {
                     if let Some(encrypted_content) = encrypted_content {
                         output.push(ContentBlockOutput::Thought(Thought {
                             text: None,
@@ -480,7 +483,7 @@ impl OpenAIResponsesInput<'_> {
             OpenAIResponsesInput::Known(
                 OpenAIResponsesInputInner::FunctionCallOutput(_)
                 | OpenAIResponsesInputInner::FunctionCall(_)
-                | OpenAIResponsesInputInner::Reasoning(_)
+                | OpenAIResponsesInputInner::Reasoning(_),
             )
             | OpenAIResponsesInput::Unknown(_) => false,
         }
