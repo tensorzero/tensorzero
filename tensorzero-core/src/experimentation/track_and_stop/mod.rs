@@ -61,6 +61,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    config::{MetricConfig, MetricConfigOptimize},
     db::{
         postgres::PostgresConnectionInfo, ExperimentationQueries, FeedbackByVariant, SelectQueries,
     },
@@ -86,6 +87,8 @@ pub struct TrackAndStopConfig {
     epsilon: f64,
     #[ts(skip)]
     update_period: Duration,
+    #[serde(skip)]
+    metric_optimize: MetricConfigOptimize,
     #[serde(skip)]
     state: Arc<ArcSwap<TrackAndStopState>>,
     #[serde(skip)]
@@ -180,7 +183,7 @@ impl UninitializedTrackAndStopConfig {
     pub fn load(
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
-        metrics: &HashMap<String, crate::config::MetricConfig>,
+        metrics: &HashMap<String, MetricConfig>,
     ) -> Result<TrackAndStopConfig, Error> {
         // Validate metric exists
         if !metrics.contains_key(&self.metric) {
@@ -250,6 +253,13 @@ impl UninitializedTrackAndStopConfig {
             .chain(self.fallback_variants.iter().cloned())
             .collect();
 
+        // Get the metric's optimization direction
+        let metric_config = metrics.get(&self.metric).ok_or_else(|| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Metric '{}' not found in metrics config", self.metric),
+            })
+        })?;
+
         Ok(TrackAndStopConfig {
             metric: self.metric,
             candidate_variants: self.candidate_variants,
@@ -258,6 +268,7 @@ impl UninitializedTrackAndStopConfig {
             delta: self.delta,
             epsilon: self.epsilon,
             update_period: Duration::from_secs(self.update_period_s),
+            metric_optimize: metric_config.optimize,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(keep_variants),
             ))),
@@ -304,6 +315,7 @@ impl VariantSampler for TrackAndStopConfig {
             min_samples_per_variant: self.min_samples_per_variant,
             epsilon: self.epsilon,
             delta: self.delta,
+            metric_optimize: self.metric_optimize,
             cancel_token,
         }));
         Ok(())
@@ -370,6 +382,7 @@ struct ProbabilityUpdateTaskArgs {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
+    metric_optimize: MetricConfigOptimize,
     cancel_token: CancellationToken,
 }
 
@@ -394,6 +407,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
         min_samples_per_variant,
         epsilon,
         delta,
+        metric_optimize,
         cancel_token,
     } = args;
 
@@ -415,6 +429,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
             min_samples_per_variant,
             epsilon,
             delta,
+            metric_optimize,
         })
         .await;
 
@@ -436,6 +451,7 @@ struct UpdateProbabilitiesArgs<'a> {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
+    metric_optimize: MetricConfigOptimize,
 }
 
 async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), TrackAndStopError> {
@@ -448,6 +464,7 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
         min_samples_per_variant,
         epsilon,
         delta,
+        metric_optimize,
     } = args;
 
     // Fetch feedback from database
@@ -464,6 +481,7 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
             min_samples_per_variant,
             delta,
             epsilon,
+            metric_optimize,
         )
     })
     .await??; // First ? for JoinError, second ? for TrackAndStopError
@@ -590,6 +608,7 @@ impl TrackAndStopState {
         min_samples_per_variant: u64,
         delta: f64,
         epsilon: f64,
+        metric_optimize: MetricConfigOptimize,
     ) -> Result<Self, TrackAndStopError> {
         let variant_performances = if variant_performances.len() > candidate_variants.len() {
             tracing::warn!("Feedback is being filtered out for non-candidate variants. Current candidate variants: {candidate_variants:?}");
@@ -627,6 +646,7 @@ impl TrackAndStopState {
                     variance_floor: None,
                     delta: Some(delta),
                     epsilon: Some(epsilon),
+                    metric_optimize,
                 })? {
                     StoppingResult::Winner(winner_variant_name) => {
                         let competitors: Vec<&str> = candidate_variants
@@ -652,6 +672,7 @@ impl TrackAndStopState {
                                 variance_floor: None,
                                 min_prob: None,
                                 reg0: None,
+                                metric_optimize,
                             },
                         )?,
                     }),
@@ -681,6 +702,7 @@ impl TrackAndStopState {
                     variance_floor: None,
                     delta: Some(delta),
                     epsilon: Some(epsilon),
+                    metric_optimize,
                 })? {
                     StoppingResult::Winner(winner) => {
                         let bandit_competitors: Vec<&str> = bandit_feedback
@@ -717,6 +739,7 @@ impl TrackAndStopState {
                                 variance_floor: None,
                                 min_prob: None,
                                 reg0: None,
+                                metric_optimize,
                             },
                         )?,
                     }),
@@ -1264,7 +1287,15 @@ mod tests {
             create_feedback("C", 4, 0.7, 0.15),
         ];
 
-        let state = TrackAndStopState::new(&candidates, performances, 10, 0.05, 0.0).unwrap();
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
 
         match state {
             TrackAndStopState::NurseryOnly(nursery) => {
@@ -1283,7 +1314,15 @@ mod tests {
             create_feedback("B", 20, 0.6, 0.2),
         ];
 
-        let state = TrackAndStopState::new(&candidates, performances, 10, 0.05, 0.0).unwrap();
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
 
         match state {
             TrackAndStopState::BanditsOnly {
@@ -1310,13 +1349,21 @@ mod tests {
             create_feedback("B", 50, 0.7, 0.1),
         ];
 
-        let state = TrackAndStopState::new(&candidates, performances, 10, 0.05, 0.0).unwrap();
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            MetricConfigOptimize::Min,
+        )
+        .unwrap();
 
         match state {
             TrackAndStopState::Stopped {
                 winner_variant_name,
             } => {
-                assert_eq!(winner_variant_name, "B");
+                assert_eq!(winner_variant_name, "A");
             }
             _ => panic!("Expected Stopped state, got {state:?}"),
         }
@@ -1328,7 +1375,15 @@ mod tests {
         let candidates = vec!["A".to_string()];
         let performances = vec![create_feedback("A", 5, 0.5, 0.1)];
 
-        let state = TrackAndStopState::new(&candidates, performances, 10, 0.05, 0.0).unwrap();
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
 
         match state {
             TrackAndStopState::Stopped {
@@ -1350,7 +1405,15 @@ mod tests {
             create_feedback("C", 5, 0.7, 0.15), // Below cutoff
         ];
 
-        let state = TrackAndStopState::new(&candidates, performances, 10, 0.05, 0.0).unwrap();
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            MetricConfigOptimize::Min,
+        )
+        .unwrap();
 
         match state {
             TrackAndStopState::NurseryAndBandits {
@@ -1378,7 +1441,15 @@ mod tests {
             create_feedback("C", 5, 0.7, 0.15), // Below cutoff
         ];
 
-        let state = TrackAndStopState::new(&candidates, performances, 10, 0.05, 0.0).unwrap();
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
 
         match state {
             TrackAndStopState::NurseryAndStopped {
@@ -1398,7 +1469,14 @@ mod tests {
         let candidates = vec![];
         let performances = vec![];
 
-        let result = TrackAndStopState::new(&candidates, performances, 10, 0.05, 0.0);
+        let result = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            MetricConfigOptimize::Min,
+        );
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -1593,8 +1671,15 @@ mod tests {
             create_feedback("fallback", 20, 0.9, 0.1),
         ];
 
-        let state =
-            TrackAndStopState::new(&candidates, feedback, 5, 0.1, 0.0).expect("state builds");
+        let state = TrackAndStopState::new(
+            &candidates,
+            feedback,
+            5,
+            0.1,
+            0.0,
+            MetricConfigOptimize::Max,
+        )
+        .expect("state builds");
 
         let TrackAndStopState::BanditsOnly {
             sampling_probabilities,
@@ -1622,8 +1707,15 @@ mod tests {
             create_feedback("fallback", 30, 0.9, 0.1),
         ];
 
-        let state =
-            TrackAndStopState::new(&candidates, feedback, 5, 0.1, 0.0).expect("state builds");
+        let state = TrackAndStopState::new(
+            &candidates,
+            feedback,
+            5,
+            0.1,
+            0.0,
+            MetricConfigOptimize::Min,
+        )
+        .expect("state builds");
 
         let TrackAndStopState::NurseryAndBandits {
             nursery,
@@ -1656,6 +1748,7 @@ mod tests {
             delta: 0.05,
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
+            metric_optimize: MetricConfigOptimize::Min,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
             ))),
