@@ -2,6 +2,7 @@ import {
   countInferencesForEpisode,
   queryInferenceTableBoundsByEpisodeId,
   queryInferenceTableByEpisodeId,
+  queryInferenceById,
 } from "~/utils/clickhouse/inference.server";
 import {
   countFeedbackByTargetId,
@@ -38,6 +39,8 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
+import { InferencePeek } from "~/components/inference/InferencePeek";
+import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
@@ -114,12 +117,33 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 type ActionData =
-  | { redirectTo: string; error?: never }
-  | { error: string; redirectTo?: never };
+  | { redirectTo: string; error?: never; inference?: never }
+  | { error: string; redirectTo?: never; inference?: never }
+  | { inference: ParsedInferenceRow; error?: never; redirectTo?: never };
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
+  const _action = formData.get("_action");
 
+  if (_action === "fetchInference") {
+    const inferenceId = formData.get("inferenceId") as string;
+    if (!inferenceId) {
+      return data<ActionData>({ error: "Inference ID is required" }, { status: 400 });
+    }
+
+    try {
+      const inference = await queryInferenceById(inferenceId);
+      if (!inference) {
+        return data<ActionData>({ error: `Inference ${inferenceId} not found` }, { status: 404 });
+      }
+      return data<ActionData>({ inference });
+    } catch (error) {
+      console.error('Failed to fetch inference:', error);
+      return data<ActionData>({ error: "Failed to fetch inference details" }, { status: 500 });
+    }
+  }
+
+  // Handle feedback action
   try {
     const response = await addHumanFeedback(formData);
     const url = new URL(request.url);
@@ -155,6 +179,27 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   } = loaderData;
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [peekInference, setPeekInference] = useState<ParsedInferenceRow | null>(null);
+  const [isPeekOpen, setIsPeekOpen] = useState(false);
+  const inferenceFetcher = useFetcherWithReset<ActionData>();
+
+  const handleInferencePeek = (inferenceId: string) => {
+    const formData = new FormData();
+    formData.append("_action", "fetchInference");
+    formData.append("inferenceId", inferenceId);
+    inferenceFetcher.submit(formData, { method: "POST" });
+    setIsPeekOpen(true);
+  };
+
+  // Update peek inference when fetcher data changes
+  useEffect(() => {
+    if (inferenceFetcher.data?.inference && inferenceFetcher.state === "idle") {
+      setPeekInference(inferenceFetcher.data.inference);
+    } else if (inferenceFetcher.data?.error) {
+      console.error('Failed to fetch inference:', inferenceFetcher.data.error);
+      setIsPeekOpen(false);
+    }
+  }, [inferenceFetcher.data, inferenceFetcher.state]);
 
   const topInference = inferences[0];
   const bottomInference = inferences[inferences.length - 1];
@@ -266,7 +311,10 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Inferences" count={num_inferences} />
-          <EpisodeInferenceTable inferences={inferences} />
+          <EpisodeInferenceTable 
+            inferences={inferences} 
+            onInferencePeek={handleInferencePeek}
+          />
           <PageButtons
             onPreviousPage={handlePreviousInferencePage}
             onNextPage={handleNextInferencePage}
@@ -302,6 +350,17 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
         </SectionLayout>
       </SectionsGroup>
       <Toaster />
+      <InferencePeek
+        inference={peekInference}
+        isOpen={isPeekOpen}
+        onOpenChange={(open) => {
+          setIsPeekOpen(open);
+          if (!open) {
+            setPeekInference(null);
+            inferenceFetcher.reset();
+          }
+        }}
+      />
     </PageLayout>
   );
 }

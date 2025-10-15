@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -7,7 +8,9 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import { Button } from "~/components/ui/button";
+import { Eye } from "lucide-react";
+import type { InferenceByIdRow, ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import {
   TableItemTime,
@@ -15,11 +18,14 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
+import { InferencePeek } from "~/components/inference/InferencePeek";
 
 export default function EpisodeInferenceTable({
   inferences,
+  onInferencePeek,
 }: {
   inferences: InferenceByIdRow[];
+  onInferencePeek?: (inferenceId: string) => void;
 }) {
   return (
     <Table>
@@ -29,6 +35,7 @@ export default function EpisodeInferenceTable({
           <TableHead>Function</TableHead>
           <TableHead>Variant</TableHead>
           <TableHead>Time</TableHead>
+          {onInferencePeek && <TableHead className="w-20">Actions</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -63,6 +70,23 @@ export default function EpisodeInferenceTable({
               <TableCell>
                 <TableItemTime timestamp={inference.timestamp} />
               </TableCell>
+              {onInferencePeek && (
+                <TableCell>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onInferencePeek(inference.id);
+                    }}
+                    className="h-8 w-8 p-0"
+                  >
+                    <Eye className="h-4 w-4" />
+                    <span className="sr-only">Peek at inference details</span>
+                  </Button>
+                </TableCell>
+              )}
             </TableRow>
           ))
         )}
