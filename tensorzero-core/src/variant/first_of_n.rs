@@ -51,6 +51,7 @@
 //! candidates are collected but don't block the return of a successful result.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -168,14 +169,14 @@ impl Variant for FirstOfNConfig {
     /// - Individual candidate errors are collected but don't prevent success
     /// - Timeouts are converted to timeout errors
     /// - Only returns an error if all candidates fail or timeout
-    async fn infer<'a: 'request, 'request>(
+    async fn infer(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'a>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
-        _inference_params: InferenceParams, // we ignore and use defaults
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
+        _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         // TODO: for bookkeeping we will have to keep these futures around and wait until they return
         // without blocking after the first resolves.
@@ -199,9 +200,9 @@ impl Variant for FirstOfNConfig {
                     variant.infer(
                         input,
                         models,
-                        function,
-                        inference_config,
-                        clients,
+                        Arc::clone(&function),
+                        Arc::clone(&inference_config),
+                        clients.clone(),
                         InferenceParams::default(),
                     ),
                 )
@@ -251,14 +252,14 @@ impl Variant for FirstOfNConfig {
     /// The streaming conversion happens after candidate selection, not during candidate
     /// execution. This means the latency benefit of streaming is limited compared to variants
     /// that support native streaming.
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'_>,
-        function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
-        _inference_params: InferenceParams, // we ignore and use defaults
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
+        inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         let inference_result = self
             .infer(
@@ -284,8 +285,8 @@ impl Variant for FirstOfNConfig {
     /// Returns an error if any candidate is invalid or if any candidate's validation fails.
     async fn validate(
         &self,
-        function: &FunctionConfig,
-        models: &mut ModelTable,
+        function: Arc<FunctionConfig>,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
@@ -298,7 +299,7 @@ impl Variant for FirstOfNConfig {
                 })
             })?;
             Box::pin(variant.validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,
@@ -332,10 +333,10 @@ impl Variant for FirstOfNConfig {
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[LazyResolvedInput],
-        _models: &'a InferenceModels<'a>,
+        _models: InferenceModels,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a>],
-        _clients: &'a InferenceClients<'a>,
+        _inference_configs: &'a [InferenceConfig],
+        _clients: InferenceClients,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
