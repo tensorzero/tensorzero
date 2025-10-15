@@ -742,6 +742,7 @@ routing = ["openai"]
 type = "openai"
 model_name = "gpt-5"
 api_type = "responses"
+include_encrypted_reasoning = true
 
 [models.reasoner.providers.dummy]
 type = "dummy"

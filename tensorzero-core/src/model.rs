@@ -1015,6 +1015,8 @@ pub enum UninitializedProviderConfig {
         api_key_location: Option<CredentialLocationWithFallback>,
         #[serde(default)]
         api_type: OpenAIAPIType,
+        #[serde(default)]
+        include_encrypted_reasoning: bool,
     },
     OpenRouter {
         model_name: String,
@@ -1119,8 +1121,9 @@ impl UninitializedProviderConfig {
                                 )
                                 .await?,
                             // TODO - decide how to expose the responses api for wrapped providers
-                            OpenAIAPIType::ChatCompletions
-                        )),
+                            OpenAIAPIType::ChatCompletions,
+                            false,
+                        )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
                             Url::parse("http://tensorzero-unreachable-domain-please-file-a-bug-report.invalid").map_err(|e| {
                                 Error::new(ErrorDetails::InternalError { message: format!("Failed to parse fake TGI endpoint: `{e}`. This should never happen. Please file a bug report: https://github.com/tensorzero/tensorzero/issues/new") })
@@ -1252,6 +1255,7 @@ impl UninitializedProviderConfig {
                 api_base,
                 api_key_location,
                 api_type,
+                include_encrypted_reasoning,
             } => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
                 api_base,
@@ -1262,7 +1266,8 @@ impl UninitializedProviderConfig {
                     )
                     .await?,
                 api_type,
-            )),
+                include_encrypted_reasoning,
+            )?),
             UninitializedProviderConfig::OpenRouter {
                 model_name,
                 api_key_location,
@@ -2246,7 +2251,8 @@ impl ShorthandModelConfig for ModelConfig {
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
                 OpenAIAPIType::ChatCompletions,
-            )),
+                false,
+            )?),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
                 OpenRouterKind

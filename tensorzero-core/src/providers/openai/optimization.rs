@@ -563,6 +563,7 @@ pub fn convert_to_optimizer_status(job: OpenAIFineTuningJob) -> Result<Optimizat
                     api_base: None,
                     api_key_location: None,
                     api_type: Default::default(),
+                    include_encrypted_reasoning: false,
                 },
                 extra_headers: None,
                 extra_body: None,

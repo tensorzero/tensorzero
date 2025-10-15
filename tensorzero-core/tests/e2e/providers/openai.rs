@@ -2187,7 +2187,7 @@ async fn test_responses_api_reasoning() {
                 "variant_name": "openai",
                 "pointer": "/reasoning",
                 "value": {
-                    "effort": "high",
+                    "effort": "low",
                     "summary": "auto"
                 }
             }
@@ -2211,5 +2211,14 @@ async fn test_responses_api_reasoning() {
     assert!(
         has_thought,
         "Missing thought block in output: {content_blocks:?}"
+    );
+
+    let has_encrypted_thought = content_blocks.iter().any(|block| {
+        block.get("type").unwrap().as_str().unwrap() == "thought"
+            && block.get("signature").unwrap().as_str().is_some()
+    });
+    assert!(
+        has_encrypted_thought,
+        "Missing encrypted thought block in output: {content_blocks:?}"
     );
 }

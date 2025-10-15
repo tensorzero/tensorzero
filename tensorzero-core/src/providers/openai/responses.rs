@@ -52,7 +52,15 @@ pub struct OpenAIResponsesRequest<'a> {
     presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    include: Option<Vec<OpenAIResponsesInclude>>,
     stream: bool,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub enum OpenAIResponsesInclude {
+    #[serde(rename = "reasoning.encrypted_content")]
+    ReasoningEncryptedContent,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -150,7 +158,17 @@ impl OpenAIResponsesResponse<'_> {
                         name: function_call.name.to_string(),
                     }));
                 }
-                OpenAIResponsesOutput::Reasoning { summary } => {
+                OpenAIResponsesOutput::Reasoning {
+                    encrypted_content,
+                    summary,
+                } => {
+                    if let Some(encrypted_content) = encrypted_content {
+                        output.push(ContentBlockOutput::Thought(Thought {
+                            text: None,
+                            signature: Some(encrypted_content),
+                            provider_type: Some(PROVIDER_TYPE.to_string()),
+                        }));
+                    }
                     for summary in summary {
                         match summary {
                             OpenAIResponsesReasoningSummary::SummaryText { text } => {
@@ -277,6 +295,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        include_encrypted_reasoning: bool,
     ) -> Result<OpenAIResponsesRequest<'a>, Error> {
         let tools = request.tool_config.as_ref().map(|tool_config| {
             tool_config
@@ -367,6 +386,11 @@ impl<'a> OpenAIResponsesRequest<'a> {
             top_p: request.top_p,
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
+            include: if include_encrypted_reasoning {
+                Some(vec![OpenAIResponsesInclude::ReasoningEncryptedContent])
+            } else {
+                None
+            },
             stream: request.stream,
         })
     }
@@ -380,6 +404,8 @@ pub enum OpenAIResponsesOutput<'a> {
     #[serde(borrow)]
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
     Reasoning {
+        #[serde(default)]
+        encrypted_content: Option<String>,
         summary: Vec<OpenAIResponsesReasoningSummary<'a>>,
     },
 }
@@ -399,6 +425,8 @@ pub enum OpenAIResponsesInput<'a> {
     FunctionCallOutput(OpenAIResponsesFunctionCallOutput<'a>),
     #[serde(borrow)]
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
+    #[serde(borrow)]
+    Reasoning(OpenAIResponsesReasoning<'a>),
 }
 
 impl OpenAIResponsesInput<'_> {
@@ -415,9 +443,9 @@ impl OpenAIResponsesInput<'_> {
                 false
             }
             // Don't consider the content of non-text blocks
-            OpenAIResponsesInput::FunctionCallOutput(_) | OpenAIResponsesInput::FunctionCall(_) => {
-                false
-            }
+            OpenAIResponsesInput::FunctionCallOutput(_)
+            | OpenAIResponsesInput::FunctionCall(_)
+            | OpenAIResponsesInput::Reasoning(_) => false,
         }
     }
 }
@@ -461,6 +489,11 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
     Unknown {
         data: Cow<'a, Value>,
     },
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct OpenAIResponsesReasoning<'a> {
+    encrypted_content: Cow<'a, str>,
 }
 
 impl Serialize for OpenAIResponsesInputMessageContent<'_> {

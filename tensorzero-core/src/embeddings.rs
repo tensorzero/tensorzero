@@ -59,7 +59,8 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
                 OpenAIAPIType::ChatCompletions,
-            )),
+                false,
+            )?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
@@ -852,6 +853,7 @@ mod tests {
                     crate::model::CredentialLocation::None,
                 )),
                 api_type: Default::default(),
+                include_encrypted_reasoning: false,
             },
             timeout_ms: None,
             timeouts: TimeoutsConfig::default(),
