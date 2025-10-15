@@ -335,8 +335,9 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 ]);
 
 export const jsonInferenceOutputSchema = z.object({
-  raw: z.string().optional(),
-  parsed: JsonValueSchema.optional(),
+  // These fields are explicitly nullable, not undefined.
+  raw: z.string().nullable(),
+  parsed: JsonValueSchema.nullable(),
 }) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const toolCallOutputSchema = z

@@ -23,7 +23,7 @@ function transformOutputForTensorZero(
   if (output === null || output === undefined) {
     return null;
   } else if ("raw" in output) {
-    if (output.raw === undefined) {
+    if (output.raw === null) {
       return null;
     }
     try {

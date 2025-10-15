@@ -1194,12 +1194,13 @@ pub struct JsonInferenceResult {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
-#[ts(export, optional_fields)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// This is never omitted from the response even if it's None. A `null` value indicates no output from the model.
+    /// It's rare and unexpected from the model, but it's possible.
     pub raw: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// This is never omitted from the response even if it's None.
     pub parsed: Option<Value>,
 }
 
