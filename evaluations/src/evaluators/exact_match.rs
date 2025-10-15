@@ -108,6 +108,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         });
         let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
@@ -168,6 +169,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
@@ -209,6 +211,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let inference_response = InferenceResponse::Json(JsonInferenceResponse {
@@ -278,6 +281,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
@@ -316,6 +320,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();

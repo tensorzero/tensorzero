@@ -9,11 +9,11 @@ export type Thought = {
    * An optional signature - currently, this is only used with Anthropic,
    * and is ignored by other providers.
    */
-  signature: string | null;
+  signature?: string;
   /**
    * When set, this 'Thought' block will only be used for providers
    * matching this type (e.g. `anthropic`). Other providers will emit
    * a warning and discard the block.
    */
-  _internal_provider_type: string | null;
+  _internal_provider_type?: string;
 };

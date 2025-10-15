@@ -610,6 +610,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                updated_at: "2025-10-13T20:17:36Z".to_string(),
                 is_custom: true,
             }),
         )
@@ -679,6 +680,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                updated_at: "2025-10-13T20:17:36Z".to_string(),
                 is_custom: true,
             }),
         )
@@ -908,6 +910,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint).unwrap();
@@ -940,6 +943,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let err = handle_reference_output(&config, &datapoint).unwrap_err();
@@ -968,6 +972,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
@@ -996,6 +1001,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
@@ -1100,6 +1106,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                updated_at: "2025-10-13T20:17:36Z".to_string(),
                 is_custom: true,
             }),
         )
@@ -1215,6 +1222,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                updated_at: "2025-10-13T20:17:36Z".to_string(),
                 is_custom: true,
             }),
         )

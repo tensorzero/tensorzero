@@ -1,7 +1,8 @@
 use serde::Deserialize;
 use tensorzero::{
-    setup_clickhouse_without_config, ClickHouseConnection, DatasetQueryParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, TimeWindow,
+    setup_clickhouse_without_config, ClickHouseConnection, CountDatapointsForDatasetFunctionParams,
+    DatapointInsert, DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
+    GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams, TimeWindow,
 };
 use uuid::Uuid;
 
@@ -88,6 +89,49 @@ impl DatabaseClient {
             params,
             GetDatasetMetadataParams
         )
+    }
+
+    #[napi]
+    pub async fn count_datasets(&self) -> Result<u32, napi::Error> {
+        napi_call_no_deserializing!(&self, count_datasets)
+    }
+
+    #[napi]
+    pub async fn stale_datapoint(&self, params: String) -> Result<(), napi::Error> {
+        napi_call_no_deserializing!(&self, stale_datapoint, params, StaleDatapointParams)
+    }
+
+    #[napi]
+    pub async fn insert_datapoint(&self, params: String) -> Result<(), napi::Error> {
+        napi_call_no_deserializing!(&self, insert_datapoint, params, DatapointInsert)
+    }
+
+    #[napi]
+    pub async fn count_datapoints_for_dataset_function(
+        &self,
+        params: String,
+    ) -> Result<u32, napi::Error> {
+        napi_call_no_deserializing!(
+            &self,
+            count_datapoints_for_dataset_function,
+            params,
+            CountDatapointsForDatasetFunctionParams
+        )
+    }
+
+    #[napi]
+    pub async fn get_adjacent_datapoint_ids(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            get_adjacent_datapoint_ids,
+            params,
+            GetAdjacentDatapointIdsParams
+        )
+    }
+
+    #[napi]
+    pub async fn get_datapoint(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(&self, get_datapoint, params, GetDatapointParams)
     }
 }
 

@@ -165,9 +165,9 @@ function ToolDetails({
 }
 
 interface ToolCallMessageProps {
-  toolName: string | null;
+  toolName?: string;
   toolRawName: string;
-  toolArguments: string | null;
+  toolArguments?: string;
   toolRawArguments: string;
   toolCallId: string;
   isEditing?: boolean;

@@ -2,6 +2,13 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 export type JsonInferenceOutput = {
+  /**
+   * This is never omitted from the response even if it's None. A `null` value indicates no output from the model.
+   * It's rare and unexpected from the model, but it's possible.
+   */
   raw: string | null;
+  /**
+   * This is never omitted from the response even if it's None.
+   */
   parsed: JsonValue | null;
 };

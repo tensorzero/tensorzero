@@ -104,6 +104,17 @@ macro_rules! napi_call {
         serde_json::to_string(&result)
             .map_err(|e| napi::Error::from_reason(e.to_string()))
     }};
+
+    // Variant 4: the Rust method takes a single parameter that doesn't need to be deserialized.
+    ($self:expr, $method:ident, $param:expr) => {{
+        // Call the Rust method with no parameters.
+        let result = $self.0.$method($param)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        // Serialize the result back to JSON.
+        serde_json::to_string(&result)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }};
 }
 
 /// Macro to reduce boilerplate when calling methods defined in tensorzero-core from NAPI
@@ -175,4 +186,14 @@ macro_rules! napi_call_no_deserializing {
 
         // Result is returned directly as a native Node type.
     };
+
+    // Variant 4: the Rust method takes a single parameter that doesn't need to be deserialized.
+    ($self:expr, $method:ident, $param:expr) => {{
+        // Call the Rust method with the parameter.
+        $self.0.$method($param)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?
+
+        // Result is returned directly as a native Node type.
+    }};
 }

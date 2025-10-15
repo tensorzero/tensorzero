@@ -1329,6 +1329,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: true,
         name: None,
     });
@@ -1435,6 +1436,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: true,
         name: None,
     });
@@ -1503,6 +1505,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tags: None,
         source_inference_id: None,
         staled_at: None,
+        updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: true,
         name: None,
     });
@@ -1609,6 +1612,7 @@ async fn test_run_llm_judge_evaluator_json() {
         tool_params: None,
         source_inference_id: None,
         staled_at: None,
+        updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: true,
         name: None,
     });

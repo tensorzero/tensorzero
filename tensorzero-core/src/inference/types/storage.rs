@@ -10,11 +10,12 @@ use pyo3::prelude::*;
 /// Configuration for the object storage backend
 /// Currently, we only support S3-compatible object storage and local filesystem storage
 /// We test against Amazon S3, GCS, Cloudflare R2, and Minio
-#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum StorageKind {
+    // ts(optional_fields) is only available for structs, not enums.
     S3Compatible {
         bucket_name: Option<String>,
         region: Option<String>,
