@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
-#![expect(dead_code)]
 use clarabel::algebra::CscMatrix;
+use clarabel::solver::SolverStatus;
 use clarabel::solver::{
     DefaultSettings, DefaultSolver, IPSolver, NonnegativeConeT, SecondOrderConeT, SupportedConeT,
     ZeroConeT,
@@ -8,6 +8,7 @@ use clarabel::solver::{
 use std::collections::HashMap;
 use thiserror::Error;
 
+use crate::config::MetricConfigOptimize;
 use crate::db::FeedbackByVariant;
 use crate::experimentation::track_and_stop::check_stopping::choose_leader;
 
@@ -18,20 +19,22 @@ use crate::experimentation::track_and_stop::check_stopping::choose_leader;
 /// while respecting an ε-tolerance for sub-optimality.
 pub struct EstimateOptimalProbabilitiesArgs {
     /// Reward observations and pull counts for each arm
-    feedback: Vec<FeedbackByVariant>,
+    pub feedback: Vec<FeedbackByVariant>,
     /// Sub-optimality tolerance (ε ≥ 0). Arms within ε of the best arm's mean are considered
     /// "good enough". Larger values lead to faster stopping.
     /// Default: 0.0
-    epsilon: Option<f64>,
+    pub epsilon: Option<f64>,
     /// Value used to lower bound empirical variance, for stability. Prevents numerical issues
     /// when observed variances are very small. Default: 1e-12
-    variance_floor: Option<f64>,
+    pub variance_floor: Option<f64>,
     /// Lower bound on per-arm sampling probability (must be in (0, 1/K) where K is number of arms).
     /// Ensures all arms receive minimum exploration for numerical stability. Default: 1e-6
-    min_prob: Option<f64>,
+    pub min_prob: Option<f64>,
     /// Regularization coefficient (≥ 0) to encourage proximity to uniform distribution.
     /// Smooths the progression of sampling distributions toward the optimum. Default: 0.01
-    reg0: Option<f64>,
+    pub reg0: Option<f64>,
+    /// Optimization direction (Min or Max)
+    pub metric_optimize: MetricConfigOptimize,
 }
 /// Errors that can occur when computing optimal sampling probabilities.
 #[derive(Debug, Error)]
@@ -57,7 +60,6 @@ pub enum EstimateOptimalProbabilitiesError {
     #[error("Failed to build Clarabel solver")]
     CouldntBuildSolver,
 }
-
 /// Compute optimal sampling proportions for ε-best arm identification given sub-Gaussian rewards.
 ///
 /// This function implements an allocation strategy for multi-armed bandits that
@@ -84,7 +86,7 @@ pub enum EstimateOptimalProbabilitiesError {
 ///
 /// # Errors
 ///
-/// Returns `OptimalProbsError` if:
+/// Returns `EstimateOptimalProbabilitiesError` if:
 /// - Input vectors have mismatched lengths
 /// - Fewer than 2 arms are provided
 /// - Any values are non-finite (NaN or infinite)
@@ -124,6 +126,7 @@ pub fn estimate_optimal_probabilities(
         variance_floor,
         min_prob,
         reg0,
+        metric_optimize,
     } = args;
     // TODO: for boolean metrics, set default epsilon to e.g. 0.01. For float metrics, anchor to reward distributions once available.
     let epsilon: f64 = epsilon.unwrap_or(0.0);
@@ -132,7 +135,19 @@ pub fn estimate_optimal_probabilities(
     let reg0: f64 = reg0.unwrap_or(0.01);
 
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
-    let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
+
+    // Negate means if we're minimizing, so we can always use argmax
+    let means: Vec<f64> = feedback
+        .iter()
+        .map(|x| {
+            let mean = x.mean as f64;
+            match metric_optimize {
+                MetricConfigOptimize::Min => -mean,
+                MetricConfigOptimize::Max => mean,
+            }
+        })
+        .collect();
+
     let variances: Vec<f64> = feedback
         .iter()
         .map(|x| (x.variance as f64).max(variance_floor))
@@ -150,10 +165,12 @@ pub fn estimate_optimal_probabilities(
 
     // ε-margins: gap_i = μ_L - μ_i + ε  (strictly > 0 for ε > 0)
     let gaps: Vec<f64> = means.iter().map(|&x| leader_mean - x + epsilon).collect();
-    let gaps2: Vec<f64> = gaps.iter().map(|&x| (x * x).max(1e-16)).collect();
+    // Floor gap² at 1e-6 for numerical stability in SOCP solver
+    // This prevents constraint coefficients from becoming too small
+    let gaps2: Vec<f64> = gaps.iter().map(|&x| (x * x).max(1e-6)).collect();
 
     // Edge case: if all arms have essentially equal means and variances, return uniform distribution
-    // This avoids numerical issues when the optimization problem becomes degenerate
+    // This avoids numerical issues when the optimization problem approaches degeneracy
     let all_gaps_tiny = gaps.iter().all(|&g| g.abs() < 1e-10);
     let (min_var, max_var) = variances
         .iter()
@@ -291,16 +308,36 @@ pub fn estimate_optimal_probabilities(
         .map_err(|_| EstimateOptimalProbabilitiesError::CouldntBuildSolver)?;
     solver.solve();
 
-    let x = solver.solution.x.as_slice();
-    let w_star = x[0..num_arms].to_vec();
+    // Check solver status and validate solution
+    match solver.solution.status {
+        SolverStatus::Solved => {
+            // Solution is valid, extract weights
+            let x = solver.solution.x.as_slice();
+            let w_star = x[0..num_arms].to_vec();
 
-    let out: HashMap<String, f64> = variant_names.into_iter().zip(w_star).collect();
-    Ok(out)
+            let out: HashMap<String, f64> = variant_names.into_iter().zip(w_star).collect();
+            Ok(out)
+        }
+        _ => {
+            // Solver failed - this can happen when the problem is degenerate
+            // (e.g., when means are equal and epsilon is very small)
+            // Fall back to uniform distribution
+            tracing::warn!(
+                "SOCP solver failed with status {:?}, falling back to uniform distribution",
+                solver.solution.status
+            );
+            let probs = vec![1.0 / num_arms as f64; num_arms];
+            let out: HashMap<String, f64> = variant_names.into_iter().zip(probs).collect();
+            Ok(out)
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
 
     // Helper function to create FeedbackByVariant for tests
     fn make_feedback(
@@ -349,6 +386,9 @@ mod tests {
         }
     }
 
+    // ============================================================================
+    // Tests for the ordering and basic properties of the returned probabilities
+    // ============================================================================
     #[test]
     fn test_two_arms_different_variances() {
         let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![1.1, 1.0]);
@@ -358,6 +398,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(1.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
@@ -377,12 +418,136 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
         assert!((probs.values().sum::<f64>() - 1.0).abs() < 1e-6);
         // With equal variances and only two arms, probabilities should be roughly equal
         assert!((probs.get("variant_0").unwrap() - probs.get("variant_1").unwrap()).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_equal_means_different_variances_above_floor() {
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5], vec![0.1, 0.5]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: None,
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+
+        // Solver should succeed and return valid probabilities
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+
+        // The higher-variance arm should get more sampling
+        assert!(
+            probs.get("variant_1").unwrap() > probs.get("variant_0").unwrap(),
+            "Higher variance arm should get more probability"
+        );
+    }
+
+    #[test]
+    fn test_equal_means_different_variances_small_epsilon() {
+        // Test with a small but non-zero epsilon
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5], vec![0.1, 0.5]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.01),
+            variance_floor: None,
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+    }
+
+    #[test]
+    fn test_nearly_equal_means_different_variances() {
+        // Test with nearly equal means (within floating point tolerance)
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5 + 1e-12], vec![0.1, 0.5]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: None,
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+
+        // With gap² floor, solver should succeed
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+    }
+
+    #[test]
+    fn test_equal_means_equal_variances_above_floor() {
+        // Test that variance_floor is applied when both variances are below it
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5], vec![1.0, 1.0 + 1e-10]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: Some(0.01),
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+
+        // Should return valid probabilities that sum to 1
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+
+        // Since both variances are floored to the same value and means are equal,
+        // probabilities should be approximately equal
+        assert!(
+            (probs.get("variant_0").unwrap() - probs.get("variant_1").unwrap()).abs() < 1e-10,
+            "With equal floored variances and equal means, probabilities should be similar"
+        );
+    }
+
+    #[test]
+    fn test_equal_means_equal_variances_below_floor() {
+        // Test that variance_floor is applied when both variances are below it
+        let feedback = make_feedback(vec![100, 100], vec![0.5, 0.5], vec![1e-15, 1e-14]);
+        let probs = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: Some(0.01),
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+
+        // Should return valid probabilities that sum to 1
+        assert!(
+            (probs.values().sum::<f64>() - 1.0).abs() < 1e-6,
+            "Probabilities should sum to 1"
+        );
+
+        // Since both variances are floored to the same value and means are equal,
+        // probabilities should be approximately equal
+        assert!(
+            (probs.get("variant_0").unwrap() - probs.get("variant_1").unwrap()).abs() < 1e-10,
+            "With equal floored variances and equal means, probabilities should be similar"
+        );
     }
 
     #[test]
@@ -396,6 +561,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(min_prob),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -418,6 +584,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(1.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
@@ -436,6 +603,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -446,6 +614,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(10.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -464,24 +633,52 @@ mod tests {
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
             vec![0.1; 10],
         );
-        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+        // Test with optimize=max
+        let probs_map_max = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.0),
             variance_floor: None,
             min_prob: Some(min_prob),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
         // All probabilities should be non-negative
-        for &p in probs_map.values() {
+        for &p in probs_map_max.values() {
             assert!(p >= min_prob - 1e-6);
         }
         // Sum to 1
-        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map_max.values().sum::<f64>() - 1.0).abs() < 1e-6);
         // The highest should get most sampling
-        let probs_vec = hashmap_to_vec(&probs_map, 10);
+        let probs_vec = hashmap_to_vec(&probs_map_max, 10);
         assert!(probs_vec[9] >= probs_vec[0]);
+
+        let feedback = make_feedback(
+            vec![10; 10],
+            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+            vec![0.1; 10],
+        );
+        // Test with optimize=min
+        let probs_map_min = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: None,
+            min_prob: Some(min_prob),
+            reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+
+        // All probabilities should be non-negative
+        for &p in probs_map_min.values() {
+            assert!(p >= min_prob - 1e-6);
+        }
+        // Sum to 1
+        assert!((probs_map_min.values().sum::<f64>() - 1.0).abs() < 1e-6);
+        // The lowest should get most sampling
+        let probs_vec = hashmap_to_vec(&probs_map_min, 10);
+        assert!(probs_vec[0] >= probs_vec[9]);
     }
 
     #[test]
@@ -494,6 +691,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -513,6 +711,7 @@ mod tests {
             variance_floor: Some(0.01),
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -525,20 +724,25 @@ mod tests {
     #[test]
     fn test_zero_variance_with_floor() {
         // Zero variance should be handled by variance floor
-        let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![0.0001, 0.0]);
+        let feedback = make_feedback(
+            vec![10, 10, 10],
+            vec![0.3, 0.5, 0.7],
+            vec![0.0001, 0.0, 0.0],
+        );
         let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.0),
             variance_floor: Some(0.001),
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
-        // Arm with higher mean and variance needs more sampling
-        let probs = hashmap_to_vec(&probs_map, 2);
-        assert!(probs[1] > probs[0]);
+        // Arm with smallest mean should get most sampling
+        let probs = hashmap_to_vec(&probs_map, 3);
+        assert!(probs[0] > probs[2]);
     }
 
     #[test]
@@ -555,6 +759,7 @@ mod tests {
             variance_floor: Some(1e-8),
             min_prob: Some(0.05),
             reg0: Some(2.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -566,7 +771,9 @@ mod tests {
         }
     }
 
+    // ===================================================================================
     // Tests with reference solutions from cvxpy (using CLARABEL solver) or scipy.minimize
+    // ===================================================================================
     #[test]
     fn test_three_arms_varied_cvxpy() {
         let feedback = make_feedback(
@@ -580,6 +787,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -603,6 +811,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(2.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -631,6 +840,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -654,6 +864,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -689,11 +900,12 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
-        let expected = vec![0.069702913270257, 0.508019009489254, 0.422278077240489];
+        let expected = vec![0.411818058014078, 0.144184113193170, 0.443997828792751];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
         assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -708,6 +920,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -731,15 +944,16 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(1.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![
-            0.049999991957649,
-            0.373495754083455,
-            0.049999994032051,
-            0.526504259929341,
+            0.164052326317122,
+            0.274275620684497,
+            0.320837210430485,
+            0.240834842568170,
         ];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
@@ -759,6 +973,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.1),
             reg0: Some(0.2),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -782,16 +997,17 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![
-            0.049999999144349,
-            0.342706084262522,
-            0.049999999158130,
-            0.417175997176582,
-            0.140117920263625,
+            0.407341605286492,
+            0.079666735242631,
+            0.355686015295549,
+            0.050000000075998,
+            0.107305644099329,
         ];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
@@ -807,6 +1023,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -828,6 +1045,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -851,11 +1069,12 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.2),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
-        let expected = vec![0.111715272862871, 0.473942231288105, 0.414342495849023];
+        let expected = vec![0.423761527414760, 0.114067986187023, 0.462170486398217];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
         assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -870,6 +1089,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -893,15 +1113,16 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.3),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![
-            0.050000000000000,
-            0.394460771374844,
-            0.064092683568538,
-            0.491446545056619,
+            0.352531945768924,
+            0.139366907316944,
+            0.408479860960564,
+            0.099621285953567,
         ];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
@@ -917,6 +1138,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.1),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -925,5 +1147,450 @@ mod tests {
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
         assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
+    }
+
+    // Helper function to compute L2 distance between two probability vectors
+    fn l2_distance(v1: &[f64], v2: &[f64]) -> f64 {
+        assert_eq!(v1.len(), v2.len(), "Vectors must have same length");
+        v1.iter()
+            .zip(v2.iter())
+            .map(|(a, b)| (a - b).powi(2))
+            .sum::<f64>()
+            .sqrt()
+    }
+
+    // Helper function to generate random offsets for each arm, scaled by a factor
+    fn generate_random_offsets(rng: &mut StdRng, num_arms: usize, scale: f64) -> Vec<f64> {
+        (0..num_arms).map(|_| rng.random::<f64>() * scale).collect()
+    }
+
+    // Helper function to check that averaged L2 distances show monotonic convergence
+    // Averaging over multiple runs should cancel out nonomonotonicity from the nonlinear optimization
+    fn check_monotone_decreasing_distances(l2_distances: &[f64]) {
+        for i in 1..l2_distances.len() {
+            assert!(
+                l2_distances[i] <= l2_distances[i - 1],
+                "Averaged L2 distance should be monotone decreasing: distance[{}] = {} > distance[{}] = {}",
+                i,
+                l2_distances[i],
+                i - 1,
+                l2_distances[i - 1]
+            );
+        }
+    }
+
+    // ======================================================================================
+    // Tests for convergence of estimated optimal probabilities to true optimal probabilities
+    // as sample means and variances converge. This convergence may not be monotone in any
+    // given problem instance, so we average over multiple random instances. Due to
+    // randomness, these tests could fail sometimes.
+    // ======================================================================================
+    #[test]
+    fn test_convergence_two_arms() {
+        const NUM_RUNS: usize = 10;
+
+        // True means and variances
+        let true_means = vec![0.5, 0.7];
+        let true_variances = vec![0.1, 0.2];
+        let pull_counts = vec![100, 100];
+        let num_arms = true_means.len();
+
+        // Compute true optimal probabilities
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.0),
+            variance_floor: None,
+            min_prob: Some(1e-6),
+            reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        // Create sequence with decreasing scales, each arm gets random offset
+        let scales = [0.2, 0.1, 0.05, 0.02, 0.01, 0.005, 0.001];
+
+        // Average L2 distances over multiple runs
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(42 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.0),
+                        variance_floor: None,
+                        min_prob: Some(1e-6),
+                        reg0: Some(0.0),
+                        metric_optimize: MetricConfigOptimize::Max,
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                let distance = l2_distance(&sample_probs, &true_probs);
+                avg_l2_distances[scale_idx] += distance;
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_three_arms_varied() {
+        const NUM_RUNS: usize = 10;
+
+        let true_means = vec![0.3, 0.6, 0.5];
+        let true_variances = vec![0.1, 0.2, 0.15];
+        let pull_counts = vec![50, 50, 50];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.05),
+            variance_floor: None,
+            min_prob: Some(0.01),
+            reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [0.15, 0.1, 0.05, 0.02, 0.01, 0.005];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(123 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.05),
+                        variance_floor: None,
+                        min_prob: Some(0.01),
+                        reg0: Some(0.1),
+                        metric_optimize: MetricConfigOptimize::Min,
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_five_arms() {
+        const NUM_RUNS: usize = 10;
+
+        let true_means = vec![0.2, 0.5, 0.4, 0.6, 0.3];
+        let true_variances = vec![0.1, 0.3, 0.2, 0.4, 0.15];
+        let pull_counts = vec![100, 100, 100, 100, 100];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.02),
+            variance_floor: None,
+            min_prob: Some(0.05),
+            reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [0.1, 0.05, 0.02, 0.01, 0.005, 0.002];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(456 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.02),
+                        variance_floor: None,
+                        min_prob: Some(0.05),
+                        reg0: Some(0.5),
+                        metric_optimize: MetricConfigOptimize::Max,
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_high_variance_arms() {
+        const NUM_RUNS: usize = 10;
+
+        let true_means = vec![10.0, 15.0, 12.0];
+        let true_variances = vec![2.0, 5.0, 3.0];
+        let pull_counts = vec![200, 200, 200];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.5),
+            variance_floor: None,
+            min_prob: Some(0.01),
+            reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [2.0, 1.0, 0.5, 0.2, 0.1, 0.05];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(789 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.5),
+                        variance_floor: None,
+                        min_prob: Some(0.01),
+                        reg0: Some(0.1),
+                        metric_optimize: MetricConfigOptimize::Min,
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_ten_arms() {
+        const NUM_RUNS: usize = 10;
+
+        let true_means = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+        let true_variances = vec![0.1; 10];
+        let pull_counts = vec![100; 10];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.05),
+            variance_floor: None,
+            min_prob: Some(0.01),
+            reg0: Some(0.2),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [0.08, 0.05, 0.03, 0.02, 0.01, 0.005];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(101112 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.05),
+                        variance_floor: None,
+                        min_prob: Some(0.01),
+                        reg0: Some(0.2),
+                        metric_optimize: MetricConfigOptimize::Max,
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
+    }
+
+    #[test]
+    fn test_convergence_close_competition() {
+        const NUM_RUNS: usize = 10;
+
+        // Test with very close means - convergence should still be monotone
+        let true_means = vec![0.50, 0.51, 0.30];
+        let true_variances = vec![0.1, 0.1, 0.1];
+        let pull_counts = vec![100, 100, 100];
+        let num_arms = true_means.len();
+
+        let true_feedback = make_feedback(
+            pull_counts.clone(),
+            true_means.clone(),
+            true_variances.clone(),
+        );
+        let true_probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback: true_feedback,
+            epsilon: Some(0.01),
+            variance_floor: None,
+            min_prob: Some(0.01),
+            reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+        let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
+
+        let scales = [0.05, 0.03, 0.02, 0.01, 0.005, 0.002];
+        let mut avg_l2_distances = vec![0.0; scales.len()];
+
+        for run in 0..NUM_RUNS {
+            let mut rng = StdRng::seed_from_u64(131415 + run as u64);
+
+            for (scale_idx, &scale) in scales.iter().enumerate() {
+                let mean_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+                let variance_offsets = generate_random_offsets(&mut rng, num_arms, scale);
+
+                let sample_means: Vec<f64> = true_means
+                    .iter()
+                    .zip(&mean_offsets)
+                    .map(|(&m, &offset)| m + offset)
+                    .collect();
+                let sample_variances: Vec<f64> = true_variances
+                    .iter()
+                    .zip(&variance_offsets)
+                    .map(|(&v, &offset)| v + offset)
+                    .collect();
+
+                let sample_feedback =
+                    make_feedback(pull_counts.clone(), sample_means, sample_variances);
+                let sample_probs_map =
+                    estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+                        feedback: sample_feedback,
+                        epsilon: Some(0.01),
+                        variance_floor: None,
+                        min_prob: Some(0.01),
+                        reg0: Some(0.1),
+                        metric_optimize: MetricConfigOptimize::Max,
+                    })
+                    .unwrap();
+                let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
+
+                avg_l2_distances[scale_idx] += l2_distance(&sample_probs, &true_probs);
+            }
+        }
+
+        check_monotone_decreasing_distances(&avg_l2_distances);
     }
 }

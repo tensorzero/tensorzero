@@ -49,8 +49,9 @@ use crate::inference::types::{
 use crate::inference::InferenceProvider;
 use crate::model::{Credential, ModelProvider};
 use crate::providers::openai::responses::{
-    get_responses_url, OpenAIResponsesInput, OpenAIResponsesInputMessage,
-    OpenAIResponsesInputMessageContent, OpenAIResponsesRequest, OpenAIResponsesResponse,
+    get_responses_url, OpenAIResponsesInput, OpenAIResponsesInputInner,
+    OpenAIResponsesInputMessage, OpenAIResponsesInputMessageContent, OpenAIResponsesRequest,
+    OpenAIResponsesResponse,
 };
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
@@ -95,6 +96,7 @@ pub struct OpenAIProvider {
     #[serde(skip)]
     credentials: OpenAICredentials,
     api_type: OpenAIAPIType,
+    provider_tools: Vec<Value>,
 }
 
 impl OpenAIProvider {
@@ -103,18 +105,24 @@ impl OpenAIProvider {
         api_base: Option<Url>,
         credentials: OpenAICredentials,
         api_type: OpenAIAPIType,
-    ) -> Self {
+        provider_tools: Vec<Value>,
+    ) -> Result<Self, Error> {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         if let Some(api_base) = &api_base {
             check_api_base_suffix(api_base);
         }
 
-        OpenAIProvider {
+        if !provider_tools.is_empty() && !matches!(api_type, OpenAIAPIType::Responses) {
+            return Err(ErrorDetails::Config{message: "`provider_tools` are provided for an OpenAI provider but Responses API is not enabled. These will be ignored.".to_string()}.into());
+        }
+
+        Ok(OpenAIProvider {
             model_name,
             api_base,
             credentials,
             api_type,
-        }
+            provider_tools,
+        })
     }
 
     pub fn model_name(&self) -> &str {
@@ -221,7 +229,8 @@ impl WrappedProvider for OpenAIProvider {
     ) -> Result<serde_json::Value, Error> {
         match self.api_type {
             OpenAIAPIType::Responses => Ok(serde_json::to_value(
-                OpenAIResponsesRequest::new(&self.model_name, request).await?,
+                OpenAIResponsesRequest::new(&self.model_name, request, &self.provider_tools)
+                    .await?,
             )
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -244,12 +253,15 @@ impl WrappedProvider for OpenAIProvider {
             })?),
         }
     }
+
     fn parse_response(
         &self,
         request: &ModelInferenceRequest,
         raw_request: String,
         raw_response: String,
         latency: Latency,
+        model_name: &str,
+        provider_name: &str,
     ) -> Result<ProviderInferenceResponse, Error> {
         match self.api_type {
             OpenAIAPIType::Responses => {
@@ -267,7 +279,14 @@ impl WrappedProvider for OpenAIProvider {
                         })
                     })?;
 
-                response.into_provider_response(latency, raw_request, raw_response.clone(), request)
+                response.into_provider_response(
+                    latency,
+                    raw_request,
+                    raw_response.clone(),
+                    request,
+                    model_name,
+                    provider_name,
+                )
             }
             OpenAIAPIType::ChatCompletions => {
                 let response = serde_json::from_str(&raw_response).map_err(|e| {
@@ -376,6 +395,8 @@ impl InferenceProvider for OpenAIProvider {
                         raw_request,
                         raw_response.clone(),
                         request.request,
+                        request.model_name,
+                        request.provider_name,
                     )
                 }
                 OpenAIAPIType::ChatCompletions => {
@@ -441,12 +462,12 @@ impl InferenceProvider for OpenAIProvider {
 
         match self.api_type {
             OpenAIAPIType::Responses => {
-                // Use OpenAI Responses API for streaming
                 let request_url =
                     get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
 
                 let request_body = serde_json::to_value(
-                    OpenAIResponsesRequest::new(&self.model_name, request).await?,
+                    OpenAIResponsesRequest::new(&self.model_name, request, &self.provider_tools)
+                        .await?,
                 )
                 .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
@@ -524,8 +545,6 @@ impl InferenceProvider for OpenAIProvider {
         }
     }
 
-    // Get a single chunk from the stream and make sure it is OK then send to client.
-    // We want to do this here so that we can tell that the request is working.
     /// 1. Upload the requests to OpenAI as a File
     /// 2. Start the batch inference
     ///    We do them in sequence here.
@@ -1331,11 +1350,13 @@ impl<'a> SystemOrDeveloper<'a> {
             SystemOrDeveloper::System(msg) => msg,
             SystemOrDeveloper::Developer(msg) => msg,
         };
-        OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-            role,
-            id: None,
-            content: vec![OpenAIResponsesInputMessageContent::InputText { text }],
-        })
+        OpenAIResponsesInput::Known(OpenAIResponsesInputInner::Message(
+            OpenAIResponsesInputMessage {
+                role,
+                id: None,
+                content: vec![OpenAIResponsesInputMessageContent::InputText { text }],
+            },
+        ))
     }
 }
 
@@ -4288,6 +4309,7 @@ mod tests {
             Some(Url::parse("http://localhost:1234/v1/").unwrap()),
             OpenAICredentials::None,
             OpenAIAPIType::ChatCompletions,
+            Vec::new(),
         );
 
         let _ = OpenAIProvider::new(
@@ -4295,6 +4317,7 @@ mod tests {
             Some(Url::parse("http://localhost:1234/v1").unwrap()),
             OpenAICredentials::None,
             OpenAIAPIType::ChatCompletions,
+            Vec::new(),
         );
 
         // Invalid cases (should warn)
@@ -4304,6 +4327,7 @@ mod tests {
             Some(invalid_url_1.clone()),
             OpenAICredentials::None,
             OpenAIAPIType::ChatCompletions,
+            Vec::new(),
         );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
@@ -4314,6 +4338,7 @@ mod tests {
             Some(invalid_url_2.clone()),
             OpenAICredentials::None,
             OpenAIAPIType::ChatCompletions,
+            Vec::new(),
         );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));

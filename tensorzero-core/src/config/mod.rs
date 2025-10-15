@@ -697,7 +697,11 @@ impl Config {
         let functions = uninitialized_config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&name).map(|c| (name, Arc::new(c))))
+            .map(|(name, config)| {
+                config
+                    .load(&name, &uninitialized_config.metrics)
+                    .map(|c| (name, Arc::new(c)))
+            })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = uninitialized_config
@@ -1342,7 +1346,11 @@ impl SchemaData {
 }
 
 impl UninitializedFunctionConfig {
-    pub fn load(self, function_name: &str) -> Result<FunctionConfig, Error> {
+    pub fn load(
+        self,
+        function_name: &str,
+        metrics: &HashMap<String, MetricConfig>,
+    ) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
                 let schema_data = SchemaData::load(
@@ -1392,7 +1400,8 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(UninitializedExperimentationConfig::load)
+                    .map(|config| config.load(&variants, metrics))
+                    .transpose()?
                     .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
@@ -1488,7 +1497,8 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(UninitializedExperimentationConfig::load)
+                    .map(|config| config.load(&variants, metrics))
+                    .transpose()?
                     .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,

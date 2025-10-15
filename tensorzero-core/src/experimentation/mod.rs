@@ -3,12 +3,16 @@ use std::{collections::HashMap, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::db::postgres::PostgresConnectionInfo;
+use crate::db::SelectQueries;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
 mod static_weights;
+pub mod track_and_stop;
 
 #[derive(Debug, Default, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -18,6 +22,10 @@ pub enum ExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     #[default]
     Uniform,
+    // NOTE: this diverges from the spec due to technical limitations with `serde`
+    // (serde enums cannot be #[serde(flatten)])
+    // we can write a custom deserializer for this if we want
+    TrackAndStop(track_and_stop::TrackAndStopConfig),
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,27 +33,41 @@ pub enum ExperimentationConfig {
 pub enum UninitializedExperimentationConfig {
     StaticWeights(static_weights::StaticWeightsConfig),
     Uniform,
+    TrackAndStop(track_and_stop::UninitializedTrackAndStopConfig),
 }
 
 impl UninitializedExperimentationConfig {
-    pub fn load(self) -> ExperimentationConfig {
+    pub fn load(
+        self,
+        variants: &HashMap<String, Arc<VariantInfo>>,
+        metrics: &HashMap<String, crate::config::MetricConfig>,
+    ) -> Result<ExperimentationConfig, Error> {
         match self {
             UninitializedExperimentationConfig::StaticWeights(config) => {
-                ExperimentationConfig::StaticWeights(config)
+                Ok(ExperimentationConfig::StaticWeights(config))
             }
-            UninitializedExperimentationConfig::Uniform => ExperimentationConfig::Uniform,
+            UninitializedExperimentationConfig::Uniform => Ok(ExperimentationConfig::Uniform),
+            UninitializedExperimentationConfig::TrackAndStop(config) => Ok(
+                ExperimentationConfig::TrackAndStop(config.load(variants, metrics)?),
+            ),
         }
     }
 }
 
 pub trait VariantSampler {
-    // TODO, when we add bandits: pass CH and PG clients here (but use opaque trait types)
-    async fn setup(&self) -> Result<(), Error>;
+    async fn setup(
+        &self,
+        db: Arc<dyn SelectQueries + Send + Sync>,
+        function_name: &str,
+        cancel_token: CancellationToken,
+    ) -> Result<(), Error>;
     async fn sample(
         &self,
         function_name: &str,
         episode_id: Uuid,
+        // This gets "popped from"
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error>;
 }
 
@@ -69,10 +91,16 @@ impl ExperimentationConfig {
 }
 
 impl VariantSampler for ExperimentationConfig {
-    async fn setup(&self) -> Result<(), Error> {
+    async fn setup(
+        &self,
+        db: Arc<dyn SelectQueries + Send + Sync>,
+        function_name: &str,
+        cancel_token: CancellationToken,
+    ) -> Result<(), Error> {
         match self {
-            Self::StaticWeights(config) => config.setup().await,
+            Self::StaticWeights(config) => config.setup(db, function_name, cancel_token).await,
             Self::Uniform => Ok(()),
+            Self::TrackAndStop(config) => config.setup(db, function_name, cancel_token).await,
         }
     }
 
@@ -81,14 +109,20 @@ impl VariantSampler for ExperimentationConfig {
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
         match self {
             Self::StaticWeights(config) => {
                 config
-                    .sample(function_name, episode_id, active_variants)
+                    .sample(function_name, episode_id, active_variants, postgres)
                     .await
             }
             Self::Uniform => sample_uniform(function_name, &episode_id, active_variants),
+            Self::TrackAndStop(config) => {
+                config
+                    .sample(function_name, episode_id, active_variants, postgres)
+                    .await
+            }
         }
     }
 }
