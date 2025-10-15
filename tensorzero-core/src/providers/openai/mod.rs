@@ -354,8 +354,6 @@ impl InferenceProvider for OpenAIProvider {
 
             match self.api_type {
                 OpenAIAPIType::Responses => {
-                    println!("Raw request: {raw_request}");
-                    println!("Raw response: {raw_response}");
                     let response: OpenAIResponsesResponse = serde_json::from_str(&raw_response)
                         .map_err(|e| {
                             Error::new(ErrorDetails::InferenceServer {

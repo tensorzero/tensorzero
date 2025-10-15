@@ -1958,7 +1958,7 @@ mod tests {
                     Some("completed")
                 );
             }
-            _ => panic!("Expected FlattenUnknown::Unknown variant"),
+            FlattenUnknown::Normal(_) => panic!("Expected FlattenUnknown::Unknown variant"),
         }
     }
 

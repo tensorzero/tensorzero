@@ -2,7 +2,7 @@ nextest-version = { recommended = "0.9.87" }
 
 [profile.default]
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
-slow-timeout = { period = "30s", terminate-after = 9 }
+slow-timeout = { period = "10s", terminate-after = 3 }
 # We look for tests with names containing "no_aws_credentials"
 # These tests require that the surrounding environment has no AWS credentials
 # (including in places like `~/.aws`)
@@ -100,6 +100,11 @@ test-group = 'clickhouse_migration'
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::vllm::)'
 slow-timeout = { period = "60s", terminate-after = 2 }
+
+[[profile.default.overrides]]
+# Web search is very slow
+filter = 'test(websearch)'
+slow-timeout = { period = "120s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::sglang::)'
