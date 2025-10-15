@@ -28,7 +28,7 @@ use crate::{
         current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
     },
     model::ProviderConfig,
-    providers::openai::OpenAIProvider,
+    providers::openai::{OpenAIAPIType, OpenAIProvider},
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
@@ -58,7 +58,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
-                false,
+                OpenAIAPIType::ChatCompletions,
             )),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
@@ -848,7 +848,9 @@ mod tests {
             config: crate::model::UninitializedProviderConfig::OpenAI {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
-                api_key_location: Some(crate::model::CredentialLocation::None),
+                api_key_location: Some(crate::model::CredentialLocationWithFallback::Single(
+                    crate::model::CredentialLocation::None,
+                )),
                 api_type: Default::default(),
             },
             timeout_ms: None,

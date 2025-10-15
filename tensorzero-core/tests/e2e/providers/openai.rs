@@ -29,7 +29,8 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, DEEPSEEK_PAPER_PDF, FERRIS_PNG,
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, ModelTestProvider,
+    DEEPSEEK_PAPER_PDF, FERRIS_PNG,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
@@ -239,6 +240,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "openai".to_string(),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "gpt-4o-mini-2024-07-18".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -260,6 +270,7 @@ async fn get_providers() -> E2ETestProviders {
         pdf_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),
+        credential_fallbacks,
     }
 }
 

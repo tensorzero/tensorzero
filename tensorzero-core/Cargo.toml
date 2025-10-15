@@ -136,9 +136,10 @@ tonic = { version = "0.14.2", default-features = false }
 sqlx = { workspace = true }
 pin-project = "1.1.10"
 once_cell = "1.21.3"
-clarabel = { version = "0", default-features = false, features = ["serde"]}
+clarabel = { version = "0", default-features = false, features = ["serde"] }
 typed-builder = "0.22.0"
-mockall = "0.13"
+arc-swap = "1.7.1"
+rand_distr = "0.5.1"
 
 [dev-dependencies]
 tracing-test = { workspace = true }
