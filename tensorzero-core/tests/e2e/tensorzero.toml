@@ -123,7 +123,7 @@ routing = ["groq"]
 
 [models."groq-qwen".providers.groq]
 type = "groq"
-model_name = "qwen/qwen3-32b"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 
 [models."groq-qwen-dynamic"]
@@ -131,7 +131,7 @@ routing = ["groq"]
 
 [models."groq-qwen-dynamic".providers.groq]
 type = "groq"
-model_name = "qwen/qwen3-32b"
+model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 api_key_location = "dynamic::groq_api_key"
 
 
