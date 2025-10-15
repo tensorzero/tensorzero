@@ -1018,6 +1018,7 @@ pub enum UninitializedProviderConfig {
         api_type: OpenAIAPIType,
         #[serde(default)]
         include_encrypted_reasoning: bool,
+        #[serde(default)]
         provider_tools: Vec<Value>,
     },
     OpenRouter {

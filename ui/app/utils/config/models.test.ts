@@ -71,7 +71,7 @@ describe("dump_optimizer_output", () => {
     };
     const result_string = dump_optimizer_output(optimizerOutput);
     expect(result_string).toBe(
-      '[models.gpt-4o]\nrouting = [ "gpt-4o" ]\n\n[models.gpt-4o.providers.gpt-4o]\ntype = "openai"\nmodel_name = "gpt-4o"\ndiscard_unknown_chunks = false\napi_type = "chat_completions"\ninclude_encrypted_reasoning = false\nprovider_tools = []',
+      '[models.gpt-4o]\nrouting = [ "gpt-4o" ]\n\n[models.gpt-4o.providers.gpt-4o]\ntype = "openai"\nmodel_name = "gpt-4o"\ndiscard_unknown_chunks = false\ninclude_encrypted_reasoning = false\napi_type = "chat_completions"\nprovider_tools = []',
     );
   });
 });
