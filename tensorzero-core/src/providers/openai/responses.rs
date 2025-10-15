@@ -15,11 +15,12 @@ use url::Url;
 use crate::{
     error::{warn_discarded_thought_block, Error, ErrorDetails},
     inference::types::{
-        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
+        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
         ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
         TextChunk, Thought, ThoughtChunk, Usage,
     },
+    model::fully_qualified_name,
     providers::openai::{
         prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
         OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
@@ -106,11 +107,13 @@ impl OpenAIResponsesResponse<'_> {
         raw_request: String,
         raw_response: String,
         generic_request: &ModelInferenceRequest<'_>,
+        model_name: &str,
+        provider_name: &str,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut output = Vec::new();
         for message in self.output {
             match message {
-                OpenAIResponsesOutput::Message(message) => {
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::Message(message)) => {
                     if message.role != "assistant" {
                         return Err(Error::new(ErrorDetails::InferenceServer {
                             message:
@@ -141,14 +144,14 @@ impl OpenAIResponsesResponse<'_> {
                         }
                     }
                 }
-                OpenAIResponsesOutput::FunctionCall(function_call) => {
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::FunctionCall(function_call)) => {
                     output.push(ContentBlockOutput::ToolCall(ToolCall {
                         id: function_call.call_id.to_string(),
                         arguments: function_call.arguments.to_string(),
                         name: function_call.name.to_string(),
                     }));
                 }
-                OpenAIResponsesOutput::Reasoning { summary } => {
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::Reasoning { summary }) => {
                     for summary in summary {
                         match summary {
                             OpenAIResponsesReasoningSummary::SummaryText { text } => {
@@ -160,6 +163,12 @@ impl OpenAIResponsesResponse<'_> {
                             }
                         }
                     }
+                }
+                FlattenUnknown::Unknown(data) => {
+                    output.push(ContentBlockOutput::Unknown {
+                        data: data.into_owned(),
+                        model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    });
                 }
             }
         }
@@ -218,6 +227,7 @@ impl<'a> OpenAITool<'a> {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(untagged)]
 pub enum OpenAIResponsesTool<'a> {
     Function(OpenAIResponsesFunctionTool<'a>),
     BuiltIn(Value),
@@ -387,9 +397,11 @@ impl<'a> OpenAIResponsesRequest<'a> {
     }
 }
 
+pub type OpenAIResponsesOutput<'a> = FlattenUnknown<'a, OpenAIResponsesOutputInner<'a>>;
+
 #[derive(Clone, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum OpenAIResponsesOutput<'a> {
+pub enum OpenAIResponsesOutputInner<'a> {
     #[serde(borrow)]
     Message(OpenAIResponsesInputMessage<'a>),
     #[serde(borrow)]
@@ -1145,6 +1157,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::FunctionType;
+
     use super::*;
     use std::time::Duration;
 
@@ -1917,5 +1931,240 @@ mod tests {
 
         // Should fail to parse
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialize_unknown_output_block() {
+        // Test that unknown output block types (like web_search_call) are deserialized as FlattenUnknown::Unknown
+        let json = r#"{
+            "type": "web_search_call",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "test query"
+            }
+        }"#;
+
+        let result: OpenAIResponsesOutput = serde_json::from_str(json).unwrap();
+
+        match result {
+            FlattenUnknown::Unknown(data) => {
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("web_search_call")
+                );
+                assert_eq!(
+                    data.get("status").and_then(|v| v.as_str()),
+                    Some("completed")
+                );
+            }
+            _ => panic!("Expected FlattenUnknown::Unknown variant"),
+        }
+    }
+
+    #[test]
+    fn test_convert_unknown_block_to_content_block_output() {
+        // Test that unknown blocks are converted to ContentBlockOutput::Unknown with proper model_provider_name
+        let json = r#"{
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "id": "ws_123",
+                    "status": "completed"
+                }
+            ],
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 20
+            }
+        }"#;
+
+        let response: OpenAIResponsesResponse = serde_json::from_str(json).unwrap();
+        let generic_request = ModelInferenceRequest {
+            inference_id: uuid::Uuid::new_v4(),
+            messages: vec![],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            stop_sequences: None,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
+            extra_cache_key: None,
+        };
+
+        let result = response.into_provider_response(
+            Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+            "test_request".to_string(),
+            "test_response".to_string(),
+            &generic_request,
+            "test-model",
+            "test-provider",
+        );
+
+        assert!(result.is_ok());
+        let provider_response = result.unwrap();
+        assert_eq!(provider_response.output.len(), 1);
+
+        match &provider_response.output[0] {
+            ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("web_search_call")
+                );
+                assert_eq!(
+                    model_provider_name.as_deref(),
+                    Some("tensorzero::model_name::test-model::provider_name::test-provider")
+                );
+            }
+            _ => panic!("Expected ContentBlockOutput::Unknown"),
+        }
+    }
+
+    #[test]
+    fn test_mixed_output_with_known_and_unknown_blocks() {
+        // Test that responses with both known and unknown blocks are handled correctly
+        let json = r#"{
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "id": "msg_1",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Hello, world!"
+                        }
+                    ]
+                },
+                {
+                    "type": "web_search_call",
+                    "id": "ws_123",
+                    "status": "completed",
+                    "action": {
+                        "type": "search",
+                        "query": "test"
+                    }
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "fc_456",
+                    "name": "get_weather",
+                    "arguments": "{}"
+                },
+                {
+                    "type": "another_unknown_type",
+                    "custom_field": "custom_value"
+                }
+            ],
+            "usage": {
+                "input_tokens": 50,
+                "output_tokens": 100
+            }
+        }"#;
+
+        let response: OpenAIResponsesResponse = serde_json::from_str(json).unwrap();
+        let generic_request = ModelInferenceRequest {
+            inference_id: uuid::Uuid::new_v4(),
+            messages: vec![],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            stop_sequences: None,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
+            extra_cache_key: None,
+        };
+
+        let result = response.into_provider_response(
+            Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+            "test_request".to_string(),
+            "test_response".to_string(),
+            &generic_request,
+            "gpt-5-nano",
+            "openai",
+        );
+
+        assert!(result.is_ok());
+        let provider_response = result.unwrap();
+
+        // Should have 4 output blocks: 1 text, 2 unknown, 1 tool call
+        assert_eq!(provider_response.output.len(), 4);
+
+        // First should be text
+        match &provider_response.output[0] {
+            ContentBlockOutput::Text(text) => {
+                assert_eq!(text.text, "Hello, world!");
+            }
+            _ => panic!("Expected ContentBlockOutput::Text"),
+        }
+
+        // Second should be unknown (web_search_call)
+        match &provider_response.output[1] {
+            ContentBlockOutput::Unknown { data, .. } => {
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("web_search_call")
+                );
+            }
+            _ => panic!("Expected ContentBlockOutput::Unknown for web_search_call"),
+        }
+
+        // Third should be tool call
+        match &provider_response.output[2] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_weather");
+                assert_eq!(tool_call.id, "fc_456");
+            }
+            _ => panic!("Expected ContentBlockOutput::ToolCall"),
+        }
+
+        // Fourth should be unknown (another_unknown_type)
+        match &provider_response.output[3] {
+            ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("another_unknown_type")
+                );
+                assert_eq!(
+                    data.get("custom_field").and_then(|v| v.as_str()),
+                    Some("custom_value")
+                );
+                assert_eq!(
+                    model_provider_name.as_deref(),
+                    Some("tensorzero::model_name::gpt-5-nano::provider_name::openai")
+                );
+            }
+            _ => panic!("Expected ContentBlockOutput::Unknown for another_unknown_type"),
+        }
     }
 }

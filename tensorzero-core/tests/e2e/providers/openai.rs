@@ -2202,3 +2202,115 @@ async fn test_responses_api_reasoning() {
         "Missing thought block in output: {content_blocks:?}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_openai_built_in_websearch() {
+    // Create a config with the custom credential location
+    let config = r#"
+
+gateway.debug = true
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "openai"
+model_name = "gpt-5-nano"
+provider_tools = [{type = "web_search"}]
+api_type = "responses"
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    // Create an embedded gateway with this config
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
+
+    // Make a simple inference request to verify it works
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Tell me some good news that happened today".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the inference succeeded
+    let response = result.unwrap();
+    println!("response: {:?}", response);
+
+    // Extract the chat response
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let InferenceResponse::Chat(chat_response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    // Assert that we have at least one Unknown content block with type "web_search_call"
+    let web_search_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter(|block| {
+            if let ContentBlockChatOutput::Unknown { data, .. } = block {
+                data.get("type")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t == "web_search_call")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        })
+        .collect();
+
+    assert!(
+        !web_search_blocks.is_empty(),
+        "Expected at least one Unknown content block with type 'web_search_call', but found none. Content blocks: {:#?}",
+        chat_response.content
+    );
+
+    // Assert that we have exactly one Text content block
+    let text_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter_map(|block| {
+            if let ContentBlockChatOutput::Text(text) = block {
+                Some(text)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        text_blocks.len(),
+        1,
+        "Expected exactly one Text content block, but found {}. Content blocks: {:#?}",
+        text_blocks.len(),
+        chat_response.content
+    );
+
+    // Assert that the text block contains citations (markdown links)
+    let text_content = &text_blocks[0].text;
+    assert!(
+        text_content.contains("]("),
+        "Expected text content to contain citations in markdown format [text](url), but found none. Text: {}",
+        text_content
+    );
+}

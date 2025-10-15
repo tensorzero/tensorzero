@@ -239,6 +239,8 @@ impl WrappedProvider for OpenAIProvider {
         raw_request: String,
         raw_response: String,
         latency: Latency,
+        model_name: &str,
+        provider_name: &str,
     ) -> Result<ProviderInferenceResponse, Error> {
         match self.api_type {
             OpenAIAPIType::Responses => {
@@ -256,7 +258,14 @@ impl WrappedProvider for OpenAIProvider {
                         })
                     })?;
 
-                response.into_provider_response(latency, raw_request, raw_response.clone(), request)
+                response.into_provider_response(
+                    latency,
+                    raw_request,
+                    raw_response.clone(),
+                    request,
+                    model_name,
+                    provider_name,
+                )
             }
             OpenAIAPIType::ChatCompletions => {
                 let response = serde_json::from_str(&raw_response).map_err(|e| {
@@ -345,6 +354,8 @@ impl InferenceProvider for OpenAIProvider {
 
             match self.api_type {
                 OpenAIAPIType::Responses => {
+                    println!("Raw request: {raw_request}");
+                    println!("Raw response: {raw_response}");
                     let response: OpenAIResponsesResponse = serde_json::from_str(&raw_response)
                         .map_err(|e| {
                             Error::new(ErrorDetails::InferenceServer {
@@ -365,6 +376,8 @@ impl InferenceProvider for OpenAIProvider {
                         raw_request,
                         raw_response.clone(),
                         request.request,
+                        request.model_name,
+                        request.provider_name,
                     )
                 }
                 OpenAIAPIType::ChatCompletions => {
