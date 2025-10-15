@@ -62,7 +62,7 @@ ts-rs = { version = "11.0.1", features = [
 ] }
 chrono = { version = "0.4.41", features = ["serde"] }
 git2 = { version = "0.20.2", default-features = false }
-tracing-opentelemetry-instrumentation-sdk = { version = "0.29.0", features = [
+tracing-opentelemetry-instrumentation-sdk = { version = "0.32.1", features = [
     "tracing_level_info",
 ] }
 tower-http = { version = "0.6.6", features = ["trace"] }
