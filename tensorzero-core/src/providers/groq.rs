@@ -5,7 +5,7 @@ use reqwest_eventsource::Event;
 use secrecy::{ExposeSecret, SecretString};
 use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::borrow::Cow;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -772,24 +772,27 @@ async fn tensorzero_to_groq_assistant_messages(
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "type")]
-enum GroqResponseFormat<'a> {
+enum GroqResponseFormat {
     #[default]
     Text,
-    JsonObject {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        schema: Option<&'a Value>, // the desired JSON schema
+    JsonObject,
+    JsonSchema {
+        json_schema: Value,
     },
 }
 
-impl<'a> GroqResponseFormat<'a> {
-    fn new(json_mode: ModelInferenceRequestJsonMode, output_schema: Option<&'a Value>) -> Self {
+impl GroqResponseFormat {
+    fn new(json_mode: ModelInferenceRequestJsonMode, output_schema: Option<&Value>) -> Self {
         match json_mode {
-            ModelInferenceRequestJsonMode::On | ModelInferenceRequestJsonMode::Strict => {
-                GroqResponseFormat::JsonObject {
-                    schema: output_schema,
-                }
-            }
+            ModelInferenceRequestJsonMode::On => GroqResponseFormat::JsonObject,
             ModelInferenceRequestJsonMode::Off => GroqResponseFormat::Text,
+            ModelInferenceRequestJsonMode::Strict => match output_schema {
+                Some(schema) => {
+                    let json_schema = json!({"name": "response", "strict": true, "schema": schema});
+                    GroqResponseFormat::JsonSchema { json_schema }
+                }
+                None => GroqResponseFormat::JsonObject,
+            },
         }
     }
 }
@@ -906,7 +909,7 @@ struct GroqRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     stream_options: Option<StreamOptions>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<GroqResponseFormat<'a>>,
+    response_format: Option<GroqResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<GroqTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1477,7 +1480,7 @@ mod tests {
         assert!(!groq_request.stream);
         assert_eq!(
             groq_request.response_format,
-            Some(GroqResponseFormat::JsonObject { schema: None })
+            Some(GroqResponseFormat::JsonObject)
         );
         assert!(groq_request.tools.is_some());
         let tools = groq_request.tools.as_ref().unwrap();
@@ -1538,7 +1541,7 @@ mod tests {
         // Resolves to normal JSON mode since no schema is provided (this shouldn't really happen in practice)
         assert_eq!(
             groq_request.response_format,
-            Some(GroqResponseFormat::JsonObject { schema: None })
+            Some(GroqResponseFormat::JsonObject)
         );
 
         // Test request with strict JSON mode with an output schema
@@ -1585,12 +1588,14 @@ mod tests {
         assert_eq!(groq_request.presence_penalty, None);
         assert_eq!(groq_request.frequency_penalty, None);
         let expected_schema = serde_json::json!({});
-        assert_eq!(
-            groq_request.response_format,
-            Some(GroqResponseFormat::JsonObject {
-                schema: Some(&expected_schema),
-            })
-        );
+        match groq_request.response_format {
+            Some(GroqResponseFormat::JsonSchema { json_schema }) => {
+                assert_eq!(json_schema["schema"], expected_schema);
+                assert_eq!(json_schema["name"], "response");
+                assert_eq!(json_schema["strict"], true);
+            }
+            _ => panic!("Expected JsonSchema variant"),
+        }
     }
 
     #[test]
@@ -2183,7 +2188,7 @@ mod tests {
         let json_mode = ModelInferenceRequestJsonMode::On;
         let output_schema = None;
         let format = GroqResponseFormat::new(json_mode, output_schema);
-        assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
+        assert_eq!(format, GroqResponseFormat::JsonObject);
 
         // Test JSON mode Off
         let json_mode = ModelInferenceRequestJsonMode::Off;
@@ -2193,24 +2198,41 @@ mod tests {
         // Test JSON mode Strict with no schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
         let format = GroqResponseFormat::new(json_mode, output_schema);
-        assert_eq!(format, GroqResponseFormat::JsonObject { schema: None });
+        assert_eq!(format, GroqResponseFormat::JsonObject);
 
         // Test JSON mode Strict with schema
         let json_mode = ModelInferenceRequestJsonMode::Strict;
-        let json_schema = serde_json::json!({
+        let schema = serde_json::json!({
             "type": "object",
             "properties": {
                 "foo": {"type": "string"}
             }
         });
-        let output_schema = Some(&json_schema);
+        let output_schema = Some(&schema);
         let format = GroqResponseFormat::new(json_mode, output_schema);
-        assert_eq!(
-            format,
-            GroqResponseFormat::JsonObject {
-                schema: output_schema
+        match format {
+            GroqResponseFormat::JsonSchema { json_schema } => {
+                assert_eq!(json_schema["schema"], schema);
+                assert_eq!(json_schema["name"], "response");
+                assert_eq!(json_schema["strict"], true);
             }
-        );
+            _ => panic!("Expected JsonSchema variant"),
+        }
+
+        // Test serialization of JsonSchema format
+        let json_mode = ModelInferenceRequestJsonMode::Strict;
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "foo": {"type": "string"}
+            }
+        });
+        let format = GroqResponseFormat::new(json_mode, Some(&schema));
+        let serialized = serde_json::to_value(&format).unwrap();
+        assert_eq!(serialized["type"], "json_schema");
+        assert_eq!(serialized["json_schema"]["name"], "response");
+        assert_eq!(serialized["json_schema"]["strict"], true);
+        assert_eq!(serialized["json_schema"]["schema"], schema);
     }
 
     #[test]
