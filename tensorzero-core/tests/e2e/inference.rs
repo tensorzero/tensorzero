@@ -779,8 +779,8 @@ async fn e2e_test_tool_call_malformed() {
     assert_eq!(id, "0");
     let name = content_block.get("name").unwrap();
     assert_eq!(name, "get_temperature");
-    let arguments = content_block.get("arguments");
-    assert!(arguments.is_none());
+    let arguments = content_block.get("arguments").unwrap();
+    assert!(arguments.is_null());
 
     // Check that type is "chat"
     // Check that usage is correct
@@ -838,8 +838,8 @@ async fn e2e_test_tool_call_malformed() {
     assert_eq!(raw_name, "get_temperature");
     let name = content_block.get("name").unwrap().as_str().unwrap();
     assert_eq!(name, "get_temperature");
-    let arguments = content_block.get("arguments");
-    assert!(arguments.is_none());
+    let arguments = content_block.get("arguments").unwrap();
+    assert!(arguments.is_null());
     // Check that episode_id is here and correct
     let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
     let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();

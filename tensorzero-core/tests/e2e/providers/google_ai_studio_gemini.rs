@@ -237,6 +237,7 @@ async fn test_gemini_multi_turn_thought_non_streaming() {
         content_blocks[0],
         json!({
             "type": "thought",
+            "text": null,
             "signature": signature,
             "_internal_provider_type": "google_ai_studio_gemini",
         })
@@ -372,6 +373,7 @@ async fn test_gemini_multi_turn_thought_streaming() {
         clickhouse_content_blocks[0],
         json!({
             "type": "thought",
+            "text": null,
             "signature": signature,
             "_internal_provider_type": "google_ai_studio_gemini",
         })
