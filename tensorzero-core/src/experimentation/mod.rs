@@ -59,6 +59,7 @@ pub trait VariantSampler {
         &self,
         db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
+        postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
     ) -> Result<(), Error>;
     async fn sample(
@@ -95,12 +96,21 @@ impl VariantSampler for ExperimentationConfig {
         &self,
         db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
+        postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         match self {
-            Self::StaticWeights(config) => config.setup(db, function_name, cancel_token).await,
+            Self::StaticWeights(config) => {
+                config
+                    .setup(db, function_name, postgres, cancel_token)
+                    .await
+            }
             Self::Uniform => Ok(()),
-            Self::TrackAndStop(config) => config.setup(db, function_name, cancel_token).await,
+            Self::TrackAndStop(config) => {
+                config
+                    .setup(db, function_name, postgres, cancel_token)
+                    .await
+            }
         }
     }
 
