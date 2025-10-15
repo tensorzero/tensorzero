@@ -9,7 +9,7 @@ async fn test_query_feedback_by_target_id_basic() {
     let clickhouse = get_clickhouse().await;
 
     // Use a known inference ID from the test database
-    let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
+    let target_id = Uuid::parse_str("0aaedb76-b442-7a94-830d-5c8202975950").unwrap();
 
     let feedback = clickhouse
         .query_feedback_by_target_id(target_id, None, None, Some(100))
@@ -47,7 +47,7 @@ async fn test_query_feedback_by_target_id_pagination() {
     let clickhouse = get_clickhouse().await;
 
     // Use a known inference ID with multiple feedback items
-    let target_id = Uuid::parse_str("0192e14c-09b8-738c-970e-c0bb29429e3e").unwrap();
+    let target_id = Uuid::parse_str("01942e26-4693-7e80-8591-47b98e25d721").unwrap();
 
     // Get first page
     let first_page = clickhouse
