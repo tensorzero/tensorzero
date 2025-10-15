@@ -71,7 +71,7 @@ export type UninitializedModelProvider = {
       api_base: string | null;
       api_key_location: string | null;
       api_type: OpenAIAPIType;
-      include_encrypted_reasoning: boolean;
+      include_encrypted_reasoning?: boolean;
     }
   | { type: "openrouter"; model_name: string; api_key_location: string | null }
   | {
