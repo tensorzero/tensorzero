@@ -127,7 +127,7 @@ export async function insertDatapoint(
       tool_params:
         chatDatapoint.tool_params as unknown as ToolCallConfigDatabaseInsert,
       tags: chatDatapoint.tags ?? undefined,
-      auxiliary: chatDatapoint.auxiliary,
+      auxiliary: chatDatapoint.auxiliary ?? "",
       staled_at: chatDatapoint.staled_at ?? undefined,
       source_inference_id: chatDatapoint.source_inference_id ?? undefined,
       is_custom: chatDatapoint.is_custom,
@@ -146,7 +146,7 @@ export async function insertDatapoint(
       output: jsonDatapoint.output,
       output_schema: jsonDatapoint.output_schema,
       tags: jsonDatapoint.tags ?? undefined,
-      auxiliary: jsonDatapoint.auxiliary,
+      auxiliary: jsonDatapoint.auxiliary ?? "",
       staled_at: jsonDatapoint.staled_at ?? undefined,
       source_inference_id: jsonDatapoint.source_inference_id ?? undefined,
       is_custom: jsonDatapoint.is_custom,

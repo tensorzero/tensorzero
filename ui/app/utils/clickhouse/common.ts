@@ -441,10 +441,10 @@ function storageKindToBackendStorageKind(
   if (kind.type === "s3_compatible") {
     return {
       type: "s3_compatible",
-      bucket_name: kind.bucket_name ?? undefined,
-      region: kind.region ?? undefined,
-      endpoint: kind.endpoint ?? undefined,
-      allow_http: kind.allow_http ?? undefined,
+      bucket_name: kind.bucket_name ?? null,
+      region: kind.region ?? null,
+      endpoint: kind.endpoint ?? null,
+      allow_http: kind.allow_http ?? null,
     };
   }
   return kind;
@@ -488,7 +488,7 @@ function displayInputMessageContentToStoredInputMessageContent(
       return {
         type: "file",
         file: {
-          url: content.file.url ?? undefined,
+          url: content.file.url ?? null,
           mime_type: content.file.mime_type,
         },
         storage_path: storagePathToBackendStoragePath(content.storage_path),
