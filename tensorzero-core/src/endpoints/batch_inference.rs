@@ -122,6 +122,7 @@ pub async fn start_batch_inference(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        deferred_tasks,
         ..
     }: AppStateData,
     params: StartBatchInferenceParams,
@@ -234,6 +235,7 @@ pub async fn start_batch_inference(
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         tags: Arc::new(HashMap::default()), // NOTE: we currently do not rate limit batch inference
         otlp_config: config.gateway.export.otlp.clone(),
+        deferred_tasks,
     };
 
     let inference_models = InferenceModels {

@@ -537,6 +537,7 @@ async fn process_embedding_batch(
             })?;
 
     // Create InferenceClients context for the embedding model
+    let deferred_tasks = tokio_util::task::TaskTracker::new();
     let clients = InferenceClients {
         http_client: client.clone(),
         credentials: Arc::new(credentials.clone()),
@@ -547,11 +548,17 @@ async fn process_embedding_batch(
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),
+        deferred_tasks: deferred_tasks.clone(),
     };
 
     let response = embedding_model_config
         .embed(&embedding_request, model_name, &clients)
         .await?;
+
+    // We're running an optimization, so we don't really have a gateway to shutdown
+    // Let's just wait for the deferred tasks to finish immediately
+    deferred_tasks.close();
+    deferred_tasks.wait().await;
 
     tracing::debug!("Successfully processed embedding batch {}", batch_index);
 

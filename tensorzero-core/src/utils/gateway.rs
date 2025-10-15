@@ -12,6 +12,7 @@ use sqlx::postgres::PgPoolOptions;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::config::{Config, ConfigFileGlob};
@@ -82,6 +83,12 @@ impl Drop for GatewayHandle {
             });
             tracing::info!("ClickHouse batch writer finished");
         }
+        self.app_state.deferred_tasks.close();
+        tokio::task::block_in_place(|| {
+            tracing::info!("Waiting for deferred tasks to finish");
+            Handle::current().block_on(self.app_state.deferred_tasks.wait());
+            tracing::info!("Deferred tasks finished");
+        });
     }
 }
 
@@ -94,6 +101,9 @@ pub struct AppStateData {
     pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
+    /// Holds any background tasks that we want to wait on during shutdown
+    /// We wait for these tasks to finish when `GatewayHandle` is dropped
+    pub deferred_tasks: TaskTracker,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -141,6 +151,7 @@ impl GatewayHandle {
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                deferred_tasks: TaskTracker::new(),
                 _private: (),
             },
             cancel_token,
@@ -160,6 +171,7 @@ impl GatewayHandle {
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                deferred_tasks: TaskTracker::new(),
                 _private: (),
             },
             cancel_token,
@@ -196,6 +208,7 @@ impl GatewayHandle {
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                deferred_tasks: TaskTracker::new(),
                 _private: (),
             },
             cancel_token,
