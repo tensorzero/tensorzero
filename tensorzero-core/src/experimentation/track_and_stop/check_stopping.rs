@@ -4,7 +4,7 @@ use core::f64;
 use std::cmp::Ordering;
 use thiserror::Error;
 
-use crate::db::FeedbackByVariant;
+use crate::{config::MetricConfigOptimize, db::FeedbackByVariant};
 
 /// Find all indices with the maximum value in `values`.
 ///
@@ -150,6 +150,8 @@ pub(super) struct CheckStoppingArgs<'a> {
     pub epsilon: Option<f64>,
     /// Type 1 error tolerance, aka 1 minus the confidence level
     pub delta: Option<f64>,
+    /// Optimization direction (Min or Max)
+    pub metric_optimize: MetricConfigOptimize,
 }
 
 /// Errors that can occur when checking stopping conditions.
@@ -299,18 +301,30 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
         variance_floor,
         epsilon,
         delta,
+        metric_optimize,
     } = args;
     // TODO: how to validate inputs?
     let variance_floor: f64 = variance_floor.unwrap_or(1e-12);
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let delta: f64 = delta.unwrap_or(0.05);
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
-    let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
+
+    // Negate means if we're minimizing, so we can always use argmax
+    let means: Vec<f64> = feedback
+        .iter()
+        .map(|x| {
+            let mean = x.mean as f64;
+            match metric_optimize {
+                MetricConfigOptimize::Min => -mean,
+                MetricConfigOptimize::Max => mean,
+            }
+        })
+        .collect();
+
     let variances: Vec<f64> = feedback
         .iter()
         .map(|x| (x.variance as f64).max(variance_floor))
         .collect();
-    let variant_names: Vec<String> = feedback.iter().map(|x| x.variant_name.clone()).collect();
     let num_arms: usize = pull_counts.len();
 
     // Can't stop the experiment if any arms haven't been pulled up to the min pull count
@@ -361,7 +375,9 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
     match glr_min {
         Some(min_val) => {
             if min_val > threshold {
-                Ok(StoppingResult::Winner(variant_names[leader_arm].clone()))
+                Ok(StoppingResult::Winner(
+                    feedback[leader_arm].variant_name.clone(),
+                ))
             } else {
                 Ok(StoppingResult::NotStopped)
             }
@@ -633,6 +649,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: None,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         assert_eq!(result, StoppingResult::NotStopped);
@@ -652,6 +669,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         assert_eq!(
@@ -675,6 +693,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         assert_eq!(
@@ -693,6 +712,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: None,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         if let StoppingResult::Winner(name) = result {
@@ -712,6 +732,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -722,6 +743,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.05),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -746,6 +768,7 @@ mod tests {
             variance_floor: Some(0.01),
             epsilon: Some(0.0),
             delta: None,
+            metric_optimize: MetricConfigOptimize::Max,
         });
         assert!(result.is_ok(), "Variance floor should prevent degeneracy");
     }
@@ -765,6 +788,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.01),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -779,6 +803,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.2),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -803,6 +828,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         // With clear difference and enough samples, should stop
@@ -827,6 +853,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         // With clear winner, should stop
@@ -852,6 +879,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -876,6 +904,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -886,6 +915,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -898,5 +928,133 @@ mod tests {
             matches!(result_large, StoppingResult::Winner(_)),
             "Should stop with large sample and clear difference"
         );
+    }
+
+    // ============================================================================
+    // Tests for optimize=min
+    // ============================================================================
+
+    #[test]
+    fn test_check_stopping_two_arms_optimize_min() {
+        // Test that with optimize=min, the arm with the lowest mean wins
+        let feedback = make_feedback(vec![100, 100], vec![0.3, 0.8], vec![0.1, 0.1]);
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(
+                name, "variant_0",
+                "Should recommend arm with lowest mean when optimize=min"
+            );
+        } else {
+            panic!("Expected variant_0 to be labeled the winner");
+        }
+    }
+
+    #[test]
+    fn test_check_stopping_many_arms_optimize_min() {
+        // Test with 5 arms, optimize=min selects the one with lowest mean
+        let feedback = make_feedback(
+            vec![200, 200, 200, 200, 200],
+            vec![0.9, 0.1, 0.5, 0.4, 0.6],
+            vec![0.1, 0.1, 0.1, 0.1, 0.1],
+        );
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 50,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+        // variant_1 has the lowest mean, so it should win
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(
+                name, "variant_1",
+                "Should recommend arm with lowest mean when optimize=min"
+            );
+        } else {
+            panic!("Expected variant_1 to be labeled the winne");
+        }
+    }
+
+    #[test]
+    fn test_check_stopping_tie_breaking_optimize_min() {
+        // Test that ties are broken correctly with optimize=min
+        // Create three arms with identical means but different variances
+        let feedback = make_feedback(
+            vec![100, 100, 100],
+            vec![0.5, 0.5, 0.5], // All tied at 0.5
+            vec![0.1, 0.3, 0.2], // Different variances
+        );
+        let result = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 10,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+
+        // Even with optimize=min, tie-breaking should work the same way
+        // Should select variant_1 which has highest variance/pull_count (0.3/100 = 0.003)
+        if let StoppingResult::Winner(name) = result {
+            assert_eq!(
+                name, "variant_1",
+                "Should break tie by selecting arm with highest variance/pull_count, even with optimize=min"
+            );
+        }
+    }
+
+    #[test]
+    fn test_check_stopping_min_vs_max_different_winners() {
+        // Verify that the same data produces different winners for min vs max
+        let feedback = make_feedback(
+            vec![200, 200, 200],
+            vec![0.3, 0.7, 0.5], // variant_0 lowest, variant_1 highest
+            vec![0.1, 0.1, 0.1],
+        );
+
+        let result_max = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 50,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Max,
+        })
+        .unwrap();
+
+        let result_min = check_stopping(CheckStoppingArgs {
+            feedback: &feedback,
+            min_pulls: 50,
+            variance_floor: None,
+            epsilon: Some(0.0),
+            delta: Some(0.05),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+
+        // With optimize=max, variant_1 (highest mean 0.7) should win
+        if let StoppingResult::Winner(name_max) = result_max {
+            assert_eq!(name_max, "variant_1", "Max should pick highest mean");
+        } else {
+            panic!("Expected winner for optimize=max");
+        }
+
+        // With optimize=min, variant_0 (lowest mean 0.3) should win
+        if let StoppingResult::Winner(name_min) = result_min {
+            assert_eq!(name_min, "variant_0", "Min should pick lowest mean");
+        } else {
+            panic!("Expected winner for optimize=min");
+        }
     }
 }

@@ -58,8 +58,10 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                // TODO: handle the fact that there are also embeddings
                 OpenAIAPIType::ChatCompletions,
                 false,
+                Vec::new(),
             )?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
@@ -846,7 +848,7 @@ mod tests {
         };
 
         let uninitialized_config = UninitializedEmbeddingProviderConfig {
-            config: crate::model::UninitializedProviderConfig::OpenAI {
+            config: UninitializedProviderConfig::OpenAI {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
                 api_key_location: Some(crate::model::CredentialLocationWithFallback::Single(
@@ -854,6 +856,7 @@ mod tests {
                 )),
                 api_type: Default::default(),
                 include_encrypted_reasoning: false,
+                provider_tools: Vec::new(),
             },
             timeout_ms: None,
             timeouts: TimeoutsConfig::default(),

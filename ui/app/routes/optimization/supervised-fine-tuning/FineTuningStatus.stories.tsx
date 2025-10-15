@@ -100,6 +100,7 @@ export const Completed: Story = {
               api_key_location: null,
               api_type: "chat_completions",
               include_encrypted_reasoning: false,
+              provider_tools: [],
             },
           },
           timeouts: {
@@ -169,6 +170,7 @@ export const LongJobId: Story = {
               api_key_location: null,
               api_type: "chat_completions",
               include_encrypted_reasoning: false,
+              provider_tools: [],
             },
           },
           timeouts: {
