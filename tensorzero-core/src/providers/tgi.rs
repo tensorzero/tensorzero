@@ -172,6 +172,8 @@ impl WrappedProvider for TGIProvider {
         raw_request: String,
         raw_response: String,
         latency: Latency,
+        _model_name: &str,
+        _provider_name: &str,
     ) -> Result<ProviderInferenceResponse, Error> {
         let response = serde_json::from_str(&raw_response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
@@ -257,6 +259,8 @@ impl InferenceProvider for TGIProvider {
                 raw_request,
                 raw_response,
                 latency,
+                model_provider_request.model_name,
+                model_provider_request.provider_name,
             )
         } else {
             Err(handle_tgi_error(

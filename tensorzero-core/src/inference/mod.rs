@@ -83,6 +83,8 @@ pub trait WrappedProvider: Debug {
         raw_request: String,
         raw_response: String,
         latency: Latency,
+        model_name: &str,
+        provider_name: &str,
     ) -> Result<ProviderInferenceResponse, Error>;
 
     fn stream_events(

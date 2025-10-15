@@ -55,6 +55,7 @@ describe("dump_optimizer_output", () => {
             discard_unknown_chunks: false,
             timeouts: {} as TimeoutsConfig,
             api_type: "chat_completions",
+            provider_tools: [],
           },
         },
         timeouts: {
@@ -69,7 +70,7 @@ describe("dump_optimizer_output", () => {
     };
     const result_string = dump_optimizer_output(optimizerOutput);
     expect(result_string).toBe(
-      '[models.gpt-4o]\nrouting = [ "gpt-4o" ]\n\n[models.gpt-4o.providers.gpt-4o]\ntype = "openai"\nmodel_name = "gpt-4o"\ndiscard_unknown_chunks = false\napi_type = "chat_completions"',
+      '[models.gpt-4o]\nrouting = [ "gpt-4o" ]\n\n[models.gpt-4o.providers.gpt-4o]\ntype = "openai"\nmodel_name = "gpt-4o"\ndiscard_unknown_chunks = false\napi_type = "chat_completions"\nprovider_tools = []',
     );
   });
 });

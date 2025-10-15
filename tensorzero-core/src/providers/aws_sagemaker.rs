@@ -142,6 +142,8 @@ impl InferenceProvider for AWSSagemakerProvider {
             raw_request,
             raw_response_string,
             latency,
+            request.model_name,
+            request.provider_name,
         )
     }
 
