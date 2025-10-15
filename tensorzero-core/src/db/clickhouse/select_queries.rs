@@ -349,10 +349,10 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let escaped_function_name = escape_string_for_clickhouse_literal(&function_name);
         let escaped_metric_name = escape_string_for_clickhouse_literal(&metric_name);
 
-        // Using toEndOfInterval since we're computing cumulative stats "up to" each time point
-        let time_grouping = format!("toEndOfInterval(minute, INTERVAL {interval_minutes} MINUTE)");
+        // Using toStartOfInterval + interval to get end of each period since we're computing cumulative stats "up to" each time point
+        let time_grouping = format!("toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE");
         let time_filter = format!(
-            "minute >= (SELECT max(toEndOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
+            "minute >= (SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
         );
 
         // Build variant filter if provided
@@ -370,7 +370,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
             }
         };
 
-        // Query to compute CUMULATIVE statistics: for each time bucket, aggregate ALL data from start up to that bucket
+        // Query to compute cumulative statistics: for each time bucket, aggregate all data from start up to that bucket
         let query = format!(
             r"
             WITH time_buckets AS (
@@ -388,8 +388,8 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     {variant_filter}
             )
             SELECT
-                formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_start,
-                vl.variant_name,
+                formatDateTime(any(tb.period), '%Y-%m-%dT%H:%i:%SZ') as period_start,
+                any(vl.variant_name) as variant_name,
                 avgMerge(f.feedback_mean) as mean,
                 varSampStableMerge(f.feedback_variance) as variance,
                 sum(f.count) as count
@@ -401,7 +401,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 AND f.metric_name = '{escaped_metric_name}'
                 AND f.minute <= tb.period
             GROUP BY tb.period, vl.variant_name
-            ORDER BY tb.period ASC, vl.variant_name
+            ORDER BY period_start ASC, variant_name ASC
             FORMAT JSONEachRow
             ",
         );
