@@ -17,7 +17,6 @@ use tracing::Level;
 
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
@@ -94,6 +93,7 @@ async fn main() {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
+    // We start with empty headers and update them after loading the config
     let delayed_log_config = observability::setup_observability(args.log_format)
         .await
         .expect_pretty("Failed to set up logs");
@@ -178,6 +178,17 @@ async fn main() {
             }
         }
 
+        // Set config-level OTLP headers if we have a tracer wrapper
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
+            if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
+                tracer_wrapper
+                    .set_static_otlp_traces_extra_headers(
+                        &config.gateway.export.otlp.traces.extra_headers,
+                    )
+                    .expect_pretty("Failed to set OTLP config headers");
+            }
+        }
+
         match delayed_log_config.delayed_otel {
             Ok(delayed_otel) => {
                 delayed_otel
@@ -203,16 +214,6 @@ async fn main() {
         .expect_pretty("Failed to initialize AppState");
 
     // Create a new observability_enabled_pretty string for the log message below
-    let observability_enabled_pretty = match &gateway_handle.app_state.clickhouse_connection_info {
-        ClickHouseConnectionInfo::Disabled => "disabled".to_string(),
-        ClickHouseConnectionInfo::Mock { healthy, .. } => {
-            format!("mocked (healthy={healthy})")
-        }
-        ClickHouseConnectionInfo::Production { database, .. } => {
-            format!("enabled (database: {database})")
-        }
-    };
-
     let postgres_enabled_pretty = match &gateway_handle.app_state.postgres_connection_info {
         PostgresConnectionInfo::Disabled => "disabled".to_string(),
         PostgresConnectionInfo::Mock { healthy, .. } => {
@@ -245,10 +246,15 @@ async fn main() {
         // Everything above this layer has OpenTelemetry tracing enabled
         // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
         // (the only response header is `traceresponse` for a completed trace)
-        .apply_otel_http_trace_layer()
+        .apply_otel_http_trace_layer(delayed_log_config.otel_tracer.clone())
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
+        .route(
+            "/datasets/{dataset_name}/datapoints",
+            post(endpoints::datasets::create_datapoints_handler),
+        )
+        // TODO(#3459): Deprecated in #3721. Remove in a future release.
         .route(
             "/datasets/{dataset_name}/datapoints/bulk",
             post(endpoints::datasets::bulk_insert_datapoints_handler),
@@ -367,7 +373,18 @@ async fn main() {
     print_configuration_info(glob.as_ref());
 
     // Print whether observability is enabled
-    tracing::info!("├ Observability: {observability_enabled_pretty}");
+    let observability_description = format!(
+        "client_type: {}, database: {}",
+        gateway_handle
+            .app_state
+            .clickhouse_connection_info
+            .client_type(),
+        gateway_handle
+            .app_state
+            .clickhouse_connection_info
+            .database()
+    );
+    tracing::info!("├ Observability: {observability_description}");
     if config.gateway.observability.batch_writes.enabled {
         tracing::info!(
             "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",

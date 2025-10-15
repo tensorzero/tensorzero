@@ -133,15 +133,15 @@ pub enum JsonMode {
 
 /// Configuration that applies to the current inference request.
 #[derive(Clone, Debug)]
-pub struct InferenceConfig<'request> {
-    pub tool_config: Option<&'request ToolCallConfig>,
-    pub templates: &'request TemplateConfig<'request>,
-    pub dynamic_output_schema: Option<&'request DynamicJSONSchema>,
-    pub function_name: &'request str,
-    pub variant_name: &'request str,
+pub struct InferenceConfig {
+    pub tool_config: Option<Arc<ToolCallConfig>>,
+    pub templates: Arc<TemplateConfig<'static>>,
+    pub dynamic_output_schema: Option<Arc<DynamicJSONSchema>>,
+    pub function_name: Arc<str>,
+    pub variant_name: Arc<str>,
     pub ids: InferenceIds,
-    pub extra_body: Cow<'request, UnfilteredInferenceExtraBody>,
-    pub extra_headers: Cow<'request, UnfilteredInferenceExtraHeaders>,
+    pub extra_body: UnfilteredInferenceExtraBody,
+    pub extra_headers: UnfilteredInferenceExtraHeaders,
     pub fetch_and_encode_input_files_before_inference: bool,
     /// Optional arbitrary data, only used when constructing the cache key.
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
@@ -152,33 +152,33 @@ pub struct InferenceConfig<'request> {
 
 /// Maps to the subset of Config that applies to the current inference request.
 #[derive(Clone, Debug)]
-pub struct BatchInferenceConfig<'a> {
-    pub tool_configs: &'a Vec<Option<ToolCallConfig>>,
-    pub templates: &'a TemplateConfig<'a>,
-    pub dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
-    pub function_name: &'a str,
-    pub variant_name: &'a str,
+pub struct BatchInferenceConfig {
+    pub tool_configs: Vec<Option<Arc<ToolCallConfig>>>,
+    pub templates: Arc<TemplateConfig<'static>>,
+    pub dynamic_output_schemas: Vec<Option<Arc<DynamicJSONSchema>>>,
+    pub function_name: Arc<str>,
+    pub variant_name: Arc<str>,
     pub fetch_and_encode_input_files_before_inference: bool,
 }
-impl<'a> BatchInferenceConfig<'a> {
+impl BatchInferenceConfig {
     pub fn inference_configs(
-        &'a self,
+        &self,
         episode_ids: &[Uuid],
         inference_ids: &[Uuid],
-    ) -> Vec<InferenceConfig<'a>> {
+    ) -> Vec<InferenceConfig> {
         izip!(
-            self.tool_configs.iter().map(|x| x.as_ref()),
-            self.dynamic_output_schemas.iter().map(|x| x.as_ref()),
+            self.tool_configs.iter(),
+            self.dynamic_output_schemas.iter(),
             episode_ids.iter(),
             inference_ids.iter()
         )
         .map(
             |(tool_config, dynamic_output_schema, episode_id, inference_id)| InferenceConfig {
-                templates: self.templates,
-                tool_config,
-                dynamic_output_schema,
-                function_name: self.function_name,
-                variant_name: self.variant_name,
+                templates: Arc::clone(&self.templates),
+                tool_config: tool_config.clone(),
+                dynamic_output_schema: dynamic_output_schema.clone(),
+                function_name: Arc::clone(&self.function_name),
+                variant_name: Arc::clone(&self.variant_name),
                 ids: InferenceIds {
                     inference_id: *inference_id,
                     episode_id: *episode_id,
@@ -210,30 +210,30 @@ pub struct ModelUsedInfo {
 }
 
 pub trait Variant {
-    async fn infer<'a: 'request, 'request>(
+    async fn infer(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'a>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error>;
 
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'_>,
-        function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error>;
 
     async fn validate(
         &self,
-        function: &FunctionConfig,
-        models: &mut ModelTable,
+        function: Arc<FunctionConfig>,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig,
         function_name: &str,
@@ -246,10 +246,10 @@ pub trait Variant {
     async fn start_batch_inference<'a>(
         &'a self,
         input: &[LazyResolvedInput],
-        models: &'a InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a>],
-        clients: &'a InferenceClients<'a>,
+        inference_configs: &'a [InferenceConfig],
+        clients: InferenceClients,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error>;
 }
@@ -283,21 +283,22 @@ impl Variant for VariantInfo {
         fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name, otel.name="variant_inference", stream=false),
         skip_all
     )]
-    async fn infer<'a: 'request, 'request>(
+    async fn infer(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'a>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
+        let variant_name = inference_config.variant_name.clone();
         let fut = async {
             match &self.inner {
                 VariantConfig::ChatCompletion(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -309,7 +310,7 @@ impl Variant for VariantInfo {
                 VariantConfig::BestOfNSampling(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -322,7 +323,7 @@ impl Variant for VariantInfo {
                 VariantConfig::Dicl(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -334,7 +335,7 @@ impl Variant for VariantInfo {
                 VariantConfig::MixtureOfN(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -346,7 +347,7 @@ impl Variant for VariantInfo {
                 VariantConfig::ChainOfThought(params) => {
                     params
                         .infer(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -377,7 +378,7 @@ impl Variant for VariantInfo {
                 // so that it can be handled by the `match response` block below
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.to_string(),
+                        variant_name: variant_name.to_string(),
                         timeout,
                         streaming: false,
                     }))
@@ -391,21 +392,22 @@ impl Variant for VariantInfo {
         fields(function_name = %inference_config.function_name, variant_name = %inference_config.variant_name, otel.name="variant_inference", stream=true),
         skip_all
     )]
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'_>,
-        function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+        let variant_name = inference_config.variant_name.clone();
         let fut = async {
             match &self.inner {
                 VariantConfig::ChatCompletion(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -417,7 +419,7 @@ impl Variant for VariantInfo {
                 VariantConfig::BestOfNSampling(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -429,7 +431,7 @@ impl Variant for VariantInfo {
                 VariantConfig::Dicl(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -441,7 +443,7 @@ impl Variant for VariantInfo {
                 VariantConfig::MixtureOfN(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -453,7 +455,7 @@ impl Variant for VariantInfo {
                 VariantConfig::ChainOfThought(params) => {
                     params
                         .infer_stream(
-                            input,
+                            Arc::clone(&input),
                             models,
                             function,
                             inference_config,
@@ -485,7 +487,7 @@ impl Variant for VariantInfo {
                 .await
                 .unwrap_or_else(|_: Elapsed| {
                     Err(Error::new(ErrorDetails::VariantTimeout {
-                        variant_name: inference_config.variant_name.to_string(),
+                        variant_name: variant_name.to_string(),
                         timeout,
                         streaming: true,
                     }))
@@ -495,14 +497,14 @@ impl Variant for VariantInfo {
         }
     }
 
-    #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name).unwrap_or("")))]
+    #[instrument(skip_all, fields(variant_name = %inference_configs.first().map(|x| x.variant_name.as_ref()).unwrap_or("")))]
     async fn start_batch_inference<'a>(
         &'a self,
         inputs: &[LazyResolvedInput],
-        models: &'a InferenceModels<'a>,
+        models: InferenceModels,
         function: &'a FunctionConfig,
-        inference_configs: &'a [InferenceConfig<'a>],
-        clients: &'a InferenceClients<'a>,
+        inference_configs: &'a [InferenceConfig],
+        clients: InferenceClients,
         inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         match &self.inner {
@@ -527,8 +529,8 @@ impl Variant for VariantInfo {
     #[instrument(skip_all, fields(variant_name = %variant_name))]
     async fn validate(
         &self,
-        function: &FunctionConfig,
-        models: &mut ModelTable,
+        function: Arc<FunctionConfig>,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
@@ -635,20 +637,17 @@ impl Variant for VariantInfo {
 
 #[expect(clippy::too_many_arguments)]
 #[expect(clippy::unnecessary_wraps)]
-fn prepare_model_inference_request<'a, 'request>(
+fn prepare_model_inference_request<'request>(
     messages: Vec<RequestMessage>,
     system: Option<String>,
-    function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'request>,
+    function: &'request FunctionConfig,
+    inference_config: &'request InferenceConfig,
     stream: bool,
     inference_params: &InferenceParams,
     base_json_mode: Option<JsonMode>,
     extra_body: FullExtraBodyConfig,
     extra_headers: FullExtraHeadersConfig,
-) -> Result<ModelInferenceRequest<'request>, Error>
-where
-    'a: 'request,
-{
+) -> Result<ModelInferenceRequest<'request>, Error> {
     let json_mode = inference_params
         .chat_completion
         .json_mode
@@ -660,7 +659,10 @@ where
                 messages,
                 system,
                 inference_id: inference_config.ids.inference_id,
-                tool_config: inference_config.tool_config.map(Cow::Borrowed),
+                tool_config: inference_config
+                    .tool_config
+                    .as_ref()
+                    .map(|arc| Cow::Borrowed(arc.as_ref())),
                 temperature: inference_params.chat_completion.temperature,
                 top_p: inference_params.chat_completion.top_p,
                 max_tokens: inference_params.chat_completion.max_tokens,
@@ -672,7 +674,10 @@ where
                 // explicitly requested in `chat_completion` params.
                 json_mode: json_mode.unwrap_or(JsonMode::Off).into(),
                 function_type: FunctionType::Chat,
-                output_schema: inference_config.dynamic_output_schema.map(|v| &v.value),
+                output_schema: inference_config
+                    .dynamic_output_schema
+                    .as_ref()
+                    .map(|v| &v.value),
                 stop_sequences: inference_params
                     .chat_completion
                     .stop_sequences
@@ -687,7 +692,7 @@ where
         }
         FunctionConfig::Json(json_config) => {
             let tool_config = match json_mode {
-                Some(JsonMode::ImplicitTool) => match inference_config.dynamic_output_schema {
+                Some(JsonMode::ImplicitTool) => match &inference_config.dynamic_output_schema {
                     Some(schema) => Some(Cow::Owned(create_dynamic_implicit_tool_config(
                         schema.value.clone(),
                     ))),
@@ -695,7 +700,7 @@ where
                 },
                 _ => None,
             };
-            let output_schema = match inference_config.dynamic_output_schema {
+            let output_schema = match &inference_config.dynamic_output_schema {
                 Some(schema) => Some(&schema.value),
                 None => Some(&json_config.output_schema.value),
             };
@@ -737,8 +742,8 @@ struct InferModelRequestArgs<'a, 'request> {
     model_name: Arc<str>,
     model_config: &'a ModelConfig,
     function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'request>,
-    clients: &'request InferenceClients<'request>,
+    inference_config: Arc<InferenceConfig>,
+    clients: InferenceClients,
     inference_params: InferenceParams,
     retry_config: &'a RetryConfig,
 }
@@ -748,11 +753,12 @@ struct InferModelRequestArgs<'a, 'request> {
 async fn infer_model_request(
     args: InferModelRequestArgs<'_, '_>,
 ) -> Result<InferenceResult, Error> {
+    let clients = args.clients.clone();
     let model_inference_response = args
         .retry_config
         .retry(|| async {
             args.model_config
-                .infer(&args.request, args.clients, &args.model_name)
+                .infer(&args.request, &clients, &args.model_name)
                 .await
         })
         .await?;
@@ -768,7 +774,7 @@ async fn infer_model_request(
             args.inference_config.ids.inference_id,
             raw_content,
             model_inference_results,
-            args.inference_config,
+            &args.inference_config,
             args.inference_params,
             Some(original_response),
         )
@@ -776,12 +782,15 @@ async fn infer_model_request(
 }
 
 #[instrument(fields(model_name = %model_name), skip_all)]
+// Note: this is due to a bug in Clippy 1.86 which runs on CI
+// when we upgrate it we should be able to remove this attribute
+#[allow(clippy::needless_lifetimes, clippy::allow_attributes)]
 async fn infer_model_request_stream<'request>(
     request: ModelInferenceRequest<'request>,
     model_name: Arc<str>,
     model_config: &ModelConfig,
     function: &FunctionConfig,
-    clients: &'request InferenceClients<'request>,
+    clients: InferenceClients,
     inference_params: InferenceParams,
     retry_config: RetryConfig,
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
@@ -797,7 +806,7 @@ async fn infer_model_request_stream<'request>(
     } = retry_config
         .retry(|| async {
             model_config
-                .infer_stream(&request, clients, &model_name)
+                .infer_stream(&request, &clients, &model_name)
                 .await
         })
         .await?;
@@ -819,13 +828,13 @@ async fn infer_model_request_stream<'request>(
     Ok((StreamExt::peekable(Box::pin(stream)), model_used_info))
 }
 
-impl<'a> BatchInferenceConfig<'a> {
+impl BatchInferenceConfig {
     pub fn new(
-        templates: &'a TemplateConfig,
-        tool_configs: &'a Vec<Option<ToolCallConfig>>,
-        dynamic_output_schemas: &'a Vec<Option<DynamicJSONSchema>>,
-        function_name: &'a str,
-        variant_name: &'a str,
+        templates: Arc<TemplateConfig<'static>>,
+        tool_configs: Vec<Option<Arc<ToolCallConfig>>>,
+        dynamic_output_schemas: Vec<Option<Arc<DynamicJSONSchema>>>,
+        function_name: Arc<str>,
+        variant_name: Arc<str>,
         fetch_and_encode_input_files_before_inference: bool,
     ) -> Self {
         Self {
@@ -901,6 +910,7 @@ mod tests {
     use crate::db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo};
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceCredentials};
     use crate::error::ErrorDetails;
+    use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::{
@@ -931,13 +941,14 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
         };
+        let tool_config_arc = Arc::new(tool_config.clone());
 
         // Create a sample inference config
         let inference_config = InferenceConfig {
-            templates: &templates,
-            tool_config: Some(&tool_config),
-            function_name: "test_function",
-            variant_name: "test_variant",
+            templates: Arc::new(templates.clone()),
+            tool_config: Some(tool_config_arc),
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -985,6 +996,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let json_mode = JsonMode::Off;
 
@@ -1033,6 +1045,7 @@ mod tests {
             implicit_tool_call_config: implicit_tool_call_config.clone(),
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let json_mode = JsonMode::On;
@@ -1075,11 +1088,11 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates: &templates,
-            tool_config: Some(&tool_config),
-            function_name: "test_function",
-            variant_name: "test_variant",
-            dynamic_output_schema: Some(&dynamic_output_schema),
+            templates: Arc::new(templates.clone()),
+            tool_config: Some(Arc::new(tool_config)),
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
+            dynamic_output_schema: Some(Arc::new(dynamic_output_schema)),
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1154,27 +1167,27 @@ mod tests {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: &client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
-        let templates = get_test_template_config();
+        let templates = Arc::new(get_test_template_config());
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates,
             tool_config: None,
-            function_name: "test_function",
-            variant_name: "test_variant",
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1196,6 +1209,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1254,8 +1268,8 @@ mod tests {
             model_name: model_name.into(),
             model_config: &model_config,
             function: &function_config_chat,
-            inference_config: &inference_config,
-            clients: &clients,
+            inference_config: Arc::new(inference_config.clone()),
+            clients: clients.clone(),
             inference_params: inference_params.clone(),
             retry_config,
         };
@@ -1311,6 +1325,7 @@ mod tests {
             },
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
         let output_schema = json!({
             "type": "object",
@@ -1368,8 +1383,8 @@ mod tests {
             model_name: model_name_json.into(),
             model_config: &model_config_json,
             function: &function_config_json,
-            inference_config: &inference_config,
-            clients: &clients,
+            inference_config: Arc::new(inference_config.clone()),
+            clients: clients.clone(),
             inference_params: inference_params.clone(),
             retry_config,
         };
@@ -1434,8 +1449,8 @@ mod tests {
             model_name: error_model_name.into(),
             model_config: &error_model_config,
             function: &function_config_chat,
-            inference_config: &inference_config,
-            clients: &clients,
+            inference_config: Arc::new(inference_config.clone()),
+            clients: clients.clone(),
             inference_params: inference_params.clone(),
             retry_config,
         };
@@ -1457,27 +1472,27 @@ mod tests {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: &client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
-        let templates = get_test_template_config();
+        let templates = Arc::new(get_test_template_config());
         let inference_params = InferenceParams::default();
         let inference_config = InferenceConfig {
-            templates: &templates,
+            templates,
             tool_config: None,
-            function_name: "test_function",
-            variant_name: "test_variant",
+            function_name: "test_function".into(),
+            variant_name: "test_variant".into(),
             dynamic_output_schema: None,
             ids: InferenceIds {
                 inference_id: Uuid::now_v7(),
@@ -1499,6 +1514,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         let request_messages = vec![RequestMessage {
@@ -1575,8 +1591,8 @@ mod tests {
             model_name: model_name.into(),
             model_config: &model_config,
             function: &function_config_chat,
-            inference_config: &inference_config,
-            clients: &clients,
+            inference_config: Arc::new(inference_config.clone()),
+            clients: clients.clone(),
             inference_params: inference_params.clone(),
             retry_config,
         };
@@ -1620,20 +1636,20 @@ mod tests {
     async fn test_infer_model_request_stream() {
         // Set up the HTTP client and ClickHouse connection info
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let clients = InferenceClients {
-            http_client: &client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1645,6 +1661,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         });
 
         // Create an input message
@@ -1706,7 +1723,7 @@ mod tests {
             "good_model".into(),
             model_config,
             &function_config,
-            &clients,
+            clients.clone(),
             inference_params.clone(),
             retry_config,
         )
@@ -1770,19 +1787,19 @@ mod tests {
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let clients = InferenceClients {
-            http_client: &client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         let inference_params = InferenceParams::default();
 
@@ -1796,6 +1813,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })));
 
         let request_messages = vec![RequestMessage {
@@ -1872,7 +1890,7 @@ mod tests {
             model_name.into(),
             model_config,
             function_config_chat,
-            &clients,
+            clients.clone(),
             inference_params.clone(),
             retry_config,
         )

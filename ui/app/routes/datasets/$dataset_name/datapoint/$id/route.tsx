@@ -30,10 +30,7 @@ import {
 } from "~/routes/api/tensorzero/inference.utils";
 import type { DisplayInputMessage } from "~/utils/clickhouse/common";
 
-import {
-  ParsedDatasetRowSchema,
-  type ParsedDatasetRow,
-} from "~/utils/clickhouse/datasets";
+import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import { logger } from "~/utils/logger";
@@ -44,39 +41,15 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
 } from "tensorzero-node";
-import { deleteDatapoint, saveDatapoint } from "./datapointOperations.server";
-
-function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
-  const rawData = {
-    dataset_name: formData.get("dataset_name"),
-    function_name: formData.get("function_name"),
-    id: formData.get("id"),
-    episode_id: formData.get("episode_id"),
-    name: formData.get("name") || null,
-    input: JSON.parse(formData.get("input") as string),
-    output: formData.get("output")
-      ? JSON.parse(formData.get("output") as string)
-      : undefined,
-    output_schema: formData.get("output_schema")
-      ? JSON.parse(formData.get("output_schema") as string)
-      : undefined,
-    tool_params: formData.get("tool_params")
-      ? JSON.parse(formData.get("tool_params") as string)
-      : undefined,
-    tags: JSON.parse(formData.get("tags") as string),
-    auxiliary: formData.get("auxiliary"),
-    is_deleted: formData.get("is_deleted") === "true",
-    updated_at: formData.get("updated_at"),
-    staled_at: null,
-    source_inference_id: formData.get("source_inference_id"),
-    is_custom: true,
-  };
-
-  const cleanedData = Object.fromEntries(
-    Object.entries(rawData).filter(([, value]) => value !== undefined),
-  );
-  return ParsedDatasetRowSchema.parse(cleanedData);
-}
+import {
+  deleteDatapoint,
+  renameDatapoint,
+  saveDatapoint,
+} from "./datapointOperations.server";
+import {
+  parseDatapointFormData,
+  serializeDatapointToFormData,
+} from "./formDataUtils";
 
 export function validateJsonOutput(
   output: ContentBlockChatOutput[] | JsonInferenceOutput | null,
@@ -137,6 +110,7 @@ export function hasDatapointChanged(params: {
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
 
+  // TODO(shuyangli): Limit the try-catch to a smaller scope so it's clear what we're catching.
   try {
     const parsedFormData = parseDatapointFormData(formData);
     const config = await getConfig();
@@ -174,6 +148,14 @@ export async function action({ request }: ActionFunctionArgs) {
           error: error instanceof Error ? error.message : String(error),
         };
       }
+    } else if (action === "rename") {
+      await renameDatapoint({
+        functionType: functionType,
+        datasetName: parsedFormData.dataset_name,
+        datapoint: parsedFormData,
+        newName: parsedFormData.name || "",
+      });
+      return data({ success: true });
     }
 
     return data(
@@ -209,7 +191,10 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export const handle: RouteHandle = {
-  crumb: (match) => [match.params.id!],
+  crumb: (match) => [
+    "Datapoints",
+    { label: match.params.id!, isIdentifier: true },
+  ],
 };
 
 export async function loader({
@@ -314,22 +299,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const saveError = fetcher.data?.success === false ? fetcher.data.error : null;
 
   const submitDatapointAction = (action: string) => {
-    const formData = new FormData();
-
     // Create a copy of datapoint with updated input, output, and tags if we're saving
     const dataToSubmit = { ...datapoint, input, output, tags };
 
-    Object.entries(dataToSubmit).forEach(([key, value]) => {
-      if (value === undefined) return;
-      if (value === null) {
-        // do nothing
-      } else if (typeof value === "object") {
-        formData.append(key, JSON.stringify(value));
-      } else {
-        formData.append(key, String(value));
-      }
-    });
-
+    const formData = serializeDatapointToFormData(dataToSubmit);
     formData.append("action", action);
 
     // Submit to the local action by targeting the current route (".")
@@ -383,6 +356,13 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     setSelectedVariant(null);
   };
 
+  const handleRenameDatapoint = async (newName: string) => {
+    const dataToSubmit = { ...datapoint, name: newName };
+    const formData = serializeDatapointToFormData(dataToSubmit);
+    formData.append("action", "rename");
+    await fetcher.submit(formData, { method: "post", action: "." });
+  };
+
   return (
     <PageLayout>
       <PageHeader
@@ -400,7 +380,10 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
       <SectionsGroup>
         <SectionLayout>
-          <DatapointBasicInfo datapoint={datapoint} />
+          <DatapointBasicInfo
+            datapoint={datapoint}
+            onRenameDatapoint={handleRenameDatapoint}
+          />
         </SectionLayout>
 
         <SectionLayout>

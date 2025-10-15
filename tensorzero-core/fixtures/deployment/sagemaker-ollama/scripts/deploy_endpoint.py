@@ -64,9 +64,7 @@ def main():
                 raise
 
         try:
-            sm_client.delete_endpoint_config(
-                EndpointConfigName=PROVISIONED_ENDPOINT_CONFIG_NAME
-            )
+            sm_client.delete_endpoint_config(EndpointConfigName=PROVISIONED_ENDPOINT_CONFIG_NAME)
         except Exception as e:
             if "Could not find endpoint configuration" in str(e):
                 print("No existing endpoint config to delete")

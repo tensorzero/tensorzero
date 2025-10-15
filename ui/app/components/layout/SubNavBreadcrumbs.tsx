@@ -15,25 +15,33 @@ export function SubNavBreadcrumbs() {
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        {segments.map((bc, idx) => (
-          <BreadcrumbItem key={idx}>
-            {idx === segments.length - 1 ? (
-              <BreadcrumbPage>{bc.label}</BreadcrumbPage>
-            ) : bc.href ? (
-              <>
-                <BreadcrumbLink asChild>
-                  <Link to={bc.href}>{bc.label}</Link>
-                </BreadcrumbLink>
-                <BreadcrumbSeparator />
-              </>
-            ) : (
-              <>
-                <span>{bc.label}</span>
-                <BreadcrumbSeparator />
-              </>
-            )}
-          </BreadcrumbItem>
-        ))}
+        {segments.map((bc, idx) => {
+          const className = bc.isIdentifier ? "font-mono" : undefined;
+
+          return (
+            <BreadcrumbItem key={idx}>
+              {idx === segments.length - 1 ? (
+                <BreadcrumbPage className={className}>
+                  {bc.label}
+                </BreadcrumbPage>
+              ) : bc.href ? (
+                <>
+                  <BreadcrumbLink asChild>
+                    <Link to={bc.href} className={className}>
+                      {bc.label}
+                    </Link>
+                  </BreadcrumbLink>
+                  <BreadcrumbSeparator />
+                </>
+              ) : (
+                <>
+                  <span className={className}>{bc.label}</span>
+                  <BreadcrumbSeparator />
+                </>
+              )}
+            </BreadcrumbItem>
+          );
+        })}
       </BreadcrumbList>
     </Breadcrumb>
   );

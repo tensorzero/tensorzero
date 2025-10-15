@@ -38,6 +38,7 @@ extract_recipient_datapoint_with_output = JsonDatapointInsert(
         "name": "Bob",
         "email": "bob@example.com",
     },
+    name="bob_recipient_example",
 )
 
 # ... and `ChatDatapointInsert`.
@@ -66,7 +67,7 @@ with TensorZeroGateway.build_http(
     gateway_url="http://localhost:3000",
 ) as t0:
     # Insert datapoints
-    bulk_insert_datapoints_response = t0.bulk_insert_datapoints(
+    create_datapoints_response = t0.create_datapoints(
         dataset_name="email_application",
         datapoints=[
             extract_recipient_datapoint,
@@ -75,13 +76,13 @@ with TensorZeroGateway.build_http(
         ],
     )
 
-    print("bulk_insert_datapoints_response:\n")
-    print(bulk_insert_datapoints_response)
+    print("create_datapoints_response:\n")
+    print(create_datapoints_response)
 
     # Retrieve a single datapoint
     get_datapoint_response = t0.get_datapoint(
         dataset_name="email_application",
-        datapoint_id=bulk_insert_datapoints_response[0],
+        datapoint_id=create_datapoints_response[0],
     )
 
     print("\nget_datapoint_response:\n")
@@ -90,7 +91,7 @@ with TensorZeroGateway.build_http(
     # Delete a single datapoint
     t0.delete_datapoint(
         dataset_name="email_application",
-        datapoint_id=bulk_insert_datapoints_response[0],
+        datapoint_id=create_datapoints_response[0],
     )
 
     print("\ndelete_datapoint_response:\n")

@@ -552,7 +552,7 @@ test("should be able to add a system message when none exists", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -565,7 +565,7 @@ test("should be able to add a system message when none exists", async ({
 
   // Reload the page to verify persistence
   await page.reload();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Verify system message is still present after reload
   await expect(page.getByText(systemMessageText)).toBeVisible();
@@ -638,7 +638,7 @@ test("should be able to delete an existing system message", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -667,7 +667,7 @@ test("should be able to delete an existing system message", async ({
   await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
     timeout: 10000,
   });
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Wait for ClickHouse to fully commit the data (eventual consistency)
   await page.waitForTimeout(2000);
@@ -680,8 +680,60 @@ test("should be able to delete an existing system message", async ({
 
   // Reload the page to verify persistence
   await page.reload();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("networkidle", { timeout: 5000 });
 
   // Verify system role is still not present after reload
   await expect(page.getByText("system", { exact: true })).not.toBeVisible();
+});
+
+test("should be able to rename a datapoint", async ({ page }) => {
+  await page.goto(
+    "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
+  );
+  await page.waitForLoadState("networkidle");
+  await expect(
+    page.getByRole("button", { name: "Rename datapoint" }),
+  ).toBeVisible();
+
+  // Click on the Add to dataset button
+  await page.getByRole("button", { name: "Rename datapoint" }).click();
+
+  // Wait for the datapoint name input by its label to be visible
+  const datapointNameInput = page.getByLabel("Datapoint name");
+  await datapointNameInput.waitFor({ state: "visible" });
+  await datapointNameInput.fill("New Datapoint Name");
+
+  // Click on the Save button
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Datapoint name should be updated
+  await expect(
+    page.getByText("New Datapoint Name", { exact: true }),
+  ).toBeVisible();
+});
+
+test("should be able to cancel renaming a datapoint", async ({ page }) => {
+  await page.goto(
+    "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
+  );
+  await page.waitForLoadState("networkidle");
+  await expect(
+    page.getByRole("button", { name: "Rename datapoint" }),
+  ).toBeVisible();
+
+  // Click on the Add to dataset button
+  await page.getByRole("button", { name: "Rename datapoint" }).click();
+
+  // Wait for the datapoint name input by its label to be visible
+  const datapointNameInput = page.getByLabel("Datapoint name");
+  await datapointNameInput.waitFor({ state: "visible" });
+  await datapointNameInput.fill("Renamed Datapoint Name");
+
+  // Click on the Cancel button
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  // We should not have updated the datapoint name
+  await expect(
+    page.getByText("Renamed Datapoint Name", { exact: false }),
+  ).not.toBeVisible();
 });

@@ -90,6 +90,7 @@ type = "experimental_dynamic_in_context_learning"
 embedding_model = "text-embedding-3-small"
 model = "gpt-4o-mini-2024-07-18"
 k = 10
+max_distance = 0.5
 system_instructions = "functions/extract_entities/baseline/system_template.minijinja"
 json_mode = "strict"
 weight = 1
@@ -308,6 +309,7 @@ parameters = "tools/load_wikipedia_page.json"
 strict = true
 
 [tools.answer_question]
+name = "submit_answer"
 description = "End the search process and answer a question. Returns the answer to the question."
 parameters = "tools/answer_question.json"
 strict = true

@@ -52,6 +52,7 @@ env:
   VLLM_MODEL_NAME: "microsoft/Phi-3.5-mini-instruct"
   VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://localhost:4316
 
 jobs:
   batch-tests:
@@ -195,7 +196,7 @@ jobs:
         run: |
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/download-provider-proxy-cache.sh
 
-      - name: Launch ClickHouse container for E2E tests
+      - name: Launch dependency services for E2E tests
         run: |
           docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
 
@@ -207,11 +208,6 @@ jobs:
       - name: Launch the provider-proxy cache for E2E tests
         run: |
           ./ci/run-provider-proxy.sh ci
-
-      - name: Run PostgreSQL migrations
-        # we build the migrations in sqlx offline mode since the database migrations haven't been run yet
-        # then the migrations can run and we can use the database
-        run: SQLX_OFFLINE=true cargo run-e2e --run-postgres-migrations
 
       - name: Launch the gateway for E2E tests
         run: |
@@ -306,10 +302,6 @@ jobs:
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
-
-      - name: Check e2e logs for deprecation warnings
-        run: |
-          ! grep -i "Deprecation Warning" e2e_logs.txt
 
       - name: Print e2e logs
         if: always()

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
 use crate::config::{ErrorContext, LoadableConfig, UninitializedSchemas};
+use crate::experimentation::ExperimentationConfig;
 use crate::utils::retries::RetryConfig;
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::Variant;
@@ -414,6 +415,7 @@ impl UninitializedEvaluatorConfig {
                     .values()
                     .flat_map(|v| v.get_all_explicit_template_names())
                     .collect();
+                let experimentation = ExperimentationConfig::legacy_from_variants_map(&variants);
                 let function_config = FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: SchemaData::load(
@@ -427,6 +429,7 @@ impl UninitializedEvaluatorConfig {
                     implicit_tool_call_config,
                     description: None,
                     all_explicit_template_names: all_template_names,
+                    experimentation,
                 });
                 Ok((
                     EvaluatorConfig::LLMJudge(LLMJudgeConfig {
@@ -842,6 +845,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     extra_headers: params.extra_headers,
                     retries: params.retries,
                     stop_sequences: params.stop_sequences,
+                    max_distance: None,
                 };
                 VariantConfig::Dicl(uninitialized_config.load()?)
             }
@@ -1039,6 +1043,7 @@ mod tests {
             implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
         });
         functions.insert(function_name.to_string(), Arc::new(function_config));
 
@@ -1477,6 +1482,9 @@ mod tests {
                     ),
                     description: None,
                     all_explicit_template_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::legacy_from_variants_map(
+                        &HashMap::new(),
+                    ),
                 })),
             );
 

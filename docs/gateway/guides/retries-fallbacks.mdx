@@ -189,6 +189,8 @@ For advanced variant types that perform multiple requests, the timeout applies c
 
 Separately, you can set a global timeout for the entire inference request using the TensorZero client's `timeout` field (or simply killing the request if you're using a different client).
 
+Embedding models and embedding model providers support a `timeout_ms` configuration field.
+
 ## Technical Notes
 
 - For variant types that require multiple model inferences (e.g. best-of-N sampling), the `routing` fallback applies to each individual model inference separately.

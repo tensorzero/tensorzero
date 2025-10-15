@@ -17,11 +17,16 @@ use futures::stream::Peekable;
 use futures::Stream;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+
 use std::borrow::Cow;
+
+
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
+
+use super::InferenceResult;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct ProviderInferenceResponseChunk {
@@ -171,8 +176,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
     }
 }
 
-// Define the CollectChunksArgs struct with existing and new fields
-pub struct CollectChunksArgs<'a, 'b> {
+pub struct CollectChunksArgs {
     pub value: Vec<InferenceResultChunk>,
     pub inference_id: Uuid,
     pub episode_id: Uuid,
@@ -189,11 +193,11 @@ pub struct CollectChunksArgs<'a, 'b> {
     pub inference_params: InferenceParams,
     pub system: Option<String>,
     pub input_messages: Vec<RequestMessage>,
-    pub function_name: &'b str,
-    pub variant_name: &'b str,
-    pub dynamic_output_schema: Option<DynamicJSONSchema>,
-    pub templates: &'b TemplateConfig<'a>,
-    pub tool_config: Option<&'b ToolCallConfig>,
+    pub function_name: Arc<str>,
+    pub variant_name: Arc<str>,
+    pub dynamic_output_schema: Option<Arc<DynamicJSONSchema>>,
+    pub templates: Arc<TemplateConfig<'static>>,
+    pub tool_config: Option<Arc<ToolCallConfig>>,
     pub cached: bool,
     pub extra_body: UnfilteredInferenceExtraBody,
     pub extra_headers: UnfilteredInferenceExtraHeaders,
@@ -202,9 +206,7 @@ pub struct CollectChunksArgs<'a, 'b> {
 
 // Modify the collect_chunks function to accept CollectChunksArgs
 // 'a ends up as static and 'b ends up as stack allocated in the caller (endpoints::inference::create_stream)
-pub async fn collect_chunks(
-    args: CollectChunksArgs<'_, '_>,
-) -> Result<crate::inference::types::InferenceResult, Error> {
+pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, Error> {
     let CollectChunksArgs {
         value,
         inference_id,
@@ -467,10 +469,12 @@ pub async fn collect_chunks(
         variant_name,
         tool_config,
         templates,
-        dynamic_output_schema: dynamic_output_schema.as_ref(),
+
+        dynamic_output_schema,
         fetch_and_encode_input_files_before_inference,
-        extra_body: Cow::Borrowed(&extra_body),
-        extra_headers: Cow::Borrowed(&extra_headers),
+        extra_body,
+        extra_headers,
+
         extra_cache_key: None,
     };
     function
@@ -526,7 +530,7 @@ pub type ProviderInferenceResponseStreamInner =
 
 pub type PeekableProviderInferenceResponseStream = Peekable<ProviderInferenceResponseStreamInner>;
 
-pub type InferenceResultStreamInner =
+type InferenceResultStreamInner =
     Pin<Box<dyn Stream<Item = Result<InferenceResultChunk, Error>> + Send>>;
 
 pub type InferenceResultStream = Peekable<InferenceResultStreamInner>;
@@ -570,6 +574,8 @@ mod tests {
     use super::*;
     use crate::{
         config::SchemaData,
+
+        experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
             current_timestamp, ContentBlockChatOutput, ContentBlockOutputType, InferenceResult,
@@ -700,7 +706,7 @@ mod tests {
     #[tokio::test]
     async fn test_collect_chunks() {
         // Test case 1: empty chunks (should error)
-        let templates = TemplateConfig::default();
+        let templates = Arc::new(TemplateConfig::default());
 
         let chunks = vec![];
         let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat::default()));
@@ -719,10 +725,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -785,10 +791,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -841,6 +847,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -882,10 +889,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -963,10 +970,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1052,10 +1059,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1125,6 +1132,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -1166,10 +1174,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1225,6 +1233,7 @@ mod tests {
             output_schema,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         }));
         let usage1 = Usage {
             input_tokens: 10,
@@ -1275,10 +1284,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
-            dynamic_output_schema: Some(dynamic_output_schema),
-            templates: &templates,
+            function_name: "".into(),
+            variant_name: "".into(),
+            dynamic_output_schema: Some(dynamic_output_schema.into()),
+            templates: Arc::new(templates),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1412,10 +1421,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: Arc::new(templates),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1481,7 +1490,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_collect_chunks_tool_name_accumulation() {
-        let templates = TemplateConfig::default();
+        let templates = Arc::new(TemplateConfig::default());
         let function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat::default()));
         let model_name = "test_model";
         let model_provider_name = "test_provider";
@@ -1534,10 +1543,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1621,10 +1630,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1699,10 +1708,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1781,10 +1790,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1847,10 +1856,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),
@@ -1965,10 +1974,10 @@ mod tests {
             raw_request: raw_request.clone(),
             raw_response: None,
             inference_params: InferenceParams::default(),
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             dynamic_output_schema: None,
-            templates: &templates,
+            templates: templates.clone(),
             tool_config: None,
             cached: false,
             extra_body: Default::default(),

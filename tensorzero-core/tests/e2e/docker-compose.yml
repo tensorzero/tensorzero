@@ -16,33 +16,6 @@ services:
       start_interval: 1s
       timeout: 1s
 
-  # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
-  # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
-  # bump this to a locally-built image (or published 'sha' tag)
-  gateway:
-    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
-    environment:
-      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/${TENSORZERO_E2E_TESTS_DATABASE:-tensorzero_e2e_tests}
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-    command: ["--default-config"]
-    extra_hosts:
-      - "howdy.tensorzero.com:127.0.0.1"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:3000/health",
-        ]
-      start_period: 1s
-      start_interval: 1s
-      timeout: 1s
-
   fixtures:
     build:
       dockerfile: ui/fixtures/Dockerfile
@@ -57,7 +30,13 @@ services:
       - CLICKHOUSE_USER=chuser
       - TENSORZERO_SKIP_LARGE_FIXTURES
     depends_on:
-      gateway:
+      clickhouse:
+        condition: service_healthy
+      gateway-clickhouse-migrations:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
         condition: service_healthy
     # Keep this running to make 'check-docker-compose.sh' detect that all containers are healthy
     command:

@@ -1,7 +1,7 @@
 ---
 title: Data Model
 description: Learn more about the data model used by TensorZero.
-# NOTE: last updated up to Migration 0015
+# NOTE: last updated up to Migration 0016
 ---
 
 The TensorZero Gateway stores inference and feedback data in ClickHouse.
@@ -162,9 +162,9 @@ It is partitioned by month and ordered by the composite cache key `(short_cache_
 The `short_cache_key` serves as the primary key for performance, while a bloom filter index on `long_cache_key`
 helps optimize point queries.
 
-## `ChatInferenceDataset`
+## `ChatInferenceDatapoint`
 
-The `ChatInferenceDataset` table stores chat inference examples organized into datasets.
+The `ChatInferenceDatapoint` table stores chat inference examples organized into datasets.
 
 | Column          |          Type           | Notes                                                                                          |
 | :-------------- | :---------------------: | ---------------------------------------------------------------------------------------------- |
@@ -183,9 +183,9 @@ The `ChatInferenceDataset` table stores chat inference examples organized into d
 The table uses the `ReplacingMergeTree` engine with `updated_at` and `is_deleted` columns for deduplication.
 It is ordered by `dataset_name`, `function_name`, and `id` to optimize queries filtering by dataset and function.
 
-## `JsonInferenceDataset`
+## `JsonInferenceDatapoint`
 
-The `JsonInferenceDataset` table stores JSON inference examples organized into datasets.
+The `JsonInferenceDatapoint` table stores JSON inference examples organized into datasets.
 
 | Column          |          Type          | Notes                                                                   |
 | :-------------- | :--------------------: | ----------------------------------------------------------------------- |

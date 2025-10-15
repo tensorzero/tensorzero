@@ -9,7 +9,6 @@ use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
@@ -26,9 +25,10 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
-use crate::error::{Error, ErrorDetails};
+use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
+use crate::experimentation::{ExperimentationConfig, VariantSampler};
 use crate::function::FunctionConfig;
-use crate::function::{sample_variant, FunctionConfigChat};
+use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
@@ -121,7 +121,7 @@ struct InferenceMetadata {
     pub variant_name: String,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    pub input: LazyResolvedInput,
+    pub input: Arc<LazyResolvedInput>,
     pub dryrun: bool,
     pub start_time: Instant,
     pub inference_params: InferenceParams,
@@ -218,7 +218,7 @@ pub async fn inference(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
-    params: Params,
+    mut params: Params,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
@@ -233,6 +233,14 @@ pub async fn inference(
     if let Some(episode_id) = &params.episode_id {
         span.record("episode_id", episode_id.to_string());
     }
+
+    // Automatically add internal tag when internal=true
+    if params.internal {
+        params
+            .tags
+            .insert("tensorzero::internal".to_string(), "true".to_string());
+    }
+
     for (tag_key, tag_value) in &params.tags {
         span.set_attribute(format!("tags.{tag_key}"), tag_value.clone());
     }
@@ -244,7 +252,7 @@ pub async fn inference(
 
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
-    let mut params = params;
+
     validate_inference_episode_id_and_apply_dynamic_evaluation_run(
         episode_id,
         params.function_name.as_ref(),
@@ -285,9 +293,9 @@ pub async fn inference(
     }
 
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
-    let mut templates = Cow::Borrowed(&config.templates);
+    let mut templates = Arc::clone(&config.templates);
 
-    prepare_candidate_variants(
+    let needs_sampling = prepare_candidate_variants(
         &mut candidate_variants,
         &mut params.tags,
         params.variant_name.as_deref(),
@@ -296,7 +304,7 @@ pub async fn inference(
         &function,
         function_name.clone(),
     )?;
-    let templates = &*templates;
+    let templates = &templates;
 
     // Increment the request count if we're not in dryrun mode
     if !dryrun {
@@ -323,28 +331,82 @@ pub async fn inference(
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
 
     let inference_clients = InferenceClients {
-        http_client,
-        clickhouse_connection_info: &clickhouse_connection_info,
-        postgres_connection_info: &postgres_connection_info,
-        credentials: &params.credentials,
-        cache_options: &(params.cache_options, dryrun).into(),
-        tags: &params.tags,
-        rate_limiting_config: &config.rate_limiting,
-        otlp_config: &config.gateway.export.otlp,
+        http_client: http_client.clone(),
+        clickhouse_connection_info: clickhouse_connection_info.clone(),
+        postgres_connection_info: postgres_connection_info.clone(),
+        credentials: Arc::new(params.credentials.clone()),
+        cache_options: (params.cache_options, dryrun).into(),
+        tags: Arc::new(params.tags.clone()),
+        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        otlp_config: config.gateway.export.otlp.clone(),
     };
 
     let inference_models = InferenceModels {
-        models: &config.models,
-        embedding_models: &config.embedding_models,
+        models: config.models.clone(),
+        embedding_models: config.embedding_models.clone(),
     };
-    let resolved_input = params.input.into_lazy_resolved_input(FetchContext {
+    let resolved_input = Arc::new(params.input.into_lazy_resolved_input(FetchContext {
         client: http_client,
         object_store_info: &config.object_store_info,
-    })?;
+    })?);
+
+    // If we don't need sampling (pinned or dynamic variant), directly infer with the single variant
+    if !needs_sampling {
+        // Extract the single variant (should be exactly one)
+        let (variant_name, variant) = candidate_variants
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                Error::new(ErrorDetails::Inference {
+                    message: format!("No candidate variants available for direct inference. {IMPOSSIBLE_ERROR_MESSAGE}"),
+                })
+            })?;
+
+        return infer_variant(InferVariantArgs {
+            variant_name,
+            variant,
+            function: &function,
+            function_name: &function_name,
+            inference_id,
+            episode_id,
+            dryrun,
+            start_time,
+            stream,
+            resolved_input,
+            inference_models,
+            inference_clients,
+            inference_params: params.params.clone(),
+            templates,
+            tool_config: &tool_config,
+            output_schema: &output_schema,
+            config: &config,
+            clickhouse_connection_info: &clickhouse_connection_info,
+            tags: &params.tags,
+            extra_body: &params.extra_body,
+            extra_headers: &params.extra_headers,
+            include_original_response: params.include_original_response,
+        })
+        .await;
+    }
+
     // Keep sampling variants until one succeeds
     while !candidate_variants.is_empty() {
-        let (variant_name, variant) =
-            sample_variant(&mut candidate_variants, &function_name, &episode_id)?;
+        let result = function
+            .experimentation()
+            .sample(&function_name, episode_id, &mut candidate_variants)
+            .await;
+        let (variant_name, variant) = match result {
+            Ok((variant_name, variant)) => (variant_name, variant),
+            Err(e) => {
+                if variant_errors.is_empty() {
+                    return Err(e);
+                }
+                // If the sampling fails we break out of the loop and return the AllVariantsExhausted error
+                // It is more informative to the caller that variants have failed than that there's some internal error with the sampling strategy.
+                // As we continue work on experimentation we will make sure that the sampler only errors if there is no way to provide a valid variant.
+                break;
+            }
+        };
 
         let result = infer_variant(InferVariantArgs {
             variant_name: variant_name.clone(),
@@ -356,9 +418,9 @@ pub async fn inference(
             dryrun,
             start_time,
             stream,
-            resolved_input: &resolved_input,
-            inference_models: &inference_models,
-            inference_clients: &inference_clients,
+            resolved_input: resolved_input.clone(),
+            inference_models: inference_models.clone(),
+            inference_clients: inference_clients.clone(),
             inference_params: params.params.clone(),
             templates,
             tool_config: &tool_config,
@@ -403,11 +465,11 @@ struct InferVariantArgs<'a> {
     dryrun: bool,
     start_time: Instant,
     stream: bool,
-    resolved_input: &'a LazyResolvedInput,
-    inference_models: &'a InferenceModels<'a>,
-    inference_clients: &'a InferenceClients<'a>,
+    resolved_input: Arc<LazyResolvedInput>,
+    inference_models: InferenceModels,
+    inference_clients: InferenceClients,
     inference_params: InferenceParams,
-    templates: &'a TemplateConfig<'a>,
+    templates: &'a Arc<TemplateConfig<'static>>,
     tool_config: &'a Option<ToolCallConfig>,
     output_schema: &'a Option<DynamicJSONSchema>,
     config: &'a Arc<Config>,
@@ -446,12 +508,14 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
 
     // Will be edited by the variant as part of making the request so we must clone here
     let variant_inference_params = inference_params.clone();
-    let inference_config = InferenceConfig {
-        function_name,
-        variant_name: &variant_name,
-        templates,
-        tool_config: tool_config.as_ref(),
-        dynamic_output_schema: output_schema.as_ref(),
+    let inference_config = Arc::new(InferenceConfig {
+        function_name: Arc::from(function_name),
+        variant_name: Arc::from(variant_name.as_str()),
+        templates: Arc::clone(templates),
+        tool_config: tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
+        dynamic_output_schema: output_schema
+            .as_ref()
+            .map(|schema| Arc::new(schema.clone())),
         ids: InferenceIds {
             inference_id,
             episode_id,
@@ -460,17 +524,17 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             .gateway
             .fetch_and_encode_input_files_before_inference,
         extra_cache_key: None,
-        extra_body: Cow::Borrowed(extra_body),
-        extra_headers: Cow::Borrowed(extra_headers),
-    };
+        extra_body: extra_body.clone(),
+        extra_headers: extra_headers.clone(),
+    });
 
     if stream {
         let result = variant
             .infer_stream(
-                resolved_input,
+                resolved_input.clone(),
                 inference_models,
-                function.as_ref(),
-                &inference_config,
+                function.clone(),
+                inference_config.clone(),
                 inference_clients,
                 variant_inference_params,
             )
@@ -480,15 +544,15 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         // The provider has already checked that the first chunk is OK.
         let (stream, model_used_info) = result?;
 
-        let extra_body = inference_config.extra_body.into_owned();
-        let extra_headers = inference_config.extra_headers.into_owned();
+        let extra_body = inference_config.extra_body.clone();
+        let extra_headers = inference_config.extra_headers.clone();
         // Create InferenceMetadata for a streaming inference
         let inference_metadata = InferenceMetadata {
             function_name: function_name.to_string(),
             variant_name: inference_config.variant_name.to_string(),
             inference_id,
             episode_id,
-            input: resolved_input.clone(),
+            input: resolved_input,
             dryrun,
             start_time,
             inference_params: model_used_info.inference_params,
@@ -523,10 +587,10 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
     } else {
         let result = variant
             .infer(
-                resolved_input,
+                Arc::clone(&resolved_input),
                 inference_models,
-                function.as_ref(),
-                &inference_config,
+                function.clone(),
+                Arc::clone(&inference_config),
                 inference_clients,
                 variant_inference_params,
             )
@@ -537,8 +601,8 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         if !dryrun {
             // Spawn a thread for a trailing write to ClickHouse so that it doesn't block the response
             let result_to_write = result.clone();
-            let extra_body = inference_config.extra_body.into_owned();
-            let extra_headers = inference_config.extra_headers.into_owned();
+            let extra_body = inference_config.extra_body.clone();
+            let extra_headers = inference_config.extra_headers.clone();
             let write_metadata = InferenceDatabaseInsertMetadata {
                 function_name: function_name.to_string(),
                 variant_name: inference_config.variant_name.to_string(),
@@ -563,7 +627,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
                 let _: () = write_inference(
                     &clickhouse_connection_info,
                     &config,
-                    resolved_input.clone().resolve().await?,
+                    Arc::unwrap_or_clone(resolved_input).resolve().await?,
                     result_to_write,
                     write_metadata,
                 )
@@ -601,7 +665,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
     ) {
         // Get the function config or return an error if it doesn't exist
         (Some(function_name), None, _) => Ok((
-            config.get_function(function_name)?.into_owned(),
+            config.get_function(function_name)?.clone().into_owned(),
             function_name.to_string(),
         )),
         (None, Some(model_name), None) => {
@@ -648,6 +712,7 @@ fn find_function(params: &Params, config: &Config) -> Result<(Arc<FunctionConfig
                     parallel_tool_calls: None,
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::default(),
                 })),
                 DEFAULT_FUNCTION_NAME.to_string(),
             ))
@@ -764,7 +829,7 @@ fn create_stream(
             let config = config.clone();
             let async_write = config.gateway.observability.async_writes;
             let write_future = async move {
-                let templates = Cow::Borrowed(&config.templates);
+                let templates = Arc::clone(&config.templates);
                 let collect_chunks_args = CollectChunksArgs {
                     value: buffer,
                     inference_id,
@@ -777,11 +842,11 @@ fn create_stream(
                     raw_request,
                     raw_response,
                     inference_params,
-                    function_name: &function_name,
-                    variant_name: &variant_name,
-                    dynamic_output_schema,
-                    templates: &templates,
-                    tool_config: tool_config.as_ref(),
+                    function_name: Arc::from(function_name.as_str()),
+                    variant_name: Arc::from(variant_name.as_str()),
+                    dynamic_output_schema: dynamic_output_schema.map(Arc::new),
+                    templates,
+                    tool_config: tool_config.as_ref().map(|tc| Arc::new(tc.clone())),
                     cached,
                     extra_body: extra_body.clone(),
                     extra_headers: extra_headers.clone(),
@@ -807,7 +872,7 @@ fn create_stream(
                         extra_headers,
                     };
                     let config = config.clone();
-                        match input.resolve().await {
+                        match Arc::unwrap_or_clone(input).resolve().await {
                             Ok(input) => {
                                 let clickhouse_connection_info = clickhouse_connection_info.clone();
                                 write_inference(
@@ -1191,22 +1256,23 @@ impl InferenceResponseChunk {
 }
 
 // Carryall struct for clients used in inference
-pub struct InferenceClients<'a> {
-    pub http_client: &'a TensorzeroHttpClient,
-    pub clickhouse_connection_info: &'a ClickHouseConnectionInfo,
-    pub postgres_connection_info: &'a PostgresConnectionInfo,
-    pub credentials: &'a InferenceCredentials,
-    pub cache_options: &'a CacheOptions,
-    pub tags: &'a HashMap<String, String>,
-    pub rate_limiting_config: &'a RateLimitingConfig,
-    pub otlp_config: &'a OtlpConfig,
+#[derive(Clone)]
+pub struct InferenceClients {
+    pub http_client: TensorzeroHttpClient,
+    pub clickhouse_connection_info: ClickHouseConnectionInfo,
+    pub postgres_connection_info: PostgresConnectionInfo,
+    pub credentials: Arc<InferenceCredentials>,
+    pub cache_options: CacheOptions,
+    pub tags: Arc<HashMap<String, String>>,
+    pub rate_limiting_config: Arc<RateLimitingConfig>,
+    pub otlp_config: OtlpConfig,
 }
 
 // Carryall struct for models used in inference
-#[derive(Debug)]
-pub struct InferenceModels<'a> {
-    pub models: &'a ModelTable,
-    pub embedding_models: &'a EmbeddingModelTable,
+#[derive(Clone, Debug)]
+pub struct InferenceModels {
+    pub models: Arc<ModelTable>,
+    pub embedding_models: Arc<EmbeddingModelTable>,
 }
 
 /// InferenceParams is the top-level struct for inference parameters.
@@ -1276,16 +1342,25 @@ impl ChatCompletionInferenceParams {
     }
 }
 
+/// Prepares the candidate variants map using inference parameters prior to sampling
+/// This function handles 2 cases:
+/// 1. If a variant is pinned, only that variant should be attempted
+/// 2. If a dynamic variant is configured, only that variant should be attempted
+///
+/// It also errors if both are configured or there is a failure to initialize the dynamic variant
+///
+/// Returns `Ok(true)` if experimentation/sampling is needed (multiple candidate variants)
+/// Returns `Ok(false)` if direct inference is needed (single predetermined variant - no sampling)
 fn prepare_candidate_variants(
     candidate_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
     tags: &mut HashMap<String, String>,
     pinned_variant_name: Option<&str>,
     dynamic_variant_config: Option<UninitializedVariantInfo>,
-    template_config: &mut Cow<'_, TemplateConfig>,
+    template_config: &mut Arc<TemplateConfig<'static>>,
     function: &FunctionConfig,
     function_name: String,
-) -> Result<(), Error> {
-    match (pinned_variant_name, dynamic_variant_config) {
+) -> Result<bool, Error> {
+    let needs_sampling = match (pinned_variant_name, dynamic_variant_config) {
         // If a variant is pinned, only that variant should be attempted
         (Some(variant_name), None) => {
             candidate_variants.retain(|k, _| k == variant_name);
@@ -1301,6 +1376,7 @@ fn prepare_candidate_variants(
                 "tensorzero::variant_pinned".to_string(),
                 variant_name.to_string(),
             );
+            false // Direct inference - no sampling needed
         }
         (None, Some(dynamic_variant_config)) => {
             // Replace the variant config with just the dynamic variant
@@ -1312,7 +1388,7 @@ fn prepare_candidate_variants(
 
             // Replace templates in the template config with the ones passed in
             // We Clone here so that we can still reference the old templates that don't conflict
-            let mut dynamic_template_config: TemplateConfig = template_config.clone().into_owned();
+            let mut dynamic_template_config: TemplateConfig = (**template_config).clone();
             for path_with_contents in candidate_variant_info.get_all_template_paths() {
                 let template_name = path_with_contents.path.get_template_key();
                 if dynamic_template_config.contains_template(&template_name) {
@@ -1324,29 +1400,25 @@ fn prepare_candidate_variants(
                 dynamic_template_config
                     .add_template(template_name, path_with_contents.contents.clone())?;
             }
-            *template_config = Cow::Owned(dynamic_template_config);
+            *template_config = Arc::new(dynamic_template_config);
             candidate_variants.clear();
             candidate_variants.insert(
                 "tensorzero::dynamic_variant".to_string(),
                 Arc::new(candidate_variant_info),
             );
+            false // Direct inference - no sampling needed
         }
-        (None, None) => {
-            // Remove all zero-weight variants - these can only be used if explicitly pinned above
-            candidate_variants.retain(|_, variant| {
-                // Retain 'None' and positive-weight variants, discarding zero-weight variants
-                variant.inner.weight().is_none_or(|w| w > 0.0)
-            });
-        }
-        _ => {
+        // If neither variant_name nor internal_dynamic_variant_config is set, we need sampling
+        (None, None) => true,
+        (Some(_), Some(_)) => {
             return Err(ErrorDetails::InvalidRequest {
                 message: "`variant_name` and `internal_dynamic_variant_config` cannot both be set."
                     .to_string(),
             }
             .into())
         }
-    }
-    Ok(())
+    };
+    Ok(needs_sampling)
 }
 
 #[cfg(test)]
@@ -1383,10 +1455,10 @@ mod tests {
             variant_name: "test_variant".to_string(),
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            input: LazyResolvedInput {
+            input: Arc::new(LazyResolvedInput {
                 messages: vec![],
                 system: None,
-            },
+            }),
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),
@@ -1437,10 +1509,10 @@ mod tests {
             variant_name: "test_variant".to_string(),
             inference_id: Uuid::now_v7(),
             episode_id: Uuid::now_v7(),
-            input: LazyResolvedInput {
+            input: Arc::new(LazyResolvedInput {
                 messages: vec![],
                 system: None,
-            },
+            }),
             dryrun: false,
             inference_params: InferenceParams::default(),
             start_time: Instant::now(),

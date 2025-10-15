@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use std::time::{Duration, Instant};
 
 use http::StatusCode;
@@ -51,21 +49,15 @@ async fn test_variant_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error": "Variant `slow_timeout` timed out due to configured `non_streaming.total_ms` timeout (400ms)",
             "error_json": {
-                "AllVariantsFailed": {
-                    "errors": {
-                        "slow_timeout": {
-                            "VariantTimeout": {
-                                "variant_name": "slow_timeout",
-                                "timeout": {
-                                    "secs": 0,
-                                    "nanos": 400000000
-                                },
-                                "streaming": false
-                            }
-                        }
-                    }
+                "VariantTimeout": {
+                    "variant_name": "slow_timeout",
+                    "timeout": {
+                        "secs": 0,
+                        "nanos": 400000000
+                    },
+                    "streaming": false
                 }
             }
         })
@@ -101,26 +93,20 @@ async fn test_variant_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_timeout: Variant `slow_timeout` timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error": "Variant `slow_timeout` timed out due to configured `streaming.ttft_ms` timeout (500ms)",
             "error_json": {
-                "AllVariantsFailed": {
-                    "errors": {
-                        "slow_timeout": {
-                            "VariantTimeout": {
-                                "variant_name": "slow_timeout",
-                                "timeout": {
-                                    "secs": 0,
-                                    "nanos": 500000000
-                                },
-                                "streaming": true
-                            }
-                        }
-                    }
+                "VariantTimeout": {
+                    "variant_name": "slow_timeout",
+                    "timeout": {
+                        "secs": 0,
+                        "nanos": 500000000
+                    },
+                    "streaming": true
                 }
             }
         })
     );
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::REQUEST_TIMEOUT);
 }
 
 #[tokio::test]
@@ -292,24 +278,18 @@ async fn test_model_provider_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error": "All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `non_streaming.total_ms` timeout (400ms)",
             "error_json": {
-                "AllVariantsFailed":  {
-                    "errors": {
-                        "timeout": {
-                            "ModelProvidersExhausted": {
-                                "provider_errors": {
-                                    "slow": {
-                                        "ModelProviderTimeout": {
-                                            "provider_name": "slow",
-                                            "timeout": {
-                                                "secs": 0,
-                                                "nanos": 400000000
-                                            },
-                                            "streaming": false
-                                        }
-                                    }
-                                }
+                "ModelProvidersExhausted": {
+                    "provider_errors": {
+                        "slow": {
+                            "ModelProviderTimeout": {
+                                "provider_name": "slow",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 400000000
+                                },
+                                "streaming": false
                             }
                         }
                     }
@@ -348,24 +328,18 @@ async fn test_model_provider_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: timeout: All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error": "All model providers failed to infer with errors: slow: Model provider slow timed out due to configured `streaming.ttft_ms` timeout (500ms)",
             "error_json": {
-                "AllVariantsFailed": {
-                    "errors": {
-                        "timeout": {
-                            "ModelProvidersExhausted": {
-                                "provider_errors": {
-                                    "slow": {
-                                        "ModelProviderTimeout": {
-                                            "provider_name": "slow",
-                                            "timeout": {
-                                                "secs": 0,
-                                                "nanos": 500000000
-                                            },
-                                            "streaming": true
-                                        }
-                                    }
-                                }
+                "ModelProvidersExhausted": {
+                    "provider_errors": {
+                        "slow": {
+                            "ModelProviderTimeout": {
+                                "provider_name": "slow",
+                                "timeout": {
+                                    "secs": 0,
+                                    "nanos": 500000000
+                                },
+                                "streaming": true
                             }
                         }
                     }
@@ -373,7 +347,7 @@ async fn test_model_provider_timeout_streaming() {
             }
         })
     );
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[tokio::test]
@@ -647,7 +621,7 @@ timeouts = { non_streaming = { total_ms = 500 }, streaming = { ttft_ms = 500 } }
         .unwrap_err();
 
     assert!(
-        response.to_string().contains("All variants failed with errors: slow_variant: Model double_timeout timed out due to configured `non_streaming.total_ms` timeout (1.2s)"),
+        response.to_string().contains("Model double_timeout timed out due to configured `non_streaming.total_ms` timeout (1.2s)"),
         "Unexpected error message: {response}"
     );
     // The first two providers should time out, but the third one shouldn't
@@ -684,21 +658,15 @@ async fn test_model_timeout_non_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `non_streaming.total_ms` timeout (400ms)",
+            "error": "Model slow_model_timeout timed out due to configured `non_streaming.total_ms` timeout (400ms)",
             "error_json": {
-                "AllVariantsFailed": {
-                    "errors": {
-                        "slow_variant": {
-                            "ModelTimeout": {
-                                "model_name": "slow_model_timeout",
-                                "timeout": {
-                                    "secs": 0,
-                                    "nanos": 400000000
-                                },
-                                "streaming": false
-                            }
-                        }
-                    }
+                "ModelTimeout": {
+                    "model_name": "slow_model_timeout",
+                    "timeout": {
+                        "secs": 0,
+                        "nanos": 400000000
+                    },
+                    "streaming": false
                 }
             }
         })
@@ -734,26 +702,20 @@ async fn test_model_timeout_streaming() {
     assert_eq!(
         response_json,
         json!({
-            "error":"All variants failed with errors: slow_variant: Model slow_model_timeout timed out due to configured `streaming.ttft_ms` timeout (500ms)",
+            "error": "Model slow_model_timeout timed out due to configured `streaming.ttft_ms` timeout (500ms)",
             "error_json": {
-                "AllVariantsFailed": {
-                    "errors": {
-                        "slow_variant": {
-                            "ModelTimeout": {
-                                "model_name": "slow_model_timeout",
-                                "timeout": {
-                                    "secs": 0,
-                                    "nanos": 500000000
-                                },
-                                "streaming": true
-                            }
-                        }
-                    }
+                "ModelTimeout": {
+                    "model_name": "slow_model_timeout",
+                    "timeout": {
+                        "secs": 0,
+                        "nanos": 500000000
+                    },
+                    "streaming": true
                 }
             }
         })
     );
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::REQUEST_TIMEOUT);
 }
 
 #[tokio::test]
@@ -766,7 +728,7 @@ async fn test_model_timeout_slow_second_chunk_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": "Hello, world!"
+                    "content": "Hello, world!",
                 }
             ]
         },

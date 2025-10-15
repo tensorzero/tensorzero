@@ -1,4 +1,3 @@
-#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -128,7 +127,7 @@ async fn test_otel_export_http_error() {
     );
 }
 
-async fn get_tempo_spans(
+pub async fn get_tempo_spans(
     episode_id: Uuid,
     start_time: DateTime<Utc>,
     tempo_semaphore: &Semaphore,

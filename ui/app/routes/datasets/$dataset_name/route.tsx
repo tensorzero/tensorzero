@@ -1,5 +1,5 @@
 import {
-  getDatasetCounts,
+  getDatasetMetadata,
   getDatasetRows,
 } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
@@ -39,8 +39,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 
   const [counts, rows] = await Promise.all([
-    getDatasetCounts({}),
-    getDatasetRows(dataset_name, pageSize, offset),
+    getDatasetMetadata({}),
+    getDatasetRows({ dataset_name, page_size: pageSize, offset }),
   ]);
   const count_info = counts.find(
     (count) => count.dataset_name === dataset_name,
@@ -93,7 +93,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     );
 
     // Check if this was the last datapoint in the dataset
-    const counts = await getDatasetCounts({});
+    const counts = await getDatasetMetadata({});
     const count_info = counts.find(
       (count) => count.dataset_name === dataset_name,
     );

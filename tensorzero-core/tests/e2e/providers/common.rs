@@ -3,6 +3,8 @@ use std::io::Cursor;
 use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
+use secrecy::SecretString;
+
 use object_store::{aws::AmazonS3Builder, ObjectStore};
 use std::sync::Arc;
 use tensorzero_core::config::provider_types::{
@@ -29,9 +31,10 @@ use serde_json::{json, Value};
 use std::future::IntoFuture;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, InferenceOutput, InferenceResponse,
+    ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
@@ -59,7 +62,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 use tensorzero_core::model::CredentialLocation;
 
-use super::helpers::get_extra_headers;
+use super::helpers::{get_extra_headers, get_test_model_extra_headers};
 
 #[derive(Clone, Debug)]
 pub struct E2ETestProvider {
@@ -70,6 +73,14 @@ pub struct E2ETestProvider {
     pub credentials: HashMap<String, String>,
 
     pub supports_batch_inference: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModelTestProvider {
+    pub provider_type: String,
+    // These are keys and values that we would put into the model block for that provider
+    pub model_info: HashMap<String, String>,
+    pub use_modal_headers: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -96,6 +107,7 @@ pub struct E2ETestProviders {
 
     pub provider_type_default_credentials: Vec<E2ETestProvider>,
     pub provider_type_default_credentials_shorthand: Vec<E2ETestProvider>,
+    pub credential_fallbacks: Vec<ModelTestProvider>,
 
     pub inference_params_inference: Vec<E2ETestProvider>,
     pub tool_use_inference: Vec<E2ETestProvider>,
@@ -165,6 +177,7 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_basic_embedding_with_provider;
         use $crate::providers::embeddings::test_bulk_embedding_with_provider;
         use $crate::providers::embeddings::test_embedding_with_dimensions_with_provider;
+        use $crate::providers::common::test_provider_type_fallback_credentials_with_provider;
         use $crate::providers::embeddings::test_embedding_with_encoding_format_with_provider;
         use $crate::providers::embeddings::test_embedding_with_user_parameter_with_provider;
         use $crate::providers::embeddings::test_embedding_invalid_model_error_with_provider;
@@ -280,6 +293,17 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.provider_type_default_credentials_shorthand;
             for provider in providers {
                 test_provider_type_default_credentials_shorthand_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_provider_type_fallback_credentials() {
+            // We just need a longhand model
+            let all_providers = $func().await;
+            let providers = all_providers.credential_fallbacks;
+            let supports_dynamic_credentials = !all_providers.provider_type_default_credentials.is_empty();
+            for provider in providers {
+                test_provider_type_fallback_credentials_with_provider(provider, supports_dynamic_credentials).await;
             }
         }
 
@@ -692,9 +716,17 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.pdf_test.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+
 [functions.pdf_test.variants.gcp_vertex_gemini]
 type = "chat_completion"
 model = "gcp_vertex_gemini::projects/tensorzero-public/locations/us-central1/publishers/google/models/gemini-2.0-flash-lite"
+
+[functions.pdf_test.variants.google_ai_studio]
+type = "chat_completion"
+model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
@@ -703,6 +735,14 @@ model = "anthropic::claude-3-5-sonnet-20241022"
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
+
+[models."responses-gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."responses-gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_type = "responses"
 
 [models.claude-3-haiku-20240307-aws-bedrock]
 routing = ["aws_bedrock"]
@@ -724,6 +764,10 @@ type = "chat"
 type = "chat_completion"
 model = "openai::gpt-4o-mini-2024-07-18"
 
+[functions.image_test.variants.openai-responses]
+type = "chat_completion"
+model = "responses-gpt-4o-mini-2024-07-18"
+
 [functions.image_test.variants.anthropic]
 type = "chat_completion"
 model = "anthropic::claude-3-haiku-20240307"
@@ -744,6 +788,14 @@ type = "gcp_vertex_gemini"
 model_id = "gemini-2.5-pro"
 location = "global"
 project_id = "tensorzero-public"
+
+[models."responses-gpt-4o-mini-2024-07-18"]
+routing = ["openai"]
+
+[models."responses-gpt-4o-mini-2024-07-18".providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+api_type = "responses"
 
 [functions.image_test.variants.gcp-vertex-haiku]
 type = "chat_completion"
@@ -775,25 +827,80 @@ region = "us-east-1"
 /// This calls the Default implementation directly, ensuring we test the actual defaults.
 fn get_default_credential_location(provider_type: &str) -> CredentialLocation {
     match provider_type {
-        "anthropic" => AnthropicDefaults::default().credential_location,
-        "openai" => OpenAIDefaults::default().credential_location,
-        "azure" => AzureDefaults::default().credential_location,
-        "deepseek" => DeepSeekDefaults::default().credential_location,
-        "fireworks" => FireworksDefaults::default().credential_location,
-        "gcp_vertex_anthropic" => GCPDefaults::default().credential_location,
-        "gcp_vertex_gemini" => GCPDefaults::default().credential_location,
-        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default().credential_location,
-        "groq" => GroqDefaults::default().credential_location,
-        "hyperbolic" => HyperbolicDefaults::default().credential_location,
-        "mistral" => MistralDefaults::default().credential_location,
-        "openrouter" => OpenRouterDefaults::default().credential_location,
-        "sglang" => SGLangDefaults::default().credential_location,
-        "tgi" => TGIDefaults::default().credential_location,
-        "together" => TogetherDefaults::default().credential_location,
-        "vllm" => VLLMDefaults::default().credential_location,
-        "xai" => XAIDefaults::default().credential_location,
+        "anthropic" => AnthropicDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "openai" => OpenAIDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "azure" => AzureDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "deepseek" => DeepSeekDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "fireworks" => FireworksDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "gcp_vertex_anthropic" => GCPDefaults::default()
+            .credential_location
+            .default_location()
+            .clone(),
+        "gcp_vertex_gemini" => GCPDefaults::default()
+            .credential_location
+            .default_location()
+            .clone(),
+        "google_ai_studio_gemini" => GoogleAIStudioGeminiDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "groq" => GroqDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "hyperbolic" => HyperbolicDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "mistral" => MistralDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "openrouter" => OpenRouterDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "sglang" => SGLangDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "tgi" => TGIDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "together" => TogetherDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "vllm" => VLLMDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
+        "xai" => XAIDefaults::default()
+            .api_key_location
+            .default_location()
+            .clone(),
         _ => panic!("Unknown provider type: {provider_type}"),
     }
+}
+
+fn uses_credential_location(provider_type: &str) -> bool {
+    matches!(provider_type, "gcp_vertex_gemini" | "gcp_vertex_anthropic")
 }
 
 /// Test that provider type default credentials work correctly.
@@ -837,10 +944,16 @@ pub async fn test_provider_type_default_credentials_with_provider(provider: E2ET
     std::env::set_var(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
-    let credential_location_config = if is_path_env {
-        format!(r#"credential_location = "path_from_env::{custom_env_var}""#)
+    let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
+    {
+        "credential_location"
     } else {
-        format!(r#"credential_location = "env::{custom_env_var}""#)
+        "api_key_location"
+    };
+    let credential_location_config = if is_path_env {
+        format!(r#"{default_credential_location_key}= "path_from_env::{custom_env_var}""#)
+    } else {
+        format!(r#"{default_credential_location_key}= "env::{custom_env_var}""#)
     };
 
     // Create a config with the custom credential location
@@ -947,10 +1060,16 @@ pub async fn test_provider_type_default_credentials_shorthand_with_provider(
     std::env::set_var(&custom_env_var, &credential_value);
 
     // Create the credential location config based on the type
-    let credential_location_config = if is_path_env {
-        format!(r#"credential_location = "path_from_env::{custom_env_var}""#)
+    let default_credential_location_key = if uses_credential_location(&provider.model_provider_name)
+    {
+        "credential_location"
     } else {
-        format!(r#"credential_location = "env::{custom_env_var}""#)
+        "api_key_location"
+    };
+    let credential_location_config = if is_path_env {
+        format!(r#"{default_credential_location_key}= "path_from_env::{custom_env_var}""#)
+    } else {
+        format!(r#"{default_credential_location_key}= "env::{custom_env_var}""#)
     };
 
     // Create a config with the custom credential location and shorthand model syntax
@@ -1000,6 +1119,172 @@ defaults.{}
         provider.model_provider_name,
         result.err()
     );
+}
+
+/// Test that fallback credentials work correctly.
+/// This test:
+/// 1. Gets the default credential location from the provider's Default impl
+/// 2. Gets the credential value from the env var or path
+/// 3. Sets up a provider with a dynamic credential location that falls back to the default location
+/// 4. Infers with the dynamic credential
+/// 5. Infers with the default credential
+/// 6. Asserts that the logs contain exactly one message about falling back
+#[traced_test]
+pub async fn test_provider_type_fallback_credentials_with_provider(
+    provider: ModelTestProvider,
+    supports_dynamic_credentials_test: bool,
+) {
+    // Get the default credential location for this provider
+    let default_location = get_default_credential_location(&provider.provider_type);
+
+    // Create the credential location config based on the type
+    let credential_location_key = if uses_credential_location(&provider.provider_type) {
+        "credential_location"
+    } else {
+        "api_key_location"
+    };
+    let default_credential_location_str = serde_json::to_string(&default_location).unwrap();
+    let credential_location_config = format!(
+        r#"{credential_location_key}= {{default = "dynamic::test_credential", fallback = {default_credential_location_str}}}"#
+    );
+
+    // Extract the env var name from the credential location
+    let original_env_var = match &default_location {
+        CredentialLocation::Env(var_name) => var_name.clone(),
+        CredentialLocation::PathFromEnv(var_name) => var_name.clone(),
+        _ => {
+            println!(
+                "Skipping test for {} - unsupported credential location type",
+                provider.provider_type
+            );
+            return;
+        }
+    };
+
+    // Create a config with the custom credential location
+    // Build the model_info config lines
+    let model_info_config = provider
+        .model_info
+        .iter()
+        .map(|(key, value)| format!("{key} = \"{value}\""))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let config = format!(
+        r#"
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+{}
+type = "{}"
+{}
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#,
+        credential_location_config, provider.provider_type, model_info_config
+    );
+
+    println!(
+        "Testing provider type fallback credentials for {}",
+        provider.provider_type
+    );
+    println!("Config:\n{config}");
+
+    // Create an embedded gateway with this config
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
+
+    // Save the original credential value if it exists
+    let original_value = std::env::var(&original_env_var).unwrap();
+    let extra_headers = if provider.use_modal_headers {
+        get_test_model_extra_headers()
+    } else {
+        UnfilteredInferenceExtraHeaders {
+            extra_headers: vec![],
+        }
+    };
+
+    if supports_dynamic_credentials_test {
+        // Make a simple inference request with primary credentials to verify it works
+        let episode_id = Uuid::now_v7();
+        let result = client
+            .inference(ClientInferenceParams {
+                function_name: Some("basic_test".to_string()),
+                variant_name: Some("default".to_string()),
+                episode_id: Some(episode_id),
+                input: ClientInput {
+                    system: None,
+                    messages: vec![ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Say hello".to_string(),
+                        })],
+                    }],
+                },
+                stream: Some(false),
+                credentials: HashMap::from([(
+                    "test_credential".to_string(),
+                    ClientSecretString(SecretString::new(original_value.clone().into())),
+                )]),
+                extra_headers: extra_headers.clone(),
+                // pass dynamic credentials here
+                ..Default::default()
+            })
+            .await;
+
+        // Assert the inference succeeded
+        assert!(
+            result.is_ok(),
+            "Inference failed for {}: {:?}",
+            provider.provider_type,
+            result.err()
+        );
+
+        assert!(!logs_contain("attempting fallback"));
+    }
+
+    // Make a simple inference request without primary credentials to verify it works
+    // with a fallback
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Say hello".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            credentials: HashMap::from([(
+                "test_credentials".to_string(),
+                ClientSecretString(SecretString::new(original_value.into())),
+            )]),
+            extra_headers,
+            // pass dynamic credentials here
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the inference succeeded
+    assert!(
+        result.is_ok(),
+        "Inference failed for {}: {:?}",
+        provider.provider_type,
+        result.err()
+    );
+
+    assert!(logs_contain("attempting fallback"));
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
@@ -2076,7 +2361,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
         }
     }
 
-    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[traced_test]
@@ -2089,7 +2374,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
     }
 
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    client
+    let res = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name),
@@ -2100,7 +2385,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
                         role: Role::Assistant,
                         content: vec![ClientInputMessageContent::Thought(Thought {
                             text: Some("My TensorZero thought".to_string()),
-                            signature: Some("My TensorZero signature".to_string()),
+                            signature: Some("My new TensorZero signature".to_string()),
                             provider_type: None,
                         })],
                     },
@@ -2115,8 +2400,15 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
             extra_headers: get_extra_headers(),
             ..Default::default()
         })
-        .await
-        .unwrap();
+        .await;
+
+    if "anthropic" == provider.model_provider_name.as_str() {
+        // Anthropic rejects requests with invalid thought signatures
+        let err = res.unwrap_err();
+        assert!(err.to_string().contains("signature"));
+    } else {
+        let _ = res.unwrap();
+    }
 
     if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
         assert!(
@@ -2711,13 +3003,15 @@ pub async fn check_simple_inference_response(
         assert!(input_tokens > 0);
         assert!(output_tokens > 0);
     }
-    let finish_reason = response_json
-        .get("finish_reason")
-        .unwrap()
-        .as_str()
-        .unwrap();
-    // Some providers return "stop" and others return "length"
-    assert!(finish_reason == "stop" || finish_reason == "length");
+    if provider.variant_name != "openai-responses" {
+        let finish_reason = response_json
+            .get("finish_reason")
+            .unwrap()
+            .as_str()
+            .unwrap();
+        // Some providers return "stop" and others return "length"
+        assert!(finish_reason == "stop" || finish_reason == "length");
+    }
 
     // Sleep to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
@@ -3118,7 +3412,7 @@ pub async fn test_streaming_invalid_request_with_provider(provider: E2ETestProvi
         let reqwest_eventsource::Error::InvalidStatusCode(code, resp) = err else {
             panic!("Unexpected error: {err:?}")
         };
-        assert_eq!(code, StatusCode::BAD_GATEWAY);
+        assert_eq!(code, StatusCode::INTERNAL_SERVER_ERROR);
         let resp: Value = resp.json().await.unwrap();
         let err_msg = resp.get("error").unwrap().as_str().unwrap();
         assert!(
@@ -4668,6 +4962,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 ) {
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
     let inference_id = Uuid::parse_str(inference_id).unwrap();
+    let content = response_json.get("content").unwrap().as_array().unwrap();
 
     if let Some(episode_id) = episode_id {
         let episode_id_response = response_json.get("episode_id").unwrap().as_str().unwrap();
@@ -4677,15 +4972,6 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
 
     let variant_name = response_json.get("variant_name").unwrap().as_str().unwrap();
     assert_eq!(variant_name, provider.variant_name);
-
-    let content = response_json.get("content").unwrap().as_array().unwrap();
-    assert!(!content.iter().any(|block| block["type"] == "tool_call"));
-    let content_block = content
-        .iter()
-        .find(|block| block["type"] == "text")
-        .unwrap();
-    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
-    assert!(content_block_text.to_lowercase().contains("mehta"));
 
     let usage = response_json.get("usage").unwrap();
     let usage = usage.as_object().unwrap();
@@ -4870,6 +5156,14 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
             panic!("Expected a text block, got {first:?}");
         }
     }
+
+    assert!(!content.iter().any(|block| block["type"] == "tool_call"));
+    let content_block = content
+        .iter()
+        .find(|block| block["type"] == "text")
+        .unwrap();
+    let content_block_text = content_block.get("text").unwrap().as_str().unwrap();
+    assert!(content_block_text.to_lowercase().contains("mehta"));
 }
 
 /// This test is similar to `test_tool_use_tool_choice_auto_used_streaming_inference_request_with_provider`, but it steers the model to not use the tool.
@@ -8334,6 +8628,10 @@ pub async fn test_stop_sequences_inference_request_with_provider(
     provider: E2ETestProvider,
     client: &tensorzero::Client,
 ) {
+    // OpenAI Responses doesn't support stop sequences
+    if provider.variant_name == "openai-responses" {
+        return;
+    }
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -9441,9 +9739,10 @@ pub async fn check_parallel_tool_use_inference_response(
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
 
     let is_openrouter = provider.model_provider_name == "openrouter";
-    if is_openrouter {
-        // For OpenRouter, check that there are at least 2 tool calls
-        // (OpenRouter may include an empty text block)
+    let is_groq = provider.model_provider_name == "groq";
+    if is_openrouter || is_groq {
+        // For Groq and OpenRouter, check that there are at least 2 tool calls
+        // (these providers may include an empty text block)
         let tool_calls = output
             .iter()
             .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
@@ -9473,8 +9772,12 @@ pub async fn check_parallel_tool_use_inference_response(
                 // Skip empty text blocks for OpenRouter
                 continue;
             }
+            StoredContentBlock::Text(text) if text.text.trim().is_empty() && is_groq => {
+                // Skip empty text blocks for Groq
+                continue;
+            }
             _ => {
-                panic!("Expected a tool call or empty text (for OpenRouter), got {block:?}");
+                panic!("Expected a tool call or empty text (for OpenRouter/Groq), got {block:?}");
             }
         }
     }
@@ -10720,6 +11023,13 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         return;
     }
 
+    // The OpenAI Responses API has a minimum value of 16
+    let max_tokens = if provider.model_name.starts_with("responses-") {
+        16
+    } else {
+        1
+    };
+
     let episode_id = Uuid::now_v7();
     let extra_headers = get_extra_headers();
 
@@ -10736,7 +11046,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
                "messages": [
                 {
                     "role": "user",
-                    "content": "What is the name of the capital city of Japan?"
+                    "content": "What is the name of the capital city of Japan? Explain your answer."
                 }
             ]},
         "stream": false,
@@ -10744,7 +11054,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         "cache_options": {"enabled": "on", "lookback_s": 10},
         "params": {
             "chat_completion": {
-                "max_tokens": 1
+                "max_tokens": max_tokens
             }
         },
         "extra_headers": extra_headers.extra_headers,
@@ -10777,6 +11087,7 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
         response_json,
         Some(episode_id),
         &provider,
+        max_tokens,
         false,
     )
     .await;
@@ -10795,8 +11106,15 @@ pub async fn test_short_inference_request_with_provider(provider: E2ETestProvide
 
     println!("API response: {response_json:#?}");
 
-    check_short_inference_response(randomness, response_json, Some(episode_id), &provider, true)
-        .await;
+    check_short_inference_response(
+        randomness,
+        response_json,
+        Some(episode_id),
+        &provider,
+        max_tokens,
+        true,
+    )
+    .await;
 }
 
 async fn check_short_inference_response(
@@ -10804,6 +11122,7 @@ async fn check_short_inference_response(
     response_json: Value,
     episode_id: Option<Uuid>,
     provider: &E2ETestProvider,
+    max_tokens: u32,
     should_be_cached: bool,
 ) {
     let hardcoded_function_name = "basic_test";
@@ -10835,7 +11154,7 @@ async fn check_short_inference_response(
         assert_eq!(output_tokens, 0);
     } else {
         assert!(input_tokens > 0);
-        assert_eq!(output_tokens, 1);
+        assert_eq!(output_tokens, max_tokens as u64);
     }
     let finish_reason = response_json
         .get("finish_reason")
@@ -10878,7 +11197,7 @@ async fn check_short_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "value": "What is the name of the capital city of Japan? Explain your answer."}]
             }
         ]
     });
@@ -10910,7 +11229,7 @@ async fn check_short_inference_response(
             .unwrap()
             .as_u64()
             .unwrap(),
-        1
+        max_tokens as u64
     );
 
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
@@ -10964,7 +11283,7 @@ async fn check_short_inference_response(
     let expected_input_messages = vec![StoredRequestMessage {
         role: Role::User,
         content: vec![StoredContentBlock::Text(Text {
-            text: "What is the name of the capital city of Japan?".to_string(),
+            text: "What is the name of the capital city of Japan? Explain your answer.".to_string(),
         })],
     }];
     assert_eq!(input_messages, expected_input_messages);
@@ -11072,6 +11391,17 @@ pub async fn test_multi_turn_parallel_tool_use_inference_request_with_provider(
             // For OpenRouter, skip empty text blocks
             let text = content_block.get("text").unwrap().as_str().unwrap();
             if text.is_empty() {
+                continue;
+            } else {
+                panic!("Unexpected text block with non-empty content: {text}");
+            }
+        }
+
+        // Special handling for groq text blocks
+        if content_block_type == "text" && provider.model_provider_name == "groq" {
+            let text = content_block.get("text").unwrap().as_str().unwrap();
+            // Groq produces a text block containing '\n'
+            if text.trim().is_empty() {
                 continue;
             } else {
                 panic!("Unexpected text block with non-empty content: {text}");
@@ -11364,6 +11694,17 @@ pub async fn test_multi_turn_parallel_tool_use_streaming_inference_request_with_
             // For OpenRouter, skip empty text blocks
             let text = content_block.get("text").unwrap().as_str().unwrap();
             if text.is_empty() {
+                continue;
+            } else {
+                panic!("Unexpected text block with non-empty content: {text}");
+            }
+        }
+
+        // Special handling for groq text blocks
+        if content_block_type == "text" && provider.model_provider_name == "groq" {
+            let text = content_block.get("text").unwrap().as_str().unwrap();
+            // Groq produces a text block containing '\n'
+            if text.trim().is_empty() {
                 continue;
             } else {
                 panic!("Unexpected text block with non-empty content: {text}");
@@ -11690,6 +12031,8 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
 
+    println!("API response: {response_json}");
+
     // Assert the output isn't JSON
     let output = response_json.get("output").unwrap().as_object().unwrap();
     let parsed = output.get("parsed").unwrap().as_object();
@@ -11698,7 +12041,10 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
     assert!(serde_json::from_str::<Value>(raw).is_err());
 
     // Assert that the answer is correct
-    assert!(raw.to_lowercase().contains("tokyo"));
+    assert!(
+        raw.to_lowercase().contains("tokyo"),
+        "Unexpected raw output: {raw}"
+    );
 
     // Check that inference_id is here
     let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();

@@ -9,7 +9,7 @@ Developers express the behavior of LLM calls by defining the relevant prompt tem
 
 You can see an example configuration file [here](https://github.com/tensorzero/tensorzero/blob/main/tensorzero-core/fixtures/config/tensorzero.toml).
 
-The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `models`, `model_providers`, `functions`, `variants`, `tools`, and `metrics`.
+The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</a> file with a few major sections (TOML tables): `gateway`, `clickhouse`, `models`, `model_providers`, `functions`, `variants`, `tools`, `metrics`, `rate_limiting`, and `object_storage`.
 
 ## `[gateway]`
 
@@ -71,6 +71,31 @@ system](/gateway/guides/opentelemetry-otlp).
   environment variable. See the above-linked guide for details.
 </Warning>
 
+### `export.otlp.traces.extra_headers`
+
+- **Type:** object (map of string to string)
+- **Required:** no (default: `{}`)
+
+Static headers to include in all OTLP trace export requests.
+This is useful for adding metadata to OTLP exports.
+
+These headers are merged with any dynamic headers sent via HTTP request headers.
+When the same header key is present in both static and dynamic headers, the dynamic header value takes precedence.
+
+```toml title="tensorzero.toml"
+[gateway.export.otlp.traces]
+# ...
+extra_headers.space_id = "123"
+extra_headers."X-Custom-Header" = "custom-value"
+# ...
+```
+
+<Warning>
+  Avoid storing sensitive credentials directly in configuration files. See
+  [Export OpenTelemetry traces](/operations/export-opentelemetry-traces) for
+  instructions on sending headers dynamically.
+</Warning>
+
 ### `export.otlp.traces.format`
 
 - **Type:** either "opentelemetry" or "openinference"
@@ -78,6 +103,19 @@ system](/gateway/guides/opentelemetry-otlp).
 
 If set to `"opentelemetry"`, TensorZero will set `gen_ai` attributes based on the [OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai).
 If set to `"openinference"`, TensorZero will set attributes based on the [OpenInference semantic conventions](https://github.com/Arize-ai/openinference/blob/main/spec/llm_spans.md).
+
+### `fetch_and_encode_input_files_before_inference`
+
+- **Type:** boolean
+- **Required:** no (default: `true`)
+
+Controls how the gateway handles remote input files (e.g., images, PDFs) during multimodal inference.
+
+If set to `true` (default), the gateway will fetch remote input files and send them as a base64-encoded payload in the prompt.
+This is recommended to ensure that TensorZero and the model providers see identical inputs, which is important for observability and reproducibility.
+
+If set to `false`, TensorZero will forward the input file URLs directly to the model provider (when supported) and fetch them for observability in parallel with inference.
+This can be more efficient, but may result in different content being observed if the URL content changes between when the provider fetches it and when TensorZero fetches it for observability.
 
 ### `observability.async_writes`
 
@@ -154,7 +192,7 @@ observability.enabled = true
 
 Disable automatic running of the TensorZero migrations when the TensorZero Gateway launches.
 If `true`, then the migrations are not applied upon launch and must instead be applied manually
-by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-migrations-only`.
+by running `docker run --rm -e TENSORZERO_CLICKHOUSE_URL=$TENSORZERO_CLICKHOUSE_URL tensorzero/gateway:{version} --run-clickhouse-migrations` or `docker compose run --rm gateway --run-clickhouse-migrations`.
 If `false`, then the migrations are run automatically upon launch.
 
 ### `template_filesystem_access`
@@ -457,7 +495,7 @@ model_name = "claude-3-haiku-20240307"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::ANTHROPIC_API_KEY`)
+- **Required:** no (default: `env::ANTHROPIC_API_KEY` unless set otherwise in `provider_type.anthropic.defaults.api_key_location`)
 
 Defines the location of the API key for the Anthropic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -640,7 +678,7 @@ If the endpoint starts with `dynamic::`, the succeeding value will be treated as
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::AZURE_OPENAI_API_KEY`)
+- **Required:** no (default: `env::AZURE_OPENAI_API_KEY` unless set otherwise in `provider_type.azure.defaults.api_key_location`)
 
 Defines the location of the API key for the Azure OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -676,7 +714,7 @@ model_name = "deepseek-chat"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::DEEPSEEK_API_KEY`)
+- **Required:** no (default: `env::DEEPSEEK_API_KEY` unless set otherwise in `provider_type.deepseek.defaults.api_key_location`)
 
 Defines the location of the API key for the DeepSeek provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -714,7 +752,7 @@ model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::FIREWORKS_API_KEY`)
+- **Required:** no (default: `env::FIREWORKS_API_KEY` unless set otherwise in `provider_type.fireworks.defaults.api_key_location`)
 
 Defines the location of the API key for the Fireworks provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -792,7 +830,7 @@ project_id = "your-project-id"
 ##### `credential_location`
 
 - **Type:** string
-- **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
+- **Required:** no (default: `env::GCP_CREDENTIALS_PATH` unless otherwise set in `provider_type.gcp_vertex_anthropic.defaults.credential_location`)
 
 Defines the location of the credentials for the GCP Vertex Anthropic provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
 
@@ -869,7 +907,7 @@ project_id = "your-project-id"
 ##### `credential_location`
 
 - **Type:** string
-- **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
+- **Required:** no (default: `env::GCP_CREDENTIALS_PATH` unless otherwise set in `provider_type.gcp_vertex_gemini.defaults.credential_location`)
 
 Defines the location of the credentials for the GCP Vertex Gemini provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
 
@@ -906,7 +944,7 @@ model_name = "gemini-1.5-flash-001"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::GOOGLE_AI_STUDIO_API_KEY`)
+- **Required:** no (default: `env::GOOGLE_AI_STUDIO_API_KEY` unless otherwise set in `provider_type.google_ai_studio.defaults.credential_location`)
 
 Defines the location of the API key for the Google AI Studio Gemini provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -943,7 +981,7 @@ model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::GROQ_API_KEY`)
+- **Required:** no (default: `env::GROQ_API_KEY` unless otherwise set in `provider_type.groq.defaults.credential_location`)
 
 Defines the location of the API key for the Groq provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -980,7 +1018,7 @@ model_name = "meta-llama/Meta-Llama-3-70B-Instruct"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::HYPERBOLIC_API_KEY`)
+- **Required:** no (default: `env::HYPERBOLIC_API_KEY` unless otherwise set in `provider_type.hyperbolic.defaults.api_key_location`)
 
 Defines the location of the API key for the Hyperbolic provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -1017,7 +1055,7 @@ model_name = "open-mistral-nemo-2407"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::MISTRAL_API_KEY`)
+- **Required:** no (default: `env::MISTRAL_API_KEY` unless otherwise set in `provider_type.mistral.defaults.api_key_location`)
 
 Defines the location of the API key for the Mistral provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -1072,7 +1110,7 @@ model_name = "gpt-4o-mini-2024-07-18"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::OPENAI_API_KEY`)
+- **Required:** no (default: `env::OPENAI_API_KEY` unless otherwise set in `provider_types.openai.defaults.api_key_location`)
 
 Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -1110,7 +1148,7 @@ model_name = "openai/gpt4.1"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::OPENROUTER_API_KEY`)
+- **Required:** no (default: `env::OPENROUTER_API_KEY` unless otherwise set in `provider_types.openrouter.defaults.api_key_location`)
 
 Defines the location of the API key for the OpenRouter provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -1184,7 +1222,7 @@ model_name = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::TOGETHER_API_KEY`)
+- **Required:** no (default: `env::TOGETHER_API_KEY` unless otherwise set in `provider_types.together.defaults.api_key_location`)
 
 Defines the location of the API key for the Together AI provider. The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
 
@@ -1272,7 +1310,7 @@ model_name = "grok-2-1212"
 ##### `api_key_location`
 
 - **Type:** string
-- **Required:** no (default: `env::XAI_API_KEY`)
+- **Required:** no (default: `env::XAI_API_KEY` unless otherwise set in `provider_types.xai.defaults.api_key_location`)
 
 Defines the location of the API key for the xAI provider.
 The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
@@ -1522,6 +1560,319 @@ type = "openai"
 api_key_location = "dynamic::openai_api_key"
 # api_key_location = "env::ALTERNATE_OPENAI_API_KEY"
 # api_key_location = "none"
+# ...
+```
+
+</Accordion>
+
+## `[provider_types]`
+
+The `provider_types` section of the configuration allows users to specify global settings that are related to the handling of a particular inference provider type (like `"openai"` or `"anthropic"`), such as where to look by default for credentials.
+
+<Accordion title="[provider_types.anthropic]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::ANTHROPIC_API_KEY`)
+
+Defines the default location of the API key for Anthropic models.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.anthropic.defaults]
+# ...
+api_key_location = "dynamic::anthropic_api_key"
+# api_key_location = "env::ALTERNATE_ANTHROPIC_API_KEY"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.azure]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::AZURE_OPENAI_API_KEY`)
+
+Defines the default location of the API key for Azure models.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.azure.defaults]
+# ...
+api_key_location = "dynamic::azure_openai_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.deepseek]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::DEEPSEEK_API_KEY`)
+
+Defines the location of the API key for the DeepSeek provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.deepseek.defaults]
+# ...
+api_key_location = "dynamic::deepseek_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.fireworks]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::FIREWORKS_API_KEY`)
+
+Defines the location of the API key for the Fireworks provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.fireworks.defaults]
+# ...
+api_key_location = "dynamic::fireworks_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.gcp_vertex_anthropic]">
+
+##### `defaults.credential_location`
+
+- **Type:** string
+- **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
+
+Defines the location of the credentials for the GCP Vertex Anthropic provider.
+The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
+
+```toml title="tensorzero.toml"
+[provider_types.gcp_vertex_anthropic.defaults]
+# ...
+credential_location = "dynamic::gcp_credentials_path"
+# credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
+# credential_location = "file::PATH_TO_CREDENTIALS_FILE"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.gcp_vertex_gemini]">
+
+#### `batch`
+
+- **Type:** object
+- **Required:** no (default: `null`)
+
+The `batch` object allows you to configure batch processing for GCP Vertex models.
+Today we support batch inference through GCP Vertex using Google cloud storage as documented [here](https://cloud.google.com/vertex-ai/docs/tabular-data/classification-regression/get-batch-predictions#api:-cloud-storage).
+To do this you must also have object_storage (see the [object_storage](#object_storage) section) configured using GCP.
+
+```toml title="tensorzero.toml"
+[provider_types.gcp_vertex_gemini.batch]
+storage_type = "cloud_storage"
+input_uri_prefix = "gs://my-bucket/batch-inputs/"
+output_uri_prefix = "gs://my-bucket/batch-outputs/"
+```
+
+The `batch` object supports the following configuration:
+
+##### `storage_type`
+
+- **Type:** string
+- **Required:** no (default `"none"`)
+
+Defines the storage type for batch processing. Currently, only `"cloud_storage"` and `"none"` are supported.
+
+##### `input_uri_prefix`
+
+- **Type:** string
+- **Required:** yes when `storage_type` is `"cloud_storage"`
+
+Defines the Google Cloud Storage URI prefix where batch input files will be stored.
+
+##### `output_uri_prefix`
+
+- **Type:** string
+- **Required:** yes when `storage_type` is `"cloud_storage"`
+
+Defines the Google Cloud Storage URI prefix where batch output files will be stored.
+
+##### `defaults.credential_location`
+
+- **Type:** string
+- **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
+
+Defines the location of the credentials for the GCP Vertex Gemini provider. The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details), and `file::PATH_TO_CREDENTIALS_FILE`.
+
+```toml title="tensorzero.toml"
+[provider_types.gcp_vertex_gemini.defaults]
+# ...
+credential_location = "dynamic::gcp_credentials_path"
+# credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
+# credential_location = "file::PATH_TO_CREDENTIALS_FILE"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.google_ai_studio]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::GOOGLE_AI_STUDIO_API_KEY`)
+
+Defines the location of the API key for the Google AI Studio provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.google_ai_studio.defaults]
+# ...
+api_key_location = "dynamic::google_ai_studio_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.groq]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::GROQ_API_KEY`)
+
+Defines the location of the API key for the Groq provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.groq.defaults]
+# ...
+api_key_location = "dynamic::groq_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.hyperbolic]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::HYPERBOLIC_API_KEY`)
+
+Defines the location of the API key for the Hyperbolic provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.hyperbolic.defaults]
+# ...
+api_key_location = "dynamic::hyperbolic_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.mistral]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::MISTRAL_API_KEY`)
+
+Defines the location of the API key for the Mistral provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.mistral.defaults]
+# ...
+api_key_location = "dynamic::mistral_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.openai]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::OPENAI_API_KEY`)
+
+Defines the location of the API key for the OpenAI provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.openai.defaults]
+# ...
+api_key_location = "dynamic::openai_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.openrouter]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::OPENROUTER_API_KEY`)
+
+Defines the location of the API key for the OpenRouter provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.openrouter.defaults]
+# ...
+api_key_location = "dynamic::openrouter_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.together]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::TOGETHER_API_KEY`)
+
+Defines the location of the API key for the Together provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.together.defaults]
+# ...
+api_key_location = "dynamic::together_api_key"
+# ...
+```
+
+</Accordion>
+
+<Accordion title="[provider_types.xai]">
+
+##### `defaults.api_key_location`
+
+- **Type:** string
+- **Required:** no (default: `env::XAI_API_KEY`)
+
+Defines the location of the API key for the xAI provider.
+The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+
+```toml title="tensorzero.toml"
+[provider_types.xai.defaults]
+# ...
+api_key_location = "dynamic::xai_api_key"
 # ...
 ```
 
@@ -2702,6 +3053,16 @@ k = 10
 # ...
 ```
 
+##### `max_distance`
+
+- **Type:** non-negative float
+- **Required:** no (default: none)
+
+Filters retrieved examples based on their cosine distance from the input embedding.
+Only examples with a cosine distance less than or equal to the specified threshold are included in the prompt.
+
+If all examples are filtered out due to this threshold, the variant falls back to default chat completion behavior.
+
 ##### `max_tokens`
 
 - **Type:** integer
@@ -3161,3 +3522,136 @@ If you set `type = "disabled"`, the TensorZero Gateway will not store or retriev
 There are no additional fields available for this type.
 
 </Accordion>
+
+## `[rate_limiting]`
+
+The `[rate_limiting]` section allows you to configure granular rate limits for your TensorZero Gateway.
+Rate limits help you control usage, manage costs, and prevent abuse.
+
+See [Enforce Custom Rate Limits](/operations/enforce-custom-rate-limits/) for a comprehensive guide on rate limiting.
+
+### `enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `true`)
+
+Enable or disable rate limiting enforcement.
+When set to `false`, rate limiting rules will not be enforced even if they are defined.
+
+```toml
+[rate_limiting]
+enabled = true
+```
+
+### `[[rate_limiting.rules]]`
+
+Rate limiting rules are defined as an array of rule configurations.
+Each rule specifies rate limits for specific resources (model inferences, tokens), time windows, scopes, and priorities.
+
+#### Rate Limit Fields
+
+You can set rate limits for different resources and time windows using the following field formats:
+
+- `model_inferences_per_second`
+- `model_inferences_per_minute`
+- `model_inferences_per_hour`
+- `model_inferences_per_day`
+- `model_inferences_per_week`
+- `model_inferences_per_month`
+- `tokens_per_second`
+- `tokens_per_minute`
+- `tokens_per_hour`
+- `tokens_per_day`
+- `tokens_per_week`
+- `tokens_per_month`
+
+Each rate limit field can be specified in two formats:
+
+**Simple Format:** A single integer value that sets both the capacity and refill rate to the same value.
+
+```toml
+[[rate_limiting.rules]]
+model_inferences_per_minute = 100
+tokens_per_hour = 10000
+```
+
+**Bucket Format:** An object with explicit `capacity` and `refill_rate` fields for fine-grained control over the token bucket algorithm.
+
+```toml
+[[rate_limiting.rules]]
+tokens_per_minute = { capacity = 1000, refill_rate = 500 }
+```
+
+<Note>
+
+The simple format is equivalent to setting `capacity` and `refill_rate` to the same value.
+The bucket format allows you to configure burst capacity independently from the sustained rate.
+
+</Note>
+
+#### `priority`
+
+- **Type:** integer
+- **Required:** yes (unless `always` is set to `true`)
+
+Defines the priority of the rule.
+When multiple rules match a request, only the rules with the highest priority value are applied.
+
+```toml
+[[rate_limiting.rules]]
+model_inferences_per_minute = 10
+priority = 1
+```
+
+#### `always`
+
+- **Type:** boolean
+- **Required:** no (mutually exclusive with `priority`)
+
+When set to `true`, this rule will always be applied regardless of priority.
+This is useful for global fallback limits.
+
+You cannot specify both `always` and `priority` in the same rule.
+
+```toml
+[[rate_limiting.rules]]
+tokens_per_hour = 1000000
+always = true
+```
+
+#### `scope`
+
+- **Type:** array of scope objects
+- **Required:** no (default: `[]`)
+
+Defines the scope to which the rate limit applies.
+Scopes allow you to apply rate limits to specific subsets of requests based on tags.
+
+The following scopes are supported:
+
+- Tags:
+  - `tag_key` (string): The tag key to match against.
+  - `tag_value` (string): The tag value to match against. This can be:
+    - `tensorzero::each`: Apply the limit separately to each unique value of the tag.
+    - `tensorzero::total`: Apply the limit to the aggregate of all requests with this tag, regardless of the tag's value.
+    - Any other string: Apply the limit only when the tag has this specific value.
+
+For example:
+
+```toml
+# Each individual user can make a maximum of 1 model inference per minute
+[[rate_limiting.rules]]
+priority = 0
+model_inferences_per_minute = 1
+scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" }
+]
+
+# But override the individual limit for the CEO
+[[rate_limiting.rules]]
+priority = 1
+model_inferences_per_minute = 5
+scope = [
+    { tag_key = "user_id", tag_value = "ceo" }
+]
+```

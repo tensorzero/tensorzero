@@ -333,7 +333,7 @@ pub async fn insert_from_existing_datapoint_handler(
 pub async fn update_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<UpdatePathParams>,
-    // This is deserialized as either a `SyntheticChatInferenceDatapoint` or `SyntheticJsonInferenceDatapoint`,
+    // This is deserialized as either a `UpdateChatInferenceDatapointRequest` or `UpdateJsonInferenceDatapointRequest`,
     // based on the type of the function looked up from the `function_name` key.
     StructuredJson(params): StructuredJson<serde_json::Value>,
 ) -> Result<Json<InsertDatapointResponse>, Error> {
@@ -352,10 +352,12 @@ pub async fn update_datapoint_handler(
         .config
         .get_function(&function_data.function_name)?;
 
+    // NOTE(shuyangli): Prior to 2025-10-02, this endpoint was not used to update datapoints in-place (they used
+    // to always get a new ID, marked as custom, and lose their episode association). Now this can be used to update metadata like name.
     match **function_config {
         FunctionConfig::Chat(_) => {
-            let chat: SyntheticChatInferenceDatapoint =
-                serde_json::from_value(params).map_err(|e| {
+            let chat: UpdateChatInferenceDatapointRequest = serde_json::from_value(params)
+                .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Failed to deserialize chat datapoint: {e}"),
                     })
@@ -368,7 +370,7 @@ pub async fn update_datapoint_handler(
                 .resolve()
                 .await?;
             function_config.validate_input(&chat.input)?;
-            // If there are no tool params in the SyntheticChatInferenceDatapoint, we use the default tool params (empty tools).
+            // If there are no tool params in the UpdateChatInferenceDatapointRequest, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
             let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
                 chat.tool_params
@@ -403,16 +405,16 @@ pub async fn update_datapoint_handler(
                 function_name: chat.function_name,
                 name: chat.name,
                 id: path_params.datapoint_id,
-                episode_id: None,
+                episode_id: chat.episode_id,
                 input: resolved_input.into_stored_input(),
                 output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
-                is_deleted: false,
+                is_deleted: chat.is_deleted,
                 is_custom: chat.is_custom,
                 source_inference_id: chat.source_inference_id,
-                staled_at: None,
+                staled_at: chat.staled_at,
             };
             let rows_written =
                 put_chat_datapoints(&app_state.clickhouse_connection_info, &[datapoint]).await?;
@@ -423,8 +425,8 @@ pub async fn update_datapoint_handler(
             }
         }
         FunctionConfig::Json(_) => {
-            let json: SyntheticJsonInferenceDatapoint =
-                serde_json::from_value(params).map_err(|e| {
+            let json: UpdateJsonInferenceDatapointRequest = serde_json::from_value(params)
+                .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Failed to deserialize JSON datapoint: {e}"),
                     })
@@ -472,16 +474,16 @@ pub async fn update_datapoint_handler(
                 function_name: json.function_name,
                 name: json.name,
                 id: path_params.datapoint_id,
-                episode_id: None,
+                episode_id: json.episode_id,
                 input: resolved_input.into_stored_input(),
                 output,
                 output_schema: json.output_schema,
                 tags: json.tags,
                 auxiliary: json.auxiliary,
-                is_deleted: false,
+                is_deleted: json.is_deleted,
                 is_custom: json.is_custom,
                 source_inference_id: json.source_inference_id,
-                staled_at: None,
+                staled_at: json.staled_at,
             };
             let rows_written =
                 put_json_datapoints(&app_state.clickhouse_connection_info, &[datapoint]).await?;
@@ -516,10 +518,10 @@ pub struct InsertDatapointPathParams {
     pub dataset_name: String,
 }
 
-// The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
+// The handler for the POST `/datasets/{dataset_name}/datapoints` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
-pub async fn bulk_insert_datapoints_handler(
+#[tracing::instrument(name = "create_datapoints_handler", skip(app_state, params))]
+pub async fn create_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
@@ -533,6 +535,20 @@ pub async fn bulk_insert_datapoints_handler(
     )
     .await?;
     Ok(Json(datapoint_ids))
+}
+
+/// DEPRECATED: Use the POST `/datasets/{dataset_name}/datapoints` endpoint instead.
+#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+pub async fn bulk_insert_datapoints_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<InsertDatapointPathParams>,
+    StructuredJson(params): StructuredJson<InsertDatapointParams>,
+) -> Result<Json<Vec<Uuid>>, Error> {
+    tracing::warn!(
+        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/datasets/{dataset_name}/datapoints` instead.",
+        dataset_name = path_params.dataset_name
+    );
+    create_datapoints_handler(State(app_state), Path(path_params), StructuredJson(params)).await
 }
 
 pub async fn insert_datapoint(
@@ -1119,8 +1135,9 @@ pub struct ExistingInferenceInfo {
     pub episode_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum DatapointKind {
     Chat,
     Json,
@@ -1183,6 +1200,13 @@ impl Datapoint {
         match self {
             Datapoint::Chat(datapoint) => datapoint.id,
             Datapoint::Json(datapoint) => datapoint.id,
+        }
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.name.as_deref(),
+            Datapoint::Json(datapoint) => datapoint.name.as_deref(),
         }
     }
 }
@@ -1252,6 +1276,11 @@ impl Datapoint {
             Datapoint::Chat(datapoint) => datapoint.is_custom,
             Datapoint::Json(datapoint) => datapoint.is_custom,
         }
+    }
+
+    #[getter]
+    pub fn get_name(&self) -> Option<String> {
+        self.name().map(std::string::ToString::to_string)
     }
 }
 
@@ -1468,11 +1497,16 @@ where
     }
 }
 
-// SyntheticChatInferenceDatapoints are created by `update_datapoint_handler` and represent datapoints not derived from inferences. In storage their `source_inference_id` is null.
+// UpdateChatInferenceDatapointRequest is used in `update_datapoint_handler` to update an existing ChatInferenceDatapoint
+// in place. It's not a partial update - the entire request is written to the database.
+//
+// TODO(shuyangli): this is currently being manually kept in sync with `ChatInferenceDatapoint`. Can we fix this?
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SyntheticChatInferenceDatapoint {
+pub struct UpdateChatInferenceDatapointRequest {
     pub function_name: String,
+    #[serde(default)]
+    pub episode_id: Option<Uuid>,
     pub input: Input,
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
@@ -1483,18 +1517,27 @@ pub struct SyntheticChatInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
     pub auxiliary: String,
+    #[serde(default)]
+    pub is_deleted: bool,
     pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
     #[serde(default)]
+    pub staled_at: Option<String>,
+    #[serde(default)]
     pub name: Option<String>,
 }
 
-// SyntheticJsonInferenceDatapoints are created by `update_datapoint_handler` and represent datapoints not derived from inferences. In storage their `source_inference_id` is null.
+// UpdateJsonInferenceDatapointRequest is used in `update_datapoint_handler` to update an existing JsonInferenceDatapoint
+// in place. It's not a partial update - the entire request is written to the database.
+//
+// TODO(shuyangli): this is currently being manually kept in sync with `JsonInferenceDatapoint`. Can we fix this?
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SyntheticJsonInferenceDatapoint {
+pub struct UpdateJsonInferenceDatapointRequest {
     pub function_name: String,
+    #[serde(default)]
+    pub episode_id: Option<Uuid>,
     pub input: Input,
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
@@ -1504,9 +1547,13 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
+    #[serde(default)]
+    pub is_deleted: bool,
     pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+    #[serde(default)]
+    pub staled_at: Option<String>,
     #[serde(default)]
     pub name: Option<String>,
 }
@@ -1733,7 +1780,8 @@ mod test {
             "is_custom": false
         }"#;
 
-        let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateChatInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(datapoint.tool_params, None);
@@ -1754,7 +1802,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateChatInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_function");
         assert!(datapoint.output.is_some());
         assert!(datapoint.tool_params.is_some());
@@ -1778,7 +1827,8 @@ mod test {
             "is_custom": false
         }"#;
 
-        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(datapoint.output_schema, json!({}));
@@ -1799,7 +1849,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert!(datapoint.output.is_some());
         assert_eq!(datapoint.output.as_ref().unwrap()["answer"], "Hello");
@@ -1822,7 +1873,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(

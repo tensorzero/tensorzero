@@ -69,6 +69,10 @@ pub enum XAICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<XAICredentials>,
+        fallback: Box<XAICredentials>,
+    },
 }
 
 impl TryFrom<Credential> for XAICredentials {
@@ -80,6 +84,10 @@ impl TryFrom<Credential> for XAICredentials {
             Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
             Credential::None => Ok(XAICredentials::None),
             Credential::Missing => Ok(XAICredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(XAICredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for xAI provider".to_string(),
             })),
@@ -101,6 +109,16 @@ impl XAICredentials {
                 }
                 .into()
             }),
+            XAICredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
+            }
             XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
@@ -346,7 +364,10 @@ impl<'a> XAIRequest<'a> {
         let response_format = XAIResponseFormat::new(request.json_mode, request.output_schema);
 
         let messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
             OpenAIMessagesConfig {
                 json_mode: Some(&request.json_mode),

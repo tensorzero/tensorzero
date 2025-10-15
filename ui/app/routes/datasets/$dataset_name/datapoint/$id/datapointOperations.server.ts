@@ -1,11 +1,16 @@
 import { v7 as uuid } from "uuid";
-import type { ParsedDatasetRow } from "~/utils/clickhouse/datasets";
+import type {
+  ParsedDatasetRow,
+  ParsedChatInferenceDatapointRow,
+  ParsedJsonInferenceDatapointRow,
+} from "~/utils/clickhouse/datasets";
 import {
-  getDatasetCounts,
+  getDatasetMetadata,
   staleDatapoint,
 } from "~/utils/clickhouse/datasets.server";
 import { getTensorZeroClient } from "~/utils/tensorzero.server";
 import { resolvedInputToTensorZeroInput } from "~/routes/api/tensorzero/inference.utils";
+import type { Datapoint } from "~/utils/tensorzero";
 import { toDatasetUrl } from "~/utils/urls";
 
 // ============================================================================
@@ -41,6 +46,52 @@ function transformOutputForTensorZero(
   }
 }
 
+/**
+ * Transforms a chat datapoint for submission to the TensorZero client.
+ */
+function transformChatDatapointForUpdateRequest(
+  datapoint: ParsedChatInferenceDatapointRow,
+): Datapoint {
+  const transformed: Datapoint = {
+    function_name: datapoint.function_name,
+    id: datapoint.id,
+    episode_id: datapoint.episode_id,
+    input: resolvedInputToTensorZeroInput(datapoint.input),
+    output: transformOutputForTensorZero(datapoint.output),
+    tags: datapoint.tags || {},
+    auxiliary: datapoint.auxiliary,
+    source_inference_id: datapoint.source_inference_id,
+    is_custom: datapoint.is_custom,
+    name: datapoint.name,
+    tool_params: datapoint.tool_params,
+    staled_at: datapoint.staled_at,
+  };
+  return transformed;
+}
+
+/**
+ * Transforms a JSON datapoint for submission to the TensorZero client.
+ */
+function transformJsonDatapointForUpdateRequest(
+  datapoint: ParsedJsonInferenceDatapointRow,
+): Datapoint {
+  const transformed: Datapoint = {
+    function_name: datapoint.function_name,
+    id: datapoint.id,
+    episode_id: datapoint.episode_id,
+    input: resolvedInputToTensorZeroInput(datapoint.input),
+    output: transformOutputForTensorZero(datapoint.output),
+    tags: datapoint.tags || {},
+    auxiliary: datapoint.auxiliary,
+    source_inference_id: datapoint.source_inference_id,
+    is_custom: datapoint.is_custom,
+    name: datapoint.name,
+    output_schema: datapoint.output_schema,
+    staled_at: datapoint.staled_at,
+  };
+  return transformed;
+}
+
 // ============================================================================
 // Core Operations
 // ============================================================================
@@ -54,7 +105,7 @@ export async function deleteDatapoint(params: {
 
   await staleDatapoint(dataset_name, id, functionType);
 
-  const datasetCounts = await getDatasetCounts({});
+  const datasetCounts = await getDatasetMetadata({});
   const datasetCount = datasetCounts.find(
     (count) => count.dataset_name === dataset_name,
   );
@@ -65,49 +116,46 @@ export async function deleteDatapoint(params: {
   return { redirectTo: toDatasetUrl(dataset_name) };
 }
 
+/**
+ * Saves a datapoint by creating a new version with a new ID and marking the old one as stale.
+ * The function type (chat/json) is automatically determined from the datapoint structure.
+ *
+ * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
+ */
 export async function saveDatapoint(params: {
   parsedFormData: ParsedDatasetRow;
   functionType: "chat" | "json";
 }): Promise<{ newId: string }> {
   const { parsedFormData, functionType } = params;
 
-  // Transform input to match TensorZero client's expected format
-  const transformedInput = resolvedInputToTensorZeroInput(parsedFormData.input);
-  const transformedOutput = transformOutputForTensorZero(parsedFormData.output);
+  // Determine function type from datapoint structure and transform accordingly
+  let datapoint: Datapoint;
+  if (functionType === "json") {
+    if (!("output_schema" in parsedFormData)) {
+      throw new Error(`Json datapoint is missing output_schema`);
+    }
+    datapoint = transformJsonDatapointForUpdateRequest(
+      parsedFormData as ParsedJsonInferenceDatapointRow,
+    );
+  } else if (functionType === "chat") {
+    datapoint = transformChatDatapointForUpdateRequest(
+      parsedFormData as ParsedChatInferenceDatapointRow,
+    );
+  } else {
+    throw new Error(`Invalid function type: ${functionType}`);
+  }
+
+  // When saving a datapoint as new, we create a new ID, and mark the data point as "custom".
+  datapoint.id = uuid();
+  datapoint.is_custom = true;
+  datapoint.episode_id = null;
+  datapoint.staled_at = null;
 
   // For future reference:
   // These two calls would be a transaction but ClickHouse isn't transactional.
-  const baseDatapoint = {
-    function_name: parsedFormData.function_name,
-    input: transformedInput,
-    output: transformedOutput,
-    tags: parsedFormData.tags || {},
-    auxiliary: parsedFormData.auxiliary,
-    is_custom: true, // we're saving it after an edit, so it's custom
-    source_inference_id: parsedFormData.source_inference_id,
-    id: uuid(), // We generate a new ID here because we want old evaluation runs to be able to point to the correct data.
-  };
-
-  let datapoint;
-  if (functionType === "json" && "output_schema" in parsedFormData) {
-    datapoint = {
-      ...baseDatapoint,
-      output_schema: parsedFormData.output_schema,
-    };
-  } else if (functionType === "chat") {
-    datapoint = {
-      ...baseDatapoint,
-      tool_params:
-        "tool_params" in parsedFormData
-          ? parsedFormData.tool_params
-          : undefined,
-    };
-  } else {
-    throw new Error(
-      `Unexpected function type "${functionType}" or missing required properties on datapoint`,
-    );
-  }
-
+  //
+  // TODO(shuyangli): this should actually use "createDatapoint" since we're creating a new datapoint. We should reason about the
+  // safety and do it in a follow-up.
   const { id } = await getTensorZeroClient().updateDatapoint(
     parsedFormData.dataset_name,
     datapoint,
@@ -120,4 +168,42 @@ export async function saveDatapoint(params: {
   );
 
   return { newId: id };
+}
+
+/**
+ * Renames a datapoint by re-inserting the datapoint with the new name.
+ *
+ * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
+ */
+export async function renameDatapoint(params: {
+  functionType: "chat" | "json";
+  datasetName: string;
+  datapoint: ParsedDatasetRow;
+  newName: string;
+}): Promise<void> {
+  const { functionType, datasetName, datapoint, newName } = params;
+
+  let transformedDatapoint: Datapoint;
+  if (functionType === "json") {
+    if (!("output_schema" in datapoint)) {
+      throw new Error(`Json datapoint is missing output_schema`);
+    }
+    transformedDatapoint = transformJsonDatapointForUpdateRequest(
+      datapoint as ParsedJsonInferenceDatapointRow,
+    );
+  } else if (functionType === "chat") {
+    transformedDatapoint = transformChatDatapointForUpdateRequest(
+      datapoint as ParsedChatInferenceDatapointRow,
+    );
+  } else {
+    throw new Error(`Invalid function type: ${functionType}`);
+  }
+
+  // Update name
+  transformedDatapoint.name = newName;
+
+  await getTensorZeroClient().updateDatapoint(
+    datasetName,
+    transformedDatapoint,
+  );
 }

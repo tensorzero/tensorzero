@@ -81,6 +81,10 @@ pub enum TGICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<TGICredentials>,
+        fallback: Box<TGICredentials>,
+    },
 }
 
 impl TryFrom<Credential> for TGICredentials {
@@ -92,6 +96,10 @@ impl TryFrom<Credential> for TGICredentials {
             Credential::Dynamic(key_name) => Ok(TGICredentials::Dynamic(key_name)),
             Credential::None => Ok(TGICredentials::None),
             Credential::Missing => Ok(TGICredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(TGICredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for TGI provider".to_string(),
             })),
@@ -115,6 +123,16 @@ impl TGICredentials {
                     .into()
                 }))
                 .transpose()
+            }
+            TGICredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             TGICredentials::None => Ok(None),
         }
@@ -440,7 +458,10 @@ impl<'a> TGIRequest<'a> {
         };
 
         let messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
             OpenAIMessagesConfig {
                 json_mode: Some(&request.json_mode),

@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
         args: ["--maxkb=1024"]
@@ -21,7 +21,8 @@ repos:
         exclude: |
           (?x)^(
               tensorzero-core/src/providers/gcp_vertex_gemini/mod\.rs|
-              ci/dummy-gcp-credentials\.json
+              ci/dummy-gcp-credentials\.json|
+              tensorzero-core/tests/e2e/self-signed-certs/.*
           )$
       - id: end-of-file-fixer
         exclude: \.minijinja$
@@ -54,6 +55,7 @@ repos:
         name: "prettier: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run format'
         language: node
+        language_version: "22.9.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
@@ -67,6 +69,7 @@ repos:
         name: "prettier: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run format'
         language: node
+        language_version: "22.9.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
@@ -80,6 +83,7 @@ repos:
         name: "prettier: tensorzero-node"
         entry: bash -c 'pnpm --filter=tensorzero-node run format'
         language: node
+        language_version: "22.9.0"
         types_or:
           [css, html, javascript, json, jsx, markdown, scss, ts, tsx, yaml]
         additional_dependencies:
@@ -93,6 +97,7 @@ repos:
         name: "eslint: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run lint'
         language: node
+        language_version: "22.9.0"
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
           - eslint
@@ -104,6 +109,7 @@ repos:
         name: "eslint: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run lint'
         language: node
+        language_version: "22.9.0"
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
           - eslint
@@ -115,6 +121,7 @@ repos:
         name: "eslint: tensorzero-node"
         entry: bash -c 'pnpm --filter=tensorzero-node run lint'
         language: node
+        language_version: "22.9.0"
         types_or: [javascript, jsx, ts, tsx]
         additional_dependencies:
           - eslint
@@ -126,6 +133,7 @@ repos:
         name: "tsc: ui"
         entry: bash -c 'pnpm --filter=tensorzero-ui run typecheck'
         language: node
+        language_version: "22.9.0"
         types_or: [ts, tsx]
         additional_dependencies:
           - typescript
@@ -135,6 +143,7 @@ repos:
         name: "tsc: openai-node"
         entry: bash -c 'pnpm --filter=openai-node run typecheck'
         language: node
+        language_version: "22.9.0"
         types_or: [ts, tsx]
         additional_dependencies:
           - typescript
@@ -144,6 +153,7 @@ repos:
         name: "tsc: tensorzero-node"
         entry: bash -c 'pnpm --filter=tensorzero-node run typecheck'
         language: node
+        language_version: "22.9.0"
         types_or: [ts, tsx]
         additional_dependencies:
           - typescript
@@ -157,7 +167,7 @@ repos:
           - --remove-empty-cells
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.0
+    rev: v0.14.0
     hooks:
       - id: ruff
         args: ["--extend-select", "I", "--fix"]
