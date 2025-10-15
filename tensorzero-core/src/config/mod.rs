@@ -82,14 +82,14 @@ pub fn skip_credential_validation() -> bool {
 #[cfg_attr(test, ts(export))]
 pub struct Config {
     pub gateway: GatewayConfig,
-    pub models: ModelTable,                    // model name => model config
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub models: Arc<ModelTable>, // model name => model config
+    pub embedding_models: Arc<EmbeddingModelTable>, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     #[serde(skip)]
-    pub templates: TemplateConfig<'static>,
+    pub templates: Arc<TemplateConfig<'static>>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
@@ -547,28 +547,29 @@ impl ConfigFileGlob {
     }
 
     pub fn new(glob: String) -> Result<Self, Error> {
-        let mut glob_paths = glob::glob(&glob)
+        // Build a matcher from the glob pattern
+        let matcher = globset::Glob::new(&glob)
             .map_err(|e| {
                 Error::new(ErrorDetails::Glob {
                     glob: glob.to_string(),
                     message: e.to_string(),
                 })
             })?
-            .map(|path_res| {
-                path_res.map_err(|e| {
-                    Error::new(ErrorDetails::Glob {
-                        glob: glob.to_string(),
-                        message: format!("Error processing globbed path: `{e}`"),
-                    })
-                })
-            })
-            .collect::<Result<Vec<PathBuf>, Error>>()?;
+            .compile_matcher();
+
+        // Extract the base path to start walking from
+        let base_path = extract_base_path_from_glob(&glob);
+
+        // Find all files matching the glob pattern
+        let mut glob_paths = find_matching_files(&base_path, &matcher);
+
         if glob_paths.is_empty() {
             return Err(Error::new(ErrorDetails::Glob {
                 glob: glob.to_string(),
                 message: "No files matched the glob pattern. Ensure that the path exists, and contains at least one file.".to_string(),
             }));
         }
+
         // Sort the paths to avoid depending on the filesystem iteration order
         // when we merge configs. This should only affect the precise error message we display,
         // not whether or not the config parses successfully (or the final `Config`
@@ -580,6 +581,78 @@ impl ConfigFileGlob {
             _private: (),
         })
     }
+}
+
+/// Extract the base path from a glob pattern.
+///
+/// This finds the longest literal path prefix before any glob metacharacters,
+/// following the same approach as the glob crate. It works at the path component
+/// level (not character level) for better handling of path separators.
+///
+/// # Examples
+/// - `/tmp/config/tensorzero.toml` → `/tmp/config/tensorzero.toml`
+/// - `/tmp/config/**/*.toml` → `/tmp/config`
+/// - `config/**/*.toml` → `config`
+/// - `*.toml` → `.`
+fn extract_base_path_from_glob(glob: &str) -> PathBuf {
+    let path = Path::new(glob);
+    let mut base_components = Vec::new();
+
+    for component in path.components() {
+        let component_str = component.as_os_str().to_string_lossy();
+        // Stop at the first component containing glob metacharacters
+        if component_str.contains(['*', '?', '[', ']', '{', '}']) {
+            break;
+        }
+        base_components.push(component);
+    }
+
+    if base_components.is_empty() {
+        PathBuf::from(".")
+    } else {
+        base_components.iter().collect()
+    }
+}
+/// Check which files match the glob pattern.
+/// If the base path is a file, check it directly against the matcher.
+/// If the base path is a directory, walk it.
+fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<PathBuf> {
+    let mut matched_files = Vec::new();
+
+    // If base_path is a file, check it directly against the matcher
+    if base_path.is_file() {
+        if matcher.is_match(base_path) {
+            matched_files.push(base_path.to_path_buf());
+        }
+        return matched_files;
+    }
+
+    // If base_path is a directory, walk it
+    for entry in walkdir::WalkDir::new(base_path)
+        .follow_links(false)
+        .into_iter()
+    {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() && matcher.is_match(path) {
+                    matched_files.push(path.to_path_buf());
+                }
+            }
+            Err(e) => {
+                let error_path = e
+                    .path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| base_path.to_string_lossy().into_owned());
+                tracing::warn!(
+                    "Skipping `{}` while scanning for configuration files: {e}",
+                    error_path
+                );
+            }
+        }
+    }
+
+    matched_files
 }
 
 impl Config {
@@ -618,7 +691,7 @@ impl Config {
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let templates = TemplateConfig::new();
+        let mut templates = TemplateConfig::new();
 
         let functions = uninitialized_config
             .functions
@@ -695,13 +768,13 @@ impl Config {
 
         let mut config = Config {
             gateway: uninitialized_config.gateway.load()?,
-            models,
-            embedding_models,
+            models: Arc::new(models),
+            embedding_models: Arc::new(embedding_models),
             functions,
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
-            templates,
+            templates: Arc::new(TemplateConfig::new()), // Will be populated below
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
@@ -742,9 +815,8 @@ impl Config {
         } else {
             None
         };
-        config
-            .templates
-            .initialize(template_paths, template_fs_base_path.as_deref())?;
+        templates.initialize(template_paths, template_fs_base_path.as_deref())?;
+        config.templates = Arc::new(templates.clone());
 
         // Validate the config
         config.validate().await?;
@@ -769,7 +841,7 @@ impl Config {
                 }
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
-                        config.templates.add_template(
+                        templates.add_template(
                             template.path.get_template_key(),
                             template.contents.clone(),
                         )?;
@@ -778,9 +850,9 @@ impl Config {
                 evaluation_function_config
                     .validate(
                         &config.tools,
-                        &mut config.models,
+                        &config.models,
                         &config.embedding_models,
-                        &config.templates,
+                        &templates,
                         &evaluation_function_name,
                     )
                     .await?;
@@ -801,6 +873,7 @@ impl Config {
             }
         }
         config.evaluations = evaluations;
+        config.templates = Arc::new(templates);
 
         Ok(config)
     }
@@ -842,7 +915,7 @@ impl Config {
             function
                 .validate(
                     &self.tools,
-                    &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
+                    &self.models,
                     &self.embedding_models,
                     &self.templates,
                     function_name,

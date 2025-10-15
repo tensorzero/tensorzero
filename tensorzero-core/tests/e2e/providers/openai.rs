@@ -31,7 +31,8 @@ use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, DEEPSEEK_PAPER_PDF, FERRIS_PNG,
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, ModelTestProvider,
+    DEEPSEEK_PAPER_PDF, FERRIS_PNG,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
@@ -241,6 +242,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "openai".to_string(),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "gpt-4o-mini-2024-07-18".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -262,6 +272,7 @@ async fn get_providers() -> E2ETestProviders {
         pdf_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),
+        credential_fallbacks,
     }
 }
 
@@ -1210,17 +1221,17 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &TensorzeroHttpClient::new().unwrap(),
-                clickhouse_connection_info: &clickhouse,
-                postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                credentials: &api_keys,
-                cache_options: &CacheOptions {
+                http_client: TensorzeroHttpClient::new().unwrap(),
+                clickhouse_connection_info: clickhouse.clone(),
+                postgres_connection_info: PostgresConnectionInfo::Disabled,
+                credentials: Arc::new(api_keys.clone()),
+                cache_options: CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
-                tags: &Default::default(),
-                rate_limiting_config: &Default::default(),
-                otlp_config: &Default::default(),
+                tags: Arc::new(Default::default()),
+                rate_limiting_config: Arc::new(Default::default()),
+                otlp_config: Default::default(),
             },
         )
         .await
@@ -1294,17 +1305,17 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &TensorzeroHttpClient::new().unwrap(),
-                clickhouse_connection_info: &clickhouse,
-                postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                credentials: &api_keys,
-                cache_options: &CacheOptions {
+                http_client: TensorzeroHttpClient::new().unwrap(),
+                clickhouse_connection_info: clickhouse.clone(),
+                postgres_connection_info: PostgresConnectionInfo::Disabled,
+                credentials: Arc::new(api_keys.clone()),
+                cache_options: CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
-                tags: &Default::default(),
-                rate_limiting_config: &Default::default(),
-                otlp_config: &Default::default(),
+                tags: Arc::new(Default::default()),
+                rate_limiting_config: Arc::new(Default::default()),
+                otlp_config: Default::default(),
             },
         )
         .await
@@ -1363,17 +1374,17 @@ async fn test_embedding_sanity_check() {
     let request_info = (&provider_config).into();
     let api_keys = InferenceCredentials::default();
     let clients = InferenceClients {
-        http_client: &client,
-        clickhouse_connection_info: &clickhouse,
-        postgres_connection_info: &PostgresConnectionInfo::Disabled,
-        credentials: &api_keys,
-        cache_options: &CacheOptions {
+        http_client: client.clone(),
+        clickhouse_connection_info: clickhouse.clone(),
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        credentials: Arc::new(api_keys),
+        cache_options: CacheOptions {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
-        tags: &Default::default(),
-        rate_limiting_config: &Default::default(),
-        otlp_config: &Default::default(),
+        tags: Arc::new(Default::default()),
+        rate_limiting_config: Arc::new(Default::default()),
+        otlp_config: Default::default(),
     };
     let scope_info = ScopeInfo {
         tags: &HashMap::new(),

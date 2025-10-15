@@ -16,7 +16,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::ContentBlock;
 use crate::model::{
-    CredentialLocation, UninitializedModelConfig, UninitializedModelProvider,
+    CredentialLocationWithFallback, UninitializedModelConfig, UninitializedModelProvider,
     UninitializedProviderConfig,
 };
 use crate::optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput};
@@ -94,7 +94,7 @@ pub struct TogetherSFTConfig {
     #[serde(skip)]
     pub credentials: TogetherCredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
     pub api_base: Url,
     // Hyperparameters
     pub n_epochs: u32,
@@ -135,7 +135,7 @@ pub struct TogetherSFTJobHandle {
     // A url to a human-readable page for the job.
     pub job_url: Url,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
 }
 
 impl std::fmt::Display for TogetherSFTJobHandle {
@@ -152,7 +152,7 @@ impl std::fmt::Display for TogetherSFTJobHandle {
 pub struct UninitializedTogetherSFTConfig {
     pub model: String,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credentials: Option<CredentialLocation>,
+    pub credentials: Option<CredentialLocationWithFallback>,
     pub api_base: Option<Url>,
     // Hyperparameters
     #[serde(default = "default_n_epochs")]

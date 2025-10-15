@@ -720,6 +720,10 @@ impl Client {
         }
         // Set internal to true so we don't validate the tags again
         params.internal = true;
+        // Automatically add internal tag when internal=true
+        params
+            .tags
+            .insert("tensorzero::internal".to_string(), "true".to_string());
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
@@ -776,16 +780,17 @@ impl Client {
         }
     }
 
-    pub async fn bulk_insert_datapoints(
+    async fn create_datapoints_internal(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
+        endpoint_path: &str,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/bulk")).map_err(|e| TensorZeroError::Other {
+                let url = client.base_url.join(&format!("datasets/{dataset_name}/{endpoint_path}")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/bulk endpoint: {e}"),
+                        message: format!("Failed to join base URL with /datasets/{dataset_name}/{endpoint_path} endpoint: {e}"),
                     })
                     .into(),
                 })?;
@@ -807,6 +812,26 @@ impl Client {
                 .await?)
             }
         }
+    }
+
+    pub async fn create_datapoints(
+        &self,
+        dataset_name: String,
+        params: InsertDatapointParams,
+    ) -> Result<Vec<Uuid>, TensorZeroError> {
+        self.create_datapoints_internal(dataset_name, params, "datapoints")
+            .await
+    }
+
+    /// DEPRECATED: Use `create_datapoints` instead.
+    pub async fn bulk_insert_datapoints(
+        &self,
+        dataset_name: String,
+        params: InsertDatapointParams,
+    ) -> Result<Vec<Uuid>, TensorZeroError> {
+        tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead.");
+        self.create_datapoints_internal(dataset_name, params, "datapoints/bulk")
+            .await
     }
 
     pub async fn delete_datapoint(

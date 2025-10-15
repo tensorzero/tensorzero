@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -67,6 +67,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "hyperbolic".to_string(),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "meta-llama/Meta-Llama-3-70B-Instruct".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         bad_auth_extra_headers,
@@ -87,5 +96,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
         pdf_inference: vec![],
         shorthand_inference: shorthand_providers.clone(),
+        credential_fallbacks,
     }
 }

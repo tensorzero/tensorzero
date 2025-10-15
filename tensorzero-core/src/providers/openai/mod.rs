@@ -56,6 +56,7 @@ use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+    warn_cannot_forward_url_if_missing_mime_type,
 };
 
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -151,6 +152,10 @@ pub enum OpenAICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<OpenAICredentials>,
+        fallback: Box<OpenAICredentials>,
+    },
 }
 
 impl TryFrom<Credential> for OpenAICredentials {
@@ -162,6 +167,10 @@ impl TryFrom<Credential> for OpenAICredentials {
             Credential::Dynamic(key_name) => Ok(OpenAICredentials::Dynamic(key_name)),
             Credential::None => Ok(OpenAICredentials::None),
             Credential::Missing => Ok(OpenAICredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(OpenAICredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenAI provider".to_string(),
             })),
@@ -185,6 +194,16 @@ impl OpenAICredentials {
                     .into()
                 }))
                 .transpose()
+            }
+            OpenAICredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             OpenAICredentials::None => Ok(None),
         }
@@ -1541,20 +1560,11 @@ pub(super) async fn prepare_file_message(
             })
         }
         _ => {
-            // If we could have forwarded an image_url (except for the fact that we're missing the mime_type), log a warning.
-            if matches!(
+            warn_cannot_forward_url_if_missing_mime_type(
                 file,
-                LazyFile::Url {
-                    file_url: FileUrl {
-                        url: _,
-                        mime_type: None,
-                    },
-                    future: _
-                }
-            ) && !messages_config.fetch_and_encode_input_files_before_inference
-            {
-                tracing::warn!("Cannot forward image_url to OpenAI because no mime_type was provided. Specify `mime_type` (or `tensorzero::mime_type` for openai-compatible requests) when sending files to allow URL forwarding to OpenAI.");
-            }
+                messages_config.fetch_and_encode_input_files_before_inference,
+                messages_config.provider_type,
+            );
 
             let resolved_file = file.resolve().await?;
             let FileWithPath {
