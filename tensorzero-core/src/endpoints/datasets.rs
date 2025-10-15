@@ -230,7 +230,7 @@ async fn insert_from_existing(
                 }
                 OutputKind::None => None,
             };
-            // TODO(shuyangli): the `put_json_datapoints` call should really take a `JsonInferenceDatapointInsert`. We'll fix it separately.
+            // TODO(#3957): the `put_json_datapoints` call should really take a `JsonInferenceDatapointInsert`. We'll fix it separately.
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
@@ -272,7 +272,7 @@ async fn insert_from_existing(
                 }
                 OutputKind::None => None,
             };
-            // TODO(shuyangli): the `put_chat_datapoints` call should really take a `ChatInferenceDatapointInsert`. We'll fix it separately.
+            // TODO(#3957): the `put_chat_datapoints` call should really take a `ChatInferenceDatapointInsert`. We'll fix it separately.
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,

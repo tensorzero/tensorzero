@@ -574,8 +574,8 @@ async fn test_count_datasets() {
     let initial_count = clickhouse.count_datasets().await.unwrap();
 
     // Insert datapoints in two different datasets
-    let dataset1 = format!("test_dataset_{}", Uuid::now_v7().simple());
-    let dataset2 = format!("test_dataset_{}", Uuid::now_v7().simple());
+    let dataset1 = format!("test_dataset_{}", Uuid::now_v7());
+    let dataset2 = format!("test_dataset_{}", Uuid::now_v7());
 
     let datapoint1 = ChatInferenceDatapointInsert {
         dataset_name: dataset1.clone(),
@@ -637,7 +637,7 @@ async fn test_count_datasets() {
 async fn test_count_datapoints_for_dataset_function_chat() {
     let clickhouse = get_clickhouse().await;
 
-    let dataset_name = format!("test_count_{}", Uuid::now_v7().simple());
+    let dataset_name = format!("test_count_{}", Uuid::now_v7());
     let function_name = "test_function";
 
     // Get initial count
@@ -702,7 +702,7 @@ async fn test_count_datapoints_for_dataset_function_chat() {
 async fn test_count_datapoints_for_dataset_function_json() {
     let clickhouse = get_clickhouse().await;
 
-    let dataset_name = format!("test_count_{}", Uuid::now_v7().simple());
+    let dataset_name = format!("test_count_{}", Uuid::now_v7());
     let function_name = "test_function";
 
     // Get initial count
@@ -1417,11 +1417,6 @@ async fn test_handles_non_existent_datapoint_retrieval() {
 
 #[tokio::test]
 async fn test_handles_duplicate_insertions_gracefully() {
-    use std::collections::HashMap;
-    use tensorzero_core::db::clickhouse::dataset_queries::{
-        ChatInferenceDatapointInsert, DatapointInsert,
-    };
-
     let clickhouse = get_clickhouse().await;
     let datapoint_id = Uuid::parse_str("01934fc5-ea98-71f0-8191-9fd88f34c31e").unwrap();
     let source_inference_id = Uuid::now_v7();
@@ -1595,11 +1590,6 @@ async fn test_insert_rows_for_dataset_handles_invalid_dataset_names() {
 
 #[tokio::test]
 async fn test_insert_datapoint_handles_invalid_dataset_names() {
-    use std::collections::HashMap;
-    use tensorzero_core::db::clickhouse::dataset_queries::{
-        ChatInferenceDatapointInsert, DatapointInsert,
-    };
-
     let clickhouse = get_clickhouse().await;
     let mut tags = HashMap::new();
     tags.insert("test".to_string(), "invalid_name".to_string());
@@ -1634,7 +1624,7 @@ async fn test_insert_datapoint_handles_invalid_dataset_names() {
 async fn test_get_adjacent_datapoint_ids() {
     let clickhouse = get_clickhouse().await;
 
-    let dataset_name = format!("test_adjacent_{}", Uuid::now_v7().simple());
+    let dataset_name = format!("test_adjacent_{}", Uuid::now_v7());
 
     // Insert three datapoints
     let id1 = Uuid::now_v7();
