@@ -26,7 +26,7 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
-use crate::experimentation::{ExperimentationConfig, VariantSampler};
+use crate::experimentation::ExperimentationConfig;
 use crate::function::FunctionConfig;
 use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;

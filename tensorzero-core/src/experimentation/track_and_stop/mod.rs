@@ -320,6 +320,12 @@ impl VariantSampler for TrackAndStopConfig {
         }));
         Ok(())
     }
+    fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
+        self.candidate_variants
+            .iter()
+            .map(String::as_str)
+            .chain(self.fallback_variants.iter().map(String::as_str))
+    }
 
     async fn sample(
         &self,

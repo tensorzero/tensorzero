@@ -44,7 +44,7 @@ node_modules/
 
 # Claude Code (see AGENTS.md)
 CLAUDE.md
-.claude/*
+**/.claude/*
 !./claude/commands/
 !./claude/commands/**
 
