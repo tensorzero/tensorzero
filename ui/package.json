@@ -89,7 +89,7 @@
     "storybook-addon-remix-react-router": "^5.0.0",
     "tailwindcss": "^4.1.11",
     "typescript": "^5.8.2",
-    "vite": "^6.3.6",
+    "vite": "^7.1.9",
     "vite-plugin-devtools-json": "^1.0.0",
     "vite-plugin-wasm": "^3.5.0",
     "vite-tsconfig-paths": "^5.1.4",
