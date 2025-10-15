@@ -26,14 +26,14 @@ slow-timeout = { period = "20s", terminate-after = 3 }
 # We also define cargo aliases for common use-cases (e.g. `cargo test-e2e`)
 [profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
-default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse) | test(db::))"
+default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse))"
 junit.path = "junit.xml"
 
 [profile.batch]
 default-filter = 'test(batch)'
 
 [profile.clickhouse]
-default-filter = 'test(test_dummy_only) | test(clickhouse) | test(db::)'
+default-filter = 'test(test_dummy_only) | test(clickhouse)'
 junit.path = "junit.xml"
 
 [profile.optimization]
