@@ -1132,6 +1132,7 @@ mod tests {
             tags: Arc::new(Default::default()),
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
         };
         let templates = Arc::new(get_test_template_config());
         let inference_params = InferenceParams::default();
@@ -1437,6 +1438,7 @@ mod tests {
             tags: Arc::new(Default::default()),
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
         };
         let templates = Arc::new(get_test_template_config());
         let inference_params = InferenceParams::default();
@@ -1602,6 +1604,7 @@ mod tests {
             tags: Arc::new(Default::default()),
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1752,6 +1755,7 @@ mod tests {
             tags: Arc::new(Default::default()),
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
         };
         let inference_params = InferenceParams::default();
 
