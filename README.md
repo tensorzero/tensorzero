@@ -41,123 +41,44 @@ Take what you need, adopt incrementally, and complement with other tools.
 
 ---
 
-<table>
-  <tr>
-    <td width="30%" valign="top"><b>What is TensorZero?</b></td>
-    <td width="70%" valign="top">TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluation, and experimentation.</td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>How is TensorZero different from other LLM frameworks?</b></td>
-    <td width="70%" valign="top">
-      1. TensorZero enables you to optimize complex LLM applications based on production metrics and human feedback.<br>
-      2. TensorZero supports the needs of industrial-grade LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.<br>
-      3. TensorZero unifies the entire LLMOps stack, creating compounding benefits. For example, LLM evaluations can be used for fine-tuning models alongside AI judges.
-    </td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>Can I use TensorZero with ___?</b></td>
-    <td width="70%" valign="top">Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API.</td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>Is TensorZero production-ready?</b></td>
-    <td width="70%" valign="top">Yes. Here's a case study: <b><a href="https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms">Automating Code Changelogs at a Large Bank with LLMs</a></b></td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>How much does TensorZero cost?</b></td>
-    <td width="70%" valign="top">Nothing. TensorZero is 100% self-hosted and open-source. There are no paid features.</td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>Who is building TensorZero?</b></td>
-    <td width="70%" valign="top">Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic). See our <b><a href="https://www.tensorzero.com/blog/tensorzero-raises-7-3m-seed-round-to-build-an-open-source-stack-for-industrial-grade-llm-applications/">$7.3M seed round announcement</a></b> and <b><a href="https://venturebeat.com/ai/tensorzero-nabs-7-3m-seed-to-solve-the-messy-world-of-enterprise-llm-development/" rel="nofollow" target="_blank">coverage from VentureBeat</a></b>. We're <b><a href="https://www.tensorzero.com/jobs" rel="nofollow" target="_blank">hiring in NYC</a></b>.</td>
-  </tr>
-  <tr>
-    <td width="30%" valign="top"><b>How do I get started?</b></td>
-    <td width="70%" valign="top">You can adopt TensorZero incrementally. Our <b><a href="https://www.tensorzero.com/docs/quickstart">Quick Start</a></b> goes from a vanilla OpenAI wrapper to a production-ready LLM application with observability and fine-tuning in just 5 minutes.</td>
-  </tr>
-</table>
-
----
-
 ## Features
 
 ### 🌐 LLM Gateway
 
 > **Integrate with TensorZero once and access every major LLM provider.**
 
-- [x] Access every major LLM provider (API or self-hosted) through a single unified API
-- [x] Infer with streaming, tool use, structured generation (JSON mode), batch, embeddings, multimodal (VLMs), file inputs, caching, etc.
-- [x] Define prompt templates and schemas to enforce a consistent, typed interface between your application and the LLMs
-- [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: <1ms p99 latency overhead at 10k+ QPS
-- [x] Integrate using our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API (use any programming language)
-- [x] Ensure high availability with routing, retries, fallbacks, load balancing, granular timeouts, etc.
-- [ ] Soon: rate limits, spend tracking and budgeting, service accounts
+- [x] **[Call any LLM](https://www.tensorzero.com/docs/gateway/call-any-llm)** (API or self-hosted) through a single unified API
+- [x] Infer with **[streaming](https://www.tensorzero.com/docs/gateway/guides/streaming-inference)**, **[tool use](https://www.tensorzero.com/docs/gateway/guides/tool-use)**, structured generation, **[batch](https://www.tensorzero.com/docs/gateway/guides/batch-inference)**, **[embeddings](https://www.tensorzero.com/docs/gateway/generate-embeddings)**, **[multimodal (images, files)](https://www.tensorzero.com/docs/gateway/guides/multimodal-inference)**, **[caching](https://www.tensorzero.com/docs/gateway/guides/inference-caching)**, etc.
+- [x] **[Create prompt templates and schemas](https://www.tensorzero.com/docs/gateway/create-a-prompt-template)** to enforce a consistent, typed interface between your application and the LLMs
+- [x] Satisfy extreme throughput and latency needs, thanks to 🦀 Rust: **[<1ms p99 latency overhead at 10k+ QPS](https://www.tensorzero.com/docs/gateway/benchmarks)**
+- [x] Use any programming language: **[integrate via our Python client, any OpenAI SDK, or our HTTP API](https://www.tensorzero.com/docs/gateway/clients)**
+- [x] **[Ensure high availability](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks)** with routing, retries, fallbacks, load balancing, granular timeouts, etc.
+- [x] **[Enforce custom rate limits](https://www.tensorzero.com/docs/operations/enforce-custom-rate-limits)** with granular scopes (e.g. user-defined tags) to keep usage under control
+- [ ] Soon: spend tracking and budgeting, service accounts
 
-<table>
-  <tr></tr> <!-- flip highlight order -->
-  <tr>
-    <td width="50%" align="center" valign="middle"><b>Model Providers</b></td>
-    <td width="50%" align="center" valign="middle"><b>Features</b></td>
-  </tr>
-  <tr>
-    <td width="50%" align="left" valign="top">
-      <p>
-        The TensorZero Gateway natively supports:
-      </p>
-      <ul>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/anthropic">Anthropic</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock">AWS Bedrock</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/aws-sagemaker">AWS SageMaker</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/azure">Azure OpenAI Service</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/deepseek">DeepSeek</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/fireworks">Fireworks</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic">GCP Vertex AI Anthropic</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-gemini">GCP Vertex AI Gemini</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini">Google AI Studio (Gemini API)</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/groq">Groq</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic">Hyperbolic</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/mistral">Mistral</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai">OpenAI</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openrouter">OpenRouter</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/sglang">SGLang</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/tgi">TGI</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/together">Together AI</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/vllm">vLLM</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/xai">xAI (Grok)</a></b></li>
-      </ul>
-      <p>
-        <em>
-          Need something else?
-          Your provider is most likely supported because TensorZero integrates with <b><a href="https://www.tensorzero.com/docs/gateway/guides/providers/openai-compatible">any OpenAI-compatible API (e.g. Ollama)</a></b>.
-          </em>
-      </p>
-    </td>
-    <td width="50%" align="left" valign="top">
-      <p>
-        The TensorZero Gateway supports advanced features like:
-      </p>
-      <ul>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks">Retries & Fallbacks</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-time-optimizations">Inference-Time Optimizations</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/prompt-templates-schemas">Prompt Templates & Schemas</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/experimentation/">Experimentation (A/B Testing)</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/configuration-reference">Configuration-as-Code (GitOps)</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/batch-inference">Batch Inference</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/multimodal-inference">Multimodal Inference (VLMs)</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/inference-caching">Inference Caching</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/metrics-feedback">Metrics & Feedback</a></b></li>
-        <li><b><a href="https://www.tensorzero.com/docs/gateway/guides/episodes">Multi-Step LLM Workflows (Episodes)</a></b></li>
-        <li><em>& a lot more...</em></li>
-      </ul>
-      <p>
-        The TensorZero Gateway is written in Rust 🦀 with <b>performance</b> in mind (&lt;1ms p99 latency overhead @ 10k QPS).
-        See <b><a href="https://www.tensorzero.com/docs/gateway/benchmarks">Benchmarks</a></b>.<br>
-      </p>
-      <p>
-        You can run inference using the <b>TensorZero client</b> (recommended), the <b>OpenAI client</b>, or the <b>HTTP API</b>.
-      </p>
-    </td>
-  </tr>
-</table>
+<br>
+
+**Supported Model Providers:**
+**[Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/anthropic)**,
+**[AWS Bedrock](https://www.tensorzero.com/docs/gateway/guides/providers/aws-bedrock)**,
+**[AWS SageMaker](https://www.tensorzero.com/docs/gateway/guides/providers/aws-sagemaker)**,
+**[Azure OpenAI Service](https://www.tensorzero.com/docs/gateway/guides/providers/azure)**,
+**[DeepSeek](https://www.tensorzero.com/docs/gateway/guides/providers/deepseek)**,
+**[Fireworks](https://www.tensorzero.com/docs/gateway/guides/providers/fireworks)**,
+**[GCP Vertex AI Anthropic](https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-anthropic)**,
+**[GCP Vertex AI Gemini](https://www.tensorzero.com/docs/gateway/guides/providers/gcp-vertex-ai-gemini)**,
+**[Google AI Studio (Gemini API)](https://www.tensorzero.com/docs/gateway/guides/providers/google-ai-studio-gemini)**,
+**[Groq](https://www.tensorzero.com/docs/gateway/guides/providers/groq)**,
+**[Hyperbolic](https://www.tensorzero.com/docs/gateway/guides/providers/hyperbolic)**,
+**[Mistral](https://www.tensorzero.com/docs/gateway/guides/providers/mistral)**,
+**[OpenAI](https://www.tensorzero.com/docs/gateway/guides/providers/openai)**,
+**[OpenRouter](https://www.tensorzero.com/docs/gateway/guides/providers/openrouter)**,
+**[SGLang](https://www.tensorzero.com/docs/gateway/guides/providers/sglang)**,
+**[TGI](https://www.tensorzero.com/docs/gateway/guides/providers/tgi)**,
+**[Together AI](https://www.tensorzero.com/docs/gateway/guides/providers/together)**,
+**[vLLM](https://www.tensorzero.com/docs/gateway/guides/providers/vllm)**, and
+**[xAI (Grok)](https://www.tensorzero.com/docs/gateway/guides/providers/xai)**.
+Need something else? TensorZero also supports **[any OpenAI-compatible API (e.g. Ollama)](https://www.tensorzero.com/docs/gateway/guides/providers/openai-compatible)**.
 
 <br>
 
@@ -194,9 +115,9 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: Python &mdash; OpenAI Client</b></summary>
+<summary><b>Usage: Python &mdash; OpenAI SDK</b></summary>
 
-You can access any provider using the OpenAI Python client with TensorZero.
+You can access any provider using the OpenAI Python SDK with TensorZero.
 
 1. `pip install tensorzero`
 2. Optional: Set up the TensorZero configuration.
@@ -232,9 +153,9 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 </details>
 
 <details>
-<summary><b>Usage: JavaScript / TypeScript (Node) &mdash; OpenAI Client</b></summary>
+<summary><b>Usage: JavaScript / TypeScript (Node) &mdash; OpenAI SDK</b></summary>
 
-You can access any provider using the OpenAI Node client with TensorZero.
+You can access any provider using the OpenAI Node SDK with TensorZero.
 
 1. Deploy `tensorzero/gateway` using Docker.
    **[Detailed instructions →](https://www.tensorzero.com/docs/gateway/deployment)**
@@ -300,11 +221,11 @@ See **[Quick Start](https://www.tensorzero.com/docs/quickstart)** for more infor
 
 > **Zoom in to debug individual API calls, or zoom out to monitor metrics across models and prompts over time &mdash; all using the open-source TensorZero UI.**
 
-- [x] Store inferences and feedback (metrics, human edits, etc.) in your own database
+- [x] Store inferences and **[feedback (metrics, human edits, etc.)](https://www.tensorzero.com/docs/gateway/guides/metrics-feedback)** in your own database
 - [x] Dive into individual inferences or high-level aggregate patterns using the TensorZero UI or programmatically
-- [x] Build datasets for optimization, evaluation, and other workflows
+- [x] **[Build datasets](https://www.tensorzero.com/docs/gateway/api-reference/datasets-datapoints)** for optimization, evaluation, and other workflows
 - [x] Replay historical inferences with new prompts, models, inference strategies, etc.
-- [x] Export OpenTelemetry (OTLP) traces to your favorite general-purpose observability tool
+- [x] **[Export OpenTelemetry traces (OTLP)](https://www.tensorzero.com/docs/operations/export-opentelemetry-traces)** and **[export Prometheus metrics](https://www.tensorzero.com/docs/observability/export-prometheus-metrics)** to your favorite application observability tools
 - [ ] Soon: AI-assisted debugging and root cause analysis; AI-assisted data labeling
 
 <table>
@@ -418,8 +339,8 @@ _More coming soon..._
 
 > **Compare prompts, models, and inference strategies using evaluations powered by heuristics and LLM judges.**
 
-- [x] Evaluate individual inferences with _static evaluations_ powered by heuristics or LLM judges (&approx; unit tests for LLMs)
-- [x] Evaluate end-to-end workflows with _dynamic evaluations_ with complete flexibility (&approx; integration tests for LLMs)
+- [x] **[Evaluate individual inferences](https://www.tensorzero.com/docs/evaluations/static-evaluations/tutorial)** with _static evaluations_ powered by heuristics or LLM judges (&approx; unit tests for LLMs)
+- [x] **[Evaluate end-to-end workflows](https://www.tensorzero.com/docs/evaluations/dynamic-evaluations/tutorial)** with _dynamic evaluations_ with complete flexibility (&approx; integration tests for LLMs)
 - [x] Optimize LLM judges just like any other TensorZero function to align them to human preferences
 - [ ] Soon: more built-in evaluators; headless evaluations
 
@@ -451,7 +372,7 @@ item_count: 7.15 ± 0.39</code></pre>
 
 > **Ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.**
 
-- [x] Ship with confidence with built-in A/B testing for models, prompts, providers, hyperparameters, etc.
+- [x] Ship with confidence with built-in **[A/B testing](https://www.tensorzero.com/docs/experimentation/run-ab-tests)** for models, prompts, providers, hyperparameters, etc.
 - [x] Enforce principled experiments (RCTs) in complex workflows, including multi-turn and compound LLM systems
 - [ ] Soon: multi-armed bandits; AI-managed experiments
 
@@ -460,9 +381,41 @@ item_count: 7.15 ± 0.39</code></pre>
 > **Build with an open-source stack well-suited for prototypes but designed from the ground up to support the most complex LLM applications and deployments.**
 
 - [x] Build simple applications or massive deployments with GitOps-friendly orchestration
-- [x] Extend TensorZero with built-in escape hatches, programmatic-first usage, direct database access, and more
+- [x] **[Extend TensorZero](https://www.tensorzero.com/docs/operations/extend-tensorzero)** with built-in escape hatches, programmatic-first usage, direct database access, and more
 - [x] Integrate with third-party tools: specialized observability and evaluations, model providers, agent orchestration frameworks, etc.
 - [x] Iterate quickly by experimenting with prompts interactively using the Playground UI
+
+## Frequently Asked Questions
+
+**What is TensorZero?**
+
+TensorZero is an open-source stack for industrial-grade LLM applications. It unifies an LLM gateway, observability, optimization, evaluation, and experimentation.
+
+**How is TensorZero different from other LLM frameworks?**
+
+1. TensorZero enables you to optimize complex LLM applications based on production metrics and human feedback.
+2. TensorZero supports the needs of industrial-grade LLM applications: low latency, high throughput, type safety, self-hosted, GitOps, customizability, etc.
+3. TensorZero unifies the entire LLMOps stack, creating compounding benefits. For example, LLM evaluations can be used for fine-tuning models alongside AI judges.
+
+**Can I use TensorZero with \_\_\_?**
+
+Yes. Every major programming language is supported. You can use TensorZero with our Python client, any OpenAI SDK or OpenAI-compatible client, or our HTTP API.
+
+**Is TensorZero production-ready?**
+
+Yes. Here's a case study: **[Automating Code Changelogs at a Large Bank with LLMs](https://www.tensorzero.com/blog/case-study-automating-code-changelogs-at-a-large-bank-with-llms)**
+
+**How much does TensorZero cost?**
+
+Nothing. TensorZero is 100% self-hosted and open-source. There are no paid features.
+
+**Who is building TensorZero?**
+
+Our technical team includes a former Rust compiler maintainer, machine learning researchers (Stanford, CMU, Oxford, Columbia) with thousands of citations, and the chief product officer of a decacorn startup. We're backed by the same investors as leading open-source projects (e.g. ClickHouse, CockroachDB) and AI labs (e.g. OpenAI, Anthropic). See our **[$7.3M seed round announcement](https://www.tensorzero.com/blog/tensorzero-raises-7-3m-seed-round-to-build-an-open-source-stack-for-industrial-grade-llm-applications/)** and **[coverage from VentureBeat](https://venturebeat.com/ai/tensorzero-nabs-7-3m-seed-to-solve-the-messy-world-of-enterprise-llm-development/)**. We're **[hiring in NYC](https://www.tensorzero.com/jobs)**.
+
+**How do I get started?**
+
+You can adopt TensorZero incrementally. Our **[Quick Start](https://www.tensorzero.com/docs/quickstart)** goes from a vanilla OpenAI wrapper to a production-ready LLM application with observability and fine-tuning in just 5 minutes.
 
 ## Demo
 
