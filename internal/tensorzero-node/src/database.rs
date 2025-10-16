@@ -218,22 +218,17 @@ struct QueryEpisodeTableParams {
 #[ts(export, optional_fields)]
 struct QueryFeedbackByTargetIdParams {
     target_id: Uuid,
-    #[ts(optional)]
     before: Option<Uuid>,
-    #[ts(optional)]
     after: Option<Uuid>,
     page_size: Option<u32>,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 struct QueryDemonstrationFeedbackByInferenceIdParams {
     inference_id: Uuid,
-    #[ts(optional)]
     before: Option<Uuid>,
-    #[ts(optional)]
     after: Option<Uuid>,
-    #[ts(optional)]
     page_size: Option<u32>,
 }
 
