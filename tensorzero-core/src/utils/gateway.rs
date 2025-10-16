@@ -84,11 +84,19 @@ impl Drop for GatewayHandle {
             tracing::info!("ClickHouse batch writer finished");
         }
         self.app_state.deferred_tasks.close();
-        tokio::task::block_in_place(|| {
-            tracing::info!("Waiting for deferred tasks to finish");
-            Handle::current().block_on(self.app_state.deferred_tasks.wait());
-            tracing::info!("Deferred tasks finished");
-        });
+        // The 'wait' future will resolve immediately if the pool is empty.
+        // Closing the pool doesn't block more futures from being added, so checking
+        // if it's empty doesn't introduce any new race conditions (it's still possible
+        // for some existing tokio task to spawn something in this pool after 'wait' resolves).
+        // This check makes it easier to write tests (since we don't need to use a multi-threaded runtime),
+        // as well as reducing the number of log messages in the common case.
+        if !self.app_state.deferred_tasks.is_empty() {
+            tokio::task::block_in_place(|| {
+                tracing::info!("Waiting for deferred tasks to finish");
+                Handle::current().block_on(self.app_state.deferred_tasks.wait());
+                tracing::info!("Deferred tasks finished");
+            });
+        }
     }
 }
 
