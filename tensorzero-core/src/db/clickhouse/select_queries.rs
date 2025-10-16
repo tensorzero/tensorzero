@@ -383,29 +383,21 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 WHERE function_name = '{escaped_function_name}'
                     AND metric_name = '{escaped_metric_name}'
                     AND {time_filter}
-            ),
-            variant_list AS (
-                SELECT DISTINCT variant_name
-                FROM FeedbackByVariantStatistics
-                WHERE function_name = '{escaped_function_name}'
-                    AND metric_name = '{escaped_metric_name}'
-                    {variant_filter}
             )
             SELECT
-                formatDateTime(any(tb.period), '%Y-%m-%dT%H:%i:%SZ') as period_end,
-                any(vl.variant_name) as variant_name,
+                formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_end,
+                f.variant_name,
                 avgMerge(f.feedback_mean) as mean,
                 varSampStableMerge(f.feedback_variance) as variance,
                 sum(f.count) as count
             FROM time_buckets tb
-            CROSS JOIN variant_list vl
             INNER JOIN FeedbackByVariantStatistics f
-                ON f.variant_name = vl.variant_name
-                AND f.function_name = '{escaped_function_name}'
+                ON f.function_name = '{escaped_function_name}'
                 AND f.metric_name = '{escaped_metric_name}'
                 AND f.minute <= tb.period
-            GROUP BY tb.period, vl.variant_name
-            ORDER BY period_end ASC, variant_name ASC
+                {variant_filter}
+            GROUP BY tb.period, f.variant_name
+            ORDER BY period_end ASC, f.variant_name ASC
             FORMAT JSONEachRow
             ",
         );

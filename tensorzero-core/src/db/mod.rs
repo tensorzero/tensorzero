@@ -194,7 +194,7 @@ pub struct FeedbackByVariant {
 }
 
 // make non-public, add larger struct with confidence sequence values
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
 pub struct InternalFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
     pub period_end: DateTime<Utc>,
