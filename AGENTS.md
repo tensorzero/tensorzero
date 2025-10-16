@@ -8,6 +8,12 @@
   - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
   - Run unit tests with `cargo test-unit` which uses `nextest` under the hood.
 
+## For APIs
+
+- Prefer using `#[cfg_attr(test, ts_rs::TS)]` for ts-rs exports.
+- For any Option types visible from the frontend, include `#[cfg_attr(test, ts(export, optional_fields))]` and `#[serde(skip_serializing_if = "Option::is_none")]` so None values are not returned over the wire. In very rare cases we may decide do return `null`s, but in general we want to omit them.
+
+
 # Python Dependencies
 
 We use `uv` to manage Python dependencies.
