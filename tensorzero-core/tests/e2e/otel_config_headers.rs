@@ -13,7 +13,7 @@ use tensorzero_core::inference::types::TextKind;
 
 use crate::common::get_gateway_endpoint;
 use crate::otel::install_capturing_otel_exporter;
-use crate::otel_export::get_tempo_spans;
+use crate::otel_export::{get_tempo_spans, TempoSpans};
 
 /// Test that static headers from config are applied
 /// This verifies that the config parses correctly and the system works end-to-end
@@ -284,8 +284,11 @@ async fn test_otel_config_and_dynamic_header_override() {
 
     // Query Tempo to get the spans and verify the headers
     let tempo_semaphore = tokio::sync::Semaphore::new(1);
-    let (function_inference_span, span_by_id) =
-        get_tempo_spans(episode_id, start_time, &tempo_semaphore).await;
+    let TempoSpans {
+        target_span: function_inference_span,
+        span_by_id,
+        resources: _,
+    } = get_tempo_spans(episode_id, start_time, &tempo_semaphore).await;
 
     // Get the HTTP span (parent of function_inference)
     let parent_id = function_inference_span["parentSpanId"].as_str().unwrap();
