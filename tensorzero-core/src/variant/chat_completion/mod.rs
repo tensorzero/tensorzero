@@ -1173,6 +1173,7 @@ mod tests {
             tags: Arc::new(Default::default()),
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
         };
         let templates = Arc::new(get_test_template_config());
         let system_template = get_system_template();
@@ -2158,6 +2159,7 @@ mod tests {
             tags: Arc::new(Default::default()),
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();

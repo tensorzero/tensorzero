@@ -1404,6 +1404,7 @@ mod tests {
             tags: Arc::new(Default::default()),
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
+            deferred_tasks: tokio_util::task::TaskTracker::new(),
         };
         let input = LazyResolvedInput {
             system: None,

@@ -203,6 +203,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 tags: Arc::new(Default::default()),
                 rate_limiting_config: Arc::new(Default::default()),
                 otlp_config: Default::default(),
+                deferred_tasks: tokio_util::task::TaskTracker::new(),
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {
