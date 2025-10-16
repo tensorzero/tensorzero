@@ -1,0 +1,12 @@
+CREATE TABLE "APIKey" (
+"id" SERIAL PRIMARY KEY,
+"organization" TEXT NOT NULL,
+"workspace" TEXT NOT NULL,
+"description" TEXT,
+"short_key" CHAR(12) NOT NULL,
+"hash" VARCHAR(255) NOT NULL,
+"disabled_at" TIMESTAMP NULL,
+"created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+"updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CONSTRAINT "uniq_short_key" UNIQUE ("short_key")
+);
