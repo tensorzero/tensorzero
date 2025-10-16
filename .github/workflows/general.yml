@@ -558,6 +558,9 @@ jobs:
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Test (Rust)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
+          TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
         run: cargo test-e2e-no-creds
 
       - name: Print docker compose logs (replicated)
