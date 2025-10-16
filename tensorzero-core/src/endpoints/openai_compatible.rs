@@ -77,6 +77,7 @@ pub async fn inference_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        deferred_tasks,
         ..
     }): AppState,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
@@ -129,6 +130,7 @@ pub async fn inference_handler(
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        deferred_tasks,
         params,
     )
     .await?;
@@ -241,6 +243,7 @@ pub async fn embeddings_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        deferred_tasks,
         ..
     }): AppState,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
@@ -251,6 +254,7 @@ pub async fn embeddings_handler(
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        deferred_tasks,
         embedding_params,
     )
     .await?;

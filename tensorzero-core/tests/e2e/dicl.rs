@@ -404,6 +404,7 @@ async fn embed_insert_example(
         tags: Arc::new(Default::default()),
         rate_limiting_config: Arc::new(Default::default()),
         otlp_config: Default::default(),
+        deferred_tasks: tokio_util::task::TaskTracker::new(),
     };
     let scope_info = ScopeInfo {
         tags: &HashMap::new(),
