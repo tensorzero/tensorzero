@@ -170,19 +170,21 @@ impl ToolCallConfig {
         // Throw an error if any tool was not found in the previous step.
         let mut tools_available = tools_available?;
 
-        let allowed_tools_set: HashSet<&str> = allowed_tools.iter().map(String::as_str).collect();
-
         if let Some(additional_tools) = dynamic_tool_params.additional_tools {
             for tool in additional_tools {
-                if !allowed_tools_set.contains(tool.name.as_str()) {
-                    tracing::info!(
-                        tool_name = %tool.name,
-                        "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
-                         In a near-future release, dynamic tools will no longer be included automatically. \
-                         If you intend for your dynamic tools to be allowed, please allow them explicitly; \
-                         otherwise, disregard this warning."
-                    );
-                }
+                // Today we automatically add dynamically configured tools to the allowed tools list but in future we may
+                // change this behavior to be more in line with OpenAI's (if allowed_tools is set do not add tools.
+                // This warning is unusable today.
+                // let allowed_tools_set: HashSet<&str> = allowed_tools.iter().map(String::as_str).collect();
+                // if !allowed_tools_set.contains(tool.name.as_str()) {
+                //     tracing::info!(
+                //         tool_name = %tool.name,
+                //         "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
+                //          In a near-future release, dynamic tools will no longer be included automatically. \
+                //          If you intend for your dynamic tools to be allowed, please allow them explicitly; \
+                //          otherwise, disregard this warning."
+                //     );
+                // }
                 tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
                     description: tool.description,
                     parameters: DynamicJSONSchema::new(tool.parameters),
