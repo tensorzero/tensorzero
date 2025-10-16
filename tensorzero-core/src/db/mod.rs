@@ -1,16 +1,22 @@
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::postgres::types::PgInterval;
+use uuid::Uuid;
+
+use crate::db::clickhouse::dataset_queries::DatasetQueries;
 use crate::error::Error;
 use crate::rate_limiting::ActiveRateLimitKey;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
-use async_trait::async_trait;
-use chrono::{DateTime, TimeDelta, Utc};
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 pub mod clickhouse;
 pub mod postgres;
 
 #[async_trait]
-pub trait ClickHouseConnection: SelectQueries + HealthCheckable + Send + Sync {}
+pub trait ClickHouseConnection:
+    SelectQueries + DatasetQueries + HealthCheckable + Send + Sync
+{
+}
 
 #[async_trait]
 pub trait PostgresConnection: RateLimitQueries + HealthCheckable + Send + Sync {}
@@ -124,7 +130,7 @@ pub struct TableBoundsWithCount {
     pub count: u64,
 }
 
-impl<T: SelectQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
+impl<T: SelectQueries + DatasetQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
 
 pub trait RateLimitQueries {
     /// This function will fail if any of the requests individually fail.
@@ -144,7 +150,7 @@ pub trait RateLimitQueries {
         key: &str,
         capacity: u64,
         refill_amount: u64,
-        refill_interval: TimeDelta,
+        refill_interval: PgInterval,
     ) -> Result<u64, Error>;
 }
 
@@ -154,7 +160,7 @@ pub struct ConsumeTicketsRequest {
     pub requested: u64,
     pub capacity: u64,
     pub refill_amount: u64,
-    pub refill_interval: TimeDelta,
+    pub refill_interval: PgInterval,
 }
 
 #[derive(Debug)]
@@ -170,7 +176,7 @@ pub struct ReturnTicketsRequest {
     pub returned: u64,
     pub capacity: u64,
     pub refill_amount: u64,
-    pub refill_interval: TimeDelta,
+    pub refill_interval: PgInterval,
 }
 
 pub struct ReturnTicketsReceipt {

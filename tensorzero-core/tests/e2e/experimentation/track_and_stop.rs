@@ -1,3 +1,4 @@
+use crate::clickhouse::{get_clean_clickhouse, DeleteDbOnDrop};
 use futures::future::join_all;
 use rand::{Rng, SeedableRng};
 use rand_distr::Distribution;
@@ -26,15 +27,11 @@ use uuid::Uuid;
 /// Returns the client, the ClickHouse connection, and a guard that drops the database.
 async fn make_embedded_gateway_with_clean_clickhouse(
     config: &str,
-) -> (
-    Client,
-    ClickHouseConnectionInfo,
-    crate::clickhouse::DeleteDbOnDrop,
-) {
+) -> (Client, ClickHouseConnectionInfo, DeleteDbOnDrop) {
     let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
         .expect("TENSORZERO_POSTGRES_URL must be set for tests that require Postgres");
 
-    let (clickhouse, guard) = crate::clickhouse::get_clean_clickhouse(false).await;
+    let (clickhouse, guard) = get_clean_clickhouse(false).await;
 
     clickhouse
         .create_database_and_migrations_table()
@@ -513,7 +510,7 @@ model_name = "test"
 
 [metrics.accuracy]
 type = "float"
-optimize = "max"
+optimize = "min"
 level = "inference"
 
 [functions.test_function]
@@ -587,7 +584,7 @@ update_period_s = 300
 async fn test_config_invalid_min_samples() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a"],
         fallback_variants: &["variant_a"],
         min_samples_per_variant: 0, // Invalid: must be >= 1
@@ -625,7 +622,7 @@ async fn test_config_invalid_delta() {
 async fn test_config_invalid_epsilon() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_type: "float",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a"],
         fallback_variants: &["variant_a"],
         epsilon: -0.1, // Invalid: must be >= 0
@@ -679,7 +676,7 @@ async fn test_min_pulls() {
     let config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "float",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &[],
         min_samples_per_variant: min_samples,
@@ -1029,7 +1026,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let setup_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b"],
         fallback_variants: &[],
         min_samples_per_variant: 50,
@@ -1067,7 +1064,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let config_large = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b"],
         fallback_variants: &[],
         min_samples_per_variant: 50,
@@ -1095,7 +1092,7 @@ async fn test_effect_of_epsilon_on_stopping() {
     let config_small = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b"],
         fallback_variants: &[],
         min_samples_per_variant: 50,
@@ -1599,9 +1596,9 @@ async fn test_remove_winner_variant_after_stopping() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_remove_non_winner_variant_after_stopping() {
     let initial_bandit_distribution = vec![
-        ("variant_a", 0.50),
-        ("variant_b", 0.95), // Clear winner
-        ("variant_c", 0.55),
+        ("variant_a", 0.50), // Clear winner
+        ("variant_b", 0.90),
+        ("variant_c", 0.95),
     ];
     let seed = 42;
 
@@ -1611,7 +1608,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
     let initial_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
+        optimize: "min",
         candidate_variants: &["variant_a", "variant_b", "variant_c"],
         fallback_variants: &[],
         min_samples_per_variant: 20,
@@ -1664,8 +1661,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
         "Expected stopping to occur in Phase 1"
     );
 
-    // Phase 2: Remove variant_a (a non-winner) and verify winner still selected
-
+    // Phase 2: Remove variant_b (a non-winner) and verify winner (variant_a) still selected
     drop(client);
     drop(bandit);
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
@@ -1674,8 +1670,8 @@ async fn test_remove_non_winner_variant_after_stopping() {
     let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
-        optimize: "max",
-        candidate_variants: &["variant_b", "variant_c"], // Removed variant_a
+        optimize: "min",
+        candidate_variants: &["variant_a", "variant_c"], // Removed variant_a
         fallback_variants: &[],
         min_samples_per_variant: 20,
         delta: 0.05,
@@ -1701,13 +1697,13 @@ async fn test_remove_non_winner_variant_after_stopping() {
         *variant_counts.entry(name.clone()).or_insert(0) += 1;
     }
 
-    let variant_b_count = *variant_counts.get("variant_b").unwrap_or(&0);
+    let variant_b_count = *variant_counts.get("variant_a").unwrap_or(&0);
     let variant_b_fraction = variant_b_count as f64 / variant_names.len() as f64;
 
     // variant_b should still dominate (at least 80% of pulls)
     assert!(
-        variant_b_fraction >= 0.80,
-        "Expected variant_b (winner) to dominate after non-winner removal, got {:.2}%",
+        variant_b_fraction == 1.0,
+        "Expected variant_a (winner) to dominate after non-winner removal, got {:.2}%",
         variant_b_fraction * 100.0
     );
 

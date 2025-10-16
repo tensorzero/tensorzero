@@ -4,7 +4,7 @@ use core::f64;
 use std::cmp::Ordering;
 use thiserror::Error;
 
-use crate::db::FeedbackByVariant;
+use crate::{config::MetricConfigOptimize, db::FeedbackByVariant};
 
 /// Find all indices with the maximum value in `values`.
 ///
@@ -151,7 +151,7 @@ pub(super) struct CheckStoppingArgs<'a> {
     /// Type 1 error tolerance, aka 1 minus the confidence level
     pub delta: Option<f64>,
     /// Optimization direction (Min or Max)
-    pub metric_optimize: crate::config::MetricConfigOptimize,
+    pub metric_optimize: MetricConfigOptimize,
 }
 
 /// Errors that can occur when checking stopping conditions.
@@ -315,8 +315,8 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
         .map(|x| {
             let mean = x.mean as f64;
             match metric_optimize {
-                crate::config::MetricConfigOptimize::Min => -mean,
-                crate::config::MetricConfigOptimize::Max => mean,
+                MetricConfigOptimize::Min => -mean,
+                MetricConfigOptimize::Max => mean,
             }
         })
         .collect();
@@ -649,7 +649,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: None,
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         assert_eq!(result, StoppingResult::NotStopped);
@@ -669,7 +669,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         assert_eq!(
@@ -693,7 +693,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         assert_eq!(
@@ -712,7 +712,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: None,
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         if let StoppingResult::Winner(name) = result {
@@ -732,7 +732,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -743,7 +743,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.05),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -768,7 +768,7 @@ mod tests {
             variance_floor: Some(0.01),
             epsilon: Some(0.0),
             delta: None,
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         });
         assert!(result.is_ok(), "Variance floor should prevent degeneracy");
     }
@@ -788,7 +788,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.01),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -803,7 +803,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.2),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -828,7 +828,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         // With clear difference and enough samples, should stop
@@ -853,7 +853,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         // With clear winner, should stop
@@ -879,7 +879,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -904,7 +904,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -915,7 +915,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -944,7 +944,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Min,
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
         if let StoppingResult::Winner(name) = result {
@@ -971,7 +971,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Min,
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
         // variant_1 has the lowest mean, so it should win
@@ -1000,7 +1000,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Min,
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
@@ -1029,7 +1029,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Max,
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -1039,7 +1039,7 @@ mod tests {
             variance_floor: None,
             epsilon: Some(0.0),
             delta: Some(0.05),
-            metric_optimize: crate::config::MetricConfigOptimize::Min,
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 

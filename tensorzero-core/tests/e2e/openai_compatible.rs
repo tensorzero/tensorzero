@@ -1003,10 +1003,10 @@ async fn test_openai_compatible_stop_sequence() {
         "messages": [
             {
                 "role": "user",
-                "content": "Output 'Hello' followed by either 'zero' or 'one'. Do not output anything else"
+                "content": "Output 'Hello world' followed by either '0' or '1'. Do not output anything else"
             }
         ],
-        "stop": ["zero", "one"],
+        "stop": ["0", "1"],
         "stream": false,
     });
 

@@ -306,7 +306,6 @@ interface ClickHouseDatapointActionArgs {
   output_schema?: JsonValue;
   variant?: string;
   cache_options: CacheParamsOptions;
-  dryrun: boolean;
   editedVariantInfo?: VariantInfo;
   functionConfig: FunctionConfig;
   toolsConfig: { [key in string]?: StaticToolConfig };
@@ -351,8 +350,10 @@ export function prepareInferenceActionRequest(
     },
     variant_name: null,
     dryrun: null,
-    internal: false,
-    tags: {},
+    internal: true,
+    tags: {
+      "tensorzero::ui": "true",
+    },
     output_schema: null,
     credentials: new Map(),
     cache_options: {
@@ -396,7 +397,6 @@ export function prepareInferenceActionRequest(
       variant_name: args.variant || null,
       output_schema: args.output_schema || null,
       tool_choice: tool_choice || null,
-      dryrun: args.dryrun,
       parallel_tool_calls: parallel_tool_calls || null,
       additional_tools,
       cache_options: args.cache_options,
@@ -421,7 +421,6 @@ export function prepareInferenceActionRequest(
       function_name: args.resource.function_name,
       input: clientInput,
       variant_name: args.variant,
-      dryrun: true,
     };
   }
 }
@@ -438,7 +437,6 @@ function prepareDefaultFunctionRequest(
     return {
       model_name: selectedVariant,
       input: clientInput,
-      dryrun: true,
       tool_choice: tool_choice,
       parallel_tool_calls: parallel_tool_calls,
       // We need to add all tools as additional for the default function
@@ -450,7 +448,6 @@ function prepareDefaultFunctionRequest(
     return {
       model_name: selectedVariant,
       input: clientInput,
-      dryrun: true,
       output_schema: output_schema || null,
     };
   }
@@ -459,7 +456,6 @@ function prepareDefaultFunctionRequest(
   return {
     model_name: selectedVariant,
     input: clientInput,
-    dryrun: true,
   };
 }
 
@@ -593,14 +589,14 @@ function resolvedInputMessageContentToClientInputMessageContent(
       return {
         type: "thought",
         text: content.text,
-        signature: content.signature || null,
-        _internal_provider_type: null,
+        signature: content.signature,
+        _internal_provider_type: undefined,
       };
     case "unknown":
       return {
         type: "unknown",
         data: content.data,
-        model_provider_name: content.model_provider_name || null,
+        model_provider_name: content.model_provider_name,
       };
     case "file":
       return resolvedFileContentToClientFile(content);

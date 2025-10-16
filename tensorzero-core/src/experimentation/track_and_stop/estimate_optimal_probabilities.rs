@@ -8,6 +8,7 @@ use clarabel::solver::{
 use std::collections::HashMap;
 use thiserror::Error;
 
+use crate::config::MetricConfigOptimize;
 use crate::db::FeedbackByVariant;
 use crate::experimentation::track_and_stop::check_stopping::choose_leader;
 
@@ -32,6 +33,8 @@ pub struct EstimateOptimalProbabilitiesArgs {
     /// Regularization coefficient (≥ 0) to encourage proximity to uniform distribution.
     /// Smooths the progression of sampling distributions toward the optimum. Default: 0.01
     pub reg0: Option<f64>,
+    /// Optimization direction (Min or Max)
+    pub metric_optimize: MetricConfigOptimize,
 }
 /// Errors that can occur when computing optimal sampling probabilities.
 #[derive(Debug, Error)]
@@ -123,6 +126,7 @@ pub fn estimate_optimal_probabilities(
         variance_floor,
         min_prob,
         reg0,
+        metric_optimize,
     } = args;
     // TODO: for boolean metrics, set default epsilon to e.g. 0.01. For float metrics, anchor to reward distributions once available.
     let epsilon: f64 = epsilon.unwrap_or(0.0);
@@ -131,7 +135,19 @@ pub fn estimate_optimal_probabilities(
     let reg0: f64 = reg0.unwrap_or(0.01);
 
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
-    let means: Vec<f64> = feedback.iter().map(|x| x.mean as f64).collect();
+
+    // Negate means if we're minimizing, so we can always use argmax
+    let means: Vec<f64> = feedback
+        .iter()
+        .map(|x| {
+            let mean = x.mean as f64;
+            match metric_optimize {
+                MetricConfigOptimize::Min => -mean,
+                MetricConfigOptimize::Max => mean,
+            }
+        })
+        .collect();
+
     let variances: Vec<f64> = feedback
         .iter()
         .map(|x| (x.variance as f64).max(variance_floor))
@@ -382,6 +398,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(1.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
@@ -401,6 +418,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -418,6 +436,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(1e-6),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -444,6 +463,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(1e-6),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
@@ -463,6 +483,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(1e-6),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -483,6 +504,7 @@ mod tests {
             variance_floor: Some(0.01),
             min_prob: Some(1e-6),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -510,6 +532,7 @@ mod tests {
             variance_floor: Some(0.01),
             min_prob: Some(1e-6),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -538,6 +561,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(min_prob),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -560,6 +584,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(1.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
@@ -578,6 +603,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -588,6 +614,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(10.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -606,24 +633,52 @@ mod tests {
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
             vec![0.1; 10],
         );
-        let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+        // Test with optimize=max
+        let probs_map_max = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.0),
             variance_floor: None,
             min_prob: Some(min_prob),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
         // All probabilities should be non-negative
-        for &p in probs_map.values() {
+        for &p in probs_map_max.values() {
             assert!(p >= min_prob - 1e-6);
         }
         // Sum to 1
-        assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
+        assert!((probs_map_max.values().sum::<f64>() - 1.0).abs() < 1e-6);
         // The highest should get most sampling
-        let probs_vec = hashmap_to_vec(&probs_map, 10);
+        let probs_vec = hashmap_to_vec(&probs_map_max, 10);
         assert!(probs_vec[9] >= probs_vec[0]);
+
+        let feedback = make_feedback(
+            vec![10; 10],
+            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+            vec![0.1; 10],
+        );
+        // Test with optimize=min
+        let probs_map_min = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
+            feedback,
+            epsilon: Some(0.0),
+            variance_floor: None,
+            min_prob: Some(min_prob),
+            reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Min,
+        })
+        .unwrap();
+
+        // All probabilities should be non-negative
+        for &p in probs_map_min.values() {
+            assert!(p >= min_prob - 1e-6);
+        }
+        // Sum to 1
+        assert!((probs_map_min.values().sum::<f64>() - 1.0).abs() < 1e-6);
+        // The lowest should get most sampling
+        let probs_vec = hashmap_to_vec(&probs_map_min, 10);
+        assert!(probs_vec[0] >= probs_vec[9]);
     }
 
     #[test]
@@ -636,6 +691,7 @@ mod tests {
             variance_floor: None,
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -655,6 +711,7 @@ mod tests {
             variance_floor: Some(0.01),
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -667,20 +724,25 @@ mod tests {
     #[test]
     fn test_zero_variance_with_floor() {
         // Zero variance should be handled by variance floor
-        let feedback = make_feedback(vec![10, 10], vec![0.3, 0.7], vec![0.0001, 0.0]);
+        let feedback = make_feedback(
+            vec![10, 10, 10],
+            vec![0.3, 0.5, 0.7],
+            vec![0.0001, 0.0, 0.0],
+        );
         let probs_map = estimate_optimal_probabilities(EstimateOptimalProbabilitiesArgs {
             feedback,
             epsilon: Some(0.0),
             variance_floor: Some(0.001),
             min_prob: None,
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
-        // Arm with higher mean and variance needs more sampling
-        let probs = hashmap_to_vec(&probs_map, 2);
-        assert!(probs[1] > probs[0]);
+        // Arm with smallest mean should get most sampling
+        let probs = hashmap_to_vec(&probs_map, 3);
+        assert!(probs[0] > probs[2]);
     }
 
     #[test]
@@ -697,6 +759,7 @@ mod tests {
             variance_floor: Some(1e-8),
             min_prob: Some(0.05),
             reg0: Some(2.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -724,6 +787,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -747,6 +811,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(2.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -775,6 +840,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -798,6 +864,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -833,11 +900,12 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
-        let expected = vec![0.069702913270257, 0.508019009489254, 0.422278077240489];
+        let expected = vec![0.411818058014078, 0.144184113193170, 0.443997828792751];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
         assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -852,6 +920,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -875,15 +944,16 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(1.0),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![
-            0.049999991957649,
-            0.373495754083455,
-            0.049999994032051,
-            0.526504259929341,
+            0.164052326317122,
+            0.274275620684497,
+            0.320837210430485,
+            0.240834842568170,
         ];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
@@ -903,6 +973,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.1),
             reg0: Some(0.2),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -926,16 +997,17 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from cvxpy (using CLARABEL solver)
         let expected = vec![
-            0.049999999144349,
-            0.342706084262522,
-            0.049999999158130,
-            0.417175997176582,
-            0.140117920263625,
+            0.407341605286492,
+            0.079666735242631,
+            0.355686015295549,
+            0.050000000075998,
+            0.107305644099329,
         ];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
@@ -951,6 +1023,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -972,6 +1045,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -995,11 +1069,12 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.2),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
-        let expected = vec![0.111715272862871, 0.473942231288105, 0.414342495849023];
+        let expected = vec![0.423761527414760, 0.114067986187023, 0.462170486398217];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
         assert!((probs_map.values().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -1014,6 +1089,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -1037,15 +1113,16 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.3),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
 
         // Expected solution from scipy (trust-constr with SLSQP fallback)
         let expected = vec![
-            0.050000000000000,
-            0.394460771374844,
-            0.064092683568538,
-            0.491446545056619,
+            0.352531945768924,
+            0.139366907316944,
+            0.408479860960564,
+            0.099621285953567,
         ];
         let probs = hashmap_to_vec(&probs_map, expected.len());
         assert_vecs_almost_equal(&probs, &expected, Some(1e-4));
@@ -1061,6 +1138,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.1),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
 
@@ -1105,7 +1183,7 @@ mod tests {
     // Tests for convergence of estimated optimal probabilities to true optimal probabilities
     // as sample means and variances converge. This convergence may not be monotone in any
     // given problem instance, so we average over multiple random instances. Due to
-    // randomness, this test could fail sometimes.
+    // randomness, these tests could fail sometimes.
     // ======================================================================================
     #[test]
     fn test_convergence_two_arms() {
@@ -1129,6 +1207,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(1e-6),
             reg0: Some(0.0),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
@@ -1166,6 +1245,7 @@ mod tests {
                         variance_floor: None,
                         min_prob: Some(1e-6),
                         reg0: Some(0.0),
+                        metric_optimize: MetricConfigOptimize::Max,
                     })
                     .unwrap();
                 let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
@@ -1198,6 +1278,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
         let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
@@ -1232,6 +1313,7 @@ mod tests {
                         variance_floor: None,
                         min_prob: Some(0.01),
                         reg0: Some(0.1),
+                        metric_optimize: MetricConfigOptimize::Min,
                     })
                     .unwrap();
                 let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
@@ -1263,6 +1345,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.05),
             reg0: Some(0.5),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
@@ -1297,6 +1380,7 @@ mod tests {
                         variance_floor: None,
                         min_prob: Some(0.05),
                         reg0: Some(0.5),
+                        metric_optimize: MetricConfigOptimize::Max,
                     })
                     .unwrap();
                 let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
@@ -1328,6 +1412,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Min,
         })
         .unwrap();
         let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
@@ -1362,6 +1447,7 @@ mod tests {
                         variance_floor: None,
                         min_prob: Some(0.01),
                         reg0: Some(0.1),
+                        metric_optimize: MetricConfigOptimize::Min,
                     })
                     .unwrap();
                 let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
@@ -1393,6 +1479,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.2),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
@@ -1427,6 +1514,7 @@ mod tests {
                         variance_floor: None,
                         min_prob: Some(0.01),
                         reg0: Some(0.2),
+                        metric_optimize: MetricConfigOptimize::Max,
                     })
                     .unwrap();
                 let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);
@@ -1459,6 +1547,7 @@ mod tests {
             variance_floor: None,
             min_prob: Some(0.01),
             reg0: Some(0.1),
+            metric_optimize: MetricConfigOptimize::Max,
         })
         .unwrap();
         let true_probs = hashmap_to_vec(&true_probs_map, num_arms);
@@ -1493,6 +1582,7 @@ mod tests {
                         variance_floor: None,
                         min_prob: Some(0.01),
                         reg0: Some(0.1),
+                        metric_optimize: MetricConfigOptimize::Max,
                     })
                     .unwrap();
                 let sample_probs = hashmap_to_vec(&sample_probs_map, num_arms);

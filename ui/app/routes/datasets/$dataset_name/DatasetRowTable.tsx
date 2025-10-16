@@ -1,3 +1,4 @@
+import type { DatasetDetailRow } from "tensorzero-node";
 import {
   Table,
   TableBody,
@@ -7,7 +8,6 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { DatasetDetailRow } from "~/utils/clickhouse/datasets";
 import {
   TableItemTime,
   TableItemFunction,
@@ -85,7 +85,8 @@ export default function DatasetRowTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <TableItemText text={row.name} />
+                  {/* TODO: switch to using undefined instead of null */}
+                  <TableItemText text={row.name ?? null} />
                 </TableCell>
                 <TableCell>
                   <TableItemFunction

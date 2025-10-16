@@ -134,11 +134,15 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
 // Because this is a supertrait of HealthCheckable, we need to use a custom mock macro instead of automock.
 #[cfg(test)]
 mock! {
+    #[derive(Debug)]
+    pub ClickHouseClient {}
+
     #[async_trait]
-    pub ClickHouseClient {
+    impl ClickHouseClient for ClickHouseClient {
         fn database_url(&self) -> &SecretString;
         fn cluster_name(&self) -> &Option<String>;
         fn database(&self) -> &str;
+        fn is_batching_enabled(&self) -> bool;
         fn batcher_join_handle(&self) -> Option<BatchWriterHandle>;
         async fn write_batched_internal(
             &self,
@@ -150,15 +154,15 @@ mock! {
             rows: Vec<String>,
             table: TableName,
         ) -> Result<(), Error>;
-        async fn run_query_synchronous<'a>(
-            &self,
+        async fn run_query_synchronous<'a, 'b, 'c, 'd>(
+            &'a self,
             query: String,
-            parameters: &HashMap<&'a str, &'a str>,
+            parameters: &'b HashMap<&'c str, &'d str>,
         ) -> Result<ClickHouseResponse, Error>;
-        async fn run_query_synchronous_with_err_logging<'a>(
-            &self,
+        async fn run_query_synchronous_with_err_logging<'a, 'b, 'c, 'd>(
+            &'a self,
             query: String,
-            parameters: &HashMap<&'a str, &'a str>,
+            parameters: &'b HashMap<&'c str, &'d str>,
             err_logging: bool,
         ) -> Result<ClickHouseResponse, Error>;
         async fn run_query_with_external_data(
@@ -168,18 +172,18 @@ mock! {
         ) -> Result<ClickHouseResponse, Error>;
         async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error>;
         async fn create_database_and_migrations_table(&self) -> Result<(), Error>;
-        async fn list_inferences<'a>(
-            &self,
-            config: &Config,
-            opts: &ListInferencesParams<'a>,
+        async fn list_inferences<'a, 'b, 'c, 'd>(
+            &'a self,
+            config: &'b Config,
+            opts: &'c ListInferencesParams<'d>,
         ) -> Result<Vec<StoredInference>, Error>;
         fn is_cluster_configured(&self) -> bool;
         fn get_on_cluster_name(&self) -> String;
-        fn get_maybe_replicated_table_engine_name<'a>(
-            &self,
-            args: GetMaybeReplicatedTableEngineNameArgs<'a>,
+        fn get_maybe_replicated_table_engine_name<'a, 'b>(
+            &'a self,
+            args: GetMaybeReplicatedTableEngineNameArgs<'b>,
         ) -> String;
-        fn variant_name(&self) -> &'static str;
+        fn client_type(&self) -> ClickHouseClientType;
     }
 
     #[async_trait]

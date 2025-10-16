@@ -46,11 +46,12 @@ use error::TrackAndStopError;
 use std::{
     collections::{BTreeMap, HashMap},
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
     },
     time::Duration,
 };
+use tokio_util::sync::CancellationToken;
 
 use estimate_optimal_probabilities::{
     estimate_optimal_probabilities, EstimateOptimalProbabilitiesArgs,
@@ -60,10 +61,11 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
+    config::{MetricConfig, MetricConfigOptimize},
     db::{
         postgres::PostgresConnectionInfo, ExperimentationQueries, FeedbackByVariant, SelectQueries,
     },
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     variant::VariantInfo,
 };
 
@@ -86,9 +88,11 @@ pub struct TrackAndStopConfig {
     #[ts(skip)]
     update_period: Duration,
     #[serde(skip)]
-    metric_optimize: crate::config::MetricConfigOptimize,
+    metric_optimize: MetricConfigOptimize,
     #[serde(skip)]
     state: Arc<ArcSwap<TrackAndStopState>>,
+    #[serde(skip)]
+    task_spawned: AtomicBool,
 }
 
 #[derive(Debug)]
@@ -130,10 +134,9 @@ impl Nursery {
         }
     }
 
-    // increments the index and returns the variant name corresponding to the index
-    fn get_variant_round_robin(&self) -> &str {
-        let index = self.index.fetch_add(1, Ordering::Relaxed) % self.variants.len() as u64;
-        &self.variants[index as usize]
+    // Increments the index at which to start searching for an active variant
+    fn get_variant_idx_round_robin(&self) -> u64 {
+        self.index.fetch_add(1, Ordering::Relaxed) % self.variants.len() as u64
     }
 
     /// Try to sample an active variant from the nursery using round-robin.
@@ -143,9 +146,20 @@ impl Nursery {
         &'a self,
         active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
     ) -> Option<&'a str> {
-        // Try up to N times to find an active variant
-        for _ in 0..self.variants.len() {
-            let variant = self.get_variant_round_robin();
+        // Handle empty nursery case
+        if self.variants.is_empty() {
+            return None;
+        }
+
+        // Try up to N times to find an active variant. We choose the starting
+        // index and then search over the variants, wrapping around the array,
+        // as opposed to incrementing self.index within the loop below,
+        // so that the sampling is truly round robin even when there are concurrent
+        // sampling calls.
+        let start_idx = self.get_variant_idx_round_robin();
+        for idx in start_idx..(start_idx + self.variants.len() as u64) {
+            let index = idx % (self.variants.len() as u64);
+            let variant = &self.variants[index as usize];
             if active_variants.contains_key(variant) {
                 return Some(variant);
             }
@@ -169,7 +183,7 @@ impl UninitializedTrackAndStopConfig {
     pub fn load(
         self,
         variants: &HashMap<String, Arc<VariantInfo>>,
-        metrics: &HashMap<String, crate::config::MetricConfig>,
+        metrics: &HashMap<String, MetricConfig>,
     ) -> Result<TrackAndStopConfig, Error> {
         // Validate metric exists
         if !metrics.contains_key(&self.metric) {
@@ -258,6 +272,7 @@ impl UninitializedTrackAndStopConfig {
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(keep_variants),
             ))),
+            task_spawned: AtomicBool::new(false),
         })
     }
 }
@@ -267,7 +282,22 @@ impl VariantSampler for TrackAndStopConfig {
         &self,
         db: Arc<dyn SelectQueries + Send + Sync>,
         function_name: &str,
+        cancel_token: CancellationToken,
     ) -> Result<(), Error> {
+        // Check if a task has already been spawned for this function
+        // Use compare_exchange to atomically check and set the flag
+        if self
+            .task_spawned
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Track-and-Stop probability update task has already been spawned for function '{function_name}'"
+                ),
+            }));
+        }
+
         // Spawn a background task that continuously updates sampling probabilities.
         // This task:
         // 1. Runs independently for the lifetime of the application
@@ -286,8 +316,15 @@ impl VariantSampler for TrackAndStopConfig {
             epsilon: self.epsilon,
             delta: self.delta,
             metric_optimize: self.metric_optimize,
+            cancel_token,
         }));
         Ok(())
+    }
+    fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
+        self.candidate_variants
+            .iter()
+            .map(String::as_str)
+            .chain(self.fallback_variants.iter().map(String::as_str))
     }
 
     async fn sample(
@@ -332,9 +369,9 @@ impl VariantSampler for TrackAndStopConfig {
 
         // Remove and return the sampled variant
         active_variants.remove_entry(&variant_name).ok_or_else(|| {
-            Error::new(ErrorDetails::Inference {
+            Error::new(ErrorDetails::InternalError {
                 message: format!(
-                    "Sampled variant {variant_name} not found in active_variants. This should never happen."
+                    "Sampled variant {variant_name} not found in active_variants. {IMPOSSIBLE_ERROR_MESSAGE}."
                 ),
             })
         })
@@ -351,7 +388,8 @@ struct ProbabilityUpdateTaskArgs {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
-    metric_optimize: crate::config::MetricConfigOptimize,
+    metric_optimize: MetricConfigOptimize,
+    cancel_token: CancellationToken,
 }
 
 /// Background task that continuously updates sampling probabilities for track-and-stop experiments.
@@ -376,9 +414,18 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
         epsilon,
         delta,
         metric_optimize,
+        cancel_token,
     } = args;
 
+    let mut interval = tokio::time::interval(update_period);
     loop {
+        tokio::select! {
+            () = cancel_token.cancelled() => {
+                break;
+            }
+            _ = interval.tick() => {}
+        }
+
         let result = update_probabilities(UpdateProbabilitiesArgs {
             db: db.as_ref(),
             candidate_variants: &candidate_variants,
@@ -398,8 +445,6 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
                 tracing::warn!("Failed to update probabilities for {function_name}: {e}");
             }
         }
-
-        tokio::time::sleep(update_period).await;
     }
 }
 
@@ -412,7 +457,7 @@ struct UpdateProbabilitiesArgs<'a> {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
-    metric_optimize: crate::config::MetricConfigOptimize,
+    metric_optimize: MetricConfigOptimize,
 }
 
 async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), TrackAndStopError> {
@@ -500,11 +545,8 @@ fn fallback_sample(
     intersection
         .get(random_index)
         .ok_or_else(|| {
-            Error::new(ErrorDetails::Inference {
-                message:
-                    "Failed to sample variant from nonempty intersection. This should never happen."
-                        .to_string(),
-            })
+            Error::new(ErrorDetails::InternalError { message:
+                format!("Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}.")})
         })
         .map(std::string::ToString::to_string)
 }
@@ -512,12 +554,13 @@ fn fallback_sample(
 /// Sample a variant from active_variants using weighted probabilities.
 /// Returns None if no active variant has positive probability.
 /// Returns an error if any probability is negative.
+/// Note: `unform_sample` must be in [0, 1], but `sampling_probabilities`
+/// just need to be non-negative, since they're summed and normalized.
 fn sample_with_probabilities<'a>(
     active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
     sampling_probabilities: &HashMap<String, f64>,
     uniform_sample: f64,
 ) -> Result<Option<&'a str>, TrackAndStopError> {
-    // TODO (?): Check for probabilities > 1, unless we want to allow arbitrary nonnegative weights
     // Check for negative probabilities
     for (variant_name, &prob) in sampling_probabilities {
         if prob < 0.0 {
@@ -571,7 +614,7 @@ impl TrackAndStopState {
         min_samples_per_variant: u64,
         delta: f64,
         epsilon: f64,
-        metric_optimize: crate::config::MetricConfigOptimize,
+        metric_optimize: MetricConfigOptimize,
     ) -> Result<Self, TrackAndStopError> {
         let variant_performances = if variant_performances.len() > candidate_variants.len() {
             tracing::warn!("Feedback is being filtered out for non-candidate variants. Current candidate variants: {candidate_variants:?}");
@@ -635,6 +678,7 @@ impl TrackAndStopState {
                                 variance_floor: None,
                                 min_prob: None,
                                 reg0: None,
+                                metric_optimize,
                             },
                         )?,
                     }),
@@ -701,6 +745,7 @@ impl TrackAndStopState {
                                 variance_floor: None,
                                 min_prob: None,
                                 reg0: None,
+                                metric_optimize,
                             },
                         )?,
                     }),
@@ -745,13 +790,10 @@ impl TrackAndStopState {
                 let total_variants = num_nursery_variants + num_bandit_variants;
                 let nursery_probability = num_nursery_variants as f64 / total_variants as f64;
 
-                if uniform_sample < nursery_probability {
+                let bandit_mass = 1.0 - nursery_probability;
+                if (bandit_mass <= f64::EPSILON) || (uniform_sample < nursery_probability) {
                     Ok(nursery.sample_active(active_variants))
                 } else {
-                    let bandit_mass = 1.0 - nursery_probability;
-                    if bandit_mass <= f64::EPSILON {
-                        return Ok(None);
-                    }
                     let bandit_sample = (uniform_sample - nursery_probability) / bandit_mass;
                     sample_with_probabilities(
                         active_variants,
@@ -766,7 +808,6 @@ impl TrackAndStopState {
                 // Sample from the active bandits using probability sampling
                 sample_with_probabilities(active_variants, sampling_probabilities, uniform_sample)
             }
-            // TODO: log info for the user about winning variant and the set it won among.
             TrackAndStopState::NurseryAndStopped {
                 nursery,
                 stopped_variant_name,
@@ -1111,9 +1152,9 @@ mod tests {
     fn test_nursery_get_variant_round_robin_single() {
         let nursery = Nursery::new(vec!["A".to_string()]);
 
-        // Should always return "A" regardless of how many times called
+        // Should always return index 0 (which maps to "A") regardless of how many times called
         for _ in 0..10 {
-            assert_eq!(nursery.get_variant_round_robin(), "A");
+            assert_eq!(nursery.get_variant_idx_round_robin(), 0);
         }
     }
 
@@ -1121,25 +1162,25 @@ mod tests {
     fn test_nursery_get_variant_round_robin_multiple() {
         let nursery = Nursery::new(vec!["A".to_string(), "B".to_string(), "C".to_string()]);
 
-        // First cycle
-        assert_eq!(nursery.get_variant_round_robin(), "A");
-        assert_eq!(nursery.get_variant_round_robin(), "B");
-        assert_eq!(nursery.get_variant_round_robin(), "C");
+        // First cycle - returns indices 0, 1, 2
+        assert_eq!(nursery.get_variant_idx_round_robin(), 0); // "A"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 1); // "B"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 2); // "C"
 
         // Second cycle - should wrap around
-        assert_eq!(nursery.get_variant_round_robin(), "A");
-        assert_eq!(nursery.get_variant_round_robin(), "B");
-        assert_eq!(nursery.get_variant_round_robin(), "C");
+        assert_eq!(nursery.get_variant_idx_round_robin(), 0); // "A"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 1); // "B"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 2); // "C"
     }
 
     #[test]
     fn test_nursery_get_variant_round_robin_two_variants() {
         let nursery = Nursery::new(vec!["X".to_string(), "Y".to_string()]);
 
-        assert_eq!(nursery.get_variant_round_robin(), "X");
-        assert_eq!(nursery.get_variant_round_robin(), "Y");
-        assert_eq!(nursery.get_variant_round_robin(), "X");
-        assert_eq!(nursery.get_variant_round_robin(), "Y");
+        assert_eq!(nursery.get_variant_idx_round_robin(), 0); // "X"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 1); // "Y"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 0); // "X"
+        assert_eq!(nursery.get_variant_idx_round_robin(), 1); // "Y"
     }
 
     #[test]
@@ -1258,7 +1299,7 @@ mod tests {
             10,
             0.05,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Max,
         )
         .unwrap();
 
@@ -1285,7 +1326,7 @@ mod tests {
             10,
             0.05,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Max,
         )
         .unwrap();
 
@@ -1320,7 +1361,7 @@ mod tests {
             10,
             0.05,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Min,
         )
         .unwrap();
 
@@ -1328,7 +1369,7 @@ mod tests {
             TrackAndStopState::Stopped {
                 winner_variant_name,
             } => {
-                assert_eq!(winner_variant_name, "B");
+                assert_eq!(winner_variant_name, "A");
             }
             _ => panic!("Expected Stopped state, got {state:?}"),
         }
@@ -1346,7 +1387,7 @@ mod tests {
             10,
             0.05,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Max,
         )
         .unwrap();
 
@@ -1376,7 +1417,7 @@ mod tests {
             10,
             0.05,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Min,
         )
         .unwrap();
 
@@ -1412,7 +1453,7 @@ mod tests {
             10,
             0.05,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Max,
         )
         .unwrap();
 
@@ -1440,7 +1481,7 @@ mod tests {
             10,
             0.05,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Min,
         );
 
         assert!(result.is_err());
@@ -1642,7 +1683,7 @@ mod tests {
             5,
             0.1,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Max,
         )
         .expect("state builds");
 
@@ -1678,7 +1719,7 @@ mod tests {
             5,
             0.1,
             0.0,
-            crate::config::MetricConfigOptimize::Max,
+            MetricConfigOptimize::Min,
         )
         .expect("state builds");
 
@@ -1697,5 +1738,53 @@ mod tests {
             !sampling_probabilities.contains_key("fallback"),
             "fallback variants should not appear in bandit probabilities"
         );
+    }
+
+    #[tokio::test]
+    async fn test_setup_prevents_duplicate_task_spawning() {
+        use crate::db::clickhouse::ClickHouseConnectionInfo;
+        use std::sync::atomic::AtomicBool;
+
+        // Create a TrackAndStopConfig instance
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec!["C".to_string()],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.1,
+            update_period: Duration::from_secs(60),
+            metric_optimize: MetricConfigOptimize::Min,
+            state: Arc::new(ArcSwap::new(Arc::new(
+                TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
+            ))),
+            task_spawned: AtomicBool::new(false),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn SelectQueries + Send + Sync>;
+        let cancel_token = CancellationToken::new();
+
+        // First call to setup should succeed
+        let result1 = config
+            .setup(db.clone(), "test_function", cancel_token.clone())
+            .await;
+        assert!(result1.is_ok(), "First setup call should succeed");
+
+        // Second call to setup should fail with an error
+        let result2 = config
+            .setup(db, "test_function", cancel_token.clone())
+            .await;
+        assert!(result2.is_err(), "Second setup call should fail");
+
+        // Verify the error message mentions the task has already been spawned
+        let err = result2.unwrap_err();
+        assert!(
+            err.to_string().contains("already been spawned"),
+            "Error should mention task already spawned, got: {err}"
+        );
+
+        // Clean up: cancel the spawned task
+        cancel_token.cancel();
     }
 }

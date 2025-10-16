@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
-use crate::experimentation::VariantSampler;
 use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
 use serde::de::DeserializeOwned;
@@ -186,6 +185,7 @@ impl GatewayHandle {
                     Arc::new(clickhouse_connection_info.clone())
                         as Arc<dyn SelectQueries + Send + Sync>,
                     function_name,
+                    cancel_token.clone(),
                 )
                 .await?;
         }
