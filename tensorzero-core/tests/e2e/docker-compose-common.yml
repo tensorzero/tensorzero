@@ -106,10 +106,12 @@ services:
       start_period: 5s
 
   # This is not a gateway to use but rather one that just sets up migrations for the Postgres db
-  # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
-  # bump this to a locally-built image (or published 'sha' tag)
+  # Build from the current checkout so migrations defined in this branch are available during CI runs.
   gateway-postgres-migrations:
-    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    build:
+      context: ../../..
+      dockerfile: gateway/Dockerfile
+    image: tensorzero/gateway:local
     environment:
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
     depends_on:
