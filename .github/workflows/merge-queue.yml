@@ -1,18 +1,17 @@
 name: Merge Queue Checks
 run-name: Merge Queue Checks for ${{ github.ref }}
 
+# This workflow is called from 'general.yml' (so that it can depends on artifacts from other jobs)
 on:
   workflow_dispatch:
-  merge_group:
-    paths-ignore:
-      - "docs/**"
+  workflow_call:
   schedule:
     - cron: "0 0 * * *" # Runs at 00:00 UTC every day
 
-# When triggered from the merge queue, cancel any existing workflow runs for the same PR branch
+# When triggered from the merge queue (via the workflow call in 'general.yml'), cancel any existing workflow runs for the same PR branch
 # Otherwise, use the unique run id for the concurrency group, to prevent anything from getting cancelled
 concurrency:
-  group: ${{ github.event_name == 'merge_group' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
+  group: ${{ github.event_name == 'workflow_call' && format('{0}-{1}', github.workflow, github.ref) || github.run_id }}
   cancel-in-progress: true
 
 env:
