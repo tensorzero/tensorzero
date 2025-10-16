@@ -699,6 +699,11 @@ jobs:
 
   check-all-live-tests-passed:
     if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     uses: ./.github/workflows/merge-queue.yml
     secrets: inherit
 
