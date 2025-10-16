@@ -6,14 +6,10 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint, Role};
 use tensorzero_core::{
-    db::{
-        clickhouse::test_helpers::{
-            select_chat_dataset_clickhouse, select_json_dataset_clickhouse,
-            stale_datapoint_clickhouse,
-        },
-        datasets::DatapointKind,
+    db::clickhouse::test_helpers::{
+        select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
     },
-    endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT,
+    endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
 };
 

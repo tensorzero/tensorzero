@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use reqwest::Url;
 use tensorzero_core::{
-    db::{clickhouse::ClickHouseConnectionInfo, datasets::DatapointKind},
-    endpoints::datasets::CLICKHOUSE_DATETIME_FORMAT,
+    db::clickhouse::ClickHouseConnectionInfo,
+    endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
 };
 use uuid::Uuid;
 

@@ -13,8 +13,8 @@ use std::{collections::HashMap, future::Future, pin::Pin};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
-use crate::db::datasets::{DatapointKind, DatasetQueries, GetDatapointParams};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo, TableName};
+use crate::db::datasets::{DatasetQueries, GetDatapointParams};
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::stored_input::StoredInput;
@@ -1069,6 +1069,23 @@ pub struct ExistingInferenceInfo {
     pub function_name: String,
     pub variant_name: String,
     pub episode_id: Uuid,
+}
+
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum DatapointKind {
+    Chat,
+    Json,
+}
+
+impl DatapointKind {
+    pub fn table_name(&self) -> TableName {
+        match self {
+            DatapointKind::Chat => TableName::ChatInferenceDatapoint,
+            DatapointKind::Json => TableName::JsonInferenceDatapoint,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]

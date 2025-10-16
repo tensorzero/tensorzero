@@ -5,21 +5,13 @@ use uuid::Uuid;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::FloatComparisonOperator;
-use crate::endpoints::datasets::Datapoint;
+use crate::endpoints::datasets::{Datapoint, DatapointKind};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
 use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
 };
 use crate::tool::ToolCallConfigDatabaseInsert;
-
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export)]
-pub enum DatapointKind {
-    Chat,
-    Json,
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

@@ -6,22 +6,13 @@ use std::num::ParseIntError;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
-    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert, DatapointKind,
+    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetDetailRow, DatasetMetadata, DatasetOutputSource, DatasetQueries, DatasetQueryParams,
     GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatasetMetadataParams,
     GetDatasetRowsParams, StaleDatapointParams,
 };
-use crate::endpoints::datasets::{validate_dataset_name, Datapoint};
+use crate::endpoints::datasets::{validate_dataset_name, Datapoint, DatapointKind};
 use crate::error::{Error, ErrorDetails};
-
-impl DatapointKind {
-    pub fn table_name(&self) -> TableName {
-        match self {
-            DatapointKind::Chat => TableName::ChatInferenceDatapoint,
-            DatapointKind::Json => TableName::JsonInferenceDatapoint,
-        }
-    }
-}
 
 #[async_trait]
 impl DatasetQueries for ClickHouseConnectionInfo {
@@ -792,9 +783,7 @@ mod tests {
     use crate::db::datasets::{
         ChatInferenceDatapointInsert, JsonInferenceDatapointInsert, MetricFilter,
     };
-    use crate::inference::types::{
-        ContentBlockChatOutput, JsonInferenceOutput, StoredInput, Text,
-    };
+    use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput, Text};
 
     use super::*;
 
