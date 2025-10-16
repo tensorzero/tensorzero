@@ -39,7 +39,7 @@ async-stream = "0.3.5"
 async-trait = "0.1.89"
 http = "1.3.1"
 tokio-stream = "0.1.15"
-tokio = { version = "1.46.1", features = ["full"] }
+tokio = { version = "1.48.0", features = ["full"] }
 tracing = { version = "0.1.40", features = ["log"] }
 pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
