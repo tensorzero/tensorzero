@@ -8,7 +8,6 @@ import type {
   StoredInput,
   StoragePath as BackendStoragePath,
   StorageKind as BackendStorageKind,
-  Datapoint,
 } from "tensorzero-node";
 
 /**
@@ -493,7 +492,13 @@ function displayInputMessageContentToStoredInputMessageContent(
         },
         storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
-    default:
+    case "template":
+    case "tool_call":
+    case "tool_result":
+    case "raw_text":
+    case "thought":
+    case "unknown":
+      // These types are already compatible with StoredInputMessageContent
       return content;
   }
 }
