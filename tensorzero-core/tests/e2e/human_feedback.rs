@@ -1209,6 +1209,8 @@ async fn test_fast_inference_then_feedback() {
     let tasks: Vec<_> = (0..20)
         .map(|_| {
             let client = Arc::clone(&client);
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+            #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 let inference_payload = tensorzero::ClientInferenceParams {
                     function_name: Some("basic_test".to_string()),

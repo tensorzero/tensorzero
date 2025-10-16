@@ -414,6 +414,8 @@ pub async fn start_openai_compatible_gateway(
         let _ = recv.await;
     };
 
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(
         axum::serve(listener, router)
             .with_graceful_shutdown(shutdown_fut)

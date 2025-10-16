@@ -71,6 +71,8 @@ where
                 let service = service.clone();
 
                 let proxy = proxy.clone();
+                // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+                #[expect(clippy::disallowed_methods)]
                 tokio::spawn(async move {
                     if let Err(err) = server::conn::http1::Builder::new()
                         .preserve_header_case(true)
@@ -123,6 +125,8 @@ where
                             .map(|b| b.boxed().map_err(|never| match never {}).boxed()));
                     };
 
+                    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+                    #[expect(clippy::disallowed_methods)]
                     tokio::spawn(async move {
                         let Ok(client) = hyper::upgrade::on(req).await else {
                             tracing::error!(

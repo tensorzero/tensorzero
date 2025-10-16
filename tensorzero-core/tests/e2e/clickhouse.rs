@@ -1039,6 +1039,8 @@ async fn test_concurrent_clickhouse_migrations() {
     let mut handles = Vec::with_capacity(num_concurrent_starts);
     for _ in 0..num_concurrent_starts {
         let clickhouse_clone = clickhouse.clone();
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         handles.push(tokio::spawn(async move {
             migration_manager::run(RunMigrationManagerArgs {
                 clickhouse: &clickhouse_clone,

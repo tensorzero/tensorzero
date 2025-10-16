@@ -45,6 +45,8 @@ async fn start_target_server(
         );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     let handle = tokio::spawn(
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_signal)
@@ -58,6 +60,8 @@ async fn test_provider_proxy() {
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
     let temp_dir = tempfile::tempdir().unwrap();
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     let _proxy_handle = tokio::spawn(run_server(
         Args {
             cache_path: temp_dir.path().to_path_buf(),
@@ -180,6 +184,8 @@ async fn test_read_old_write_new() {
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
     let temp_dir = tempfile::tempdir().unwrap();
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     let _proxy_handle = tokio::spawn(run_server(
         Args {
             cache_path: temp_dir.path().to_path_buf(),
@@ -261,6 +267,8 @@ async fn test_read_old_write_new() {
     // Start a new proxy server with the same settings
     let (server_started_tx, server_started_rx) = oneshot::channel();
 
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     let _proxy_handle = tokio::spawn(run_server(
         Args {
             cache_path: temp_dir.path().to_path_buf(),

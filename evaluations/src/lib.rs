@@ -458,6 +458,8 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {

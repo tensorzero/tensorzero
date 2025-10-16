@@ -357,6 +357,8 @@ async fn run_health_server(port: u16) -> Result<(), Box<dyn std::error::Error + 
         let (stream, _) = listener.accept().await?;
         let io = hyper_util::rt::TokioIo::new(stream);
 
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .serve_connection(io, service_fn(health_check_handler))
@@ -389,6 +391,8 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
 
     // Start health check server
     let health_port = args.health_port;
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         if let Err(e) = run_health_server(health_port).await {
             tracing::error!("Health check server failed: {:?}", e);
