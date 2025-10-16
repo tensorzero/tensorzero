@@ -846,7 +846,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             }));
         }
 
-        let datapoint: Datapoint = serde_json::from_str(&result.response).map_err(|e| {
+        let datapoint: Datapoint = serde_json::from_str(result.response.trim()).map_err(|e| {
             Error::new(ErrorDetails::ClickHouseDeserialization {
                 message: format!("Failed to deserialize datapoint: {e}"),
             })
