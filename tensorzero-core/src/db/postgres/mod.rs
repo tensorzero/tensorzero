@@ -19,8 +19,13 @@ fn get_run_migrations_command() -> String {
 
 #[derive(Debug, Clone)]
 pub enum PostgresConnectionInfo {
-    Enabled { pool: PgPool },
-    Mock { healthy: bool },
+    Enabled {
+        pool: PgPool,
+    },
+    #[cfg(test)]
+    Mock {
+        healthy: bool,
+    },
     Disabled,
 }
 
@@ -29,6 +34,7 @@ impl PostgresConnectionInfo {
         Self::Enabled { pool }
     }
 
+    #[cfg(test)]
     pub fn new_mock(healthy: bool) -> Self {
         Self::Mock { healthy }
     }
@@ -40,6 +46,7 @@ impl PostgresConnectionInfo {
     pub fn get_pool(&self) -> Option<&PgPool> {
         match self {
             Self::Enabled { pool } => Some(pool),
+            #[cfg(test)]
             Self::Mock { .. } => None,
             Self::Disabled => None,
         }
@@ -48,6 +55,7 @@ impl PostgresConnectionInfo {
     pub fn get_pool_result(&self) -> Result<&PgPool, Error> {
         match self {
             Self::Enabled { pool } => Ok(pool),
+            #[cfg(test)]
             Self::Mock { .. } => Err(Error::new(ErrorDetails::PostgresConnectionInitialization {
                 message: "Mock database is not supported".to_string(),
             })),
@@ -90,6 +98,7 @@ impl HealthCheckable for PostgresConnectionInfo {
     async fn health(&self) -> Result<(), Error> {
         match self {
             Self::Disabled => Ok(()),
+            #[cfg(test)]
             Self::Mock { healthy } => {
                 if *healthy {
                     Ok(())

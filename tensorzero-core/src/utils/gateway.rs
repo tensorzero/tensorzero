@@ -170,7 +170,10 @@ impl GatewayHandle {
     pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
         let config = Arc::new(Config::default());
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
+        #[cfg(test)]
         let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
+        #[cfg(not(test))]
+        let postgres_connection_info = PostgresConnectionInfo::new_disabled();
         let cancel_token = CancellationToken::new();
         Self {
             app_state: AppStateData {
@@ -205,6 +208,7 @@ impl GatewayHandle {
                     Arc::new(clickhouse_connection_info.clone())
                         as Arc<dyn SelectQueries + Send + Sync>,
                     function_name,
+                    &postgres_connection_info,
                     cancel_token.clone(),
                 )
                 .await?;
