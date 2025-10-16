@@ -14,7 +14,8 @@ import {
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { CodeEditor, useFormattedJson } from "../ui/code-editor";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { Input } from "../ui/input";
 
 export function EmptyMessage({ message = "No content" }: { message?: string }) {
   return (
@@ -27,14 +28,16 @@ export function EmptyMessage({ message = "No content" }: { message?: string }) {
 interface LabelProps {
   children?: React.ReactNode;
   icon?: React.ReactNode;
+  action?: React.ReactNode;
 }
 
-function Label({ children, icon }: LabelProps) {
+function Label({ children, icon, action }: LabelProps) {
   return (
     children && (
       <div className="flex flex-row items-center gap-1">
         {icon}
         <span className="text-fg-tertiary text-xs font-medium">{children}</span>
+        <div>{action}</div>
       </div>
     )
   );
@@ -47,6 +50,7 @@ interface TextMessageProps {
   emptyMessage?: string;
   isEditing?: boolean;
   onChange?: (value: string) => void;
+  action?: ReactNode;
 }
 
 export function TextMessage({
@@ -56,6 +60,7 @@ export function TextMessage({
   emptyMessage,
   isEditing,
   onChange,
+  action,
 }: TextMessageProps) {
   const formattedContent = useFormattedJson(content || "");
 
@@ -63,7 +68,10 @@ export function TextMessage({
     <EmptyMessage message={emptyMessage} />
   ) : (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label icon={<AlignLeftIcon className="text-fg-muted h-3 w-3" />}>
+      <Label
+        icon={<AlignLeftIcon className="text-fg-muted h-3 w-3" />}
+        action={action}
+      >
         {label}
       </Label>
       <CodeEditor
@@ -80,15 +88,15 @@ export function TextMessage({
 
 export function TemplateMessage({
   templateName,
-  arguments: templateArguments,
+  templateArguments,
   isEditing,
   onChange,
 }: {
   templateName: string;
-  arguments: unknown;
+  templateArguments: unknown;
   isEditing?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onChange?: (value: any) => void;
+  onChange?: (templateName: string, value: any) => void;
 }) {
   const formattedJson = useFormattedJson(templateArguments ?? {});
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -96,7 +104,26 @@ export function TemplateMessage({
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <Label icon={<FileCode className="text-fg-muted h-3 w-3" />}>
-        Template: <span className="font-mono text-xs">{templateName}</span>
+        <div className="inline-flex items-center gap-1">
+          {!isEditing || templateName === "system" ? (
+            <>
+              Template:{" "}
+              <span className="font-mono text-xs">{templateName}</span>
+            </>
+          ) : (
+            <>
+              Template:
+              <Input
+                type="text"
+                className="inline-block"
+                value={templateName}
+                onChange={(e) => {
+                  onChange?.(e.target.value, templateArguments);
+                }}
+              />
+            </>
+          )}
+        </div>
       </Label>
       <CodeEditor
         allowedLanguages={["json"]}
@@ -106,7 +133,7 @@ export function TemplateMessage({
           try {
             const parsedJson = JSON.parse(updatedJson);
             setJsonError(null);
-            onChange?.(parsedJson);
+            onChange?.(templateName, parsedJson);
           } catch {
             setJsonError("Invalid JSON format");
           }
@@ -145,10 +172,32 @@ function ToolDetails({
   return (
     <div className="border-border bg-bg-tertiary/50 grid grid-flow-row grid-cols-[min-content_1fr] grid-rows-[repeat(3,min-content)] place-content-center gap-x-4 gap-y-1 rounded-sm px-3 py-2 text-xs">
       <p className="text-fg-secondary font-medium">{nameLabel}</p>
-      <p className="self-center truncate font-mono text-[0.6875rem]">{name}</p>
+      {!isEditing ? (
+        <p className="self-center truncate font-mono text-[0.6875rem]">
+          {name}
+        </p>
+      ) : (
+        <Input
+          type="text"
+          value={name}
+          onChange={(e) => {
+            onChange?.(id, e.target.value, payload);
+          }}
+        />
+      )}
 
       <p className="text-fg-secondary font-medium">ID</p>
-      <p className="self-center truncate font-mono text-[0.6875rem]">{id}</p>
+      {!isEditing ? (
+        <p className="self-center truncate font-mono text-[0.6875rem]">{id}</p>
+      ) : (
+        <Input
+          type="text"
+          value={id}
+          onChange={(e) => {
+            onChange?.(e.target.value, name, payload);
+          }}
+        />
+      )}
 
       <p className="text-fg-secondary font-medium">{payloadLabel}</p>
       <CodeEditor
@@ -215,7 +264,7 @@ export function ToolCallMessage(
         id={toolCall.toolCallId}
         payload={toolArguments}
         payloadLabel={payloadLabel}
-        isEditing={"isEditing" in toolCall ? toolCall.isEditing : undefined}
+        isEditing={"isEditing" in toolCall ? toolCall?.isEditing : undefined}
         onChange={"onChange" in toolCall ? toolCall.onChange : undefined}
         enforceJson={true}
       />

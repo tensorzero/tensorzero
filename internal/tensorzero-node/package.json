@@ -58,6 +58,6 @@
     "version": "napi version"
   },
   "dependencies": {
-    "buildkite-test-collector": "^1.9.1"
+    "buildkite-test-collector": "^1.9.2"
   }
 }

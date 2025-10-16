@@ -43,13 +43,11 @@ export type TemplateInput = z.infer<typeof templateInputSchema>;
 
 // The three display text types below handle the scenario
 // where the function 1) does not use schemas
-export const displayUnstructuredTextInputSchema = z.object({
+export const displayTextInputSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
 });
-export type DisplayUnstructuredTextInput = z.infer<
-  typeof displayUnstructuredTextInputSchema
->;
+export type DisplayTextInput = z.infer<typeof displayTextInputSchema>;
 
 // 2) uses templates
 export const displayTemplateSchema = z.object({
@@ -242,7 +240,7 @@ export type ModelInferenceInputMessageContent = z.infer<
 >;
 
 export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
-  displayUnstructuredTextInputSchema,
+  displayTextInputSchema,
   displayTemplateSchema,
   displayMissingFunctionTextInputSchema,
   toolCallContentSchema,
@@ -278,7 +276,7 @@ export type ModelInferenceInputMessage = z.infer<
 
 export const displayModelInferenceInputMessageContentSchema =
   z.discriminatedUnion("type", [
-    displayUnstructuredTextInputSchema,
+    displayTextInputSchema,
     toolCallContentSchema,
     toolResultContentSchema,
     resolvedFileContentSchema,
