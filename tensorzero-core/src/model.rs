@@ -1017,6 +1017,8 @@ pub enum UninitializedProviderConfig {
         #[serde(default)]
         api_type: OpenAIAPIType,
         #[serde(default)]
+        include_encrypted_reasoning: bool,
+        #[serde(default)]
         provider_tools: Vec<Value>,
     },
     OpenRouter {
@@ -1123,6 +1125,7 @@ impl UninitializedProviderConfig {
                                 .await?,
                             // TODO - decide how to expose the responses api for wrapped providers
                             OpenAIAPIType::ChatCompletions,
+                            false,
                             Vec::new(),
                             )?),
                         HostedProviderKind::TGI => Box::new(TGIProvider::new(
@@ -1256,6 +1259,7 @@ impl UninitializedProviderConfig {
                 api_base,
                 api_key_location,
                 api_type,
+                include_encrypted_reasoning,
                 provider_tools,
             } => ProviderConfig::OpenAI(OpenAIProvider::new(
                 model_name,
@@ -1267,6 +1271,7 @@ impl UninitializedProviderConfig {
                     )
                     .await?,
                 api_type,
+                include_encrypted_reasoning,
                 provider_tools,
             )?),
             UninitializedProviderConfig::OpenRouter {
@@ -2252,6 +2257,7 @@ impl ShorthandModelConfig for ModelConfig {
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
                 OpenAIAPIType::ChatCompletions,
+                false,
                 Vec::new(),
             )?),
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(

@@ -95,6 +95,7 @@ pub struct OpenAIProvider {
     api_base: Option<Url>,
     #[serde(skip)]
     credentials: OpenAICredentials,
+    include_encrypted_reasoning: bool,
     api_type: OpenAIAPIType,
     provider_tools: Vec<Value>,
 }
@@ -105,8 +106,16 @@ impl OpenAIProvider {
         api_base: Option<Url>,
         credentials: OpenAICredentials,
         api_type: OpenAIAPIType,
+        include_encrypted_reasoning: bool,
         provider_tools: Vec<Value>,
     ) -> Result<Self, Error> {
+        if !matches!(api_type, OpenAIAPIType::Responses) && include_encrypted_reasoning {
+            return Err(Error::new(ErrorDetails::Config {
+                message:
+                    "include_encrypted_reasoning is only supported when api_type = \"responses\""
+                        .to_string(),
+            }));
+        }
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         if let Some(api_base) = &api_base {
             check_api_base_suffix(api_base);
@@ -120,7 +129,10 @@ impl OpenAIProvider {
             model_name,
             api_base,
             credentials,
+
+            include_encrypted_reasoning,
             api_type,
+
             provider_tools,
         })
     }
@@ -229,8 +241,13 @@ impl WrappedProvider for OpenAIProvider {
     ) -> Result<serde_json::Value, Error> {
         match self.api_type {
             OpenAIAPIType::Responses => Ok(serde_json::to_value(
-                OpenAIResponsesRequest::new(&self.model_name, request, &self.provider_tools)
-                    .await?,
+                OpenAIResponsesRequest::new(
+                    &self.model_name,
+                    request,
+                    self.include_encrypted_reasoning,
+                    &self.provider_tools,
+                )
+                .await?,
             )
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
@@ -465,9 +482,15 @@ impl InferenceProvider for OpenAIProvider {
                 let request_url =
                     get_responses_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?;
 
+                // TODO - support encrypted reasoning in streaming
                 let request_body = serde_json::to_value(
-                    OpenAIResponsesRequest::new(&self.model_name, request, &self.provider_tools)
-                        .await?,
+                    OpenAIResponsesRequest::new(
+                        &self.model_name,
+                        request,
+                        false,
+                        &self.provider_tools,
+                    )
+                    .await?,
                 )
                 .map_err(|e| {
                     Error::new(ErrorDetails::Serialization {
@@ -4309,6 +4332,7 @@ mod tests {
             Some(Url::parse("http://localhost:1234/v1/").unwrap()),
             OpenAICredentials::None,
             OpenAIAPIType::ChatCompletions,
+            false,
             Vec::new(),
         );
 
@@ -4317,6 +4341,7 @@ mod tests {
             Some(Url::parse("http://localhost:1234/v1").unwrap()),
             OpenAICredentials::None,
             OpenAIAPIType::ChatCompletions,
+            false,
             Vec::new(),
         );
 
@@ -4327,6 +4352,7 @@ mod tests {
             Some(invalid_url_1.clone()),
             OpenAICredentials::None,
             OpenAIAPIType::ChatCompletions,
+            false,
             Vec::new(),
         );
         assert!(logs_contain("automatically appends `/chat/completions`"));
@@ -4338,6 +4364,7 @@ mod tests {
             Some(invalid_url_2.clone()),
             OpenAICredentials::None,
             OpenAIAPIType::ChatCompletions,
+            false,
             Vec::new(),
         );
         assert!(logs_contain("automatically appends `/chat/completions`"));

@@ -60,6 +60,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                     .await?,
                 // TODO: handle the fact that there are also embeddings
                 OpenAIAPIType::ChatCompletions,
+                false,
                 Vec::new(),
             )?),
             #[cfg(any(test, feature = "e2e_tests"))]
@@ -854,6 +855,7 @@ mod tests {
                     crate::model::CredentialLocation::None,
                 )),
                 api_type: Default::default(),
+                include_encrypted_reasoning: false,
                 provider_tools: Vec::new(),
             },
             timeout_ms: None,

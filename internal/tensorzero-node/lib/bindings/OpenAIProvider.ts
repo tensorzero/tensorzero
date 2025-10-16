@@ -5,6 +5,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
 export type OpenAIProvider = {
   model_name: string;
   api_base: string | null;
+  include_encrypted_reasoning: boolean;
   api_type: OpenAIAPIType;
   provider_tools: Array<JsonValue>;
 };
