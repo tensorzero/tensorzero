@@ -2,5 +2,5 @@ apiVersion: v2
 name: tensorzero
 description: A Helm chart for Kubernetes with deployment, secret, configmap, service, and ingress
 type: application
-version: 0.0.1
-appVersion: "2025.9.6"
+version: 0.0.0 # updated by CI
+appVersion: "2025.10.3"

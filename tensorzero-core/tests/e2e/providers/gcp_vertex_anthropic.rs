@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use crate::providers::common::{E2ETestProvider, E2ETestProviders};
 
+use super::common::ModelTestProvider;
+
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
 
@@ -78,6 +80,19 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "gcp_vertex_anthropic".to_string(),
+        model_info: HashMap::from([
+            (
+                "model_id".to_string(),
+                "claude-3-haiku@20240307".to_string(),
+            ),
+            ("location".to_string(), "us-central1".to_string()),
+            ("project_id".to_string(), "tensorzero-public".to_string()),
+        ]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -86,6 +101,8 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
+        provider_type_default_credentials: vec![],
+        provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
@@ -95,5 +112,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: image_providers,
         pdf_inference: vec![],
         shorthand_inference: shorthand_providers,
+        credential_fallbacks,
     }
 }

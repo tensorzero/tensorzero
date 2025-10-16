@@ -2,15 +2,17 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent, File,
-    InferenceOutput, InferenceResponse, Input, InputMessage, InputMessageContent, Role,
+    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
+    InputMessage, InputMessageContent, Role,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
-use tensorzero_core::config::ProviderTypesConfig;
+use tensorzero_core::config::provider_types::ProviderTypesConfig;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProviderConfig,
@@ -22,13 +24,16 @@ use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind,
 };
+use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
+use tensorzero_core::tool::ToolCallInput;
 use url::Url;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
 use crate::providers::common::{
-    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, DEEPSEEK_PAPER_PDF, FERRIS_PNG,
+    E2ETestProvider, E2ETestProviders, EmbeddingTestProvider, ModelTestProvider,
+    DEEPSEEK_PAPER_PDF, FERRIS_PNG,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{
     get_clickhouse, select_batch_model_inference_clickhouse, select_chat_inference_clickhouse,
@@ -83,15 +88,31 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
-    let inference_params_providers = vec![E2ETestProvider {
-        supports_batch_inference: true,
-        variant_name: "openai".to_string(),
-        model_name: "gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "openai".into(),
-        credentials: credentials.clone(),
-    }];
+    let inference_params_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: credentials.clone(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: true,
@@ -101,13 +122,22 @@ async fn get_providers() -> E2ETestProviders {
         credentials,
     }];
 
-    let image_providers = vec![E2ETestProvider {
-        supports_batch_inference: true,
-        variant_name: "openai".to_string(),
-        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
-        model_provider_name: "openai".into(),
-        credentials: HashMap::new(),
-    }];
+    let image_providers = vec![
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai".to_string(),
+            model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+    ];
 
     let json_providers = vec![
         E2ETestProvider {
@@ -145,6 +175,20 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
+        E2ETestProvider {
+            supports_batch_inference: false,
+            variant_name: "openai-responses-strict".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let json_mode_off_providers = vec![
@@ -162,6 +206,13 @@ async fn get_providers() -> E2ETestProviders {
             model_provider_name: "openai".into(),
             credentials: HashMap::new(),
         },
+        E2ETestProvider {
+            supports_batch_inference: true,
+            variant_name: "openai-responses_json_mode_off".to_string(),
+            model_name: "responses-gpt-4o-mini-2024-07-18".into(),
+            model_provider_name: "openai".into(),
+            credentials: HashMap::new(),
+        },
     ];
 
     let shorthand_providers = vec![E2ETestProvider {
@@ -176,6 +227,31 @@ async fn get_providers() -> E2ETestProviders {
         model_name: "text-embedding-3-small".into(),
     }];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai".to_string(),
+        model_name: "gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: true,
+        variant_name: "openai-shorthand".to_string(),
+        model_name: "openai::gpt-4o-mini-2024-07-18".into(),
+        model_provider_name: "openai".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "openai".to_string(),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "gpt-4o-mini-2024-07-18".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -184,6 +260,9 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: embedding_providers,
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
@@ -194,6 +273,7 @@ async fn get_providers() -> E2ETestProviders {
         pdf_inference: image_providers.clone(),
 
         shorthand_inference: shorthand_providers.clone(),
+        credential_fallbacks,
     }
 }
 
@@ -1110,6 +1190,7 @@ async fn test_embedding_request() {
             .load(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
+                &ProviderTypeDefaultCredentials::default(),
             )
             .await
             .unwrap();
@@ -1141,17 +1222,17 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &TensorzeroHttpClient::new().unwrap(),
-                clickhouse_connection_info: &clickhouse,
-                postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                credentials: &api_keys,
-                cache_options: &CacheOptions {
+                http_client: TensorzeroHttpClient::new().unwrap(),
+                clickhouse_connection_info: clickhouse.clone(),
+                postgres_connection_info: PostgresConnectionInfo::Disabled,
+                credentials: Arc::new(api_keys.clone()),
+                cache_options: CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
-                tags: &Default::default(),
-                rate_limiting_config: &Default::default(),
-                otlp_config: &Default::default(),
+                tags: Arc::new(Default::default()),
+                rate_limiting_config: Arc::new(Default::default()),
+                otlp_config: Default::default(),
             },
         )
         .await
@@ -1225,17 +1306,17 @@ async fn test_embedding_request() {
             &request,
             &model_name,
             &InferenceClients {
-                http_client: &TensorzeroHttpClient::new().unwrap(),
-                clickhouse_connection_info: &clickhouse,
-                postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                credentials: &api_keys,
-                cache_options: &CacheOptions {
+                http_client: TensorzeroHttpClient::new().unwrap(),
+                clickhouse_connection_info: clickhouse.clone(),
+                postgres_connection_info: PostgresConnectionInfo::Disabled,
+                credentials: Arc::new(api_keys.clone()),
+                cache_options: CacheOptions {
                     max_age_s: None,
                     enabled: CacheEnabledMode::On,
                 },
-                tags: &Default::default(),
-                rate_limiting_config: &Default::default(),
-                otlp_config: &Default::default(),
+                tags: Arc::new(Default::default()),
+                rate_limiting_config: Arc::new(Default::default()),
+                otlp_config: Default::default(),
             },
         )
         .await
@@ -1263,6 +1344,7 @@ async fn test_embedding_sanity_check() {
             .load(
                 &ProviderTypesConfig::default(),
                 Arc::from("good".to_string()),
+                &ProviderTypeDefaultCredentials::default(),
             )
             .await
             .unwrap();
@@ -1293,17 +1375,17 @@ async fn test_embedding_sanity_check() {
     let request_info = (&provider_config).into();
     let api_keys = InferenceCredentials::default();
     let clients = InferenceClients {
-        http_client: &client,
-        clickhouse_connection_info: &clickhouse,
-        postgres_connection_info: &PostgresConnectionInfo::Disabled,
-        credentials: &api_keys,
-        cache_options: &CacheOptions {
+        http_client: client.clone(),
+        clickhouse_connection_info: clickhouse.clone(),
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        credentials: Arc::new(api_keys),
+        cache_options: CacheOptions {
             max_age_s: None,
             enabled: CacheEnabledMode::On,
         },
-        tags: &Default::default(),
-        rate_limiting_config: &Default::default(),
-        otlp_config: &Default::default(),
+        tags: Arc::new(Default::default()),
+        rate_limiting_config: Arc::new(Default::default()),
+        otlp_config: Default::default(),
     };
     let scope_info = ScopeInfo {
         tags: &HashMap::new(),
@@ -2087,5 +2169,400 @@ async fn test_forward_file_url() {
     assert!(
         text.text.to_lowercase().contains("deepseek"),
         "Content should contain 'deepseek': {text:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_responses_api_reasoning() {
+    let payload = json!({
+        "function_name": "openai_responses_gpt5",
+        "variant_name": "openai",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "How many letters are in the word potato?"
+                }
+            ]},
+        "extra_body": [
+            {
+                "variant_name": "openai",
+                "pointer": "/reasoning",
+                "value": {
+                    "effort": "high",
+                    "summary": "auto"
+                }
+            }
+        ]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("API response: {response_json}");
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    let has_thought = content_blocks
+        .iter()
+        .any(|block| block.get("type").unwrap().as_str().unwrap() == "thought");
+    assert!(
+        has_thought,
+        "Missing thought block in output: {content_blocks:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_openai_built_in_websearch() {
+    // Create a config with the custom credential location
+    let config = r#"
+
+gateway.debug = true
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "openai"
+model_name = "gpt-5-nano"
+provider_tools = [{type = "web_search"}]
+api_type = "responses"
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    // Create an embedded gateway with this config
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
+
+    // Make a simple inference request to verify it works
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Tell me some good news that happened today".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the inference succeeded
+    let response = result.unwrap();
+    println!("response: {response:?}");
+
+    // Extract the chat response
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let InferenceResponse::Chat(chat_response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    // Assert that we have at least one Unknown content block with type "web_search_call"
+    let web_search_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter(|block| {
+            if let ContentBlockChatOutput::Unknown { data, .. } = block {
+                data.get("type")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t == "web_search_call")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        })
+        .collect();
+
+    assert!(
+        !web_search_blocks.is_empty(),
+        "Expected at least one Unknown content block with type 'web_search_call', but found none. Content blocks: {:#?}",
+        chat_response.content
+    );
+
+    // Assert that we have exactly one Text content block
+    let text_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter_map(|block| {
+            if let ContentBlockChatOutput::Text(text) = block {
+                Some(text)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        text_blocks.len(),
+        1,
+        "Expected exactly one Text content block, but found {}. Content blocks: {:#?}",
+        text_blocks.len(),
+        chat_response.content
+    );
+
+    // Assert that the text block contains citations (markdown links)
+    let text_content = &text_blocks[0].text;
+    assert!(
+        text_content.contains("]("),
+        "Expected text content to contain citations in markdown format [text](url), but found none. Text: {text_content}",
+    );
+
+    // Round-trip test: Convert output content blocks back to input and make another inference
+    let assistant_content: Vec<ClientInputMessageContent> = chat_response
+        .content
+        .iter()
+        .map(|block| match block {
+            ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
+                text: text.text.clone(),
+            }),
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                ClientInputMessageContent::ToolCall(ToolCallInput {
+                    id: tool_call.id.clone(),
+                    name: tool_call.name.clone(),
+                    arguments: tool_call.arguments.clone(),
+                    raw_name: None,
+                    raw_arguments: None,
+                })
+            }
+            ContentBlockChatOutput::Thought(thought) => {
+                ClientInputMessageContent::Thought(thought.clone())
+            }
+            ContentBlockChatOutput::Unknown {
+                data,
+                model_provider_name,
+            } => ClientInputMessageContent::Unknown {
+                data: data.clone(),
+                model_provider_name: model_provider_name.clone(),
+            },
+        })
+        .collect();
+
+    // Make a second inference with the assistant's response and a new user question
+    let result2 = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![
+                    ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Tell me some good news that happened today".to_string(),
+                        })],
+                    },
+                    ClientInputMessage {
+                        role: Role::Assistant,
+                        content: assistant_content,
+                    },
+                    ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Can you summarize what you just told me in one sentence?"
+                                .to_string(),
+                        })],
+                    },
+                ],
+            },
+            stream: Some(false),
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the round-trip inference succeeded
+    let response2 = result2.unwrap();
+    println!("Round-trip response: {response2:?}");
+
+    let InferenceOutput::NonStreaming(response2) = response2 else {
+        panic!("Expected non-streaming inference response for round-trip");
+    };
+
+    let InferenceResponse::Chat(chat_response2) = response2 else {
+        panic!("Expected chat inference response for round-trip");
+    };
+
+    // Assert that the second response has at least one text block
+    let has_text = chat_response2
+        .content
+        .iter()
+        .any(|block| matches!(block, ContentBlockChatOutput::Text(_)));
+    assert!(
+        has_text,
+        "Expected at least one text content block in round-trip response. Content blocks: {:#?}",
+        chat_response2.content
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_openai_built_in_websearch_streaming() {
+    // Create a config with the custom credential location
+    let config = r#"
+
+gateway.debug = true
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "openai"
+model_name = "gpt-5-nano"
+provider_tools = [{type = "web_search"}]
+api_type = "responses"
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    // Create an embedded gateway with this config
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
+
+    // Make a streaming inference request
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "Tell me some good news that happened today".to_string(),
+                    })],
+                }],
+            },
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the inference succeeded
+    let response = result.unwrap();
+    println!("response: {response:?}");
+
+    // Extract the streaming response
+    let InferenceOutput::Streaming(mut stream) = response else {
+        panic!("Expected streaming inference response");
+    };
+
+    // Collect all chunks
+    let mut chunks = vec![];
+    let mut inference_id: Option<Uuid> = None;
+    let mut full_text = String::new();
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.unwrap();
+
+        // Extract inference_id from the first chunk
+        if inference_id.is_none() {
+            if let InferenceResponseChunk::Chat(chat_chunk) = &chunk {
+                inference_id = Some(chat_chunk.inference_id);
+            }
+        }
+
+        // Concatenate text from chunks
+        if let InferenceResponseChunk::Chat(chat_chunk) = &chunk {
+            for content_block in &chat_chunk.content {
+                if let ContentBlockChunk::Text(text_chunk) = content_block {
+                    full_text.push_str(&text_chunk.text);
+                }
+            }
+        }
+
+        chunks.push(chunk);
+    }
+
+    // Assert that we have multiple streaming chunks (indicates streaming is working)
+    assert!(
+        chunks.len() >= 10,
+        "Expected at least 10 streaming chunks, but got {}. Streaming may not be working properly.",
+        chunks.len()
+    );
+
+    // Assert that all chunks are Chat type
+    for chunk in &chunks {
+        assert!(
+            matches!(chunk, InferenceResponseChunk::Chat(_)),
+            "Expected all chunks to be Chat type, but found: {chunk:?}",
+        );
+    }
+
+    // Assert that the last chunk has usage information
+    if let Some(InferenceResponseChunk::Chat(last_chunk)) = chunks.last() {
+        assert!(
+            last_chunk.usage.is_some(),
+            "Expected the last chunk to have usage information, but it was None"
+        );
+    } else {
+        panic!("No chunks received");
+    }
+
+    // Assert that the last chunk has a finish_reason
+    if let Some(InferenceResponseChunk::Chat(last_chunk)) = chunks.last() {
+        assert!(
+            last_chunk.finish_reason.is_some(),
+            "Expected the last chunk to have a finish_reason, but it was None"
+        );
+    }
+
+    // Assert that the concatenated text contains citations (markdown links)
+    assert!(
+        full_text.contains("]("),
+        "Expected concatenated text to contain citations in markdown format [text](url), but found none. Text length: {}",
+        full_text.len()
+    );
+
+    // Sleep for 1 second to allow writing to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+
+    let inference_id = inference_id.expect("Should have extracted inference_id from chunks");
+
+    // Fetch the model inference data from ClickHouse
+    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let raw_response = model_inference
+        .get("raw_response")
+        .unwrap()
+        .as_str()
+        .unwrap();
+
+    // Assert that raw_response contains web_search_call (confirms web search was used)
+    assert!(
+        raw_response.contains("web_search_call"),
+        "Expected raw_response to contain 'web_search_call', but it was not found"
+    );
+
+    // Assert that raw_response contains response.completed event
+    assert!(
+        raw_response.contains("response.completed"),
+        "Expected raw_response to contain 'response.completed' event, but it was not found"
     );
 }

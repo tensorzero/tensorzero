@@ -30,7 +30,7 @@ use super::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
 use crate::cache::ModelProviderRequest;
-use crate::config::{
+use crate::config::provider_types::{
     GCPBatchConfigCloudStorage, GCPBatchConfigType, GCPProviderTypeConfig, ProviderTypesConfig,
 };
 use crate::endpoints::inference::InferenceCredentials;
@@ -56,12 +56,11 @@ use crate::inference::types::{
 };
 use crate::inference::InferenceProvider;
 use crate::model::{
-    build_creds_caching_default_with_fn, fully_qualified_name, Credential, CredentialLocation,
-    ModelProvider,
+    fully_qualified_name, Credential, CredentialLocationWithFallback, ModelProvider,
 };
+use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::gcp_vertex_anthropic::make_gcp_sdk_credentials;
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
 use super::openai::convert_stream_error;
 
@@ -261,6 +260,21 @@ pub async fn make_gcp_object_store(
                 }));
             }
         }
+        GCPVertexCredentials::WithFallback { default, fallback } => {
+            // Try default first, fall back to fallback if it fails
+            // We need to recursively call this function with each credential
+            match Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await {
+                Ok(store) => return Ok(store),
+                Err(_) => {
+                    tracing::info!(
+                        "Default credential for {} is unavailable for GCS, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    return Box::pin(make_gcp_object_store(gs_url, fallback, dynamic_api_keys))
+                        .await;
+                }
+            }
+        }
         GCPVertexCredentials::None => {
             return Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
@@ -432,24 +446,18 @@ pub fn location_subdomain_prefix(location: &str) -> String {
 }
 
 impl GCPVertexGeminiProvider {
-    pub async fn build_credentials(
-        cred_location: Option<CredentialLocation>,
-    ) -> Result<GCPVertexCredentials, Error> {
-        GCPVertexCredentials::new(
-            cred_location,
-            &DEFAULT_CREDENTIALS,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-        )
-        .await
-    }
     // Constructs a provider from a shorthand string of the form:
     // * 'projects/<project_id>/locations/<location>/publishers/google/models/XXX'
     // * 'projects/<project_id>/locations/<location>/endpoints/XXX'
     //
     // This is *not* a full url - we append ':generateContent' or ':streamGenerateContent' to the end of the path as needed.
-    pub async fn new_shorthand(project_url_path: String) -> Result<Self, Error> {
-        let credentials = Self::build_credentials(None).await?;
+    pub async fn new_shorthand(
+        project_url_path: String,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self, Error> {
+        let credentials = GCPVertexGeminiKind
+            .get_defaulted_credential(None, default_credentials)
+            .await?;
 
         let shorthand_url = parse_shorthand_url(&project_url_path, "google")?;
         let (location, model_id, endpoint_id, model_or_endpoint_id) = match shorthand_url {
@@ -504,12 +512,13 @@ impl GCPVertexGeminiProvider {
         endpoint_id: Option<String>,
         location: String,
         project_id: String,
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
         provider_types: &ProviderTypesConfig,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<Self, Error> {
-        let default_location = default_api_key_location();
-        let cred_location = api_key_location.as_ref().unwrap_or(&default_location);
-        let credentials = Self::build_credentials(Some(cred_location.clone())).await?;
+        let credentials = GCPVertexGeminiKind
+            .get_defaulted_credential(api_key_location.as_ref(), default_credentials)
+            .await?;
 
         let location_prefix = location_subdomain_prefix(&location);
 
@@ -532,10 +541,10 @@ impl GCPVertexGeminiProvider {
         let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         let batch_config = match &provider_types.gcp_vertex_gemini {
-            Some(GCPProviderTypeConfig { batch: Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
+            GCPProviderTypeConfig { batch: Some(GCPBatchConfigType::CloudStorage(GCPBatchConfigCloudStorage {
                 input_uri_prefix,
                 output_uri_prefix,
-            }))}) => {
+            })), .. } => {
                 Some(BatchConfig {
                     input_uri_prefix: input_uri_prefix.clone(),
                     output_uri_prefix: output_uri_prefix.clone(),
@@ -627,10 +636,6 @@ impl GCPVertexGeminiProvider {
     }
 }
 
-pub fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::PathFromEnv("GCP_VERTEX_CREDENTIALS_PATH".to_string())
-}
-
 #[derive(Clone, Debug)]
 pub enum GCPVertexCredentials {
     Static {
@@ -640,35 +645,15 @@ pub enum GCPVertexCredentials {
     Dynamic(String),
     Sdk(Credentials),
     None,
+    WithFallback {
+        default: Box<GCPVertexCredentials>,
+        fallback: Box<GCPVertexCredentials>,
+    },
 }
 
-impl GCPVertexCredentials {
-    /// Helper method to build credentials for a GCP-based provider
-    /// You should call either `GCPVertexGeminiProvider::build_credentials` or
-    /// `GCPVertexAnthropicProvider::build_credentials` rather than calling this directly.
-    pub async fn new(
-        cred_location: Option<CredentialLocation>,
-        cache: &'static OnceLock<GCPVertexCredentials>,
-        default_location: CredentialLocation,
-        provider_type: &'static str,
-    ) -> Result<Self, Error> {
-        if matches!(cred_location, Some(CredentialLocation::Sdk)) {
-            make_gcp_sdk_credentials(provider_type).await
-        } else {
-            build_creds_caching_default_with_fn(
-                cred_location,
-                default_location,
-                provider_type,
-                cache,
-                |creds| build_non_sdk_credentials(creds, provider_type),
-            )
-        }
-    }
-}
-
-fn build_non_sdk_credentials(
+pub fn build_gcp_non_sdk_credentials(
     credentials: Credential,
-    provider_type: &str,
+    provider_type: &ProviderType,
 ) -> Result<GCPVertexCredentials, Error> {
     match credentials {
         Credential::FileContents(file_content) => Ok(GCPVertexCredentials::Static {
@@ -682,6 +667,10 @@ fn build_non_sdk_credentials(
         }),
         Credential::Dynamic(key_name) => Ok(GCPVertexCredentials::Dynamic(key_name)),
         Credential::Missing => Ok(GCPVertexCredentials::None),
+        Credential::WithFallback { default, fallback } => Ok(GCPVertexCredentials::WithFallback {
+            default: Box::new(build_gcp_non_sdk_credentials(*default, provider_type)?),
+            fallback: Box::new(build_gcp_non_sdk_credentials(*fallback, provider_type)?),
+        }),
         _ => Err(Error::new(ErrorDetails::GCPCredentials {
             message: format!("Invalid credential_location for {provider_type} provider"),
         }))?,
@@ -849,6 +838,20 @@ impl GCPVertexCredentials {
                         return Err(Error::new(ErrorDetails::InternalError {
                             message: "GCP SDK return CacheableResource::NotModified. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
                         }))
+                    }
+                }
+            }
+            GCPVertexCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                match Box::pin(default.get_auth_headers(audience, dynamic_api_keys)).await {
+                    Ok(headers) => return Ok(headers),
+                    Err(_) => {
+                        tracing::info!(
+                            "Default credential for {} is unavailable, attempting fallback",
+                            PROVIDER_NAME
+                        );
+                        return Box::pin(fallback.get_auth_headers(audience, dynamic_api_keys))
+                            .await;
                     }
                 }
             }
@@ -3788,23 +3791,23 @@ mod tests {
             "universe_domain": "googleapis.com"
         }"#;
         let generic = Credential::FileContents(SecretString::from(json_content));
-        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
+        let creds = build_gcp_non_sdk_credentials(generic, &ProviderType::GCPVertexGemini).unwrap();
         assert!(matches!(creds, GCPVertexCredentials::Static { .. }));
 
         // Test Dynamic credential
         let generic = Credential::Dynamic("key_name".to_string());
-        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
+        let creds = build_gcp_non_sdk_credentials(generic, &ProviderType::GCPVertexGemini).unwrap();
         assert!(matches!(creds, GCPVertexCredentials::Dynamic(_)));
 
         // Test Missing credential
         let generic = Credential::Missing;
-        let creds = build_non_sdk_credentials(generic, "GCPVertexGemini").unwrap();
+        let creds = build_gcp_non_sdk_credentials(generic, &ProviderType::GCPVertexGemini).unwrap();
         assert!(matches!(creds, GCPVertexCredentials::None));
 
         // Test invalid JSON content
         let invalid_json = "invalid json";
         let generic = Credential::FileContents(SecretString::from(invalid_json));
-        let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
+        let result = build_gcp_non_sdk_credentials(generic, &ProviderType::GCPVertexGemini);
         assert!(result.is_err());
         let error = result.unwrap_err();
         let err = error.get_details();
@@ -3814,7 +3817,7 @@ mod tests {
 
         // Test invalid credential type (Static)
         let generic = Credential::Static(SecretString::from("test"));
-        let result = build_non_sdk_credentials(generic, "GCPVertexGemini");
+        let result = build_gcp_non_sdk_credentials(generic, &ProviderType::GCPVertexGemini);
         assert!(result.is_err());
         let error = result.unwrap_err();
         let err = error.get_details();

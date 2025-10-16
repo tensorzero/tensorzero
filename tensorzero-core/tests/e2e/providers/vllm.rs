@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -78,6 +78,24 @@ async fn get_providers() -> E2ETestProviders {
     }];*/
     let reasoning_providers = vec![];
 
+    // vllm requires api_base parameter, so it can't be tested with just default credentials
+    let provider_type_default_credentials_providers = vec![];
+
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "vllm".into(),
+        model_info: HashMap::from([
+            (
+                "model_name".to_string(),
+                "Qwen/Qwen2.5-0.5B-Instruct".to_string(),
+            ),
+            (
+                "api_base".to_string(),
+                "https://tensorzero--vllm-inference-qwen-vllm-inference.modal.run/v1/".to_string(),
+            ),
+        ]),
+        use_modal_headers: true,
+    }];
+
     E2ETestProviders {
         simple_inference: providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -86,6 +104,8 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
         dynamic_tool_use_inference: tool_providers.clone(),
@@ -95,5 +115,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
         pdf_inference: vec![],
         shorthand_inference: vec![],
+        credential_fallbacks,
     }
 }

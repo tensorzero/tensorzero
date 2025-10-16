@@ -8,7 +8,6 @@ use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{json, Value};
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use crate::http::TensorzeroHttpClient;
 use std::time::Duration;
@@ -34,7 +33,7 @@ use crate::inference::types::{
     FinishReason, ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
@@ -51,10 +50,6 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("OPENROUTER_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "OpenRouter";
 pub const PROVIDER_TYPE: &str = "openrouter";
 
@@ -67,23 +62,12 @@ pub struct OpenRouterProvider {
     credentials: OpenRouterCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<OpenRouterCredentials> = OnceLock::new();
-
 impl OpenRouterProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-        Ok(OpenRouterProvider {
+    pub fn new(model_name: String, credentials: OpenRouterCredentials) -> Self {
+        OpenRouterProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -96,6 +80,10 @@ pub enum OpenRouterCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<OpenRouterCredentials>,
+        fallback: Box<OpenRouterCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for OpenRouterCredentials {
@@ -107,6 +95,12 @@ impl TryFrom<Credential> for OpenRouterCredentials {
             Credential::Dynamic(key_name) => Ok(OpenRouterCredentials::Dynamic(key_name)),
             Credential::None => Ok(OpenRouterCredentials::None),
             Credential::Missing => Ok(OpenRouterCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(OpenRouterCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for OpenRouter provider".to_string(),
             })),
@@ -132,6 +126,16 @@ impl OpenRouterCredentials {
                 .transpose()
             }
             OpenRouterCredentials::None => Ok(None),
+            OpenRouterCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
+            }
         }
     }
 }

@@ -1,8 +1,8 @@
-#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use base64::prelude::*;
+use chrono::DateTime;
 use chrono::Utc;
 use http::StatusCode;
 use opentelemetry::SpanId;
@@ -66,14 +66,160 @@ async fn test_otel_export_trace_export_with_custom_header() {
     }
 }
 
+#[tokio::test]
+async fn test_otel_export_http_error() {
+    let client = reqwest::Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "episode_id": episode_id,
+        "model_name": "openai::missing-model-name",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let start_time = Utc::now();
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    let _response_json = response.json::<Value>().await.unwrap();
+
+    let (function_inference_span, span_by_id) =
+        get_tempo_spans(episode_id, start_time, &Semaphore::new(1)).await;
+
+    let parent_id = function_inference_span["parentSpanId"].as_str().unwrap();
+    let parent_span = span_by_id.get(parent_id).unwrap();
+
+    let parent_attrs: HashMap<&str, serde_json::Value> = parent_span["attributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| (a["key"].as_str().unwrap(), a["value"].clone()))
+        .collect();
+
+    println!("Parent attrs: {parent_attrs:?}");
+
+    assert_eq!(parent_span["name"], "POST /inference");
+    assert_eq!(parent_attrs["level"]["stringValue"], "INFO");
+    assert_eq!(parent_attrs["http.response.status_code"]["intValue"], "502");
+    assert_eq!(parent_span["status"]["code"], "STATUS_CODE_ERROR");
+    assert!(
+        parent_span["status"]["message"]
+            .as_str()
+            .unwrap()
+            .starts_with("All variants failed with errors: openai::missing-model-name"),
+        "Unexpected span error message: {}",
+        parent_span["status"]["message"].as_str().unwrap()
+    );
+}
+
+pub async fn get_tempo_spans(
+    episode_id: Uuid,
+    start_time: DateTime<Utc>,
+    tempo_semaphore: &Semaphore,
+) -> (Value, HashMap<String, Value>) {
+    // It takes some time for the span to show up in Tempo
+    tokio::time::sleep(std::time::Duration::from_secs(25)).await;
+
+    let start_time = start_time.timestamp();
+    let now = Utc::now().timestamp();
+
+    let client = reqwest::Client::new();
+
+    let tempo_base_url = std::env::var("TENSORZERO_TEMPO_URL")
+        .unwrap_or_else(|_| "http://localhost:3200".to_string());
+
+    let get_url = Url::parse(&format!(
+        "{tempo_base_url}/api/search?tags=episode_id={episode_id}&start={start_time}&end={now}"
+    ))
+    .unwrap();
+    println!("Requesting URL: {get_url}");
+
+    let permit = tempo_semaphore.acquire().await.unwrap();
+
+    let jaeger_result = client.get(get_url).send().await.unwrap();
+    let res = jaeger_result.text().await.unwrap();
+    println!("Tempo result: {res}");
+    let tempo_traces = serde_json::from_str::<Value>(&res).unwrap();
+    let trace_id = tempo_traces["traces"][0]["traceID"].as_str().unwrap();
+
+    let trace_res = client
+        .get(format!("{tempo_base_url}/api/traces/{trace_id}"))
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+
+    drop(permit);
+
+    println!("Trace res: {trace_res}");
+    let trace_data = serde_json::from_str::<Value>(&trace_res).unwrap();
+
+    let mut span_by_id = HashMap::new();
+    let mut target_span = None;
+
+    for batch in trace_data["batches"].as_array().unwrap() {
+        for scope_span in batch["scopeSpans"].as_array().unwrap() {
+            for span in scope_span["spans"].as_array().unwrap() {
+                span_by_id.insert(span["spanId"].as_str().unwrap().to_string(), span.clone());
+                if span["name"] == "function_inference" {
+                    //println!("Found function_inference span: {span:?}");
+                    let attrs = span["attributes"].as_array().unwrap();
+                    for attr in attrs {
+                        if attr["key"].as_str().unwrap() == "function_name" {
+                            assert!(
+                                attr["value"].get("intValue").is_none(),
+                                "Bad span: {span:?}"
+                            );
+                        }
+                        if attr["key"].as_str().unwrap() == "episode_id" {
+                            let inference_id_jaeger =
+                                attr["value"]["stringValue"].as_str().unwrap();
+                            if episode_id.to_string() == inference_id_jaeger {
+                                if target_span.is_some() {
+                                    panic!("Found multiple function_inference spans with episode id: {episode_id}");
+                                } else {
+                                    target_span = Some(span.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (
+        target_span.unwrap_or_else(|| {
+            panic!("No function_inference span found with matching episode: {episode_id}")
+        }),
+        span_by_id,
+    )
+}
+
 // TODO - investigate why this test is sometimes flaky when running locally
 async fn test_otel_export_trace_export(
     existing_trace_parent: Option<ExistingTraceData>,
     custom_header: Option<(String, String)>,
     tempo_semaphore: Arc<Semaphore>,
 ) {
-    let episode_id = Uuid::now_v7();
     let client = reqwest::Client::new();
+    let episode_id = Uuid::now_v7();
 
     let payload = json!({
         "function_name": "basic_test",
@@ -91,7 +237,7 @@ async fn test_otel_export_trace_export(
         "tags": {"foo": "bar"},
     });
 
-    let start_time = Utc::now().timestamp();
+    let start_time = Utc::now();
 
     let mut builder = client
         .post(get_gateway_endpoint("/inference"))
@@ -113,87 +259,12 @@ async fn test_otel_export_trace_export(
 
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
-    let response_json = response.json::<Value>().await.unwrap();
-
-    let inference_id = response_json["inference_id"]
-        .as_str()
-        .expect("inference_id should be a string");
-
-    // It takes some time for the span to show up in Tempo
-    tokio::time::sleep(std::time::Duration::from_secs(25)).await;
-
-    let now = Utc::now().timestamp();
-
-    let jaeger_base_url = std::env::var("TENSORZERO_TEMPO_URL")
-        .unwrap_or_else(|_| "http://localhost:3200".to_string());
-
-    let get_url = Url::parse(&format!(
-        "{jaeger_base_url}/api/search?tags=inference_id={inference_id}&start={start_time}&end={now}"
-    ))
-    .unwrap();
-    println!("Requesting URL: {get_url}");
-
-    let permit = tempo_semaphore.acquire().await.unwrap();
-
-    let jaeger_result = client.get(get_url).send().await.unwrap();
-    let res = jaeger_result.text().await.unwrap();
-    println!("Tempo result: {res}");
-    let tempo_traces = serde_json::from_str::<Value>(&res).unwrap();
-    let trace_id = tempo_traces["traces"][0]["traceID"].as_str().unwrap();
-
-    let trace_res = client
-        .get(format!("{jaeger_base_url}/api/traces/{trace_id}"))
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
-
-    drop(permit);
-
-    println!("Trace res: {trace_res}");
-    let trace_data = serde_json::from_str::<Value>(&trace_res).unwrap();
-
-    let mut span_by_id = HashMap::new();
-    let mut target_span = None;
-
-    for batch in trace_data["batches"].as_array().unwrap() {
-        for scope_span in batch["scopeSpans"].as_array().unwrap() {
-            for span in scope_span["spans"].as_array().unwrap() {
-                span_by_id.insert(span["spanId"].as_str().unwrap(), span.clone());
-                if span["name"] == "function_inference" {
-                    //println!("Found function_inference span: {span:?}");
-                    let attrs = span["attributes"].as_array().unwrap();
-                    for attr in attrs {
-                        if attr["key"].as_str().unwrap() == "function_name" {
-                            assert!(
-                                attr["value"].get("intValue").is_none(),
-                                "Bad span: {span:?}"
-                            );
-                        }
-                        if attr["key"].as_str().unwrap() == "inference_id" {
-                            let inference_id_jaeger =
-                                attr["value"]["stringValue"].as_str().unwrap();
-                            if inference_id == inference_id_jaeger {
-                                if target_span.is_some() {
-                                    panic!("Found multiple function_inference spans with inference id: {inference_id}");
-                                } else {
-                                    target_span = Some(span.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    let _response_json = response.json::<Value>().await.unwrap();
+    let (function_inference_span, span_by_id) =
+        get_tempo_spans(episode_id, start_time, &tempo_semaphore).await;
 
     // Just check a couple of spans - we already have more comprehensive tests that check the exact spans
     // send to the global `opentelemetry` exporter.
-    let function_inference_span = target_span.unwrap_or_else(|| {
-        panic!("No function_inference span found with matching inference_id: {inference_id}")
-    });
     assert_eq!(function_inference_span["name"], "function_inference");
     assert_eq!(function_inference_span["kind"], "SPAN_KIND_INTERNAL");
     let attrs: HashMap<&str, serde_json::Value> = function_inference_span["attributes"]
@@ -229,6 +300,8 @@ async fn test_otel_export_trace_export(
             "Bad parent attrs: {parent_attrs:?}"
         );
     }
+    println!("Parent attrs: {parent_attrs:?}");
+    assert_eq!(parent_attrs["http.response.status_code"]["intValue"], "200");
 
     if let Some(existing_trace_parent) = existing_trace_parent {
         // Tempo returns a base64-encoded binary trace ID, so we need to decode it

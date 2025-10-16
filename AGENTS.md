@@ -1,10 +1,12 @@
 # Rust
 
 - Use `cargo check` for quick verification, restrict further (e.g. `cargo check --package tensorzero-core`) if appropriate. Test suite compilation is slow.
-- Run unit tests with `cargo test-unit` which uses `nextest` under the hood.
-- Run `cargo clippy --all-targets --all-features -- -D warnings` once you're done with your work (before committing) to catch warnings and errors.
 - If you update Rust types or functions used in TypeScript, regenerate bindings with `pnpm build-bindings` from `internal/tensorzero-node` (not root). Run `cargo check` first to catch compilation errors.
-- If you change the signature of a struct, function, and so on, use `rg` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
+- If you change a signature of a struct, function, and so on, use `rg` to find all instances in the codebase. For example, search for `StructName {` when updating struct fields.
+- Once you're done with your work, make sure to:
+  - Run `cargo fmt`.
+  - Run `cargo clippy --all-targets --all-features -- -D warnings` to catch warnings and errors.
+  - Run unit tests with `cargo test-unit` which uses `nextest` under the hood.
 
 # Python Dependencies
 
@@ -14,9 +16,17 @@ When updating Python dependencies anywhere in the project, you must update both 
 
 1. Update `pyproject.toml` with your changes
 2. Run `uv lock --project="pyproject.toml"` from the directory containing the `pyproject.toml` to generate/update `uv.lock`
-3. Run `uv export --project="pyproject.toml" --output-file="requirements.txt"` from the same directory to generate/update `requirements.txt`
+3. Run `uv export --project="pyproject.toml" --output-file="requirements.txt"` from the same directory to generate/update `requirements.txt` (don't skip `--output-file`)
 
 The pre-commit hooks automatically handle this by running `uv lock` and `uv export` for all `pyproject.toml` files in the repository.
+
+# Type generation for TypeScript
+
+We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
+
+- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`.
+- To generate implementations for `n-api` functions to be called in TypeScript, and package types in `internal/tensorzero-node` for UI, run `pnpm --filter=tensorzero-node run build`.
+- Remember to run `pnpm -r typecheck` to make sure TypeScript and Rust implementations agree on types. Prefer to maintain all types in Rust.
 
 # CI/CD
 

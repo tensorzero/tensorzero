@@ -1,5 +1,3 @@
-#![allow(clippy::print_stdout)]
-
 use futures::StreamExt;
 use http::StatusCode;
 use reqwest::Client;
@@ -15,6 +13,8 @@ use crate::{
     common::get_gateway_endpoint,
     providers::common::{E2ETestProvider, E2ETestProviders},
 };
+
+use super::common::ModelTestProvider;
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -144,6 +144,31 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "google-ai-studio-gemini-flash-8b".to_string(),
+        model_name: "gemini-2.0-flash-lite".into(),
+        model_provider_name: "google_ai_studio_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "google-ai-studio-gemini-flash-8b-shorthand".to_string(),
+        model_name: "google_ai_studio_gemini::gemini-2.0-flash-lite".into(),
+        model_provider_name: "google_ai_studio_gemini".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "google_ai_studio_gemini".to_string(),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "gemini-2.0-flash-lite".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -152,15 +177,19 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: tool_providers.clone(),
         tool_multi_turn_inference: tool_providers.clone(),
         dynamic_tool_use_inference: tool_providers.clone(),
         parallel_tool_use_inference: vec![],
         json_mode_inference: json_providers.clone(),
         json_mode_off_inference: json_mode_off_providers.clone(),
-        image_inference: image_providers,
+        image_inference: image_providers.clone(),
         shorthand_inference: shorthand_providers.clone(),
-        pdf_inference: vec![],
+        pdf_inference: image_providers,
+        credential_fallbacks,
     }
 }
 

@@ -83,9 +83,6 @@ pub struct DynamicEvaluationRunEpisodePathParams {
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct DynamicEvaluationRunEpisodeParams {
-    // This has been deprecated in favor of `task_name`.
-    #[serde(default)]
-    pub datapoint_name: Option<String>,
     #[serde(default)]
     pub task_name: Option<String>,
     #[serde(default)]
@@ -125,10 +122,9 @@ pub async fn dynamic_evaluation_run_episode(
         "tensorzero::dynamic_evaluation_run_id".to_string(),
         run_id_str,
     );
-    let task_name = get_task_name(params.task_name, params.datapoint_name)?;
     write_dynamic_evaluation_run_episode(
         &clickhouse_connection_info,
-        task_name.as_deref(),
+        params.task_name.as_deref(),
         tags,
         run_id,
         episode_id,
@@ -227,13 +223,13 @@ pub struct DynamicEvaluationRunEpisodeRow {
     pub run_id: Uuid,
     pub episode_id: Uuid,
     pub variant_pins: HashMap<String, String>,
-    pub datapoint_name: Option<String>,
+    pub task_name: Option<String>, // For legacy reasons, stored as `task_name` in the database
     pub tags: HashMap<String, String>,
 }
 
 async fn write_dynamic_evaluation_run_episode(
     clickhouse: &ClickHouseConnectionInfo,
-    datapoint_name: Option<&str>,
+    task_name: Option<&str>,
     tags: HashMap<String, String>,
     run_id: Uuid,
     episode_id: Uuid,
@@ -244,15 +240,15 @@ async fn write_dynamic_evaluation_run_episode(
         run_id,
         episode_id_uint,
         variant_pins,
-        datapoint_name,
+        datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
         tags
     )
     SELECT
-        {run_id:UUID} as run_id,
-        toUInt128({episode_id:UUID}) as episode_id_uint,
+        {run_id:UUID} AS run_id,
+        toUInt128({episode_id:UUID}) AS episode_id_uint,
         variant_pins,
-        {datapoint_name:Nullable(String)} as datapoint_name,
-        mapUpdate(tags, {tags:Map(String, String)}) as tags -- merge the tags in the params on top of tags in the dynamic evaluation run
+        {datapoint_name:Nullable(String)} AS datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
+        mapUpdate(tags, {tags:Map(String, String)}) AS tags -- merge the tags in the params on top of tags in the dynamic evaluation run
     FROM DynamicEvaluationRun
     WHERE run_id_uint = toUInt128({run_id:UUID})
     ";
@@ -261,7 +257,7 @@ async fn write_dynamic_evaluation_run_episode(
     let episode_id_str = episode_id.to_string();
     query_params.insert("run_id", run_id_str.as_str());
     query_params.insert("episode_id", episode_id_str.as_str());
-    query_params.insert("datapoint_name", datapoint_name.unwrap_or("\\N")); // Use \\N to indicate NULL
+    query_params.insert("datapoint_name", task_name.unwrap_or("\\N")); // Use \\N to indicate NULL; for legacy reasons, stored as `datapoint_name` in the database
     let tags_str = to_map_literal(&tags);
     query_params.insert("tags", tags_str.as_str());
     clickhouse
@@ -348,58 +344,4 @@ async fn lookup_dynamic_evaluation_run(
         })
     })?;
     Ok(Some(dynamic_evaluation_run))
-}
-
-fn get_task_name(
-    task_name: Option<String>,
-    datapoint_name: Option<String>,
-) -> Result<Option<String>, Error> {
-    match (task_name, datapoint_name) {
-        (Some(task_name), None) => Ok(Some(task_name)),
-        (None, Some(datapoint_name)) => {
-            tracing::warn!("`datapoint_name` is deprecated in favor of `task_name`. Please change your usage to `task_name`");
-            Ok(Some(datapoint_name))
-        }
-        (None, None) => Ok(None),
-        (Some(_), Some(_)) => Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "task_name and datapoint_name cannot both be provided".to_string(),
-        })),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use tracing_test::traced_test;
-
-    use super::*;
-
-    #[test]
-    #[traced_test]
-    fn test_get_task_name() {
-        let task_name = get_task_name(Some("task_name".to_string()), None);
-        assert_eq!(task_name, Ok(Some("task_name".to_string())));
-
-        assert_eq!(
-            get_task_name(
-                Some("task_name".to_string()),
-                Some("datapoint_name".to_string())
-            ),
-            Err(Error::new(ErrorDetails::InvalidRequest {
-                message: "task_name and datapoint_name cannot both be provided".to_string(),
-            }))
-        );
-        assert!(!logs_contain(
-            "`datapoint_name` is deprecated in favor of `task_name`. Please change your usage to `task_name`"
-        ));
-    }
-
-    #[test]
-    #[traced_test]
-    fn test_get_task_name_deprecation_warning() {
-        let task_name = get_task_name(None, Some("datapoint_name".to_string()));
-        assert_eq!(task_name, Ok(Some("datapoint_name".to_string())));
-        assert!(logs_contain(
-            "`datapoint_name` is deprecated in favor of `task_name`. Please change your usage to `task_name`"
-        ));
-    }
 }

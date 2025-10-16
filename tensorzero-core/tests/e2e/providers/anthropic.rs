@@ -5,15 +5,25 @@ use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use tensorzero::{
+    test_helpers::make_embedded_gateway_with_config, ClientInferenceParams, ClientInput,
+    ClientInputMessage, ClientInputMessageContent, File, InferenceOutput, InferenceResponse, Role,
+};
+use url::Url;
 use uuid::Uuid;
 
 use crate::{
     common::get_gateway_endpoint,
-    providers::common::{E2ETestProvider, E2ETestProviders},
+    providers::common::{E2ETestProvider, E2ETestProviders, DEEPSEEK_PAPER_PDF, FERRIS_PNG},
 };
-use tensorzero_core::db::clickhouse::test_helpers::{
-    get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+use tensorzero_core::{
+    db::clickhouse::test_helpers::{
+        get_clickhouse, select_chat_inference_clickhouse, select_model_inference_clickhouse,
+    },
+    inference::types::{ContentBlockChatOutput, TextKind},
 };
+
+use super::common::ModelTestProvider;
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -112,6 +122,31 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "anthropic".to_string(),
+        model_name: "claude-3-haiku-20240307".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "anthropic-shorthand".to_string(),
+        model_name: "anthropic::claude-3-haiku-20240307".into(),
+        model_provider_name: "anthropic".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "anthropic".into(),
+        model_info: HashMap::from([(
+            "model_name".to_string(),
+            "claude-3-haiku-20240307".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         bad_auth_extra_headers,
@@ -120,6 +155,9 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
@@ -129,6 +167,7 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: image_providers,
         pdf_inference: pdf_providers,
         shorthand_inference: shorthand_providers.clone(),
+        credential_fallbacks,
     }
 }
 
@@ -943,5 +982,157 @@ async fn test_streaming_thinking() {
             .unwrap()
             .contains("Invalid `signature`"),
         "Unexpected error: {resp}"
+    );
+}
+
+#[tokio::test]
+async fn test_forward_image_url() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [gateway]
+    fetch_and_encode_input_files_before_inference = false
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let response = client.inference(ClientInferenceParams {
+        model_name: Some("anthropic::claude-3-haiku-20240307".to_string()),
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
+                ClientInputMessageContent::File(File::Url {
+                    url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
+                    mime_type: Some(mime::IMAGE_PNG)
+                }),
+                ],
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    // Sleep for 1 second to allow writing to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+
+    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(raw_request, "{\"model\":\"claude-3-haiku-20240307\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the image\"},{\"type\":\"image\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png\"}}]}],\"max_tokens\":4096,\"stream\":false}");
+
+    let file_path =
+        "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png";
+
+    // Check that the file exists on the filesystem
+    let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
+    assert_eq!(result, FERRIS_PNG);
+
+    println!("Got response: {response:#?}");
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+    let text_block = &response.content[0];
+    let ContentBlockChatOutput::Text(text) = text_block else {
+        panic!("Expected text content block");
+    };
+    assert!(
+        text.text.to_lowercase().contains("cartoon")
+            || text.text.to_lowercase().contains("crab")
+            || text.text.to_lowercase().contains("animal"),
+        "Content should contain 'cartoon' or 'crab' or 'animal': {text:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_forward_file_url() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let config = format!(
+        r#"
+    [object_storage]
+    type = "filesystem"
+    path = "{}"
+
+    [gateway]
+    fetch_and_encode_input_files_before_inference = false
+    "#,
+        temp_dir.path().to_string_lossy()
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+
+    let response = client.inference(ClientInferenceParams {
+        model_name: Some("anthropic::claude-3-5-sonnet-20241022".to_string()),
+        input: ClientInput {
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
+                ClientInputMessageContent::File(File::Url {
+                    url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
+                    mime_type: Some(mime::APPLICATION_PDF)
+                }),
+                ],
+            }],
+            ..Default::default()
+        },
+        ..Default::default()
+    }).await.unwrap();
+
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    // Sleep for 1 second to allow writing to ClickHouse
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let clickhouse = get_clickhouse().await;
+
+    let model_inference = select_model_inference_clickhouse(&clickhouse, response.inference_id())
+        .await
+        .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(raw_request, "{\"model\":\"claude-3-5-sonnet-20241022\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"max_tokens\":8192,\"stream\":false}");
+
+    let file_path =
+        "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf";
+
+    // Check that the file exists on the filesystem
+    let result = std::fs::read(temp_dir.path().join(file_path)).unwrap();
+    assert_eq!(result, DEEPSEEK_PAPER_PDF);
+
+    println!("Got response: {response:#?}");
+
+    let InferenceResponse::Chat(response) = response else {
+        panic!("Expected chat inference response");
+    };
+    let text_block = &response.content[0];
+    let ContentBlockChatOutput::Text(text) = text_block else {
+        panic!("Expected text content block");
+    };
+    assert!(
+        text.text.to_lowercase().contains("deepseek"),
+        "Content should contain 'deepseek': {text:?}"
     );
 }

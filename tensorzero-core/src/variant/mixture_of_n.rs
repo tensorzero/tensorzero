@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 use std::fmt;
+use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
+use futures::StreamExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -22,7 +24,6 @@ use crate::inference::types::{
     JsonInferenceResultChunk, RequestMessagesOrBatch, TextChunk, ThoughtChunk, Usage,
 };
 use crate::model::ModelTable;
-use crate::rate_limiting::TicketBorrows;
 use crate::tool::ToolCallChunk;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -130,24 +131,30 @@ impl UninitializedMixtureOfNConfig {
 }
 
 impl Variant for MixtureOfNConfig {
-    async fn infer<'a: 'request, 'request>(
+    async fn infer(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'a>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         _inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, clients)
+            .infer_candidates(
+                &input,
+                &models,
+                &function,
+                Arc::clone(&inference_config),
+                clients.clone(),
+            )
             .await?;
         match self
             .fuse_candidates(
-                input,
-                function,
-                models.models,
-                inference_config,
+                &input,
+                &function,
+                &models.models,
+                Arc::clone(&inference_config),
                 clients,
                 candidate_inference_results,
                 false,
@@ -163,26 +170,32 @@ impl Variant for MixtureOfNConfig {
         }
     }
 
-    async fn infer_stream<'request>(
+    async fn infer_stream(
         &self,
-        input: &LazyResolvedInput,
-        models: &'request InferenceModels<'_>,
-        function: &FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        input: Arc<LazyResolvedInput>,
+        models: InferenceModels,
+        function: Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
         // We infer the candidates in non-streaming mode, since we need to pass the full candidate results to the fuser
         let candidate_inference_results = self
-            .infer_candidates(input, models, function, inference_config, clients)
+            .infer_candidates(
+                &input,
+                &models,
+                &function,
+                Arc::clone(&inference_config),
+                clients.clone(),
+            )
             .await?;
 
         match self
             .fuse_candidates(
-                input,
-                function,
-                models.models,
-                inference_config,
+                &input,
+                &function,
+                &models.models,
+                Arc::clone(&inference_config),
                 clients,
                 candidate_inference_results,
                 true,
@@ -201,8 +214,8 @@ impl Variant for MixtureOfNConfig {
 
     async fn validate(
         &self,
-        function: &FunctionConfig,
-        models: &mut ModelTable,
+        function: Arc<FunctionConfig>,
+        models: &ModelTable,
         embedding_models: &EmbeddingModelTable,
         templates: &TemplateConfig<'_>,
         function_name: &str,
@@ -217,7 +230,7 @@ impl Variant for MixtureOfNConfig {
             })?;
             // Required by the compiler due to recursion (we call the top-level `validate`)
             Box::pin(variant.validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,
@@ -232,11 +245,11 @@ impl Variant for MixtureOfNConfig {
                 })
             })?;
         }
-        // Validate the evaluator variant
+        // Validate the fuser variant
         self.fuser
             .inner
             .validate(
-                function,
+                Arc::clone(&function),
                 models,
                 embedding_models,
                 templates,
@@ -249,7 +262,7 @@ impl Variant for MixtureOfNConfig {
 
     // We do not return templates for the candidates, as they are required to be variants in the same function
     // and will therefore also have the same templates.
-    // We only return templates for the evaluator variant.
+    // We only return templates for the fuser variant.
     fn get_all_template_paths(&self) -> Vec<&PathWithContents> {
         self.fuser.inner.get_all_template_paths()
     }
@@ -261,10 +274,10 @@ impl Variant for MixtureOfNConfig {
     async fn start_batch_inference<'a>(
         &'a self,
         _input: &[LazyResolvedInput],
-        _models: &'a InferenceModels<'a>,
+        _models: InferenceModels,
         _function: &'a FunctionConfig,
-        _inference_configs: &'a [InferenceConfig<'a>],
-        _clients: &'a InferenceClients<'a>,
+        _inference_configs: &'a [InferenceConfig],
+        _clients: InferenceClients,
         _inference_params: Vec<InferenceParams>,
     ) -> Result<StartBatchModelInferenceWithMetadata<'a>, Error> {
         Err(ErrorDetails::UnsupportedVariantForBatchInference { variant_name: None }.into())
@@ -331,7 +344,6 @@ pub fn stream_inference_from_non_stream(
             }
         },
         cached: model_inference_result.cached,
-        ticket_borrow: TicketBorrows::empty(),
     };
     let stream = make_stream_from_non_stream(inference_result, Some(usage))?;
     Ok((stream, model_used_info))
@@ -401,7 +413,7 @@ fn make_stream_from_non_stream(
             finish_reason: json.finish_reason,
         })),
     };
-    Ok(Box::pin(tokio_stream::once(chunk)))
+    Ok(StreamExt::peekable(Box::pin(tokio_stream::once(chunk))))
 }
 
 impl fmt::Debug for InferenceOrStreamResult {
@@ -416,13 +428,13 @@ impl fmt::Debug for InferenceOrStreamResult {
 }
 impl MixtureOfNConfig {
     /// Infer each candidate variant concurrently and return the results.
-    async fn infer_candidates<'a, 'request>(
+    async fn infer_candidates(
         &self,
         input: &LazyResolvedInput,
-        models: &'request InferenceModels<'a>,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        models: &InferenceModels,
+        function: &Arc<FunctionConfig>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
     ) -> Result<Vec<InferenceResult>, Error> {
         // Get all the variants we are going to infer
         let candidate_variants = self
@@ -449,10 +461,12 @@ impl MixtureOfNConfig {
                 // the sub-variant will make the same request (and have the same injected index)
                 // However, the 'A, C' and 'C, D' evaluations will all have distinct cache keys:
                 // (A, 2), (C, 3), (C, 2), (D, 4)
-                let mut config = inference_config.clone();
-                config.variant_name = candidate;
-                config.extra_cache_key = Some(format!("candidate_{i}"));
-                Ok((candidate.to_string(), variant, config))
+                let config = InferenceConfig {
+                    variant_name: Arc::from(candidate.as_str()),
+                    extra_cache_key: Some(format!("candidate_{i}")),
+                    ..inference_config.as_ref().clone()
+                };
+                Ok((candidate.to_string(), variant, Arc::new(config)))
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
@@ -464,11 +478,11 @@ impl MixtureOfNConfig {
                 timeout(
                     Duration::from_secs_f64(self.timeout_s),
                     candidate_variant.infer(
-                        input,
-                        models,
-                        function,
-                        config,
-                        clients,
+                        Arc::new(input.clone()),
+                        models.clone(),
+                        Arc::clone(function),
+                        Arc::clone(config),
+                        clients.clone(),
                         InferenceParams::default(),
                     ),
                 ),
@@ -508,13 +522,13 @@ impl MixtureOfNConfig {
     /// If the fuser fails to return a valid response,
     /// we randomly select one of the candidates.
     #[expect(clippy::too_many_arguments)]
-    async fn fuse_candidates<'a, 'request>(
+    async fn fuse_candidates<'a>(
         &'a self,
         input: &LazyResolvedInput,
-        function: &'a FunctionConfig,
-        models: &'a ModelTable,
-        inference_config: &'request InferenceConfig<'request>,
-        clients: &'request InferenceClients<'request>,
+        function: &Arc<FunctionConfig>,
+        models: &'a Arc<ModelTable>,
+        inference_config: Arc<InferenceConfig>,
+        clients: InferenceClients,
         mut candidates: Vec<InferenceResult>,
         stream: bool,
     ) -> Result<InferenceOrStreamResult, Error> {
@@ -604,21 +618,22 @@ impl MixtureOfNConfig {
 ///  * Prepare the request for the fuser variant.
 ///  * Infer the request using the model specified in the fuser config.
 ///  * Return the output of the fuser.
-async fn inner_fuse_candidates<'a, 'request>(
+async fn inner_fuse_candidates<'a>(
     fuser: &'a FuserConfig,
-    input: &'request LazyResolvedInput,
+    input: &LazyResolvedInput,
     models: &'a ModelTable,
-    function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'request>,
-    clients: &'request InferenceClients<'request>,
+    function: &Arc<FunctionConfig>,
+    inference_config: Arc<InferenceConfig>,
+    clients: InferenceClients,
     candidates: &[InferenceResult],
 ) -> Result<InferenceResult, Error> {
+    let inference_config_clone = Arc::clone(&inference_config);
     let mut inference_params = InferenceParams::default();
     let (inference_request, included_indices) = fuser
-        .prepare_request(
+        .prepare_fuser_request(
             input,
             function,
-            inference_config,
+            &inference_config,
             candidates,
             &mut inference_params,
             false,
@@ -639,8 +654,8 @@ async fn inner_fuse_candidates<'a, 'request>(
         request: inference_request,
         model_name: fuser.inner.model().clone(),
         model_config: &model_config,
-        function,
-        inference_config,
+        function: function.as_ref(),
+        inference_config: inference_config_clone,
         retry_config: fuser.inner.retries(),
         clients,
         inference_params: InferenceParams::default(),
@@ -657,21 +672,21 @@ async fn inner_fuse_candidates<'a, 'request>(
 ///  * Prepare the request for the fuser variant.
 ///  * Infer the request using the model specified in the fuser config.
 ///  * Return the output of the fuser.
-async fn inner_fuse_candidates_stream<'a, 'request>(
+async fn inner_fuse_candidates_stream<'a>(
     fuser: &'a FuserConfig,
-    input: &'request LazyResolvedInput,
+    input: &LazyResolvedInput,
     models: &'a ModelTable,
-    function: &'a FunctionConfig,
-    inference_config: &'request InferenceConfig<'request>,
-    clients: &'request InferenceClients<'request>,
+    function: &Arc<FunctionConfig>,
+    inference_config: Arc<InferenceConfig>,
+    clients: InferenceClients,
     candidates: &[InferenceResult],
 ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
     let mut params = InferenceParams::default();
     let (inference_request, included_indices) = fuser
-        .prepare_request(
+        .prepare_fuser_request(
             input,
             function,
-            inference_config,
+            &inference_config,
             candidates,
             &mut params,
             true,
@@ -692,7 +707,7 @@ async fn inner_fuse_candidates_stream<'a, 'request>(
         inference_request,
         fuser.inner.model().clone(),
         &model_config,
-        function,
+        function.as_ref(),
         clients,
         params,
         *fuser.inner.retries(),
@@ -742,7 +757,7 @@ impl FuserConfig {
     /// # Returns
     ///
     /// On success, returns a tuple containing:
-    /// - `RequestMessage`: The templated message to be sent to the evaluator.
+    /// - `RequestMessage`: The templated message to be sent to the fuser.
     /// - `Vec<usize>`: A sorted vector of indices indicating which candidates were successfully included in the fuser message.
     ///
     /// # Errors
@@ -790,9 +805,9 @@ impl FuserConfig {
         ))
     }
 
-    /// Prepares the request for the evaluator variant.
+    /// Prepares the request for the fuser variant.
     /// We use the `prepare_system_message` and `prepare_candidate_message` functions to generate
-    /// the system and candidate messages for the evaluator, which take candidate selection into account.
+    /// the system and candidate messages for the fuser, which take candidate selection into account.
     ///
     /// Additionally, this function returns the indices of candidates that were successfully included in the fuser message.
     ///
@@ -805,11 +820,11 @@ impl FuserConfig {
     /// # Errors
     ///
     /// Returns an `Error` if any of the candidate outputs fail to serialize or if templating fails.
-    async fn prepare_request<'a, 'request>(
+    async fn prepare_fuser_request<'a, 'request>(
         &'a self,
         input: &'request LazyResolvedInput,
-        function: &'a FunctionConfig,
-        inference_config: &'request InferenceConfig<'request>,
+        function: &'request Arc<FunctionConfig>,
+        inference_config: &'request InferenceConfig,
         candidates: &[InferenceResult],
         inference_params: &mut InferenceParams,
         stream: bool,
@@ -819,16 +834,16 @@ impl FuserConfig {
     {
         // Do this before we prepare the system message so we can use the correct max index in the system message
         let (candidate_message, included_indices) =
-            Self::prepare_candidate_message(inference_config.templates, candidates)?;
+            Self::prepare_candidate_message(&inference_config.templates, candidates)?;
         let max_index = included_indices.len().saturating_sub(1);
         let system = Some(self.prepare_system_message(
-            inference_config.templates,
+            &inference_config.templates,
             input.system.as_ref(),
             max_index,
         )?);
         let mut messages = try_join_all(input.messages.iter().map(|message| {
             self.inner
-                .prepare_request_message(inference_config.templates, message)
+                .prepare_request_message(&inference_config.templates, message)
         }))
         .await?;
 
@@ -862,13 +877,12 @@ impl FuserConfig {
             inference_extra_headers: inference_config
                 .extra_headers
                 .clone()
-                .into_owned()
-                .filter(inference_config.variant_name),
+                .filter(&inference_config.variant_name),
         };
         let model_inference_request = prepare_model_inference_request(
             messages,
             system,
-            function,
+            function.as_ref(),
             inference_config,
             stream,
             inference_params,
@@ -889,9 +903,10 @@ mod tests {
 
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
-        config::{SchemaData, UninitializedSchemas},
+        config::{provider_types::ProviderTypesConfig, SchemaData, UninitializedSchemas},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
         endpoints::inference::{InferenceCredentials, InferenceIds},
+        experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
@@ -904,6 +919,7 @@ mod tests {
             test_system_template_schema,
         },
         model::{ModelConfig, ModelProvider, ProviderConfig},
+        model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
         tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
     };
@@ -1271,14 +1287,15 @@ mod tests {
         };
 
         let templates = get_test_template_config();
-        let json_function_config = FunctionConfig::Json(FunctionConfigJson {
+        let json_function_config = Arc::new(FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             output_schema: StaticJSONSchema::from_value(json!({})).unwrap(),
             implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
-        });
+            experimentation: ExperimentationConfig::default(),
+        }));
         // Prepare some candidate InferenceResults
         let model_inference_response0 = ModelInferenceResponseWithMetadata {
             id: Uuid::now_v7(),
@@ -1346,43 +1363,47 @@ mod tests {
             .await,
         );
         let candidates = vec![candidate0, candidate1];
-        let models = ModelTable::try_from(HashMap::from([(
-            "json".into(),
-            ModelConfig {
-                routing: vec!["json".into()],
-                providers: HashMap::from([(
-                    "json".into(),
-                    ModelProvider {
-                        name: "json".into(),
-                        config: ProviderConfig::Dummy(DummyProvider {
-                            model_name: "json".into(),
-                            ..Default::default()
-                        }),
-                        extra_body: Default::default(),
-                        extra_headers: Default::default(),
-                        timeouts: Default::default(),
-                        discard_unknown_chunks: false,
-                    },
-                )]),
-                timeouts: Default::default(),
-            },
-        )]))
+        let provider_types = ProviderTypesConfig::default();
+        let models = ModelTable::new(
+            HashMap::from([(
+                "json".into(),
+                ModelConfig {
+                    routing: vec!["json".into()],
+                    providers: HashMap::from([(
+                        "json".into(),
+                        ModelProvider {
+                            name: "json".into(),
+                            config: ProviderConfig::Dummy(DummyProvider {
+                                model_name: "json".into(),
+                                ..Default::default()
+                            }),
+                            extra_body: Default::default(),
+                            extra_headers: Default::default(),
+                            timeouts: Default::default(),
+                            discard_unknown_chunks: false,
+                        },
+                    )]),
+                    timeouts: Default::default(),
+                },
+            )]),
+            ProviderTypeDefaultCredentials::new(&provider_types).into(),
+        )
         .expect("Failed to create model table");
         let client = TensorzeroHttpClient::new().unwrap();
-        let clickhouse_connection_info = ClickHouseConnectionInfo::Disabled;
+        let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
         let api_keys = InferenceCredentials::default();
         let inference_clients = InferenceClients {
-            http_client: &client,
-            clickhouse_connection_info: &clickhouse_connection_info,
-            postgres_connection_info: &PostgresConnectionInfo::Disabled,
-            credentials: &api_keys,
-            cache_options: &CacheOptions {
+            http_client: client.clone(),
+            clickhouse_connection_info: clickhouse_connection_info.clone(),
+            postgres_connection_info: PostgresConnectionInfo::Disabled,
+            credentials: Arc::new(api_keys.clone()),
+            cache_options: CacheOptions {
                 max_age_s: None,
                 enabled: CacheEnabledMode::WriteOnly,
             },
-            tags: &Default::default(),
-            rate_limiting_config: &Default::default(),
-            otlp_config: &Default::default(),
+            tags: Arc::new(Default::default()),
+            rate_limiting_config: Arc::new(Default::default()),
+            otlp_config: Default::default(),
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1393,11 +1414,11 @@ mod tests {
                 inference_id: Uuid::now_v7(),
                 episode_id: Uuid::now_v7(),
             },
-            templates: &templates,
+            templates: Arc::new(templates),
             tool_config: None,
             dynamic_output_schema: None,
-            function_name: "",
-            variant_name: "",
+            function_name: "".into(),
+            variant_name: "".into(),
             fetch_and_encode_input_files_before_inference: false,
             extra_body: Default::default(),
             extra_headers: Default::default(),
@@ -1408,9 +1429,9 @@ mod tests {
             .fuse_candidates(
                 &input,
                 &json_function_config,
-                &models,
-                &inference_config,
-                &inference_clients,
+                &Arc::new(models),
+                Arc::new(inference_config.clone()),
+                inference_clients.clone(),
                 candidates.clone(),
                 false,
             )
@@ -1479,7 +1500,12 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1490,9 +1516,9 @@ mod tests {
             .fuse_candidates(
                 &input,
                 &json_function_config,
-                &models,
-                &inference_config,
-                &inference_clients,
+                &Arc::new(models),
+                Arc::new(inference_config.clone()),
+                inference_clients.clone(),
                 candidates.clone(),
                 false,
             )
@@ -1515,7 +1541,7 @@ mod tests {
         }
         // Depending on implementation, you might check which candidate was selected
 
-        // Set up evaluator with a provider that returns invalid JSON
+        // Set up fuser with a provider that returns invalid JSON
         let fuser_config = FuserConfig {
             inner: UninitializedChatCompletionConfig {
                 model: "regular".into(),
@@ -1554,13 +1580,18 @@ mod tests {
                     timeouts: Default::default(),
                 },
             );
-            ModelTable::try_from(map).expect("Failed to create model table")
+            let provider_types = ProviderTypesConfig::default();
+            ModelTable::new(
+                map,
+                ProviderTypeDefaultCredentials::new(&provider_types).into(),
+            )
+            .expect("Failed to create model table")
         };
         let input = LazyResolvedInput {
             system: None,
             messages: vec![],
         };
-        let chat_function_config = FunctionConfig::Chat(FunctionConfigChat {
+        let chat_function_config = Arc::new(FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
             tools: vec![],
@@ -1568,15 +1599,17 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
-        });
+            experimentation: ExperimentationConfig::default(),
+        }));
 
+        let models_arc = Arc::new(models);
         let InferenceOrStreamResult::NonStream(result) = mixture_of_n_variant
             .fuse_candidates(
                 &input,
                 &chat_function_config,
-                &models,
-                &inference_config,
-                &inference_clients,
+                &models_arc,
+                Arc::new(inference_config.clone()),
+                inference_clients.clone(),
                 candidates.clone(),
                 false,
             )
@@ -1603,9 +1636,9 @@ mod tests {
             .fuse_candidates(
                 &input,
                 &json_function_config,
-                &models,
-                &inference_config,
-                &inference_clients,
+                &models_arc,
+                Arc::new(inference_config.clone()),
+                inference_clients.clone(),
                 empty_candidates.clone(),
                 false,
             )

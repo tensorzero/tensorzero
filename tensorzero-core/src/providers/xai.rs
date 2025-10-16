@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
 use lazy_static::lazy_static;
@@ -20,7 +19,7 @@ use crate::inference::types::{
     ProviderInferenceResponse, ProviderInferenceResponseArgs,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -40,10 +39,6 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("XAI_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "xAI";
 pub const PROVIDER_TYPE: &str = "xai";
 
@@ -56,24 +51,12 @@ pub struct XAIProvider {
     credentials: XAICredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<XAICredentials> = OnceLock::new();
-
 impl XAIProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
-        Ok(XAIProvider {
+    pub fn new(model_name: String, credentials: XAICredentials) -> Self {
+        XAIProvider {
             model_name,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -86,6 +69,10 @@ pub enum XAICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<XAICredentials>,
+        fallback: Box<XAICredentials>,
+    },
 }
 
 impl TryFrom<Credential> for XAICredentials {
@@ -97,6 +84,10 @@ impl TryFrom<Credential> for XAICredentials {
             Credential::Dynamic(key_name) => Ok(XAICredentials::Dynamic(key_name)),
             Credential::None => Ok(XAICredentials::None),
             Credential::Missing => Ok(XAICredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(XAICredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for xAI provider".to_string(),
             })),
@@ -118,6 +109,16 @@ impl XAICredentials {
                 }
                 .into()
             }),
+            XAICredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
+            }
             XAICredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
@@ -363,7 +364,10 @@ impl<'a> XAIRequest<'a> {
         let response_format = XAIResponseFormat::new(request.json_mode, request.output_schema);
 
         let messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
             OpenAIMessagesConfig {
                 json_mode: Some(&request.json_mode),

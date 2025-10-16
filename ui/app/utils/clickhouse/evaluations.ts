@@ -58,6 +58,7 @@ export const JsonEvaluationResultSchema = z.object({
   metric_value: z.string(),
   feedback_id: z.string().uuid(),
   is_human_feedback: z.boolean(),
+  name: z.string().nullable(),
 });
 
 export type JsonEvaluationResult = z.infer<typeof JsonEvaluationResultSchema>;
@@ -76,6 +77,7 @@ export const ChatEvaluationResultSchema = z.object({
   metric_value: z.string(),
   feedback_id: z.string().uuid(),
   is_human_feedback: z.preprocess((val) => val === 1, z.boolean()),
+  name: z.string().nullable(),
 });
 
 export type ChatEvaluationResult = z.infer<typeof ChatEvaluationResultSchema>;

@@ -6,19 +6,20 @@ use crate::cache::{
     embedding_cache_lookup, start_cache_write, CacheData, CacheValidationInfo, EmbeddingCacheData,
     EmbeddingModelProviderRequest,
 };
-use crate::config::{ProviderTypesConfig, TimeoutsConfig};
+use crate::config::{provider_types::ProviderTypesConfig, TimeoutsConfig};
 use crate::endpoints::inference::InferenceClients;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::extra_body::ExtraBodyConfig;
 use crate::inference::types::RequestMessagesOrBatch;
 use crate::inference::types::{ContentBlock, Text};
 use crate::model::{ModelProviderRequestInfo, UninitializedProviderConfig};
-use crate::model_table::BaseModelTable;
-use crate::model_table::ShorthandModelConfig;
+use crate::model_table::{BaseModelTable, ProviderKind, ProviderTypeDefaultCredentials};
+use crate::model_table::{OpenAIKind, ShorthandModelConfig};
 use crate::providers::azure::AzureProvider;
 use crate::rate_limiting::{
-    get_estimated_tokens, RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
-    RateLimitedResponse, ScopeInfo,
+    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
+    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
+    ScopeInfo,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -27,7 +28,7 @@ use crate::{
         current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
     },
     model::ProviderConfig,
-    providers::openai::OpenAIProvider,
+    providers::openai::{OpenAIAPIType, OpenAIProvider},
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
@@ -44,12 +45,23 @@ pub type EmbeddingModelTable = BaseModelTable<EmbeddingModelConfig>;
 impl ShorthandModelConfig for EmbeddingModelConfig {
     const SHORTHAND_MODEL_PREFIXES: &[&str] = &["openai::"];
     const MODEL_TYPE: &str = "Embedding model";
-    async fn from_shorthand(provider_type: &str, model_name: &str) -> Result<Self, Error> {
+    async fn from_shorthand(
+        provider_type: &str,
+        model_name: &str,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<Self, Error> {
         let model_name = model_name.to_string();
         let provider_config = match provider_type {
-            "openai" => {
-                EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(model_name, None, None)?)
-            }
+            "openai" => EmbeddingProviderConfig::OpenAI(OpenAIProvider::new(
+                model_name,
+                None,
+                OpenAIKind
+                    .get_defaulted_credential(None, default_credentials)
+                    .await?,
+                // TODO: handle the fact that there are also embeddings
+                OpenAIAPIType::ChatCompletions,
+                Vec::new(),
+            )?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
@@ -93,6 +105,7 @@ impl UninitializedEmbeddingModelConfig {
     pub async fn load(
         self,
         provider_types: &ProviderTypesConfig,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<EmbeddingModelConfig, Error> {
         // Handle timeout deprecation
         let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
@@ -114,7 +127,9 @@ impl UninitializedEmbeddingModelConfig {
         };
 
         let providers = try_join_all(self.providers.into_iter().map(|(name, config)| async {
-            let provider_config = config.load(provider_types, name.clone()).await?;
+            let provider_config = config
+                .load(provider_types, name.clone(), default_credentials)
+                .await?;
             Ok::<_, Error>((name, provider_config))
         }))
         .await?
@@ -143,7 +158,7 @@ impl EmbeddingModelConfig {
         &self,
         request: &EmbeddingRequest,
         model_name: &str,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
     ) -> Result<EmbeddingModelResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_embedding_models = async {
@@ -157,12 +172,12 @@ impl EmbeddingModelConfig {
                     request,
                     model_name,
                     provider_name,
-                    otlp_config: clients.otlp_config,
+                    otlp_config: &clients.otlp_config,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
                     let cache_lookup = embedding_cache_lookup(
-                        clients.clickhouse_connection_info,
+                        &clients.clickhouse_connection_info,
                         &provider_request,
                         clients.cache_options.max_age_s,
                     )
@@ -190,7 +205,7 @@ impl EmbeddingModelConfig {
                             .into());
                             };
                             let _ = start_cache_write(
-                                clients.clickhouse_connection_info,
+                                &clients.clickhouse_connection_info,
                                 provider_request.get_cache_key()?,
                                 CacheData {
                                     output: EmbeddingCacheData {
@@ -288,15 +303,31 @@ pub struct EmbeddingRequest {
 }
 
 impl RateLimitedRequest for EmbeddingRequest {
-    fn estimated_resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
+    fn estimated_resource_usage(
+        &self,
+        resources: &[RateLimitResource],
+    ) -> Result<EstimatedRateLimitResourceUsage, Error> {
         let EmbeddingRequest {
             input,
             dimensions: _,
             encoding_format: _,
         } = self;
-        Ok(RateLimitResourceUsage {
-            model_inferences: 1,
-            tokens: input.estimated_input_token_usage(),
+
+        let tokens = if resources.contains(&RateLimitResource::Token) {
+            Some(input.estimated_input_token_usage())
+        } else {
+            None
+        };
+
+        let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
+            Some(1)
+        } else {
+            None
+        };
+
+        Ok(EstimatedRateLimitResourceUsage {
+            model_inferences,
+            tokens,
         })
     }
 }
@@ -533,18 +564,18 @@ impl EmbeddingProviderInfo {
     pub async fn embed(
         &self,
         request: &EmbeddingRequest,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
         scope_info: &ScopeInfo<'_>,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
             .rate_limiting_config
-            .consume_tickets(clients.postgres_connection_info, scope_info, request)
+            .consume_tickets(&clients.postgres_connection_info, scope_info, request)
             .await?;
         let response_fut = self.inner.embed(
             request,
-            clients.http_client,
-            clients.credentials,
+            &clients.http_client,
+            &clients.credentials,
             model_provider_data,
         );
         let response = if let Some(timeout_ms) = self.timeout_ms {
@@ -595,7 +626,12 @@ impl UninitializedEmbeddingProviderConfig {
         self,
         provider_types: &ProviderTypesConfig,
         provider_name: Arc<str>,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<EmbeddingProviderInfo, Error> {
+        let provider_config = self
+            .config
+            .load(provider_types, default_credentials)
+            .await?;
         // Handle timeout deprecation
         let timeout_ms = match (self.timeout_ms, self.timeouts.non_streaming.total_ms) {
             (Some(timeout_ms), None) => Some(timeout_ms),
@@ -616,7 +652,6 @@ impl UninitializedEmbeddingProviderConfig {
             }
         };
 
-        let provider_config = self.config.load(provider_types).await?;
         let extra_body = self.extra_body;
         Ok(match provider_config {
             ProviderConfig::OpenAI(provider) => EmbeddingProviderInfo {
@@ -730,6 +765,7 @@ mod tests {
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
+        model_table::ProviderTypeDefaultCredentials,
     };
 
     use super::*;
@@ -775,17 +811,17 @@ mod tests {
                 &request,
                 "fallback",
                 &InferenceClients {
-                    http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                    credentials: &InferenceCredentials::default(),
-                    cache_options: &CacheOptions {
+                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: PostgresConnectionInfo::Disabled,
+                    credentials: Arc::new(InferenceCredentials::default()),
+                    cache_options: CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: &Default::default(),
-                    rate_limiting_config: &Default::default(),
-                    otlp_config: &Default::default(),
+                    tags: Arc::new(Default::default()),
+                    rate_limiting_config: Arc::new(Default::default()),
+                    otlp_config: Default::default(),
                 },
             )
             .await;
@@ -811,10 +847,14 @@ mod tests {
         };
 
         let uninitialized_config = UninitializedEmbeddingProviderConfig {
-            config: crate::model::UninitializedProviderConfig::OpenAI {
+            config: UninitializedProviderConfig::OpenAI {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
-                api_key_location: Some(crate::model::CredentialLocation::None),
+                api_key_location: Some(crate::model::CredentialLocationWithFallback::Single(
+                    crate::model::CredentialLocation::None,
+                )),
+                api_type: Default::default(),
+                provider_tools: Vec::new(),
             },
             timeout_ms: None,
             timeouts: TimeoutsConfig::default(),
@@ -822,7 +862,11 @@ mod tests {
         };
 
         let provider_info = uninitialized_config
-            .load(&ProviderTypesConfig::default(), Arc::from("test_provider"))
+            .load(
+                &ProviderTypesConfig::default(),
+                Arc::from("test_provider"),
+                &ProviderTypeDefaultCredentials::default(),
+            )
             .await
             .unwrap();
 

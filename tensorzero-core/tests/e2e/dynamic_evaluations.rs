@@ -1,4 +1,3 @@
-#![allow(clippy::print_stdout)]
 use std::{
     collections::HashMap,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -52,7 +51,6 @@ async fn test_dynamic_evaluation() {
                 run_id,
                 DynamicEvaluationRunEpisodeParams {
                     task_name: Some(format!("test_datapoint_{i}")),
-                    datapoint_name: None,
                     tags: HashMap::from([
                         ("baz".to_string(), format!("baz_{i}")),
                         ("zoo".to_string(), format!("zoo_{i}")),
@@ -152,10 +150,7 @@ async fn test_dynamic_evaluation() {
             episode_row.variant_pins,
             HashMap::from([("basic_test".to_string(), "test2".to_string())])
         );
-        assert_eq!(
-            episode_row.datapoint_name,
-            Some(format!("test_datapoint_{i}"))
-        );
+        assert_eq!(episode_row.task_name, Some(format!("test_datapoint_{i}")));
         let expected_tags = HashMap::from([
             ("foo".to_string(), "bar".to_string()),
             ("baz".to_string(), format!("baz_{i}")),
@@ -232,7 +227,6 @@ async fn test_dynamic_evaluation_other_function() {
             run_id,
             DynamicEvaluationRunEpisodeParams {
                 task_name: None,
-                datapoint_name: None,
                 tags: HashMap::new(),
             },
         )
@@ -305,7 +299,6 @@ async fn test_dynamic_evaluation_variant_error() {
             run_id,
             DynamicEvaluationRunEpisodeParams {
                 task_name: None,
-                datapoint_name: None,
                 tags: HashMap::new(),
             },
         )
@@ -331,7 +324,7 @@ async fn test_dynamic_evaluation_variant_error() {
     };
     let response = client.inference(inference_params).await.unwrap_err();
     println!("Response: {response:#?}");
-    assert!(response.to_string().contains("All variants failed"));
+    assert!(response.to_string().contains("All model providers failed"));
 }
 
 /// Test that the variant behavior is default if we pin a different variant name
@@ -361,7 +354,6 @@ async fn test_dynamic_evaluation_override_variant_tags() {
             run_id,
             DynamicEvaluationRunEpisodeParams {
                 task_name: None,
-                datapoint_name: None,
                 tags: HashMap::new(),
             },
         )

@@ -2,6 +2,7 @@
 use base64::Engine;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 use url::Url;
 use uuid::Uuid;
@@ -11,7 +12,7 @@ use tracing_subscriber::{self, EnvFilter};
 use tensorzero::{InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role};
 use tensorzero_core::{
     cache::CacheOptions,
-    config::{Config, ConfigFileGlob, ProviderTypesConfig},
+    config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
     db::{
         clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
         postgres::PostgresConnectionInfo,
@@ -27,6 +28,7 @@ use tensorzero_core::{
         ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
         StoredInputMessage, StoredInputMessageContent, Text,
     },
+    model_table::ProviderTypeDefaultCredentials,
     optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
@@ -70,7 +72,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
 
     let optimizer_info = test_case
         .get_optimizer_info(use_mock_inference_provider())
-        .load()
+        .load(&ProviderTypeDefaultCredentials::default())
         .await
         .unwrap();
 
@@ -122,7 +124,14 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
         .unwrap();
     let mut status;
     loop {
-        status = job_handle.poll(&client, &credentials).await.unwrap();
+        status = job_handle
+            .poll(
+                &client,
+                &credentials,
+                &ProviderTypeDefaultCredentials::default(),
+            )
+            .await
+            .unwrap();
         println!("Status: `{status:?}` Handle: `{job_handle}`");
         if matches!(status, OptimizationJobInfo::Completed { .. }) {
             break;
@@ -146,7 +155,11 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
     match output {
         OptimizerOutput::Model(model_config) => {
             let model_config = model_config
-                .load("test-fine-tuned-model", &ProviderTypesConfig::default())
+                .load(
+                    "test-fine-tuned-model",
+                    &ProviderTypesConfig::default(),
+                    &ProviderTypeDefaultCredentials::default(),
+                )
                 .await
                 .unwrap();
             // Test the model configuration
@@ -182,14 +195,14 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 extra_cache_key: None,
             };
             let clients = InferenceClients {
-                http_client: &client,
-                clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
-                postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                credentials: &HashMap::new(),
-                cache_options: &CacheOptions::default(),
-                tags: &Default::default(),
-                rate_limiting_config: &Default::default(),
-                otlp_config: &Default::default(),
+                http_client: client.clone(),
+                clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                postgres_connection_info: PostgresConnectionInfo::Disabled,
+                credentials: Arc::new(HashMap::new()),
+                cache_options: CacheOptions::default(),
+                tags: Arc::new(Default::default()),
+                rate_limiting_config: Arc::new(Default::default()),
+                otlp_config: Default::default(),
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {

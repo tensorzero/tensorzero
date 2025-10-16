@@ -3,11 +3,15 @@ use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+#[cfg(feature = "pyo3")]
+use crate::model::CredentialLocation;
 use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
     db::{
-        clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
+        clickhouse::{
+            clickhouse_client::ClickHouseClientType, ClickHouseConnectionInfo, ExternalDataInfo,
+        },
         postgres::PostgresConnectionInfo,
     },
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
@@ -15,11 +19,10 @@ use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
-    model::{build_creds_caching_default, CredentialLocation},
+    model::CredentialLocationWithFallback,
+    model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
-    providers::openai::{
-        default_api_key_location, OpenAICredentials, DEFAULT_CREDENTIALS, PROVIDER_TYPE,
-    },
+    providers::openai::OpenAICredentials,
     stored_inference::RenderedSample,
     utils::retries::RetryConfig,
     variant::dicl::UninitializedDiclConfig,
@@ -65,7 +68,7 @@ pub struct DiclOptimizationConfig {
     #[serde(skip)]
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credential_location: Option<CredentialLocation>,
+    pub credential_location: Option<CredentialLocationWithFallback>,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -88,7 +91,7 @@ pub struct UninitializedDiclOptimizationConfig {
     #[serde(default = "default_append_to_existing_variants")]
     pub append_to_existing_variants: bool,
     #[cfg_attr(test, ts(type = "string | null"))]
-    pub credentials: Option<CredentialLocation>,
+    pub credentials: Option<CredentialLocationWithFallback>,
 }
 
 impl Default for UninitializedDiclOptimizationConfig {
@@ -138,9 +141,12 @@ impl UninitializedDiclOptimizationConfig {
         append_to_existing_variants: Option<bool>,
         credentials: Option<String>,
     ) -> PyResult<Self> {
-        // Use Deserialize to convert the string to a CredentialLocation
-        let credentials =
-            credentials.map(|s| serde_json::from_str(&s).unwrap_or(CredentialLocation::Env(s)));
+        // Use Deserialize to convert the string to a CredentialLocationWithFallback
+        let credentials = credentials.map(|s| {
+            serde_json::from_str(&s).unwrap_or(CredentialLocationWithFallback::Single(
+                CredentialLocation::Env(s),
+            ))
+        });
         Ok(Self {
             embedding_model,
             variant_name,
@@ -188,7 +194,10 @@ impl UninitializedDiclOptimizationConfig {
 }
 
 impl UninitializedDiclOptimizationConfig {
-    pub fn load(self) -> Result<DiclOptimizationConfig, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<DiclOptimizationConfig, Error> {
         Ok(DiclOptimizationConfig {
             embedding_model: Arc::from(self.embedding_model),
             variant_name: self.variant_name,
@@ -199,12 +208,9 @@ impl UninitializedDiclOptimizationConfig {
             k: self.k,
             model: Arc::from(self.model),
             append_to_existing_variants: self.append_to_existing_variants,
-            credentials: build_creds_caching_default(
-                self.credentials.clone(),
-                default_api_key_location(),
-                PROVIDER_TYPE,
-                &DEFAULT_CREDENTIALS,
-            )?,
+            credentials: OpenAIKind
+                .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
+                .await?,
             credential_location: self.credentials,
         })
     }
@@ -248,10 +254,7 @@ impl Optimizer for DiclOptimizationConfig {
         }
 
         // Check if ClickHouse is available (required for DICL)
-        if matches!(
-            clickhouse_connection_info,
-            ClickHouseConnectionInfo::Disabled
-        ) {
+        if clickhouse_connection_info.client_type() == ClickHouseClientType::Disabled {
             return Err(Error::new(ErrorDetails::AppState {
                 message: "DICL optimization requires ClickHouse to be enabled to store examples"
                     .to_string(),
@@ -376,6 +379,7 @@ impl JobHandle for DiclOptimizationJobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        _default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         // DICL optimization is synchronous, so it's always complete once launched
         let _ = (client, credentials);
@@ -401,6 +405,7 @@ impl JobHandle for DiclOptimizationJobHandle {
                     extra_body: None,
                     extra_headers: None,
                     retries: RetryConfig::default(),
+                    max_distance: None,
                 },
             ))),
         })
@@ -532,17 +537,16 @@ async fn process_embedding_batch(
             })?;
 
     // Create InferenceClients context for the embedding model
-    let cache_options = CacheOptions::default();
     let clients = InferenceClients {
-        http_client: client,
-        credentials,
-        clickhouse_connection_info: &ClickHouseConnectionInfo::Disabled,
-        postgres_connection_info: &PostgresConnectionInfo::Disabled,
-        cache_options: &cache_options,
-        tags: &HashMap::default(),
-        rate_limiting_config: &config.rate_limiting,
+        http_client: client.clone(),
+        credentials: Arc::new(credentials.clone()),
+        clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+        postgres_connection_info: PostgresConnectionInfo::Disabled,
+        cache_options: CacheOptions::default(),
+        tags: Arc::new(HashMap::default()),
+        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         // We don't currently perform any OTLP export in optimization workflows
-        otlp_config: &Default::default(),
+        otlp_config: Default::default(),
     };
 
     let response = embedding_model_config
@@ -792,8 +796,13 @@ pub async fn dicl_examples_exist(
 mod tests {
     use super::*;
     use crate::{
-        embeddings::{EmbeddingModelConfig, EmbeddingProviderConfig, EmbeddingProviderInfo},
+        config::provider_types::ProviderTypesConfig,
+        embeddings::{
+            EmbeddingModelConfig, EmbeddingModelTable, EmbeddingProviderConfig,
+            EmbeddingProviderInfo,
+        },
         endpoints::inference::InferenceCredentials,
+        experimentation::ExperimentationConfig,
     };
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
@@ -830,10 +839,15 @@ mod tests {
                 providers,
                 timeout_ms: None,
             };
+            let provider_types = ProviderTypesConfig::default();
             Config {
-                embedding_models: HashMap::from([(Arc::from(model_name), embedding_model_config)])
-                    .try_into()
+                embedding_models: Arc::new(
+                    EmbeddingModelTable::new(
+                        HashMap::from([(Arc::from(model_name), embedding_model_config)]),
+                        ProviderTypeDefaultCredentials::new(&provider_types).into(),
+                    )
                     .unwrap(),
+                ),
                 ..Default::default()
             }
         }
@@ -1228,6 +1242,7 @@ mod tests {
             description: None,
 
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1243,6 +1258,7 @@ mod tests {
             parallel_tool_calls: None,
             description: None,
             all_explicit_templates_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1272,6 +1288,7 @@ mod tests {
             implicit_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 
@@ -1308,6 +1325,7 @@ mod tests {
             implicit_tool_call_config: invalid_tool_call_config,
             description: None,
             all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::default(),
         })
     }
 

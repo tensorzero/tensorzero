@@ -48,18 +48,14 @@ from IPython.display import clear_output
 from tensorzero import ContentBlock, RenderedSample, TensorZeroGateway
 
 # %%
-assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, (
-    "TENSORZERO_CLICKHOUSE_URL environment variable not set"
-)
+assert "TENSORZERO_CLICKHOUSE_URL" in os.environ, "TENSORZERO_CLICKHOUSE_URL environment variable not set"
 
 # %% [markdown]
 # Initialize the TensorZero client
 #
 
 # %%
-t0 = TensorZeroGateway.build_embedded(
-    clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"], config_file=CONFIG_PATH
-)
+t0 = TensorZeroGateway.build_embedded(clickhouse_url=os.environ["TENSORZERO_CLICKHOUSE_URL"], config_file=CONFIG_PATH)
 
 # %%
 inferences = t0.experimental_list_inferences(
@@ -160,9 +156,7 @@ def sample_to_openai_messages(sample: RenderedSample) -> Dict[str, Any]:
     }
 
     if sample.input.system:
-        result["input"]["messages"].append(
-            {"role": "system", "content": sample.input.system}
-        )
+        result["input"]["messages"].append({"role": "system", "content": sample.input.system})
     for message in sample.input.messages:
         content = []
         for part in message.content:
@@ -171,21 +165,15 @@ def sample_to_openai_messages(sample: RenderedSample) -> Dict[str, Any]:
             else:
                 raise ValueError(f"Unsupported content type: {part.type}")
         if len(content) != 1:
-            raise ValueError(
-                f"Expected exactly one content part for message {message}, got {len(content)}"
-            )
-        result["input"]["messages"].append(
-            {"role": message.role, "content": content[0]}
-        )
+            raise ValueError(f"Expected exactly one content part for message {message}, got {len(content)}")
+        result["input"]["messages"].append({"role": message.role, "content": content[0]})
 
     result["preferred_output"].append(prepare_output(sample.output))
     if len(sample.dispreferred_outputs) != 1:
         raise ValueError(
             f"Expected exactly one dispreferred output for sample {sample}, got {len(sample.dispreferred_outputs)}"
         )
-    result["non_preferred_output"].append(
-        prepare_output(sample.dispreferred_outputs[0])
-    )
+    result["non_preferred_output"].append(prepare_output(sample.dispreferred_outputs[0]))
 
     return result
 
@@ -222,9 +210,7 @@ def upload_dataset_to_openai(samples, openai_client) -> str:
 
 openai_client = openai.OpenAI()
 
-dpo_fine_tuning_object_id = upload_dataset_to_openai(
-    prepared_train_samples, openai_client
-)
+dpo_fine_tuning_object_id = upload_dataset_to_openai(prepared_train_samples, openai_client)
 val_file_object_id = upload_dataset_to_openai(prepared_val_samples, openai_client)
 
 # %% [markdown]

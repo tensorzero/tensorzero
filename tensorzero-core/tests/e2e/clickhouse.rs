@@ -9,18 +9,13 @@ use async_trait::async_trait;
 use paste::paste;
 use secrecy::ExposeSecret;
 use serde_json::json;
-use tensorzero_core::config::BatchWritesConfig;
-use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
-use tensorzero_core::db::clickhouse::migration_manager::{
-    RunMigrationArgs, RunMigrationManagerArgs,
-};
-use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error::{Error, ErrorDetails};
 use tokio::runtime::Handle;
 use tokio::time::sleep;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
+use tensorzero_core::config::BatchWritesConfig;
+use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::check_table_exists;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0002::Migration0002;
@@ -33,14 +28,16 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
-use tensorzero_core::db::SelectQueries;
-use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
-
 use tensorzero_core::db::clickhouse::migration_manager::{
     self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
+    RunMigrationArgs, RunMigrationManagerArgs,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
+use tensorzero_core::db::SelectQueries;
+use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::error::{Error, ErrorDetails};
+use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -89,11 +86,8 @@ pub async fn get_clean_clickhouse(
         Uuid::now_v7().simple()
     );
     let mut clickhouse_url = url::Url::parse(&CLICKHOUSE_URL).unwrap();
-    clickhouse_url.set_path("");
-    clickhouse_url.set_query(Some(format!("database={database}").as_str()));
+    clickhouse_url.set_path(&database);
     let clickhouse_url = clickhouse_url.to_string();
-    // Set TENSORZERO_E2E_TESTS_DATABASE so the client can use it
-    std::env::set_var("TENSORZERO_E2E_TESTS_DATABASE", &database);
     let clickhouse = ClickHouseConnectionInfo::new(
         &clickhouse_url,
         BatchWritesConfig {
@@ -187,17 +181,8 @@ async fn insert_large_fixtures(clickhouse: &ClickHouseConnectionInfo) {
         .unwrap_or_else(|_| format!("{MANIFEST_PATH}/../ui/fixtures/s3-fixtures"));
     let s3_fixtures_path = &s3_fixtures_path;
 
-    let ClickHouseConnectionInfo::Production {
-        database_url,
-        database,
-        cluster_name: _,
-        client: _,
-        batch_sender: _,
-    } = clickhouse
-    else {
-        panic!("ClickHouseConnectionInfo is not a Production connection");
-    };
-
+    let database_url = clickhouse.database_url();
+    let database = clickhouse.database();
     let url = url::Url::parse(database_url.expose_secret()).unwrap();
     let mut host = url.host_str().unwrap();
     if host == "localhost" || host == "127.0.0.1" {
@@ -552,7 +537,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32
+        25, 26, 27, 28, 29, 30, 31, 32, 33
     ]
 );
 
@@ -777,7 +762,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29, 30, 31, 32
+            24, 25, 26, 27, 28, 29, 30, 31, 32, 33
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await.unwrap();

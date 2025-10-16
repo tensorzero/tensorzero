@@ -1,3 +1,4 @@
+use crate::experimentation::{ExperimentationConfig, UninitializedExperimentationConfig};
 use crate::rate_limiting::{RateLimitingConfig, UninitializedRateLimitingConfig};
 /// IMPORTANT: THIS MODULE IS NOT STABLE.
 ///            IT IS MEANT FOR INTERNAL USE ONLY.
@@ -7,6 +8,7 @@ use futures::future::try_join_all;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
 use object_store::{ObjectStore, PutPayload};
+use provider_types::ProviderTypesConfig;
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::PyKeyError;
 #[cfg(feature = "pyo3")]
@@ -36,10 +38,10 @@ use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
 use crate::function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass};
 use crate::inference::types::storage::StorageKind;
 use crate::inference::types::Usage;
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::{ModelConfig, ModelTable, UninitializedModelConfig};
-use crate::model_table::{CowNoClone, ShorthandModelConfig};
+use crate::model_table::{CowNoClone, ProviderTypeDefaultCredentials, ShorthandModelConfig};
 use crate::optimization::{OptimizerInfo, UninitializedOptimizerInfo};
 use crate::tool::{create_implicit_tool_call_config, StaticToolConfig, ToolChoice};
 use crate::variant::best_of_n_sampling::UninitializedBestOfNSamplingConfig;
@@ -52,6 +54,7 @@ use std::error::Error as StdError;
 
 pub mod gateway;
 pub mod path;
+pub mod provider_types;
 pub mod rate_limiting;
 mod span_map;
 #[cfg(test)]
@@ -79,14 +82,14 @@ pub fn skip_credential_validation() -> bool {
 #[cfg_attr(test, ts(export))]
 pub struct Config {
     pub gateway: GatewayConfig,
-    pub models: ModelTable,                    // model name => model config
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub models: Arc<ModelTable>, // model name => model config
+    pub embedding_models: Arc<EmbeddingModelTable>, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     #[serde(skip)]
-    pub templates: TemplateConfig<'static>,
+    pub templates: Arc<TemplateConfig<'static>>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
@@ -134,38 +137,6 @@ pub struct TemplateFilesystemAccess {
     #[serde(default)]
     enabled: bool,
     base_path: Option<ResolvedTomlPath>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct GCPProviderTypeConfig {
-    #[serde(default)]
-    pub batch: Option<GCPBatchConfigType>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "storage_type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-#[serde(deny_unknown_fields)]
-pub enum GCPBatchConfigType {
-    // In the future, we'll want to allow explicitly setting 'none' at the model provider level,
-    // to override the global provider-types batch config.
-    None,
-    CloudStorage(GCPBatchConfigCloudStorage),
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct GCPBatchConfigCloudStorage {
-    pub input_uri_prefix: String,
-    pub output_uri_prefix: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -419,6 +390,9 @@ pub struct OtlpTracesConfig {
     pub enabled: bool,
     #[serde(default)]
     pub format: OtlpTracesFormat,
+    /// Extra headers to include in OTLP export requests (can be overridden by dynamic headers at request time)
+    #[serde(default)]
+    pub extra_headers: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -573,28 +547,29 @@ impl ConfigFileGlob {
     }
 
     pub fn new(glob: String) -> Result<Self, Error> {
-        let mut glob_paths = glob::glob(&glob)
+        // Build a matcher from the glob pattern
+        let matcher = globset::Glob::new(&glob)
             .map_err(|e| {
                 Error::new(ErrorDetails::Glob {
                     glob: glob.to_string(),
                     message: e.to_string(),
                 })
             })?
-            .map(|path_res| {
-                path_res.map_err(|e| {
-                    Error::new(ErrorDetails::Glob {
-                        glob: glob.to_string(),
-                        message: format!("Error processing globbed path: `{e}`"),
-                    })
-                })
-            })
-            .collect::<Result<Vec<PathBuf>, Error>>()?;
+            .compile_matcher();
+
+        // Extract the base path to start walking from
+        let base_path = extract_base_path_from_glob(&glob);
+
+        // Find all files matching the glob pattern
+        let mut glob_paths = find_matching_files(&base_path, &matcher);
+
         if glob_paths.is_empty() {
             return Err(Error::new(ErrorDetails::Glob {
                 glob: glob.to_string(),
                 message: "No files matched the glob pattern. Ensure that the path exists, and contains at least one file.".to_string(),
             }));
         }
+
         // Sort the paths to avoid depending on the filesystem iteration order
         // when we merge configs. This should only affect the precise error message we display,
         // not whether or not the config parses successfully (or the final `Config`
@@ -606,6 +581,78 @@ impl ConfigFileGlob {
             _private: (),
         })
     }
+}
+
+/// Extract the base path from a glob pattern.
+///
+/// This finds the longest literal path prefix before any glob metacharacters,
+/// following the same approach as the glob crate. It works at the path component
+/// level (not character level) for better handling of path separators.
+///
+/// # Examples
+/// - `/tmp/config/tensorzero.toml` → `/tmp/config/tensorzero.toml`
+/// - `/tmp/config/**/*.toml` → `/tmp/config`
+/// - `config/**/*.toml` → `config`
+/// - `*.toml` → `.`
+fn extract_base_path_from_glob(glob: &str) -> PathBuf {
+    let path = Path::new(glob);
+    let mut base_components = Vec::new();
+
+    for component in path.components() {
+        let component_str = component.as_os_str().to_string_lossy();
+        // Stop at the first component containing glob metacharacters
+        if component_str.contains(['*', '?', '[', ']', '{', '}']) {
+            break;
+        }
+        base_components.push(component);
+    }
+
+    if base_components.is_empty() {
+        PathBuf::from(".")
+    } else {
+        base_components.iter().collect()
+    }
+}
+/// Check which files match the glob pattern.
+/// If the base path is a file, check it directly against the matcher.
+/// If the base path is a directory, walk it.
+fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<PathBuf> {
+    let mut matched_files = Vec::new();
+
+    // If base_path is a file, check it directly against the matcher
+    if base_path.is_file() {
+        if matcher.is_match(base_path) {
+            matched_files.push(base_path.to_path_buf());
+        }
+        return matched_files;
+    }
+
+    // If base_path is a directory, walk it
+    for entry in walkdir::WalkDir::new(base_path)
+        .follow_links(false)
+        .into_iter()
+    {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if path.is_file() && matcher.is_match(path) {
+                    matched_files.push(path.to_path_buf());
+                }
+            }
+            Err(e) => {
+                let error_path = e
+                    .path()
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| base_path.to_string_lossy().into_owned());
+                tracing::warn!(
+                    "Skipping `{}` while scanning for configuration files: {e}",
+                    error_path
+                );
+            }
+        }
+    }
+
+    matched_files
 }
 
 impl Config {
@@ -644,12 +691,16 @@ impl Config {
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let templates = TemplateConfig::new();
+        let mut templates = TemplateConfig::new();
 
         let functions = uninitialized_config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&name).map(|c| (name, Arc::new(c))))
+            .map(|(name, config)| {
+                config
+                    .load(&name, &uninitialized_config.metrics)
+                    .map(|c| (name, Arc::new(c)))
+            })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = uninitialized_config
@@ -657,11 +708,18 @@ impl Config {
             .into_iter()
             .map(|(name, config)| config.load(name.clone()).map(|c| (name, Arc::new(c))))
             .collect::<Result<HashMap<String, Arc<StaticToolConfig>>, Error>>()?;
+        let provider_type_default_credentials = Arc::new(ProviderTypeDefaultCredentials::new(
+            &uninitialized_config.provider_types,
+        ));
 
         let models = try_join_all(uninitialized_config.models.into_iter().map(
             |(name, config)| async {
                 config
-                    .load(&name, &uninitialized_config.provider_types)
+                    .load(
+                        &name,
+                        &uninitialized_config.provider_types,
+                        &provider_type_default_credentials,
+                    )
                     .await
                     .map(|c| (name, c))
             },
@@ -673,7 +731,10 @@ impl Config {
         let embedding_models = try_join_all(uninitialized_config.embedding_models.into_iter().map(
             |(name, config)| async {
                 config
-                    .load(&uninitialized_config.provider_types)
+                    .load(
+                        &uninitialized_config.provider_types,
+                        &provider_type_default_credentials,
+                    )
                     .await
                     .map(|c| (name, c))
             },
@@ -683,33 +744,41 @@ impl Config {
         .collect::<HashMap<_, _>>();
 
         let object_store_info = ObjectStoreInfo::new(uninitialized_config.object_storage)?;
-        let optimizers = try_join_all(
-            uninitialized_config
-                .optimizers
-                .into_iter()
-                .map(|(name, config)| async { config.load().await.map(|c| (name, c)) }),
-        )
+        let optimizers = try_join_all(uninitialized_config.optimizers.into_iter().map(
+            |(name, config)| async {
+                config
+                    .load(&provider_type_default_credentials)
+                    .await
+                    .map(|c| (name, c))
+            },
+        ))
         .await?
         .into_iter()
         .collect::<HashMap<_, _>>();
-
-        let mut config = Config {
-            gateway: uninitialized_config.gateway.load()?,
-            models: models.try_into().map_err(|e| {
+        let models =
+            ModelTable::new(models, provider_type_default_credentials.clone()).map_err(|e| {
                 Error::new(ErrorDetails::Config {
                     message: format!("Failed to load models: {e}"),
                 })
-            })?,
-            embedding_models: embedding_models.try_into().map_err(|e| {
-                Error::new(ErrorDetails::Config {
-                    message: format!("Failed to load embedding models: {e}"),
-                })
-            })?,
+            })?;
+        let embedding_models =
+            EmbeddingModelTable::new(embedding_models, provider_type_default_credentials).map_err(
+                |e| {
+                    Error::new(ErrorDetails::Config {
+                        message: format!("Failed to load embedding models: {e}"),
+                    })
+                },
+            )?;
+
+        let mut config = Config {
+            gateway: uninitialized_config.gateway.load()?,
+            models: Arc::new(models),
+            embedding_models: Arc::new(embedding_models),
             functions,
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
-            templates,
+            templates: Arc::new(TemplateConfig::new()), // Will be populated below
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
@@ -750,9 +819,8 @@ impl Config {
         } else {
             None
         };
-        config
-            .templates
-            .initialize(template_paths, template_fs_base_path.as_deref())?;
+        templates.initialize(template_paths, template_fs_base_path.as_deref())?;
+        config.templates = Arc::new(templates.clone());
 
         // Validate the config
         config.validate().await?;
@@ -777,7 +845,7 @@ impl Config {
                 }
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
-                        config.templates.add_template(
+                        templates.add_template(
                             template.path.get_template_key(),
                             template.contents.clone(),
                         )?;
@@ -786,9 +854,9 @@ impl Config {
                 evaluation_function_config
                     .validate(
                         &config.tools,
-                        &mut config.models,
+                        &config.models,
                         &config.embedding_models,
-                        &config.templates,
+                        &templates,
                         &evaluation_function_name,
                     )
                     .await?;
@@ -809,6 +877,7 @@ impl Config {
             }
         }
         config.evaluations = evaluations;
+        config.templates = Arc::new(templates);
 
         Ok(config)
     }
@@ -850,7 +919,7 @@ impl Config {
             function
                 .validate(
                     &self.tools,
-                    &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
+                    &self.models,
                     &self.embedding_models,
                     &self.templates,
                     function_name,
@@ -885,7 +954,7 @@ impl Config {
             model.validate(model_name)?;
         }
 
-        for embedding_model_name in self.embedding_models.keys() {
+        for embedding_model_name in self.embedding_models.table.keys() {
             if embedding_model_name.starts_with("tensorzero::") {
                 return Err(ErrorDetails::Config {
                     message: format!(
@@ -923,6 +992,7 @@ impl Config {
                     parallel_tool_calls: None,
                     description: None,
                     all_explicit_templates_names: HashSet::new(),
+                    experimentation: ExperimentationConfig::default(),
                 },
             ))))
         } else {
@@ -1099,15 +1169,6 @@ pub struct UninitializedConfig {
     pub rate_limiting: UninitializedRateLimitingConfig,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub struct ProviderTypesConfig {
-    #[serde(default)]
-    pub gcp_vertex_gemini: Option<GCPProviderTypeConfig>,
-}
-
 /// The result of parsing all of the globbed config files,
 /// and merging them into a single `toml::Table`
 struct UninitializedGlobbedConfig {
@@ -1181,6 +1242,7 @@ pub struct UninitializedFunctionConfigChat {
     parallel_tool_calls: Option<bool>,
     #[serde(default)]
     description: Option<String>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1195,6 +1257,7 @@ pub struct UninitializedFunctionConfigJson {
     output_schema: Option<ResolvedTomlPath>, // schema will default to {} if not specified
     #[serde(default)]
     description: Option<String>,
+    experimentation: Option<UninitializedExperimentationConfig>,
 }
 
 /// Holds all of the schemas used by a chat completion function.
@@ -1204,23 +1267,23 @@ pub struct UninitializedFunctionConfigJson {
 #[cfg_attr(test, ts(export))]
 pub struct SchemaData {
     #[serde(flatten)]
-    pub inner: HashMap<String, StaticJSONSchema>,
+    pub inner: HashMap<String, SchemaWithMetadata>,
 }
 
 impl SchemaData {
-    pub fn get_implicit_system_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_system_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("system")
     }
 
-    pub fn get_implicit_user_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_user_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("user")
     }
 
-    pub fn get_implicit_assistant_schema(&self) -> Option<&StaticJSONSchema> {
+    pub fn get_implicit_assistant_schema(&self) -> Option<&SchemaWithMetadata> {
         self.inner.get("assistant")
     }
 
-    pub fn get_named_schema(&self, name: &str) -> Option<&StaticJSONSchema> {
+    pub fn get_named_schema(&self, name: &str) -> Option<&SchemaWithMetadata> {
         self.inner.get(name)
     }
 
@@ -1233,17 +1296,41 @@ impl SchemaData {
     ) -> Result<Self, Error> {
         let mut map = HashMap::new();
         if let Some(user_schema) = user_schema {
-            map.insert("user".to_string(), user_schema);
+            map.insert(
+                "user".to_string(),
+                SchemaWithMetadata {
+                    schema: user_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         if let Some(assistant_schema) = assistant_schema {
-            map.insert("assistant".to_string(), assistant_schema);
+            map.insert(
+                "assistant".to_string(),
+                SchemaWithMetadata {
+                    schema: assistant_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         if let Some(system_schema) = system_schema {
-            map.insert("system".to_string(), system_schema);
+            map.insert(
+                "system".to_string(),
+                SchemaWithMetadata {
+                    schema: system_schema,
+                    legacy_definition: true,
+                },
+            );
         }
         for (name, schema) in schemas.inner {
             if map
-                .insert(name.to_string(), StaticJSONSchema::from_path(schema.path)?)
+                .insert(
+                    name.clone(),
+                    SchemaWithMetadata {
+                        schema: StaticJSONSchema::from_path(schema.path)?,
+                        legacy_definition: false,
+                    },
+                )
                 .is_some()
             {
                 return Err(Error::new(ErrorDetails::Config {
@@ -1258,7 +1345,11 @@ impl SchemaData {
 }
 
 impl UninitializedFunctionConfig {
-    pub fn load(self, function_name: &str) -> Result<FunctionConfig, Error> {
+    pub fn load(
+        self,
+        function_name: &str,
+        metrics: &HashMap<String, MetricConfig>,
+    ) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
                 let schema_data = SchemaData::load(
@@ -1306,6 +1397,11 @@ impl UninitializedFunctionConfig {
                         }
                     }
                 }
+                let experimentation = params
+                    .experimentation
+                    .map(|config| config.load(&variants, metrics))
+                    .transpose()?
+                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
                     schemas: schema_data,
@@ -1314,6 +1410,7 @@ impl UninitializedFunctionConfig {
                     parallel_tool_calls: params.parallel_tool_calls,
                     description: params.description,
                     all_explicit_templates_names: all_template_names,
+                    experimentation,
                 }))
             }
             UninitializedFunctionConfig::Json(params) => {
@@ -1366,10 +1463,8 @@ impl UninitializedFunctionConfig {
                                 variant_missing_mode = Some(name.clone());
                             }
                         }
-                        VariantConfig::BestOfNSampling(best_of_n_config) => {
-                            if best_of_n_config.evaluator().inner.json_mode().is_none() {
-                                variant_missing_mode = Some(format!("{name}.evaluator"));
-                            }
+                        VariantConfig::BestOfNSampling(_best_of_n_config) => {
+                            // Evaluator json_mode is optional - it defaults to `strict` at runtime
                         }
                         VariantConfig::MixtureOfN(mixture_of_n_config) => {
                             if mixture_of_n_config.fuser().inner.json_mode().is_none() {
@@ -1396,6 +1491,11 @@ impl UninitializedFunctionConfig {
                         .into());
                     }
                 }
+                let experimentation = params
+                    .experimentation
+                    .map(|config| config.load(&variants, metrics))
+                    .transpose()?
+                    .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,
                     schemas: schema_data,
@@ -1403,6 +1503,7 @@ impl UninitializedFunctionConfig {
                     implicit_tool_call_config,
                     description: params.description,
                     all_explicit_template_names: all_template_names,
+                    experimentation,
                 }))
             }
         }

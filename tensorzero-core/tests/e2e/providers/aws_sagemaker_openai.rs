@@ -45,6 +45,8 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: vec![],
         inference_params_dynamic_credentials: vec![],
+        provider_type_default_credentials: vec![],
+        provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
@@ -55,5 +57,7 @@ async fn get_providers() -> E2ETestProviders {
         pdf_inference: vec![],
 
         shorthand_inference: vec![],
+        // AWS SageMaker only works with SDK credentials
+        credential_fallbacks: vec![],
     }
 }

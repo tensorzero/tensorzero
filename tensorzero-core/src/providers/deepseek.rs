@@ -28,7 +28,7 @@ use crate::inference::types::{
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::tool::ToolCallChunk;
 
@@ -48,18 +48,18 @@ lazy_static! {
     };
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("DEEPSEEK_API_KEY".to_string())
-}
-
 const PROVIDER_NAME: &str = "DeepSeek";
 pub const PROVIDER_TYPE: &str = "deepseek";
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DeepSeekCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<DeepSeekCredentials>,
+        fallback: Box<DeepSeekCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for DeepSeekCredentials {
@@ -70,6 +70,12 @@ impl TryFrom<Credential> for DeepSeekCredentials {
             Credential::Static(key) => Ok(DeepSeekCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(DeepSeekCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(DeepSeekCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(DeepSeekCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for DeepSeek provider".to_string(),
             })),
@@ -93,6 +99,16 @@ impl DeepSeekCredentials {
                     .into()
                 })
             }
+            DeepSeekCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
+            }
             DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
@@ -112,18 +128,11 @@ pub struct DeepSeekProvider {
 }
 
 impl DeepSeekProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credential_location = api_key_location.unwrap_or_else(default_api_key_location);
-        let generic_credentials = Credential::try_from((credential_location, PROVIDER_TYPE))?;
-        let provider_credentials = DeepSeekCredentials::try_from(generic_credentials)?;
-
-        Ok(DeepSeekProvider {
+    pub fn new(model_name: String, credentials: DeepSeekCredentials) -> Self {
+        DeepSeekProvider {
             model_name,
-            credentials: provider_credentials,
-        })
+            credentials,
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -626,7 +635,10 @@ pub(super) async fn prepare_deepseek_messages<'a>(
             );
         }
     } else if let Some(system_msg) = prepare_system_or_developer_message(
-        request.system.as_deref().map(SystemOrDeveloper::System),
+        request
+            .system
+            .as_deref()
+            .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
         Some(&request.json_mode),
         &messages,
     ) {

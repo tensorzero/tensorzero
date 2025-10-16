@@ -164,6 +164,7 @@ describe("getEvaluationResults", () => {
       expect(result).toHaveProperty("datapoint_id");
       expect(result).toHaveProperty("evaluation_run_id");
       expect(result).toHaveProperty("input");
+      expect(result).toHaveProperty("name");
       expect(result).toHaveProperty("generated_output");
       expect(result).toHaveProperty("reference_output");
       expect(result).toHaveProperty("metric_name");
@@ -251,6 +252,7 @@ describe("getEvaluationResults", () => {
       expect(result).toHaveProperty("datapoint_id");
       expect(result).toHaveProperty("evaluation_run_id");
       expect(result).toHaveProperty("input");
+      expect(result).toHaveProperty("name");
       expect(result).toHaveProperty("generated_output");
       expect(result).toHaveProperty("reference_output");
       expect(result).toHaveProperty("metric_name");
@@ -498,9 +500,7 @@ describe("getEvaluationsForDatapoint", () => {
     expect(second_evaluation.metric_value).toBe("true");
     expect(second_evaluation.input.messages).toHaveLength(1);
     const second_evaluation_input = second_evaluation.input;
-    if (
-      second_evaluation_input.messages[0].content[0].type === "structured_text"
-    ) {
+    if (second_evaluation_input.messages[0].content[0].type === "template") {
       expect(
         second_evaluation_input.messages[0].content[0].arguments,
       ).toStrictEqual({

@@ -1,6 +1,6 @@
 use crate::common::{mock_inference_provider_base, OptimizationTestCase};
 use tensorzero_core::{
-    model::CredentialLocation,
+    model::{CredentialLocation, CredentialLocationWithFallback},
     optimization::{
         gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig, UninitializedOptimizerConfig,
         UninitializedOptimizerInfo,
@@ -29,7 +29,9 @@ impl OptimizationTestCase for GCPVertexGeminiSFTTestCase {
                     adapter_size: None,
                     n_epochs: Some(1),
                     export_last_checkpoint_only: None,
-                    credentials: Some(CredentialLocation::Sdk),
+                    credentials: Some(CredentialLocationWithFallback::Single(
+                        CredentialLocation::Sdk,
+                    )),
                     seed: None,
                     api_base: if use_mock_inference_provider {
                         Some(

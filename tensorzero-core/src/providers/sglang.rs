@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
@@ -25,7 +24,7 @@ use crate::inference::types::{
     ProviderInferenceResponseStreamInner, TextChunk,
 };
 use crate::inference::InferenceProvider;
-use crate::model::{build_creds_caching_default, Credential, CredentialLocation, ModelProvider};
+use crate::model::{Credential, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -37,10 +36,6 @@ use super::openai::{
     OpenAIRequestMessage, OpenAIResponse, OpenAIResponseChoice, OpenAITool, OpenAIToolChoice,
     OpenAIUsage, StreamOptions, SystemOrDeveloper,
 };
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("SGLANG_API_KEY".to_string())
-}
 
 const PROVIDER_NAME: &str = "SGLang";
 pub const PROVIDER_TYPE: &str = "sglang";
@@ -55,29 +50,16 @@ pub struct SGLangProvider {
     credentials: SGLangCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<SGLangCredentials> = OnceLock::new();
-
 impl SGLangProvider {
-    pub fn new(
-        model_name: String,
-        api_base: Url,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(model_name: String, api_base: Url, credentials: SGLangCredentials) -> Self {
         // Check if the api_base has the `/chat/completions` suffix and warn if it does
         check_api_base_suffix(&api_base);
 
-        Ok(SGLangProvider {
+        SGLangProvider {
             model_name,
             api_base,
             credentials,
-        })
+        }
     }
 
     pub fn model_name(&self) -> &str {
@@ -90,6 +72,10 @@ pub enum SGLangCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<SGLangCredentials>,
+        fallback: Box<SGLangCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for SGLangCredentials {
@@ -101,6 +87,10 @@ impl TryFrom<Credential> for SGLangCredentials {
             Credential::Dynamic(key_name) => Ok(SGLangCredentials::Dynamic(key_name)),
             Credential::None => Ok(SGLangCredentials::None),
             Credential::Missing => Ok(SGLangCredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(SGLangCredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for SGLang provider".to_string(),
             })),
@@ -124,6 +114,16 @@ impl SGLangCredentials {
                     .into()
                 }))
                 .transpose()
+            }
+            SGLangCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             SGLangCredentials::None => Ok(None),
         }
@@ -569,7 +569,10 @@ impl<'a> SGLangRequest<'a> {
             None
         };
         let messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
             OpenAIMessagesConfig {
                 json_mode: Some(&request.json_mode),
@@ -909,31 +912,27 @@ mod tests {
     #[traced_test]
     fn test_sglang_provider_new_api_base_check() {
         let model_name = "test-model".to_string();
-        let api_key_location = Some(CredentialLocation::None);
 
         // Valid cases (should not warn)
         let _ = SGLangProvider::new(
             model_name.clone(),
             Url::parse("http://localhost:1234/v1/").unwrap(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            SGLangCredentials::None,
+        );
 
         let _ = SGLangProvider::new(
             model_name.clone(),
             Url::parse("http://localhost:1234/v1").unwrap(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            SGLangCredentials::None,
+        );
 
         // Invalid cases (should warn)
         let invalid_url_1 = Url::parse("http://localhost:1234/chat/completions").unwrap();
         let _ = SGLangProvider::new(
             model_name.clone(),
             invalid_url_1.clone(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            SGLangCredentials::None,
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_1.as_ref()));
 
@@ -941,9 +940,8 @@ mod tests {
         let _ = SGLangProvider::new(
             model_name.clone(),
             invalid_url_2.clone(),
-            api_key_location.clone(),
-        )
-        .unwrap();
+            SGLangCredentials::None,
+        );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
     }

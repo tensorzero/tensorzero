@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 
 use futures::{StreamExt, TryStreamExt};
 use secrecy::{ExposeSecret, SecretString};
@@ -25,9 +24,7 @@ use crate::inference::types::{
     ProviderInferenceResponse,
 };
 use crate::inference::types::{ContentBlockOutput, ProviderInferenceResponseArgs};
-use crate::model::{
-    build_creds_caching_default, Credential, CredentialLocation, EndpointLocation, ModelProvider,
-};
+use crate::model::{Credential, EndpointLocation, ModelProvider};
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
 };
@@ -84,21 +81,12 @@ impl AzureEndpoint {
     }
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<AzureCredentials> = OnceLock::new();
-
 impl AzureProvider {
     pub fn new(
         deployment_id: String,
         endpoint_location: EndpointLocation,
-        api_key_location: Option<CredentialLocation>,
+        credentials: AzureCredentials,
     ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
         let endpoint = match endpoint_location {
             EndpointLocation::Static(url_str) => {
                 let url = Url::parse(&url_str).map_err(|e| {
@@ -143,6 +131,10 @@ pub enum AzureCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<AzureCredentials>,
+        fallback: Box<AzureCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for AzureCredentials {
@@ -153,6 +145,10 @@ impl TryFrom<Credential> for AzureCredentials {
             Credential::Static(key) => Ok(AzureCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(AzureCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(AzureCredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(AzureCredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Azure provider".to_string(),
             })),
@@ -181,12 +177,18 @@ impl AzureCredentials {
                 message: "No credentials are set".to_string(),
             }
             .into()),
+            AzureCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
+            }
         }
     }
-}
-
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("AZURE_OPENAI_API_KEY".to_string())
 }
 
 impl InferenceProvider for AzureProvider {
@@ -591,7 +593,7 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
+    max_completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
     stream: bool,
@@ -607,7 +609,10 @@ impl<'a> AzureRequest<'a> {
     pub async fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
         let messages = prepare_openai_messages(
-            request.system.as_deref().map(SystemOrDeveloper::System),
+            request
+                .system
+                .as_deref()
+                .map(|m| SystemOrDeveloper::System(Cow::Borrowed(m))),
             &request.messages,
             OpenAIMessagesConfig {
                 json_mode: Some(&request.json_mode),
@@ -625,7 +630,7 @@ impl<'a> AzureRequest<'a> {
             stop: request.borrow_stop_sequences(),
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
-            max_tokens: request.max_tokens,
+            max_completion_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
             seed: request.seed,
@@ -810,7 +815,7 @@ mod tests {
 
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
-        assert_eq!(azure_request.max_tokens, Some(100));
+        assert_eq!(azure_request.max_completion_tokens, Some(100));
         assert!(!azure_request.stream);
         assert_eq!(azure_request.seed, Some(69));
         assert_eq!(azure_request.response_format, None);
@@ -856,7 +861,7 @@ mod tests {
 
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
-        assert_eq!(azure_request.max_tokens, Some(100));
+        assert_eq!(azure_request.max_completion_tokens, Some(100));
         assert_eq!(azure_request.top_p, Some(0.9));
         assert_eq!(azure_request.presence_penalty, Some(0.1));
         assert_eq!(azure_request.frequency_penalty, Some(0.2));
@@ -1032,7 +1037,7 @@ mod tests {
                 AzureProvider::new(
                     "gpt-4.1-mini".to_string(),
                     EndpointLocation::Static("https://test.openai.azure.com".to_string()),
-                    None,
+                    AzureCredentials::None,
                 )
             })
             .await
@@ -1055,7 +1060,7 @@ mod tests {
                 AzureProvider::new(
                     "gpt-4.1-mini".to_string(),
                     EndpointLocation::Dynamic("azure_endpoint".to_string()),
-                    None,
+                    AzureCredentials::None,
                 )
             })
             .await

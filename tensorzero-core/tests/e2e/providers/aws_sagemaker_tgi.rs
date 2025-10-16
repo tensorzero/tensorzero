@@ -29,6 +29,8 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: vec![],
         inference_params_dynamic_credentials: vec![],
+        provider_type_default_credentials: vec![],
+        provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
@@ -38,5 +40,7 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
         pdf_inference: vec![],
         shorthand_inference: vec![],
+        // AWS only supports SDK credentials so we can't fall back
+        credential_fallbacks: vec![],
     }
 }

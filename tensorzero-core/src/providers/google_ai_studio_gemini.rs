@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::sync::OnceLock;
 use std::time::Duration;
 
 use futures::{future::try_join_all, StreamExt};
@@ -23,7 +22,6 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::file::require_image;
 use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
@@ -37,10 +35,7 @@ use crate::inference::types::{
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
-use crate::model::{
-    build_creds_caching_default, fully_qualified_name, Credential, CredentialLocation,
-    ModelProvider,
-};
+use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
@@ -63,20 +58,8 @@ pub struct GoogleAIStudioGeminiProvider {
     credentials: GoogleAIStudioCredentials,
 }
 
-static DEFAULT_CREDENTIALS: OnceLock<GoogleAIStudioCredentials> = OnceLock::new();
-
 impl GoogleAIStudioGeminiProvider {
-    pub fn new(
-        model_name: String,
-        api_key_location: Option<CredentialLocation>,
-    ) -> Result<Self, Error> {
-        let credentials = build_creds_caching_default(
-            api_key_location,
-            default_api_key_location(),
-            PROVIDER_TYPE,
-            &DEFAULT_CREDENTIALS,
-        )?;
-
+    pub fn new(model_name: String, credentials: GoogleAIStudioCredentials) -> Result<Self, Error> {
         let request_url = Url::parse(&format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent",
         ))
@@ -106,15 +89,15 @@ impl GoogleAIStudioGeminiProvider {
     }
 }
 
-fn default_api_key_location() -> CredentialLocation {
-    CredentialLocation::Env("GOOGLE_AI_STUDIO_API_KEY".to_string())
-}
-
 #[derive(Clone, Debug)]
 pub enum GoogleAIStudioCredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<GoogleAIStudioCredentials>,
+        fallback: Box<GoogleAIStudioCredentials>,
+    },
 }
 
 impl TryFrom<Credential> for GoogleAIStudioCredentials {
@@ -125,10 +108,16 @@ impl TryFrom<Credential> for GoogleAIStudioCredentials {
             Credential::Static(key) => Ok(GoogleAIStudioCredentials::Static(key)),
             Credential::Dynamic(key_name) => Ok(GoogleAIStudioCredentials::Dynamic(key_name)),
             Credential::Missing => Ok(GoogleAIStudioCredentials::None),
+            Credential::WithFallback { default, fallback } => {
+                Ok(GoogleAIStudioCredentials::WithFallback {
+                    default: Box::new((*default).try_into()?),
+                    fallback: Box::new((*fallback).try_into()?),
+                })
+            }
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for Google AI Studio Gemini provider"
                     .to_string(),
-            }))?,
+            })),
         }
     }
 }
@@ -149,10 +138,21 @@ impl GoogleAIStudioCredentials {
                     .into()
                 })
             }
+            GoogleAIStudioCredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
+            }
             GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            })?,
+            }
+            .into()),
         }
     }
 }
@@ -604,7 +604,6 @@ async fn convert_non_thought_content_block(
                 file,
                 storage_path: _,
             } = &*resolved_file;
-            require_image(&file.mime_type, PROVIDER_TYPE)?;
             Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: file.mime_type.to_string(),

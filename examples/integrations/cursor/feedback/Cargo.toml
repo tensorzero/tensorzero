@@ -18,16 +18,16 @@ tracing-subscriber = { workspace = true }
 tree-sitter = "0.25.9"
 tree-sitter-rust = "0.24.0"
 tree-sitter-typescript = "0.23.2"
-tree-sitter-python = "0.23.6"
+tree-sitter-python = "0.25.0"
 tree-sitter-toml-ng = "0.7.0"
-tree-sitter-md = "0.3.2"
+tree-sitter-md = "0.5.1"
 tensorzero = { path = "../../../../clients/rust" }
 tensorzero-core = { path = "../../../../tensorzero-core" }
 chrono.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-regex = "1.11.2"
+regex = "1.12.1"
 url.workspace = true
 rayon = "1.11.0"
 futures = { workspace = true }

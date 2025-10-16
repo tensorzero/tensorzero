@@ -17,7 +17,6 @@ use tracing::Level;
 
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
-use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
 use tensorzero_core::endpoints;
 use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
@@ -40,11 +39,6 @@ struct GatewayArgs {
     #[arg(long)]
     default_config: bool,
 
-    // Hidden flag used by our `Dockerfile` to warn users who have not overridden the default CMD
-    #[arg(long)]
-    #[clap(hide = true)]
-    warn_default_cmd: bool,
-
     /// Sets the log format used for all gateway logs.
     #[arg(long)]
     #[arg(value_enum)]
@@ -53,9 +47,6 @@ struct GatewayArgs {
 
     #[command(flatten)]
     migration_commands: MigrationCommands,
-
-    /// Deprecated: use `--config-file` instead
-    tensorzero_toml: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -102,6 +93,7 @@ async fn main() {
     let args = GatewayArgs::parse();
     // Set up logs and metrics immediately, so that we can use `tracing`.
     // OTLP will be enabled based on the config file
+    // We start with empty headers and update them after loading the config
     let delayed_log_config = observability::setup_observability(args.log_format)
         .await
         .expect_pretty("Failed to set up logs");
@@ -127,51 +119,37 @@ async fn main() {
 
     let metrics_handle = observability::setup_metrics().expect_pretty("Failed to set up metrics");
 
-    if args.warn_default_cmd {
-        tracing::warn!("Deprecation Warning: Running gateway from Docker container without overriding default CMD. Please override the command to either `--config-file` to specify a custom configuration file (e.g. `--config-file /path/to/tensorzero.toml`) or `--default-config` to use default settings (i.e. no custom functions, metrics, etc.).");
-    }
-
-    if args.tensorzero_toml.is_some() && args.config_file.is_some() {
-        tracing::error!("Cannot specify both `--config-file` and a positional path argument");
-        std::process::exit(1);
-    }
-
-    if args.tensorzero_toml.is_some() {
-        tracing::warn!(
-            "`Specifying a positional path argument is deprecated. Use `--config-file path/to/tensorzero.toml` instead."
-        );
-    }
-
-    let config_path = args.config_file.or(args.tensorzero_toml);
-
-    if config_path.is_some() && args.default_config {
-        tracing::error!("Cannot specify both `--config-file` and `--default-config`");
-        std::process::exit(1);
-    }
-
-    if !args.default_config && config_path.is_none() {
-        tracing::warn!("Running the gateway without any config-related arguments is deprecated. Use `--default-config` to start the gateway with the default config.");
-    }
-
-    let (config, glob) = if let Some(path) = &config_path {
-        let glob =
-            ConfigFileGlob::new_from_path(path).expect_pretty("Failed to process config file glob");
-        (
-            Arc::new(
-                Config::load_and_verify_from_path(&glob)
-                    .await
-                    .ok() // Don't print the error here, since it was already printed when it was constructed
-                    .expect_pretty(&format!(
-                        "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
-                        glob.glob,
-                        glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
-                    )),
-            ),
-            Some(glob),
-        )
-    } else {
-        tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-        (Arc::new(Config::default()), None)
+    // Handle `--config-file` or `--default-config`
+    let (config, glob) = match (args.default_config, args.config_file) {
+        (true, Some(_)) => {
+            tracing::error!("You must not specify both `--config-file` and `--default-config`.");
+            std::process::exit(1);
+        }
+        (false, None) => {
+            tracing::error!("You must specify either `--config-file` or `--default-config`.");
+            std::process::exit(1);
+        }
+        (true, None) => {
+            tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
+            (Arc::new(Config::default()), None)
+        }
+        (false, Some(path)) => {
+            let glob = ConfigFileGlob::new_from_path(&path)
+                .expect_pretty("Failed to process config file glob");
+            (
+                Arc::new(
+                    Config::load_and_verify_from_path(&glob)
+                        .await
+                        .ok() // Don't print the error here, since it was already printed when it was constructed
+                        .expect_pretty(&format!(
+                            "Failed to load config. Config file glob `{}` resolved to the following files:\n{}",
+                            glob.glob,
+                            glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n")
+                        )),
+                ),
+                Some(glob),
+            )
+        }
     };
 
     if config.gateway.debug {
@@ -200,6 +178,17 @@ async fn main() {
             }
         }
 
+        // Set config-level OTLP headers if we have a tracer wrapper
+        if let Some(ref tracer_wrapper) = delayed_log_config.otel_tracer {
+            if !config.gateway.export.otlp.traces.extra_headers.is_empty() {
+                tracer_wrapper
+                    .set_static_otlp_traces_extra_headers(
+                        &config.gateway.export.otlp.traces.extra_headers,
+                    )
+                    .expect_pretty("Failed to set OTLP config headers");
+            }
+        }
+
         match delayed_log_config.delayed_otel {
             Ok(delayed_otel) => {
                 delayed_otel
@@ -225,16 +214,6 @@ async fn main() {
         .expect_pretty("Failed to initialize AppState");
 
     // Create a new observability_enabled_pretty string for the log message below
-    let observability_enabled_pretty = match &gateway_handle.app_state.clickhouse_connection_info {
-        ClickHouseConnectionInfo::Disabled => "disabled".to_string(),
-        ClickHouseConnectionInfo::Mock { healthy, .. } => {
-            format!("mocked (healthy={healthy})")
-        }
-        ClickHouseConnectionInfo::Production { database, .. } => {
-            format!("enabled (database: {database})")
-        }
-    };
-
     let postgres_enabled_pretty = match &gateway_handle.app_state.postgres_connection_info {
         PostgresConnectionInfo::Disabled => "disabled".to_string(),
         PostgresConnectionInfo::Mock { healthy, .. } => {
@@ -267,10 +246,15 @@ async fn main() {
         // Everything above this layer has OpenTelemetry tracing enabled
         // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
         // (the only response header is `traceresponse` for a completed trace)
-        .apply_otel_http_trace_layer()
+        .apply_otel_http_trace_layer(delayed_log_config.otel_tracer.clone())
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
+        .route(
+            "/datasets/{dataset_name}/datapoints",
+            post(endpoints::datasets::create_datapoints_handler),
+        )
+        // TODO(#3459): Deprecated in #3721. Remove in a future release.
         .route(
             "/datasets/{dataset_name}/datapoints/bulk",
             post(endpoints::datasets::bulk_insert_datapoints_handler),
@@ -389,7 +373,18 @@ async fn main() {
     print_configuration_info(glob.as_ref());
 
     // Print whether observability is enabled
-    tracing::info!("├ Observability: {observability_enabled_pretty}");
+    let observability_description = format!(
+        "client_type: {}, database: {}",
+        gateway_handle
+            .app_state
+            .clickhouse_connection_info
+            .client_type(),
+        gateway_handle
+            .app_state
+            .clickhouse_connection_info
+            .database()
+    );
+    tracing::info!("├ Observability: {observability_description}");
     if config.gateway.observability.batch_writes.enabled {
         tracing::info!(
             "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",

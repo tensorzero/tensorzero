@@ -12,6 +12,7 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
+import { toDatasetUrl } from "~/utils/urls";
 
 export const handle: RouteHandle = {
   crumb: () => ["Builder"],
@@ -34,8 +35,12 @@ export async function action({ request }: ActionFunctionArgs) {
     ]);
     const skippedRows = totalRows - writtenRows;
 
+    if (!queryParams.dataset_name) {
+      throw new Error("Dataset name is required");
+    }
+
     return redirect(
-      `/datasets/${queryParams.dataset_name}?rowsAdded=${writtenRows}&rowsSkipped=${skippedRows}`,
+      `${toDatasetUrl(queryParams.dataset_name)}?rowsAdded=${writtenRows}&rowsSkipped=${skippedRows}`,
     );
   } catch (error) {
     logger.error("Error creating dataset:", error);

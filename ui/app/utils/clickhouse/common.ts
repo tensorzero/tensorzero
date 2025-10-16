@@ -39,21 +39,20 @@ export type TemplateInput = z.infer<typeof templateInputSchema>;
 // The three display text types below handle the scenario
 // where the function 1) does not use schemas
 export const displayUnstructuredTextInputSchema = z.object({
-  type: z.literal("unstructured_text"),
+  type: z.literal("text"),
   text: z.string(),
 });
 export type DisplayUnstructuredTextInput = z.infer<
   typeof displayUnstructuredTextInputSchema
 >;
 
-// 2) uses schemas
-export const displayStructuredTextInputSchema = z.object({
-  type: z.literal("structured_text"),
-  arguments: z.any(),
+// 2) uses templates
+export const displayTemplateSchema = z.object({
+  type: z.literal("template"),
+  name: z.string(),
+  arguments: z.record(JsonValueSchema.optional()),
 });
-export type DisplayStructuredTextInput = z.infer<
-  typeof displayStructuredTextInputSchema
->;
+export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
 
 // 3) is missing from the config so we don't know
 export const displayMissingFunctionTextInputSchema = z.object({
@@ -63,13 +62,6 @@ export const displayMissingFunctionTextInputSchema = z.object({
 export type DisplayMissingFunctionTextInput = z.infer<
   typeof displayMissingFunctionTextInputSchema
 >;
-
-export const displayTemplateSchema = z.object({
-  type: z.literal("template"),
-  name: z.string(),
-  arguments: z.record(JsonValueSchema.optional()),
-});
-export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
 
 export const modelInferenceTextInputSchema = z.object({
   type: z.literal("text"),
@@ -87,18 +79,9 @@ export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
-  signature: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
-  _internal_provider_type: z
-    .string()
-    .nullish()
-    .transform((val) => val ?? null),
+  text: z.string().nullable(),
+  signature: z.string().optional(),
+  _internal_provider_type: z.string().optional(),
 });
 
 export const unknownSchema = z.object({
@@ -164,9 +147,9 @@ export const storageKindSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("s3_compatible"),
       bucket_name: z.string(),
-      region: z.string().nullable(),
-      endpoint: z.string().nullable(),
-      allow_http: z.boolean().nullable(),
+      region: z.string().nullish(),
+      endpoint: z.string().nullish(),
+      allow_http: z.boolean().nullish(),
     })
     .strict(),
   z
@@ -255,7 +238,6 @@ export type ModelInferenceInputMessageContent = z.infer<
 
 export const displayInputMessageContentSchema = z.discriminatedUnion("type", [
   displayUnstructuredTextInputSchema,
-  displayStructuredTextInputSchema,
   displayTemplateSchema,
   displayMissingFunctionTextInputSchema,
   toolCallContentSchema,
@@ -353,8 +335,9 @@ export const contentBlockOutputSchema = z.discriminatedUnion("type", [
 ]);
 
 export const jsonInferenceOutputSchema = z.object({
+  // These fields are explicitly nullable, not undefined.
   raw: z.string().nullable(),
-  parsed: JsonValueSchema,
+  parsed: JsonValueSchema.nullable(),
 }) satisfies z.ZodType<JsonInferenceOutput>;
 
 export const toolCallOutputSchema = z
@@ -452,10 +435,8 @@ function displayInputMessageContentToInputMessageContent(
   content: DisplayInputMessageContent,
 ): InputMessageContent {
   switch (content.type) {
-    case "unstructured_text":
+    case "text":
       return { type: "text", value: content.text };
-    case "structured_text":
-      return { type: "text", value: content.arguments };
     case "missing_function_text":
       return { type: "text", value: content.value };
     case "tool_call":

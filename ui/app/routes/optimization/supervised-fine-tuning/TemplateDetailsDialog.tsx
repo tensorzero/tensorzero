@@ -6,7 +6,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
-import { Textarea } from "~/components/ui/textarea";
+import { CodeEditor } from "~/components/ui/code-editor";
+import { LegacyStructuredPromptBadge } from "~/components/ui/LegacyStructuredPromptBadge";
 import type { ChatCompletionConfig } from "tensorzero-node";
 
 interface TemplateDetailsDialogProps {
@@ -35,72 +36,45 @@ export function TemplateDetailsDialog({
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="space-y-4">
-                {variant && (
-                  <>
-                    <div className="space-y-2">
-                      <h4 className="leading-none font-medium">
-                        System Template
-                      </h4>
-                      {chatCompletionVariants[variant]?.templates.system
-                        ?.template ? (
-                        <Textarea
-                          readOnly
-                          value={
-                            chatCompletionVariants[variant]?.templates.system
-                              ?.template?.contents
-                          }
-                          className="h-[200px] resize-none"
-                        />
-                      ) : (
-                        <p className="text-muted-foreground text-sm">
-                          No system template.
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <h4 className="leading-none font-medium">
-                        User Template
-                      </h4>
-                      {chatCompletionVariants[variant]?.templates.user
-                        ?.template ? (
-                        <Textarea
-                          readOnly
-                          value={
-                            chatCompletionVariants[variant]?.templates.user
-                              ?.template?.contents
-                          }
-                          className="h-[200px] resize-none"
-                        />
-                      ) : (
-                        <p className="text-muted-foreground text-sm">
-                          No user template.
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                <div className="space-y-2">
-                  <h4 className="leading-none font-medium">
-                    Assistant Template
-                  </h4>
-                  {chatCompletionVariants[variant]?.templates.assistant
-                    ?.template ? (
-                    <Textarea
-                      readOnly
-                      value={
-                        chatCompletionVariants[variant]?.templates.assistant
-                          ?.template?.contents
-                      }
-                      className="h-[200px] resize-none"
-                    />
+                {variant && chatCompletionVariants[variant] ? (
+                  Object.keys(chatCompletionVariants[variant].templates)
+                    .length > 0 ? (
+                    Object.entries(
+                      chatCompletionVariants[variant].templates,
+                    ).map(([templateName, templateData]) => {
+                      const isLegacy = templateData?.legacy_definition === true;
+                      return (
+                        <div key={templateName} className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-mono leading-none font-medium">
+                              {templateName}
+                            </h4>
+                            {isLegacy && (
+                              <LegacyStructuredPromptBadge
+                                name={templateName}
+                                type="template"
+                              />
+                            )}
+                          </div>
+                          {templateData?.template ? (
+                            <CodeEditor
+                              value={templateData.template.contents}
+                              readOnly
+                            />
+                          ) : (
+                            <p className="text-muted-foreground text-sm">
+                              No template defined.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })
                   ) : (
                     <p className="text-muted-foreground text-sm">
-                      No assistant template.
+                      No templates defined.
                     </p>
-                  )}
-                </div>
+                  )
+                ) : null}
               </div>
             </div>
           </div>

@@ -97,6 +97,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
+            name: None,
             episode_id: Some(Uuid::now_v7()),
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "hello world".to_string(),
@@ -107,6 +108,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         });
         let inference_response = InferenceResponse::Chat(ChatInferenceResponse {
@@ -156,6 +158,7 @@ mod tests {
                     }],
                 }],
             },
+            name: None,
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
             episode_id: Some(Uuid::now_v7()),
@@ -166,6 +169,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
@@ -188,6 +192,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
+            name: None,
             output_schema: json!({
                 "type": "object",
                 "properties": {
@@ -206,6 +211,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let inference_response = InferenceResponse::Json(JsonInferenceResponse {
@@ -259,6 +265,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
+            name: None,
             episode_id: Some(Uuid::now_v7()),
             output: None,
             output_schema: json!({
@@ -274,6 +281,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();
@@ -293,6 +301,7 @@ mod tests {
             },
             dataset_name: "test".to_string(),
             function_name: "test".to_string(),
+            name: None,
             episode_id: Some(Uuid::now_v7()),
             output: Some(JsonInferenceOutput {
                 parsed: None,
@@ -311,6 +320,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = run_exact_match_evaluator(&inference_response, &datapoint).unwrap();

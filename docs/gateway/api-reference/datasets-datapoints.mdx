@@ -49,8 +49,8 @@ This endpoint returns the datapoint with the given ID, including all the relevan
 This endpoint adds a list of datapoints to a dataset.
 If the dataset does not exist, it will be created with the given name.
 
-- **Gateway Endpoint:** `POST /datasets/{dataset_name}/datapoints/bulk`
-- **Client Method:** `bulk_insert_datapoints`
+- **Gateway Endpoint:** `POST /datasets/{dataset_name}/datapoints`
+- **Client Method:** `create_datapoints`
 - **Parameters:**
   - `dataset_name` (string)
   - `datapoints` (list of objects, see below)
@@ -64,6 +64,7 @@ For `chat` functions, each datapoint object must have the following fields:
 - `tool_choice` (string, optional, identical to an inference's `tool_choice`)
 - `parallel_tool_calls` (boolean, optional, defaults to `false`)
 - `tags` (map of string to string, optional)
+- `name` (string, optional)
 
 For `json` functions, each datapoint object must have the following fields:
 
@@ -72,6 +73,7 @@ For `json` functions, each datapoint object must have the following fields:
 - `output` (object, optional, an object that matches the `output_schema` of the function)
 - `output_schema` (object, optional, a dynamic JSON schema that overrides the output schema of the function)
 - `tags` (map of string to string, optional)
+- `name` (string, optional)
 
 ### Delete a datapoint
 

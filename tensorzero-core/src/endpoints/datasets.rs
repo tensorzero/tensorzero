@@ -1,13 +1,6 @@
-use crate::db::clickhouse::TableName;
-use crate::function::FunctionConfigType;
-use crate::http::TensorzeroHttpClient;
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::{
-    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
-};
-use crate::inference::types::stored_input::StoredInput;
 use axum::extract::{Path, Query, State};
 use axum::Json;
+use chrono::Utc;
 use futures::future;
 use futures::try_join;
 #[cfg(feature = "pyo3")]
@@ -20,21 +13,28 @@ use std::{collections::HashMap, future::Future, pin::Pin};
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::inference::types::Text;
+use crate::db::clickhouse::dataset_queries::{DatasetQueries, GetDatapointParams};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo, TableName};
+use crate::function::{FunctionConfig, FunctionConfigType};
+use crate::http::TensorzeroHttpClient;
+use crate::inference::types::stored_input::StoredInput;
+use crate::inference::types::{
+    ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
+    JsonInferenceDatabaseInsert, JsonInferenceOutput, Text,
+};
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::{
     config::Config,
-    db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo},
     error::{Error, ErrorDetails},
-    function::FunctionConfig,
-    inference::types::{
-        ChatInferenceDatabaseInsert, ContentBlockChatOutput, FetchContext, Input,
-        JsonInferenceDatabaseInsert, JsonInferenceOutput,
-    },
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
     tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
+};
+
+#[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::{
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
 
 #[cfg(debug_assertions)]
@@ -230,9 +230,11 @@ async fn insert_from_existing(
                 }
                 OutputKind::None => None,
             };
+            // TODO(#3957): the `put_json_datapoints` call should really take a `JsonInferenceDatapointInsert`. We'll fix it separately.
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
+                name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
@@ -244,6 +246,9 @@ async fn insert_from_existing(
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
+
+                // Ignored during insert.
+                updated_at: Utc::now().to_string(),
             };
             let rows_written = put_json_datapoints(clickhouse, &[datapoint]).await?;
             if rows_written == 0 {
@@ -267,9 +272,11 @@ async fn insert_from_existing(
                 }
                 OutputKind::None => None,
             };
+            // TODO(#3957): the `put_chat_datapoints` call should really take a `ChatInferenceDatapointInsert`. We'll fix it separately.
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
+                name: None,
                 id: datapoint_id,
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
@@ -281,6 +288,9 @@ async fn insert_from_existing(
                 is_custom: false,
                 source_inference_id: Some(*inference_id),
                 staled_at: None,
+
+                // Ignored during insert.
+                updated_at: Utc::now().to_string(),
             };
             let rows_written = put_chat_datapoints(clickhouse, &[datapoint]).await?;
             if rows_written == 0 {
@@ -331,7 +341,7 @@ pub async fn insert_from_existing_datapoint_handler(
 pub async fn update_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<UpdatePathParams>,
-    // This is deserialized as either a `SyntheticChatInferenceDatapoint` or `SyntheticJsonInferenceDatapoint`,
+    // This is deserialized as either a `UpdateChatInferenceDatapointRequest` or `UpdateJsonInferenceDatapointRequest`,
     // based on the type of the function looked up from the `function_name` key.
     StructuredJson(params): StructuredJson<serde_json::Value>,
 ) -> Result<Json<InsertDatapointResponse>, Error> {
@@ -350,10 +360,12 @@ pub async fn update_datapoint_handler(
         .config
         .get_function(&function_data.function_name)?;
 
+    // NOTE(shuyangli): Prior to 2025-10-02, this endpoint was not used to update datapoints in-place (they used
+    // to always get a new ID, marked as custom, and lose their episode association). Now this can be used to update metadata like name.
     match **function_config {
         FunctionConfig::Chat(_) => {
-            let chat: SyntheticChatInferenceDatapoint =
-                serde_json::from_value(params).map_err(|e| {
+            let chat: UpdateChatInferenceDatapointRequest = serde_json::from_value(params)
+                .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Failed to deserialize chat datapoint: {e}"),
                     })
@@ -366,7 +378,7 @@ pub async fn update_datapoint_handler(
                 .resolve()
                 .await?;
             function_config.validate_input(&chat.input)?;
-            // If there are no tool params in the SyntheticChatInferenceDatapoint, we use the default tool params (empty tools).
+            // If there are no tool params in the UpdateChatInferenceDatapointRequest, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
             let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
                 chat.tool_params
@@ -399,17 +411,21 @@ pub async fn update_datapoint_handler(
             let datapoint = ChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: chat.function_name,
+                name: chat.name,
                 id: path_params.datapoint_id,
-                episode_id: None,
+                episode_id: chat.episode_id,
                 input: resolved_input.into_stored_input(),
                 output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
-                is_deleted: false,
+                is_deleted: chat.is_deleted,
                 is_custom: chat.is_custom,
                 source_inference_id: chat.source_inference_id,
-                staled_at: None,
+                staled_at: chat.staled_at,
+
+                // Ignored during insert.
+                updated_at: Utc::now().to_string(),
             };
             let rows_written =
                 put_chat_datapoints(&app_state.clickhouse_connection_info, &[datapoint]).await?;
@@ -420,8 +436,8 @@ pub async fn update_datapoint_handler(
             }
         }
         FunctionConfig::Json(_) => {
-            let json: SyntheticJsonInferenceDatapoint =
-                serde_json::from_value(params).map_err(|e| {
+            let json: UpdateJsonInferenceDatapointRequest = serde_json::from_value(params)
+                .map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Failed to deserialize JSON datapoint: {e}"),
                     })
@@ -467,17 +483,21 @@ pub async fn update_datapoint_handler(
             let datapoint = JsonInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: json.function_name,
+                name: json.name,
                 id: path_params.datapoint_id,
-                episode_id: None,
+                episode_id: json.episode_id,
                 input: resolved_input.into_stored_input(),
                 output,
                 output_schema: json.output_schema,
                 tags: json.tags,
                 auxiliary: json.auxiliary,
-                is_deleted: false,
+                is_deleted: json.is_deleted,
                 is_custom: json.is_custom,
                 source_inference_id: json.source_inference_id,
-                staled_at: None,
+                staled_at: json.staled_at,
+
+                // Ignored during insert.
+                updated_at: Utc::now().to_string(),
             };
             let rows_written =
                 put_json_datapoints(&app_state.clickhouse_connection_info, &[datapoint]).await?;
@@ -512,10 +532,10 @@ pub struct InsertDatapointPathParams {
     pub dataset_name: String,
 }
 
-// The handler for the POST `/datasets/:dataset_name/datapoints/bulk` endpoint.
+// The handler for the POST `/datasets/{dataset_name}/datapoints` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
-pub async fn bulk_insert_datapoints_handler(
+#[tracing::instrument(name = "create_datapoints_handler", skip(app_state, params))]
+pub async fn create_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
@@ -529,6 +549,20 @@ pub async fn bulk_insert_datapoints_handler(
     )
     .await?;
     Ok(Json(datapoint_ids))
+}
+
+/// DEPRECATED: Use the POST `/datasets/{dataset_name}/datapoints` endpoint instead.
+#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+pub async fn bulk_insert_datapoints_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<InsertDatapointPathParams>,
+    StructuredJson(params): StructuredJson<InsertDatapointParams>,
+) -> Result<Json<Vec<Uuid>>, Error> {
+    tracing::warn!(
+        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/datasets/{dataset_name}/datapoints` instead.",
+        dataset_name = path_params.dataset_name
+    );
+    create_datapoints_handler(State(app_state), Path(path_params), StructuredJson(params)).await
 }
 
 pub async fn insert_datapoint(
@@ -631,6 +665,7 @@ pub async fn insert_datapoint(
                 chat_datapoints.push(ChatInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: chat.function_name,
+                    name: chat.name,
                     id: datapoint_id,
                     episode_id: None,
                     input: resolved_input.into_stored_input(),
@@ -642,6 +677,8 @@ pub async fn insert_datapoint(
                     is_custom: true,
                     source_inference_id: None,
                     staled_at: None,
+                    // Ignored during insert.
+                    updated_at: Utc::now().to_string(),
                 });
             }
             FunctionConfig::Json(json_function_config) => {
@@ -712,6 +749,7 @@ pub async fn insert_datapoint(
                 let datapoint = JsonInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: json.function_name,
+                    name: json.name,
                     id: datapoint_id,
                     episode_id: None,
                     input: resolved_input.into_stored_input(),
@@ -723,6 +761,8 @@ pub async fn insert_datapoint(
                     is_custom: true,
                     source_inference_id: None,
                     staled_at: None,
+                    // Ignored during insert.
+                    updated_at: Utc::now().to_string(),
                 };
                 json_datapoints.push(datapoint);
             }
@@ -773,18 +813,18 @@ pub async fn delete_datapoint(
     // The INSERT INTO SELECT FROM will just not write anything if the datapoint doesn't exist.
     let json_delete_query = r"
     INSERT INTO JsonInferenceDatapoint
-    (dataset_name, function_name, id, episode_id, input, output, output_schema,
+    (dataset_name, function_name, name, id, episode_id, input, output, output_schema,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
-    SELECT dataset_name, function_name, id, episode_id, input, output, output_schema,
+    SELECT dataset_name, function_name, name, id, episode_id, input, output, output_schema,
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM JsonInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
 ";
     let chat_delete_query = r"
     INSERT INTO ChatInferenceDatapoint
-    (dataset_name, function_name, id, episode_id, input, output, tool_params,
+    (dataset_name, function_name, name, id, episode_id, input, output, tool_params,
      tags, auxiliary, is_deleted, is_custom, source_inference_id, updated_at, staled_at)
-    SELECT dataset_name, function_name, id, episode_id, input, output, tool_params,
+    SELECT dataset_name, function_name, name, id, episode_id, input, output, tool_params,
            tags, auxiliary, is_deleted, is_custom, source_inference_id, now64(), now64()
     FROM ChatInferenceDatapoint
     WHERE id = {datapoint_id: UUID} AND dataset_name = {dataset_name: String}
@@ -855,6 +895,7 @@ pub async fn list_datapoints(
             'chat' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -866,7 +907,8 @@ pub async fn list_datapoints(
             source_inference_id,
             is_deleted,
             is_custom,
-            staled_at
+            staled_at,
+            updated_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
         AND staled_at IS NULL"
@@ -883,6 +925,7 @@ pub async fn list_datapoints(
             'json' as type,
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -894,7 +937,8 @@ pub async fn list_datapoints(
             source_inference_id,
             is_deleted,
             is_custom,
-            staled_at
+            staled_at,
+            updated_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
         AND staled_at IS NULL",
@@ -995,90 +1039,15 @@ pub async fn get_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<GetDatapointPathParams>,
 ) -> Result<Json<Datapoint>, Error> {
-    get_datapoint(
-        path_params.dataset_name,
-        path_params.datapoint_id,
-        &app_state.clickhouse_connection_info,
-    )
-    .await
-    .map(Json)
-}
-
-#[tracing::instrument(name = "get_datapoint", skip(clickhouse))]
-pub async fn get_datapoint(
-    dataset_name: String,
-    datapoint_id: Uuid,
-    clickhouse: &ClickHouseConnectionInfo,
-) -> Result<Datapoint, Error> {
-    let query = r"
-    WITH dataset as (
-        SELECT
-            'chat' as type,
-            dataset_name,
-            function_name,
-            id,
-            episode_id,
-            input,
-            output,
-            tool_params,
-            '\N' as output_schema, -- for column alignment in UNION ALL
-            tags,
-            auxiliary,
-            source_inference_id,
-            is_deleted,
-            is_custom,
-            staled_at
-        FROM ChatInferenceDatapoint FINAL
-        WHERE dataset_name = {dataset_name: String}
-        AND staled_at IS NULL
-        UNION ALL
-        SELECT
-            'json' as type,
-            dataset_name,
-            function_name,
-            id,
-            episode_id,
-            input,
-            output,
-            '\N' as tool_params, -- for column alignment in UNION ALL
-            output_schema,
-            tags,
-            auxiliary,
-            source_inference_id,
-            is_deleted,
-            is_custom,
-            staled_at
-        FROM JsonInferenceDatapoint FINAL
-        WHERE dataset_name = {dataset_name: String}
-        AND staled_at IS NULL
-    )
-    SELECT * FROM dataset
-    WHERE id = {datapoint_id: UUID}
-    LIMIT 1
-    FORMAT JSONEachRow
-    ";
-    let datapoint_id_str = datapoint_id.to_string();
-    let params = HashMap::from([
-        ("dataset_name", dataset_name.as_str()),
-        ("datapoint_id", datapoint_id_str.as_str()),
-    ]);
-
-    let result = clickhouse
-        .run_query_synchronous(query.to_string(), &params)
-        .await?;
-    if result.response.is_empty() {
-        return Err(Error::new(ErrorDetails::DatapointNotFound {
-            dataset_name,
-            datapoint_id,
-        }));
-    }
-    let datapoint: Datapoint = serde_json::from_str(&result.response).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: format!("Failed to deserialize datapoint: {e}"),
+    app_state
+        .clickhouse_connection_info
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: path_params.dataset_name,
+            datapoint_id: path_params.datapoint_id,
+            allow_stale: None,
         })
-    })?;
-
-    Ok(datapoint)
+        .await
+        .map(Json)
 }
 
 #[derive(Debug, Deserialize)]
@@ -1109,8 +1078,9 @@ pub struct ExistingInferenceInfo {
     pub episode_id: Uuid,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
+#[ts(export)]
 pub enum DatapointKind {
     Chat,
     Json,
@@ -1173,6 +1143,13 @@ impl Datapoint {
         match self {
             Datapoint::Chat(datapoint) => datapoint.id,
             Datapoint::Json(datapoint) => datapoint.id,
+        }
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.name.as_deref(),
+            Datapoint::Json(datapoint) => datapoint.name.as_deref(),
         }
     }
 }
@@ -1243,6 +1220,11 @@ impl Datapoint {
             Datapoint::Json(datapoint) => datapoint.is_custom,
         }
     }
+
+    #[getter]
+    pub fn get_name(&self) -> Option<String> {
+        self.name().map(std::string::ToString::to_string)
+    }
 }
 
 impl std::fmt::Display for Datapoint {
@@ -1261,6 +1243,8 @@ impl std::fmt::Display for Datapoint {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChatDatapointInsert {
     pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Value>,
@@ -1273,6 +1257,8 @@ pub struct ChatDatapointInsert {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct JsonDatapointInsert {
     pub function_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     pub input: Input,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Value>,
@@ -1295,13 +1281,18 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[cfg_attr(test, ts(optional))]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+
+    // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
@@ -1310,10 +1301,17 @@ pub struct ChatInferenceDatapoint {
     pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub staled_at: Option<String>,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub name: Option<String>,
 }
 
 impl std::fmt::Display for ChatInferenceDatapoint {
@@ -1326,7 +1324,7 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
@@ -1337,11 +1335,15 @@ pub struct JsonInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[cfg_attr(test, ts(optional))]
     pub output: Option<JsonInferenceOutput>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: serde_json::Value,
+
+    // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
@@ -1350,10 +1352,17 @@ pub struct JsonInferenceDatapoint {
     pub is_custom: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub source_inference_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub staled_at: Option<String>,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub name: Option<String>,
 }
 
 impl std::fmt::Display for JsonInferenceDatapoint {
@@ -1448,10 +1457,16 @@ where
     }
 }
 
+// UpdateChatInferenceDatapointRequest is used in `update_datapoint_handler` to update an existing ChatInferenceDatapoint
+// in place. It's not a partial update - the entire request is written to the database.
+//
+// TODO(shuyangli): this is currently being manually kept in sync with `ChatInferenceDatapoint`. Can we fix this?
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SyntheticChatInferenceDatapoint {
+pub struct UpdateChatInferenceDatapointRequest {
     pub function_name: String,
+    #[serde(default)]
+    pub episode_id: Option<Uuid>,
     pub input: Input,
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
@@ -1462,15 +1477,27 @@ pub struct SyntheticChatInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]
     pub auxiliary: String,
+    #[serde(default)]
+    pub is_deleted: bool,
     pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+    #[serde(default)]
+    pub staled_at: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
+// UpdateJsonInferenceDatapointRequest is used in `update_datapoint_handler` to update an existing JsonInferenceDatapoint
+// in place. It's not a partial update - the entire request is written to the database.
+//
+// TODO(shuyangli): this is currently being manually kept in sync with `JsonInferenceDatapoint`. Can we fix this?
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SyntheticJsonInferenceDatapoint {
+pub struct UpdateJsonInferenceDatapointRequest {
     pub function_name: String,
+    #[serde(default)]
+    pub episode_id: Option<Uuid>,
     pub input: Input,
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
@@ -1480,12 +1507,18 @@ pub struct SyntheticJsonInferenceDatapoint {
     pub tags: Option<HashMap<String, String>>,
     #[serde(skip_serializing, default)] // this will become an object
     pub auxiliary: String,
+    #[serde(default)]
+    pub is_deleted: bool,
     pub is_custom: bool,
     #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+    #[serde(default)]
+    pub staled_at: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
-fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
+pub(crate) fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
     if dataset_name == "builder" || dataset_name.starts_with("tensorzero::") {
         Err(Error::new(ErrorDetails::InvalidDatasetName {
             dataset_name: dataset_name.to_string(),
@@ -1517,6 +1550,7 @@ async fn put_chat_datapoints(
         (
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1531,6 +1565,7 @@ async fn put_chat_datapoints(
         SELECT
             new_data.dataset_name,
             new_data.function_name,
+            new_data.name,
             new_data.id,
             new_data.episode_id,
             new_data.input,
@@ -1546,7 +1581,7 @@ async fn put_chat_datapoints(
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), updated_at String".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };
@@ -1578,6 +1613,7 @@ async fn put_json_datapoints(
         (
             dataset_name,
             function_name,
+            name,
             id,
             episode_id,
             input,
@@ -1592,6 +1628,7 @@ async fn put_json_datapoints(
         SELECT
             new_data.dataset_name,
             new_data.function_name,
+            new_data.name,
             new_data.id,
             new_data.episode_id,
             new_data.input,
@@ -1607,7 +1644,7 @@ async fn put_json_datapoints(
 
     let external_data = ExternalDataInfo {
         external_data_name: "new_data".to_string(),
-        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID)".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), updated_at String".to_string(),
         format: "JSONEachRow".to_string(),
         data: serialized_datapoints.join("\n"),
     };
@@ -1703,7 +1740,8 @@ mod test {
             "is_custom": false
         }"#;
 
-        let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateChatInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(datapoint.tool_params, None);
@@ -1724,7 +1762,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: SyntheticChatInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateChatInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_function");
         assert!(datapoint.output.is_some());
         assert!(datapoint.tool_params.is_some());
@@ -1748,7 +1787,8 @@ mod test {
             "is_custom": false
         }"#;
 
-        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(datapoint.output_schema, json!({}));
@@ -1769,7 +1809,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert!(datapoint.output.is_some());
         assert_eq!(datapoint.output.as_ref().unwrap()["answer"], "Hello");
@@ -1792,7 +1833,8 @@ mod test {
             "is_custom": true
         }"#;
 
-        let datapoint: SyntheticJsonInferenceDatapoint = serde_json::from_str(json_str).unwrap();
+        let datapoint: UpdateJsonInferenceDatapointRequest =
+            serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_json_function");
         assert_eq!(datapoint.output, None);
         assert_eq!(

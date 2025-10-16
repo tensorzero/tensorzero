@@ -2,6 +2,7 @@ use crate::config::UninitializedVariantConfig;
 use crate::http::TensorzeroHttpClient;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
+use crate::model_table::ProviderTypeDefaultCredentials;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
@@ -46,14 +47,6 @@ pub mod together_sft;
 #[cfg_attr(test, ts(export))]
 pub struct OptimizerInfo {
     inner: OptimizerConfig,
-}
-
-impl OptimizerInfo {
-    pub async fn new(uninitialized_info: UninitializedOptimizerInfo) -> Result<Self, Error> {
-        Ok(Self {
-            inner: uninitialized_info.inner.load().await?,
-        })
-    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -127,23 +120,38 @@ impl JobHandle for OptimizationJobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error> {
         match self {
-            OptimizationJobHandle::Dicl(job_handle) => job_handle.poll(client, credentials).await,
+            OptimizationJobHandle::Dicl(job_handle) => {
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
+            }
             OptimizationJobHandle::OpenAISFT(job_handle) => {
-                job_handle.poll(client, credentials).await
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
             }
             OptimizationJobHandle::OpenAIRFT(job_handle) => {
-                job_handle.poll(client, credentials).await
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
             }
             OptimizationJobHandle::FireworksSFT(job_handle) => {
-                job_handle.poll(client, credentials).await
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
             }
             OptimizationJobHandle::GCPVertexGeminiSFT(job_handle) => {
-                job_handle.poll(client, credentials).await
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
             }
             OptimizationJobHandle::TogetherSFT(job_handle) => {
-                job_handle.poll(client, credentials).await
+                job_handle
+                    .poll(client, credentials, default_credentials)
+                    .await
             }
         }
     }
@@ -261,6 +269,7 @@ pub trait JobHandle {
         &self,
         client: &TensorzeroHttpClient,
         credentials: &InferenceCredentials,
+        default_credentials: &ProviderTypeDefaultCredentials,
     ) -> Result<OptimizationJobInfo, Error>;
 }
 
@@ -369,9 +378,12 @@ pub struct UninitializedOptimizerInfo {
 }
 
 impl UninitializedOptimizerInfo {
-    pub async fn load(self) -> Result<OptimizerInfo, Error> {
+    pub async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<OptimizerInfo, Error> {
         Ok(OptimizerInfo {
-            inner: self.inner.load().await?,
+            inner: self.inner.load(default_credentials).await?,
         })
     }
 }
@@ -396,24 +408,30 @@ pub enum UninitializedOptimizerConfig {
 }
 
 impl UninitializedOptimizerConfig {
-    // TODO: add a provider_types argument as needed
-    async fn load(self) -> Result<OptimizerConfig, Error> {
+    async fn load(
+        self,
+        default_credentials: &ProviderTypeDefaultCredentials,
+    ) -> Result<OptimizerConfig, Error> {
         Ok(match self {
-            UninitializedOptimizerConfig::Dicl(config) => OptimizerConfig::Dicl(config.load()?),
+            UninitializedOptimizerConfig::Dicl(config) => {
+                OptimizerConfig::Dicl(config.load(default_credentials).await?)
+            }
             UninitializedOptimizerConfig::OpenAISFT(config) => {
-                OptimizerConfig::OpenAISFT(config.load()?)
+                OptimizerConfig::OpenAISFT(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::OpenAIRFT(config) => {
-                OptimizerConfig::OpenAIRFT(Box::new(config.load()?))
+                OptimizerConfig::OpenAIRFT(Box::new(config.load(default_credentials).await?))
             }
             UninitializedOptimizerConfig::FireworksSFT(config) => {
-                OptimizerConfig::FireworksSFT(config.load()?)
+                OptimizerConfig::FireworksSFT(config.load(default_credentials).await?)
             }
             UninitializedOptimizerConfig::GCPVertexGeminiSFT(config) => {
-                OptimizerConfig::GCPVertexGeminiSFT(Box::new(config.load().await?))
+                OptimizerConfig::GCPVertexGeminiSFT(Box::new(
+                    config.load(default_credentials).await?,
+                ))
             }
             UninitializedOptimizerConfig::TogetherSFT(config) => {
-                OptimizerConfig::TogetherSFT(Box::new(config.load()?))
+                OptimizerConfig::TogetherSFT(Box::new(config.load(default_credentials).await?))
             }
         })
     }

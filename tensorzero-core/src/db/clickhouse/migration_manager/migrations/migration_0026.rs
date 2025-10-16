@@ -88,7 +88,7 @@ impl Migration for Migration0026<'_> {
                     episode_id_uint UInt128, -- UUID encoded as a UInt128
                     variant_pins Map(String, String),
                     tags Map(String, String),
-                    datapoint_name Nullable(String),
+                    datapoint_name Nullable(String), -- externally: task_name (TODO: rename in a future migration)
                     is_deleted Bool DEFAULT false,
                     updated_at DateTime64(6, 'UTC') DEFAULT now()
                 ) ENGINE = {table_engine_name}

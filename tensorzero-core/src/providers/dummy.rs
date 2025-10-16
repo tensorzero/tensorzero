@@ -30,9 +30,10 @@ use crate::inference::types::{
 };
 use crate::inference::types::{ContentBlock, FinishReason, ProviderInferenceResponseStreamInner};
 use crate::inference::types::{Text, TextChunk, Thought, ThoughtChunk};
-use crate::model::{CredentialLocation, ModelProvider};
+use crate::model::{CredentialLocation, CredentialLocationWithFallback, ModelProvider};
 use crate::providers::helpers::inject_extra_request_data;
 use crate::rate_limiting::ActiveRateLimitKey;
+use crate::rate_limiting::FailedRateLimit;
 use crate::tool::{ToolCall, ToolCallChunk};
 
 const PROVIDER_NAME: &str = "Dummy";
@@ -50,9 +51,11 @@ pub struct DummyProvider {
 impl DummyProvider {
     pub fn new(
         model_name: String,
-        api_key_location: Option<CredentialLocation>,
+        api_key_location: Option<CredentialLocationWithFallback>,
     ) -> Result<Self, Error> {
-        let api_key_location = api_key_location.unwrap_or_else(default_api_key_location);
+        let api_key_location = api_key_location
+            .map(|loc| loc.default_location().clone())
+            .unwrap_or_else(default_api_key_location);
         match api_key_location {
             CredentialLocation::Dynamic(key_name) => Ok(DummyProvider {
                 model_name,
@@ -85,6 +88,10 @@ impl DummyProvider {
             "input_tokens_output_tokens_zero" => Usage {
                 input_tokens: 0,
                 output_tokens: 0,
+            },
+            "input_five_output_six" => Usage {
+                input_tokens: 5,
+                output_tokens: 6,
             },
             _ => Usage {
                 input_tokens: 10,
@@ -273,8 +280,11 @@ impl InferenceProvider for DummyProvider {
             if *counter % 2 == 0 {
                 if self.model_name.contains("rate_limit") {
                     return Err(ErrorDetails::RateLimitExceeded {
-                        key: ActiveRateLimitKey(String::from("key")),
-                        tickets_remaining: 0,
+                        failed_rate_limits: vec![FailedRateLimit {
+                            key: ActiveRateLimitKey(String::from("key")),
+                            requested: 100,
+                            available: 0,
+                        }],
                     }
                     .into());
                 }

@@ -15,7 +15,10 @@ import { useNavigate, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 
 export const handle: RouteHandle = {
-  crumb: (match) => ["Projects", match.params.project_name!],
+  crumb: (match) => [
+    "Projects",
+    { label: match.params.project_name!, isIdentifier: true },
+  ],
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {

@@ -1,8 +1,7 @@
-#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
 use crate::common::get_gateway_endpoint;
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 use uuid::Uuid;
@@ -19,7 +18,7 @@ async fn get_providers() -> E2ETestProviders {
     let standard_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "openrouter".to_string(),
-        model_name: "gpt_4_1_mini_openrouter".into(),
+        model_name: "gpt_4_o_mini_openrouter".into(),
         model_provider_name: "openrouter".into(),
         credentials: HashMap::new(),
     }];
@@ -27,7 +26,7 @@ async fn get_providers() -> E2ETestProviders {
     let extra_body_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "openrouter-extra-body".to_string(),
-        model_name: "gpt_4_1_mini_openrouter".into(),
+        model_name: "gpt_4_o_mini_openrouter".into(),
         model_provider_name: "openrouter".into(),
         credentials: HashMap::new(),
     }];
@@ -35,7 +34,7 @@ async fn get_providers() -> E2ETestProviders {
     let bad_auth_extra_headers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "openrouter-extra-headers".to_string(),
-        model_name: "gpt_4_1_mini_openrouter".into(),
+        model_name: "gpt_4_o_mini_openrouter".into(),
         model_provider_name: "openrouter".into(),
         credentials: HashMap::new(),
     }];
@@ -43,7 +42,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "openrouter".to_string(),
-        model_name: "gpt_4_1_mini_openrouter".into(),
+        model_name: "gpt_4_o_mini_openrouter".into(),
         model_provider_name: "openrouter".into(),
         credentials: credentials.clone(),
     }];
@@ -51,7 +50,7 @@ async fn get_providers() -> E2ETestProviders {
     let inference_params_dynamic_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "openrouter-dynamic".to_string(),
-        model_name: "gpt_4_1_mini_openrouter_dynamic".into(),
+        model_name: "gpt_4_o_mini_openrouter_dynamic".into(),
         model_provider_name: "openrouter".into(),
         credentials,
     }];
@@ -60,21 +59,21 @@ async fn get_providers() -> E2ETestProviders {
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "openrouter".to_string(),
-            model_name: "gpt_4_1_mini_openrouter".into(),
+            model_name: "gpt_4_o_mini_openrouter".into(),
             model_provider_name: "openrouter".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "openrouter-implicit".to_string(),
-            model_name: "gpt_4_1_mini_openrouter".into(),
+            model_name: "gpt_4_o_mini_openrouter".into(),
             model_provider_name: "openrouter".into(),
             credentials: HashMap::new(),
         },
         E2ETestProvider {
             supports_batch_inference: false,
             variant_name: "openrouter-strict".to_string(),
-            model_name: "gpt_4_1_mini_openrouter".into(),
+            model_name: "gpt_4_o_mini_openrouter".into(),
             model_provider_name: "openrouter".into(),
             credentials: HashMap::new(),
         },
@@ -83,9 +82,31 @@ async fn get_providers() -> E2ETestProviders {
     let shorthand_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "openrouter-shorthand".to_string(),
-        model_name: "openrouter::openai/gpt-4.1".to_string(),
+        model_name: "openrouter::openai/gpt-4o-mini".to_string(),
         model_provider_name: "openrouter".into(),
         credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "openrouter".to_string(),
+        model_name: "openai/gpt-4.1-mini".into(),
+        model_provider_name: "openrouter".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let provider_type_default_credentials_shorthand_providers = vec![E2ETestProvider {
+        supports_batch_inference: false,
+        variant_name: "openrouter-shorthand".to_string(),
+        model_name: "openrouter::openai/gpt-4.1-mini".into(),
+        model_provider_name: "openrouter".into(),
+        credentials: HashMap::new(),
+    }];
+
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "openrouter".to_string(),
+        model_info: HashMap::from([("model_name".to_string(), "openai/gpt-4o-mini".to_string())]),
+        use_modal_headers: false,
     }];
 
     E2ETestProviders {
@@ -96,6 +117,9 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: inference_params_providers,
         inference_params_dynamic_credentials: inference_params_dynamic_providers,
+        provider_type_default_credentials: provider_type_default_credentials_providers,
+        provider_type_default_credentials_shorthand:
+            provider_type_default_credentials_shorthand_providers,
         tool_use_inference: standard_providers.clone(),
         tool_multi_turn_inference: standard_providers.clone(),
         dynamic_tool_use_inference: standard_providers.clone(),
@@ -105,6 +129,7 @@ async fn get_providers() -> E2ETestProviders {
         pdf_inference: vec![],
         shorthand_inference: shorthand_providers,
         json_mode_off_inference: vec![],
+        credential_fallbacks,
     }
 }
 

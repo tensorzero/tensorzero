@@ -124,6 +124,7 @@ pub async fn run_llm_judge_evaluator(
         extra_body: Default::default(),
         extra_headers: Default::default(),
         internal_dynamic_variant_config: None,
+        otlp_traces_extra_headers: HashMap::new(),
     };
     let result = clients.tensorzero_client.inference(params).await?;
     let response = match result {
@@ -592,6 +593,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -608,6 +610,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                updated_at: "2025-10-13T20:17:36Z".to_string(),
                 is_custom: true,
             }),
         )
@@ -660,6 +663,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -676,6 +680,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                updated_at: "2025-10-13T20:17:36Z".to_string(),
                 is_custom: true,
             }),
         )
@@ -891,6 +896,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -904,6 +910,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint).unwrap();
@@ -922,6 +929,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -935,6 +943,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let err = handle_reference_output(&config, &datapoint).unwrap_err();
@@ -947,6 +956,7 @@ mod tests {
         let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -962,6 +972,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
@@ -973,6 +984,7 @@ mod tests {
         let datapoint = Datapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
+            name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
@@ -989,6 +1001,7 @@ mod tests {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: true,
         });
         let result = handle_reference_output(&config, &datapoint)
@@ -1077,6 +1090,7 @@ mod tests {
             &Datapoint::Chat(ChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -1092,6 +1106,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                updated_at: "2025-10-13T20:17:36Z".to_string(),
                 is_custom: true,
             }),
         )
@@ -1190,6 +1205,7 @@ mod tests {
             &Datapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
+                name: None,
                 id: Uuid::now_v7(),
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
@@ -1206,6 +1222,7 @@ mod tests {
                 is_deleted: false,
                 source_inference_id: None,
                 staled_at: None,
+                updated_at: "2025-10-13T20:17:36Z".to_string(),
                 is_custom: true,
             }),
         )

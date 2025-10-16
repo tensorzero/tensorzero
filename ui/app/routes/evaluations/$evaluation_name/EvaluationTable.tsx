@@ -10,12 +10,14 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { Checkbox } from "~/components/ui/checkbox";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { toEvaluationDatapointUrl } from "~/utils/urls";
 
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
 import type {
@@ -46,6 +48,7 @@ import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbac
 import { InferenceButton } from "~/components/utils/InferenceButton";
 import InputSnippet from "~/components/inference/InputSnippet";
 import { logger } from "~/utils/logger";
+import { TableItemText } from "~/components/ui/TableItems";
 
 type TruncatedContentProps = (
   | {
@@ -132,12 +135,7 @@ function getInputSummary(input: DisplayInput): string {
 
   const firstContent = firstMessage.content[0];
 
-  if (firstContent.type === "structured_text") {
-    const text = JSON.stringify(firstContent.arguments, null, 2);
-    return text.length > 30 ? text.substring(0, 30) + "..." : text;
-  }
-
-  if (firstContent.type === "unstructured_text") {
+  if (firstContent.type === "text") {
     const text = firstContent.text;
     return text.length > 30 ? text.substring(0, 30) + "..." : text;
   }
@@ -222,6 +220,10 @@ interface EvaluationTableProps {
   evaluation_statistics: EvaluationStatistics[];
   evaluator_names: string[];
   evaluation_name: string;
+  selectedRows: Map<string, SelectedRowData>;
+  setSelectedRows: React.Dispatch<
+    React.SetStateAction<Map<string, SelectedRowData>>
+  >;
 }
 
 interface MetricValueInfo {
@@ -231,16 +233,29 @@ interface MetricValueInfo {
   is_human_feedback: boolean;
 }
 
+// Interface for tracking selected rows
+export interface SelectedRowData {
+  datapoint_id: string;
+  evaluation_run_id: string;
+  inference_id: string;
+  variant_name: string;
+  episode_id: string | null;
+}
+
 export function EvaluationTable({
   selected_evaluation_run_infos,
   evaluation_results,
   evaluation_statistics,
   evaluator_names,
   evaluation_name,
+  selectedRows,
+  setSelectedRows,
 }: EvaluationTableProps) {
   const selectedRunIds = selected_evaluation_run_infos.map(
     (info) => info.evaluation_run_id,
   );
+  const config = useConfig();
+  const navigate = useNavigate();
 
   // Get all unique datapoints from the results
   const uniqueDatapoints = useMemo(() => {
@@ -248,6 +263,7 @@ export function EvaluationTable({
       string,
       {
         id: string;
+        name: string | null;
         input: DisplayInput;
         reference_output: JsonInferenceOutput | ContentBlockChatOutput[] | null;
       }
@@ -257,6 +273,7 @@ export function EvaluationTable({
       if (!datapoints.has(result.datapoint_id)) {
         datapoints.set(result.datapoint_id, {
           id: result.datapoint_id,
+          name: result.name,
           input: result.input,
           reference_output: result.reference_output,
         });
@@ -324,8 +341,44 @@ export function EvaluationTable({
     return map;
   }, [selected_evaluation_run_infos]);
 
-  const config = useConfig();
-  const navigate = useNavigate();
+  // Build a map of row data for selection
+  const rowDataMap = useMemo(() => {
+    const map = new Map<string, SelectedRowData>();
+    evaluation_results.forEach((result) => {
+      const rowKey = `${result.datapoint_id}-${result.evaluation_run_id}`;
+      if (result.inference_id && !map.has(rowKey)) {
+        map.set(rowKey, {
+          datapoint_id: result.datapoint_id,
+          evaluation_run_id: result.evaluation_run_id,
+          inference_id: result.inference_id,
+          variant_name:
+            runIdToVariant.get(result.evaluation_run_id) || "Unknown",
+          episode_id: result.episode_id,
+        });
+      }
+    });
+    return map;
+  }, [evaluation_results, runIdToVariant]);
+
+  const handleRowSelect = (rowKey: string, rowData: SelectedRowData) => {
+    setSelectedRows((prev) => {
+      const newMap = new Map(prev);
+      if (newMap.has(rowKey)) {
+        newMap.delete(rowKey);
+      } else {
+        newMap.set(rowKey, rowData);
+      }
+      return newMap;
+    });
+  };
+
+  const evaluation_config = config.evaluations[evaluation_name];
+  if (!evaluation_config) {
+    throw new Error(
+      `Evaluation config not found for evaluation ${evaluation_name}`,
+    );
+  }
+
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <div>
@@ -341,6 +394,12 @@ export function EvaluationTable({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[40px] py-2 text-center align-top">
+                      {/* Checkbox column */}
+                    </TableHead>
+                    <TableHead className="py-2 text-center align-top">
+                      Name
+                    </TableHead>
                     <TableHead className="py-2 text-center align-top">
                       Input
                     </TableHead>
@@ -409,159 +468,201 @@ export function EvaluationTable({
                         {/* If there are multiple variants, we need to add a border to the last row only.
                             In the single-variant case the length should be 1 so every row will have a border.
                         */}
-                        {filteredVariants.map(([runId, data], index) => (
-                          <TableRow
-                            key={`input-${datapoint.id}-variant-${runId}`}
-                            className={
-                              index !== filteredVariants.length - 1
-                                ? "cursor-pointer border-b-0"
-                                : "cursor-pointer"
-                            }
-                            onClick={() => {
-                              const evaluation_run_ids = filteredVariants
-                                .map(([runId]) => runId)
-                                .join(",");
-                              navigate(
-                                `/evaluations/${evaluation_name}/${datapoint.id}?evaluation_run_ids=${evaluation_run_ids}`,
-                              );
-                            }}
-                          >
-                            {/* Input cell - only for the first variant row */}
-                            {index === 0 && (
-                              <TableCell
-                                rowSpan={filteredVariants.length}
-                                className="max-w-[200px] align-middle"
-                              >
-                                <TruncatedContent
-                                  content={datapoint.input}
-                                  type="input"
-                                />
-                              </TableCell>
-                            )}
+                        {filteredVariants.map(([runId, data], index) => {
+                          const rowKey = `${datapoint.id}-${runId}`;
+                          const isSelected = selectedRows.has(rowKey);
+                          const rowData = rowDataMap.get(rowKey);
 
-                            {/* Reference Output cell - only for the first variant row */}
-                            {index === 0 && (
+                          return (
+                            <TableRow
+                              key={`input-${datapoint.id}-variant-${runId}`}
+                              className={
+                                index !== filteredVariants.length - 1
+                                  ? "cursor-pointer border-b-0"
+                                  : "cursor-pointer"
+                              }
+                              onClick={() => {
+                                const evaluation_run_ids = filteredVariants
+                                  .map(([runId]) => runId)
+                                  .join(",");
+                                navigate(
+                                  toEvaluationDatapointUrl(
+                                    evaluation_name,
+                                    datapoint.id,
+                                    { evaluation_run_ids },
+                                  ),
+                                );
+                              }}
+                            >
+                              {/* Checkbox cell */}
                               <TableCell
-                                rowSpan={filteredVariants.length}
-                                className="max-w-[200px] text-center align-middle"
+                                className="text-center align-middle"
+                                onClick={(e) => e.stopPropagation()}
                               >
-                                {datapoint.reference_output ? (
-                                  <TruncatedContent
-                                    content={datapoint.reference_output}
-                                    type="output"
+                                {rowData && (
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onCheckedChange={() =>
+                                      handleRowSelect(rowKey, rowData)
+                                    }
+                                    aria-label={`Select row for ${datapoint.id}`}
                                   />
-                                ) : (
-                                  "-"
                                 )}
                               </TableCell>
-                            )}
 
-                            {/* Variant circle - only if multiple variants are selected */}
-                            {selectedRunIds.length > 1 && (
-                              <TableCell className="text-center align-middle">
-                                <VariantCircle
-                                  runId={runId}
-                                  variantName={
-                                    runIdToVariant.get(runId) || "Unknown"
-                                  }
+                              {/* Name cell - only for the first variant row */}
+                              {index === 0 && (
+                                <TableCell
+                                  rowSpan={filteredVariants.length}
+                                  className="max-w-[150px] text-center align-middle"
+                                >
+                                  <TableItemText text={datapoint.name} />
+                                </TableCell>
+                              )}
+
+                              {/* Input cell - only for the first variant row */}
+                              {index === 0 && (
+                                <TableCell
+                                  rowSpan={filteredVariants.length}
+                                  className="max-w-[200px] align-middle"
+                                >
+                                  <TruncatedContent
+                                    content={datapoint.input}
+                                    type="input"
+                                  />
+                                </TableCell>
+                              )}
+
+                              {/* Reference Output cell - only for the first variant row */}
+                              {index === 0 && (
+                                <TableCell
+                                  rowSpan={filteredVariants.length}
+                                  className="max-w-[200px] text-center align-middle"
+                                >
+                                  {datapoint.reference_output ? (
+                                    <TruncatedContent
+                                      content={datapoint.reference_output}
+                                      type="output"
+                                    />
+                                  ) : (
+                                    "-"
+                                  )}
+                                </TableCell>
+                              )}
+
+                              {/* Variant circle - only if multiple variants are selected */}
+                              {selectedRunIds.length > 1 && (
+                                <TableCell className="text-center align-middle">
+                                  <VariantCircle
+                                    runId={runId}
+                                    variantName={
+                                      runIdToVariant.get(runId) || "Unknown"
+                                    }
+                                  />
+                                </TableCell>
+                              )}
+
+                              {/* Generated output */}
+                              <TableCell className="max-w-[200px] align-middle">
+                                <TruncatedContent
+                                  content={data.generated_output}
+                                  type="output"
                                 />
                               </TableCell>
-                            )}
 
-                            {/* Generated output */}
-                            <TableCell className="max-w-[200px] align-middle">
-                              <TruncatedContent
-                                content={data.generated_output}
-                                type="output"
-                              />
-                            </TableCell>
+                              {/* Metrics cells */}
+                              {evaluator_names.map((evaluator_name) => {
+                                const metric_name = getEvaluatorMetricName(
+                                  evaluation_name,
+                                  evaluator_name,
+                                );
+                                const metricValue =
+                                  data.metrics.get(metric_name);
+                                const metricType =
+                                  config.metrics[metric_name]?.type;
+                                const evaluatorConfig =
+                                  config.evaluations[evaluation_name]
+                                    ?.evaluators[evaluator_name];
 
-                            {/* Metrics cells */}
-                            {evaluator_names.map((evaluator_name) => {
-                              const metric_name = getEvaluatorMetricName(
-                                evaluation_name,
-                                evaluator_name,
-                              );
-                              const metricValue = data.metrics.get(metric_name);
-                              const metricType =
-                                config.metrics[metric_name]?.type;
-                              const evaluatorConfig =
-                                config.evaluations[evaluation_name]?.evaluators[
-                                  evaluator_name
-                                ];
-
-                              return (
-                                <TableCell
-                                  key={metric_name}
-                                  className="h-[52px] text-center align-middle"
-                                >
-                                  {/* Add group and relative positioning to the container */}
-                                  <div
-                                    className={`group relative flex h-full items-center justify-center ${metricValue && evaluatorConfig?.type === "llm_judge" ? "pl-10" : ""}`}
+                                return (
+                                  <TableCell
+                                    key={metric_name}
+                                    className="h-[52px] text-center align-middle"
                                   >
-                                    {metricValue &&
-                                    metricType &&
-                                    evaluatorConfig ? (
-                                      <>
-                                        <MetricValue
-                                          value={metricValue.value}
-                                          metricType={metricType}
-                                          isHumanFeedback={
-                                            metricValue.is_human_feedback
-                                          }
-                                          optimize={
-                                            evaluatorConfig.type === "llm_judge"
-                                              ? evaluatorConfig.optimize
-                                              : "max"
-                                          }
-                                          cutoff={
-                                            evaluatorConfig.cutoff ?? undefined
-                                          }
-                                        />
-                                        {/* Make feedback editor appear on hover */}
-                                        {evaluatorConfig.type ===
-                                          "llm_judge" && (
-                                          <div
-                                            className="ml-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-                                            // Stop click event propagation so the row navigation is not triggered
-                                            onClick={(e) => e.stopPropagation()}
-                                          >
-                                            <EvaluationFeedbackEditor
-                                              inferenceId={
-                                                metricValue.inference_id
+                                    {/* Add group and relative positioning to the container */}
+                                    <div
+                                      className={`group relative flex h-full items-center justify-center ${metricValue && evaluatorConfig?.type === "llm_judge" ? "pl-10" : ""}`}
+                                    >
+                                      {metricValue &&
+                                      metricType &&
+                                      evaluatorConfig ? (
+                                        <>
+                                          <MetricValue
+                                            value={metricValue.value}
+                                            metricType={metricType}
+                                            isHumanFeedback={
+                                              metricValue.is_human_feedback
+                                            }
+                                            optimize={
+                                              evaluatorConfig.type ===
+                                              "llm_judge"
+                                                ? evaluatorConfig.optimize
+                                                : "max"
+                                            }
+                                            cutoff={
+                                              evaluatorConfig.cutoff ??
+                                              undefined
+                                            }
+                                          />
+                                          {/* Make feedback editor appear on hover */}
+                                          {evaluatorConfig.type ===
+                                            "llm_judge" && (
+                                            <div
+                                              className="ml-2 flex gap-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                                              // Stop click event propagation so the row navigation is not triggered
+                                              onClick={(e) =>
+                                                e.stopPropagation()
                                               }
-                                              datapointId={datapoint.id}
-                                              metricName={metric_name}
-                                              originalValue={metricValue.value}
-                                              evalRunId={runId}
-                                              evaluatorInferenceId={
-                                                metricValue.evaluator_inference_id
-                                              }
-                                              variantName={
-                                                runIdToVariant.get(runId) ||
-                                                "Unknown"
-                                              }
-                                            />
-                                            {metricValue.evaluator_inference_id && (
-                                              <InferenceButton
+                                            >
+                                              <EvaluationFeedbackEditor
                                                 inferenceId={
+                                                  metricValue.inference_id
+                                                }
+                                                datapointId={datapoint.id}
+                                                metricName={metric_name}
+                                                originalValue={
+                                                  metricValue.value
+                                                }
+                                                evalRunId={runId}
+                                                evaluatorInferenceId={
                                                   metricValue.evaluator_inference_id
                                                 }
-                                                tooltipText="View LLM judge inference"
+                                                variantName={
+                                                  runIdToVariant.get(runId) ||
+                                                  "Unknown"
+                                                }
                                               />
-                                            )}
-                                          </div>
-                                        )}
-                                      </>
-                                    ) : (
-                                      "-"
-                                    )}
-                                  </div>
-                                </TableCell>
-                              );
-                            })}
-                          </TableRow>
-                        ))}
+                                              {metricValue.evaluator_inference_id && (
+                                                <InferenceButton
+                                                  inferenceId={
+                                                    metricValue.evaluator_inference_id
+                                                  }
+                                                  tooltipText="View LLM judge inference"
+                                                />
+                                              )}
+                                            </div>
+                                          )}
+                                        </>
+                                      ) : (
+                                        "-"
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          );
+                        })}
                       </React.Fragment>
                     );
                   })}

@@ -1,4 +1,4 @@
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
 use std::collections::HashMap;
 
 crate::generate_provider_tests!(get_providers);
@@ -55,6 +55,15 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "tgi".into(),
+        model_info: HashMap::from([(
+            "api_base".to_string(),
+            "https://zr0gj152lrhnrr-80.proxy.runpod.net/v1/".to_string(),
+        )]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -63,6 +72,8 @@ async fn get_providers() -> E2ETestProviders {
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
+        provider_type_default_credentials: vec![],
+        provider_type_default_credentials_shorthand: vec![],
         tool_use_inference: vec![],
         tool_multi_turn_inference: vec![],
         dynamic_tool_use_inference: vec![],
@@ -72,5 +83,6 @@ async fn get_providers() -> E2ETestProviders {
         image_inference: vec![],
         pdf_inference: vec![],
         shorthand_inference: vec![],
+        credential_fallbacks,
     }
 }

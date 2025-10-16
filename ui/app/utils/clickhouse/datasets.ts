@@ -13,6 +13,7 @@ export const ChatInferenceDatapointRowSchema = z
   .object({
     dataset_name: z.string(),
     function_name: z.string(),
+    name: z.string().nullable(),
     id: z.string().uuid(),
     episode_id: z.string().uuid().nullable(),
     input: z.string(),
@@ -38,6 +39,7 @@ export const JsonInferenceDatapointRowSchema = z
   .object({
     dataset_name: z.string(),
     function_name: z.string(),
+    name: z.string().nullable(),
     id: z.string().uuid(),
     episode_id: z.string().uuid().nullable(),
     input: z.string(),
@@ -139,49 +141,3 @@ export const DatapointInsertSchema = z.union([
   JsonInferenceDatapointInsertSchema,
 ]);
 export type DatapointInsert = z.infer<typeof DatapointInsertSchema>;
-
-/**
- * Schema defining the allowed query parameters for selecting rows from the ChatInference or JsonInference tables
- * to be added to a dataset.
- */
-export const DatasetQueryParamsSchema = z.object({
-  inferenceType: z.enum(["chat", "json"]),
-  function_name: z.string().optional(),
-  dataset_name: z.string().optional(),
-  variant_name: z.string().optional(), // variant_name must have a corresponding function_name
-  extra_where: z.string().array().default([]), // Extra WHERE clauses (e.g. filtering by episode_id)
-  extra_params: z
-    .record(z.string(), z.union([z.string(), z.number()]))
-    .default({}), // Additional query parameters for placeholder substitution
-  metric_filter: z
-    .object({
-      metric: z.string(),
-      metric_type: z.enum(["boolean", "float"]),
-      operator: z.enum([">", "<"]),
-      threshold: z.number(),
-      join_on: z.enum(["id", "episode_id"]),
-    })
-    .optional(), // Optional filter based on metric feedback
-  output_source: z.enum(["none", "inference", "demonstration"]),
-  limit: z.number().optional(),
-  offset: z.number().optional(),
-  is_custom: z.boolean().optional(),
-});
-export type DatasetQueryParams = z.infer<typeof DatasetQueryParamsSchema>;
-
-export const DatasetCountInfoSchema = z.object({
-  dataset_name: z.string(),
-  count: z.number(),
-  last_updated: z.string().datetime(),
-});
-export type DatasetCountInfo = z.infer<typeof DatasetCountInfoSchema>;
-
-export const DatasetDetailRowSchema = z.object({
-  id: z.string().uuid(),
-  type: z.enum(["chat", "json"]),
-  function_name: z.string(),
-  episode_id: z.string().uuid().nullable(),
-  updated_at: z.string().datetime(),
-});
-
-export type DatasetDetailRow = z.infer<typeof DatasetDetailRowSchema>;

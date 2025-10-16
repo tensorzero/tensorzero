@@ -2,8 +2,7 @@
 
 use std::collections::HashSet;
 
-use axum::{extract::State, http::HeaderMap};
-use http::{HeaderName, HeaderValue};
+use axum::extract::State;
 use http_body_util::BodyExt;
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
@@ -27,18 +26,6 @@ async fn test_openai_compatible_route_new_format() {
     .await;
 }
 
-#[tokio::test(flavor = "multi_thread")]
-#[traced_test]
-async fn test_openai_compatible_route_old_format() {
-    test_openai_compatible_route_with_function_name_as_model(
-        "tensorzero::basic_test_no_system_schema",
-    )
-    .await;
-    assert!(logs_contain(
-        "Please set the `model` parameter to `tensorzero::function_name::your_function` instead of `tensorzero::your_function.`"
-    ));
-}
-
 async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let state = client.get_app_state_data().unwrap().clone();
@@ -46,7 +33,6 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
 
     let response = tensorzero_core::endpoints::openai_compatible::inference_handler(
         State(state),
-        HeaderMap::default(),
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "model": model,
@@ -881,55 +867,11 @@ async fn test_openai_compatible_streaming_tool_call() {
 
 #[tokio::test]
 #[traced_test]
-async fn test_openai_compatible_warn_headers() {
-    let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
-    let state = client.get_app_state_data().unwrap().clone();
-    let episode_id = Uuid::now_v7();
-    let _ = tensorzero_core::endpoints::openai_compatible::inference_handler(
-        State(state),
-        HeaderMap::from_iter(vec![
-            (
-                HeaderName::from_static("episode_id"),
-                HeaderValue::from_str(&episode_id.to_string()).unwrap(),
-            ),
-            (
-                HeaderName::from_static("variant_name"),
-                HeaderValue::from_str("test").unwrap(),
-            ),
-            (
-                HeaderName::from_static("dryrun"),
-                HeaderValue::from_str("true").unwrap(),
-            ),
-        ]),
-        StructuredJson(
-            serde_json::from_value(serde_json::json!({
-                "messages": [],
-                "model": "tensorzero::model_name::dummy::good",
-            }))
-            .unwrap(),
-        ),
-    )
-    .await;
-
-    assert!(logs_contain(
-        "Deprecation Warning: Please use the `tensorzero::episode_id` field instead of the `episode_id` header."
-    ));
-    assert!(logs_contain(
-        "Deprecation Warning: Please use the `tensorzero::variant_name` field instead of the `variant_name` header."
-    ));
-    assert!(logs_contain(
-        "Deprecation Warning: Please use the `tensorzero::dryrun` field instead of the `dryrun` header."
-    ));
-}
-
-#[tokio::test]
-#[traced_test]
 async fn test_openai_compatible_warn_unknown_fields() {
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     let state = client.get_app_state_data().unwrap().clone();
     tensorzero_core::endpoints::openai_compatible::inference_handler(
         State(state),
-        HeaderMap::default(),
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
@@ -953,7 +895,6 @@ async fn test_openai_compatible_deny_unknown_fields() {
     let state = client.get_app_state_data().unwrap().clone();
     let err = tensorzero_core::endpoints::openai_compatible::inference_handler(
         State(state),
-        HeaderMap::default(),
         StructuredJson(
             serde_json::from_value(serde_json::json!({
                 "messages": [],
@@ -1062,10 +1003,10 @@ async fn test_openai_compatible_stop_sequence() {
         "messages": [
             {
                 "role": "user",
-                "content": "Output 'Hello' followed by either 'zero' or 'one'. Do not output anything else"
+                "content": "Output 'Hello world' followed by either '0' or '1'. Do not output anything else"
             }
         ],
-        "stop": ["zero", "one"],
+        "stop": ["0", "1"],
         "stream": false,
     });
 
