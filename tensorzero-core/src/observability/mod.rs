@@ -41,6 +41,7 @@ use std::time::Duration;
 
 use once_cell::sync::OnceCell;
 
+use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
@@ -67,7 +68,6 @@ use tracing::level_filters::LevelFilter;
 use tracing::Span;
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use tracing_opentelemetry::PreSampledTracer;
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -274,23 +274,6 @@ impl Tracer for TracerWrapper {
         } else {
             self.default_tracer.build_with_context(builder, parent_cx)
         }
-    }
-}
-
-impl PreSampledTracer for TracerWrapper {
-    fn sampled_context(
-        &self,
-        data: &mut tracing_opentelemetry::OtelData,
-    ) -> opentelemetry::Context {
-        self.default_tracer.sampled_context(data)
-    }
-
-    fn new_trace_id(&self) -> opentelemetry::trace::TraceId {
-        self.default_tracer.new_trace_id()
-    }
-
-    fn new_span_id(&self) -> opentelemetry::trace::SpanId {
-        self.default_tracer.new_span_id()
     }
 }
 
@@ -577,7 +560,12 @@ fn make_otel_http_span<B>(
 
     let span =
         tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(req);
-    span.set_parent(context);
+    match span.set_parent(context) {
+        Ok(()) => (),
+        Err(e) => {
+            tracing::error!("Failed to set parent context: {e}. {IMPOSSIBLE_ERROR_MESSAGE}");
+        }
+    }
 
     let route = req
         .extensions()
@@ -587,10 +575,9 @@ fn make_otel_http_span<B>(
         span.record("http.route", route);
     }
 
-    let method = tracing_opentelemetry_instrumentation_sdk::http::http_method(req.method());
     span.record(
         "otel.name",
-        format!("{method} {}", route.unwrap_or_default()).trim(),
+        format!("{} {}", req.method(), route.unwrap_or_default()).trim(),
     );
     span
 }
