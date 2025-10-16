@@ -61,6 +61,7 @@ use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
 use std::str::FromStr;
+use tokio_util::task::task_tracker::TaskTrackerToken;
 use tokio_util::task::TaskTracker;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
@@ -170,6 +171,7 @@ pub struct TracerWrapper {
     // memory is freed immediately when a shutdown tasks exists. We wait on all remaining tasks
     // in `TracerWrapper::shutdown`
     shutdown_tasks: TaskTracker,
+    in_flight_spans: TaskTracker,
 }
 
 // Adds our self-signed certificate to the TLS config for Tonic
@@ -308,6 +310,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
             .time_to_idle(Duration::from_secs(60 * 60))
             .build(),
         shutdown_tasks,
+        in_flight_spans: TaskTracker::new(),
     };
 
     // Cloning of these types internally preserves a reference - we don't need our own `Arc` here
@@ -317,6 +320,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
         static_otlp_traces_extra_headers: wrapper.static_otlp_traces_extra_headers.clone(),
         custom_tracers: wrapper.custom_tracers.clone(),
         shutdown_tasks: wrapper.shutdown_tasks.clone(),
+        in_flight_spans: wrapper.in_flight_spans.clone(),
     };
     Ok(OtelLayerData {
         layer: tracing_opentelemetry::layer()
@@ -535,6 +539,23 @@ fn extract_tensorzero_headers(
     Ok(None)
 }
 
+/// An opentelemetry `Context` value that keeps track of in-flight spans.
+/// When we create a new top-level OpenTelemetry span (regardless of whether or not we have custom headers),
+/// we attach an `InFlightSpan` to the `Context`
+/// The `tracing-opentelemetry` library will propagate the `Context` to all descendant spans,
+/// which ensures that our `InFlightSpan` is only dropped once all descendant spans are dropped.
+/// In particular, it will be dropped after any background tasks (e.g. rate-limiting `return_tickets` calls)
+/// have finished executing, even if they continue executing after we finish processing the original
+/// incoming HTTP request from the client.
+///
+/// During gateway shutdown, we wait for the parent `TaskTracker` to finish,
+/// which ensures that we only try to shut down all of our OTEL exporters after all in-flight spans have finished.
+pub struct InFlightSpan {
+    // This field just holds on to the token until the `InFlightSpan` is dropped.
+    #[expect(dead_code)]
+    token: TaskTrackerToken,
+}
+
 /// Creates the top-level span for an incoming HTTP request, with the correct
 /// OpenTelemetry context attached
 /// This span is *only* used for OpenTelemetry - we have a separate `TracerLayer`
@@ -549,7 +570,11 @@ fn make_otel_http_span<B>(
     // We check for a `CustomTracerKey` in `TracerWrapper`, and use it to dispatch to a
     // dynamically-created `SdkTracer` with additional headers set.
     let mut context =
-        tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers());
+        tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers())
+            // See the docs on `InFlightSpan` for more information.
+            .with_value(InFlightSpan {
+                token: tracer_wrapper.in_flight_spans.token(),
+            });
     // If we had custom OTEL headers, and we've enabled otel export, then create a custom tracer
     // that attaches our custom headers on export.
     // This is stored in the span's `Context`, which is automatically propagated to descendants.
@@ -714,18 +739,32 @@ impl TracerWrapper {
             })
     }
 
+    /// Shuts down all OpenTelemetry exporters.
+    /// This ensures that the batch exporter flushes all pending spans.
+    /// No new requests should be *started* after this method is called:
+    /// * In the HTTP gateway, we call this after the axum server has exited
+    /// * If we ever support OTEL in an embedded client, it should be called
+    ///   in a method that takes `self` by value (to prevent starting any new requests afterwards)
+    ///
+    /// This method will correctly wait for any processing related to *previous* requests to finish
+    /// (e.g. rate-limiting `return_tickets` calls) to finish before shutting down the exporters.
     pub async fn shutdown(&self) {
-        // First, spawn shutdown tasks for all of our custom tracers.
-        // This might happen in parallel for the same custom tracer, but opentelemetry
+        // See the docs on `InFlightSpan` for more information.
+        self.in_flight_spans.close();
+        self.in_flight_spans.wait().await;
+        // Now that all of our OpenTelemetry spans have closed (including spans in background tasks),
+        // shut down all of our custom tracers.
+        // This might happen in parallel for the same custom tracer (if moka evicts its cache entry), but opentelemetry
         // documents that it's safe to call `shutdown` multiple times.
         for (_key, tracer) in &self.custom_tracers {
             if let Some(provider) = &tracer.provider {
                 self.shutdown_tasks.spawn(shutdown_otel(provider.clone()));
             }
         }
+        // Also shut down our default tracer.
         self.shutdown_tasks
             .spawn(shutdown_otel(self.default_provider.clone()));
-        // Then, wait for all of the custom tracers to shut down.
+        // Then, wait for all all of the shutdown tasks to finish.
         self.shutdown_tasks.close();
         self.shutdown_tasks.wait().await;
     }
