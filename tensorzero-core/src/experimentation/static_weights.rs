@@ -127,6 +127,7 @@ impl VariantSampler for StaticWeightsConfig {
         &self,
         _db: Arc<dyn FeedbackQueries + Send + Sync>,
         _function_name: &str,
+        _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         // We just assert that all weights are non-negative
@@ -359,12 +360,14 @@ mod tests {
         .await
         .unwrap();
         let experiment = config.functions.get("test").unwrap().experimentation();
+        let postgres = PostgresConnectionInfo::new_disabled();
         // no-op but we call it for completeness
         experiment
             .setup(
                 Arc::new(ClickHouseConnectionInfo::new_disabled())
                     as Arc<dyn FeedbackQueries + Send + Sync>,
                 "test",
+                &postgres,
                 CancellationToken::new(),
             )
             .await

@@ -17,8 +17,9 @@
 //! As part of our opentelemetry handling, we support forwarding custom HTTP headers to the OTLP export endpoint.
 //! This requires several interconnected steps:
 //! 1. A client makes a request to a traced-enabled TensorZero HTTP endpoint (e.g. POST /inference),
-//!    with header(s) prefixed with `tensorzero-otlp-traces-extra-header-`.
-//!    For example, `tensorzero-otlp-traces-extra-header-my-first-header: my-first-value`.
+//!    with header(s) prefixed with:
+//! * `tensorzero-otlp-traces-extra-header-`: For example, `tensorzero-otlp-traces-extra-header-my-first-header: my-first-value`.
+//! * `tensorzero-otlp-traces-extra-resource-`: For example, `tensorzero-otlp-traces-extra-resource-my-first-resource: my-first-value`.
 //! 2. Our `tensorzero_tracing_middleware` Axum middleware detects these custom headers,
 //!    and rejects the request if the headers fail to parse as a `tonic::metadata::MetadataMap`
 //!    (this is the type that we will ultimately pass to the OTLP exporter).
@@ -32,7 +33,8 @@
 //!    which triggers shutdown in our `Drop` impl for `CustomTracer`
 //! 4. When a span is exported using `TracerWrapper::build_with_context`, we inspect the `Context` for a `CustomTracerContextEntry`.
 //!    If present, we use the wrapped `CustomTracer`, which will cause the span to get exported using the correct
-//!    custom HTTP headers. Otherwise, we our default `SdkTracer`, which doesn't attach any custom headers
+//!    custom HTTP headers and OpenTelemetry resources. Otherwise, we our default `SdkTracer`, which doesn't attach any custom headers
+//!    or extra OpenTelemetry resources.
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -61,6 +63,7 @@ use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::trace::{SdkTracerProvider, SpanExporter};
 use opentelemetry_sdk::Resource;
 use std::str::FromStr;
+use tokio_util::task::task_tracker::TaskTrackerToken;
 use tokio_util::task::TaskTracker;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
@@ -87,25 +90,41 @@ pub enum LogFormat {
 
 #[derive(Clone, Debug)]
 struct CustomTracerKey {
+    // Extra headers to use for outgoing OTLP export requests.
+    // These will be set as headers in the gRPc request made by `tonic`
     extra_headers: MetadataMap,
+    // Extra OpenTelemetry resources (https://opentelemetry.io/docs/languages/js/resources/)
+    // These will be set as attributes on *all* spans (not just top-level spans)
+    // exported by a `CustomTracer`
+    extra_resources: Vec<KeyValue>,
 }
 
 impl Hash for CustomTracerKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        let CustomTracerKey { extra_headers } = self;
+        let CustomTracerKey {
+            extra_headers,
+            extra_resources,
+        } = self;
+        // We add null byte separators to keep the data prefix-free: https://doc.rust-lang.org/std/hash/trait.Hash.html#prefix-collisions
         extra_headers.as_ref().iter().for_each(|(key, value)| {
             key.hash(state);
             state.write_u8(0);
             value.hash(state);
             state.write_u8(0);
         });
+        state.write_u8(0);
+        extra_resources.hash(state);
     }
 }
 
 impl PartialEq for CustomTracerKey {
     fn eq(&self, other: &Self) -> bool {
-        let CustomTracerKey { extra_headers } = self;
+        let CustomTracerKey {
+            extra_headers,
+            extra_resources,
+        } = self;
         extra_headers.as_ref() == other.extra_headers.as_ref()
+            && extra_resources == &other.extra_resources
     }
 }
 
@@ -170,6 +189,7 @@ pub struct TracerWrapper {
     // memory is freed immediately when a shutdown tasks exists. We wait on all remaining tasks
     // in `TracerWrapper::shutdown`
     shutdown_tasks: TaskTracker,
+    in_flight_spans: TaskTracker,
 }
 
 // Adds our self-signed certificate to the TLS config for Tonic
@@ -198,8 +218,11 @@ impl TracerWrapper {
         //    lookup and nested `build_with_context` inside the closure.
         let tracer = self.custom_tracers.try_get_with_by_ref(key, || {
             // We need to provide a dummy generic parameter to satisfy the compiler
-            let (provider, tracer) =
-                build_tracer::<opentelemetry_otlp::SpanExporter>(key.extra_headers.clone(), None)?;
+            let (provider, tracer) = build_tracer::<opentelemetry_otlp::SpanExporter>(
+                key.extra_headers.clone(),
+                key.extra_resources.clone(),
+                None,
+            )?;
             Ok::<_, Error>(Arc::new(CustomTracer {
                 inner: tracer,
                 provider: Some(provider),
@@ -220,6 +243,7 @@ impl TracerWrapper {
 /// to outgoing OTLP export requests.
 fn build_tracer<T: SpanExporter + 'static>(
     metadata: MetadataMap,
+    resources: Vec<KeyValue>,
     override_exporter: Option<T>,
 ) -> Result<(SdkTracerProvider, SdkTracer), Error> {
     let tls_config = tonic::transport::ClientTlsConfig::new().with_enabled_roots();
@@ -243,6 +267,7 @@ fn build_tracer<T: SpanExporter + 'static>(
                 opentelemetry_semantic_conventions::resource::SERVICE_NAME,
                 "tensorzero-gateway",
             ))
+            .with_attributes(resources)
             .build(),
     );
 
@@ -288,8 +313,8 @@ struct OtelLayerData<T: Layer<Registry>> {
 fn internal_build_otel_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<OtelLayerData<impl Layer<Registry>>, Error> {
-    // Default tracer always has empty headers
-    let (provider, tracer) = build_tracer(MetadataMap::new(), override_exporter)?;
+    // Default tracer always has empty headers and no extra resources
+    let (provider, tracer) = build_tracer(MetadataMap::new(), vec![], override_exporter)?;
     opentelemetry::global::set_tracer_provider(provider.clone());
     let shutdown_tasks = TaskTracker::new();
     // Initialize empty - will be set once later via set_static_otlp_traces_extra_headers
@@ -308,6 +333,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
             .time_to_idle(Duration::from_secs(60 * 60))
             .build(),
         shutdown_tasks,
+        in_flight_spans: TaskTracker::new(),
     };
 
     // Cloning of these types internally preserves a reference - we don't need our own `Arc` here
@@ -317,6 +343,7 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
         static_otlp_traces_extra_headers: wrapper.static_otlp_traces_extra_headers.clone(),
         custom_tracers: wrapper.custom_tracers.clone(),
         shutdown_tasks: wrapper.shutdown_tasks.clone(),
+        in_flight_spans: wrapper.in_flight_spans.clone(),
     };
     Ok(OtelLayerData {
         layer: tracing_opentelemetry::layer()
@@ -467,6 +494,7 @@ pub trait RouterExt<S> {
 ///
 /// 5. The custom `SdkTracer` is preserved in a `moka::Cache` for subsequent requests.
 const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
+const TENSORZERO_OTLP_RESOURCE_PREFIX: &str = "tensorzero-otlp-traces-extra-resource-";
 
 /// Converts a HashMap of config headers to a MetadataMap
 fn config_headers_to_metadata(
@@ -507,6 +535,7 @@ fn extract_tensorzero_headers(
         .get()
         .cloned()
         .unwrap_or_default();
+    let mut extra_resources = vec![];
     for (name, value) in headers {
         if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_HEADERS_PREFIX) {
             let key: AsciiMetadataKey = suffix.parse().map_err(|e| {
@@ -525,14 +554,45 @@ fn extract_tensorzero_headers(
             })?;
             metadata.insert(key, value);
         }
+        if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_RESOURCE_PREFIX) {
+            let key = suffix.to_string();
+            let value = value.to_str().map_err(|e| {
+                Error::new(ErrorDetails::Observability {
+                    message: format!("Failed to parse `{TENSORZERO_OTLP_RESOURCE_PREFIX}` header `{suffix}` value as valid string: {e}"),
+                })
+            })?.to_string();
+            extra_resources.push(KeyValue::new(key, value));
+        }
     }
-    if !metadata.is_empty() {
-        tracing::debug!("Using custom OTLP headers: {:?}", metadata);
+    if !metadata.is_empty() || !extra_resources.is_empty() {
+        tracing::debug!(
+            "Using custom OTLP configuration: metadata={:?}, extra_resources={:?}",
+            metadata,
+            extra_resources
+        );
         return Ok(Some(CustomTracerKey {
             extra_headers: metadata,
+            extra_resources,
         }));
     }
     Ok(None)
+}
+
+/// An opentelemetry `Context` value that keeps track of in-flight spans.
+/// When we create a new top-level OpenTelemetry span (regardless of whether or not we have custom headers),
+/// we attach an `InFlightSpan` to the `Context`
+/// The `tracing-opentelemetry` library will propagate the `Context` to all descendant spans,
+/// which ensures that our `InFlightSpan` is only dropped once all descendant spans are dropped.
+/// In particular, it will be dropped after any background tasks (e.g. rate-limiting `return_tickets` calls)
+/// have finished executing, even if they continue executing after we finish processing the original
+/// incoming HTTP request from the client.
+///
+/// During gateway shutdown, we wait for the parent `TaskTracker` to finish,
+/// which ensures that we only try to shut down all of our OTEL exporters after all in-flight spans have finished.
+pub struct InFlightSpan {
+    // This field just holds on to the token until the `InFlightSpan` is dropped.
+    #[expect(dead_code)]
+    token: TaskTrackerToken,
 }
 
 /// Creates the top-level span for an incoming HTTP request, with the correct
@@ -549,7 +609,11 @@ fn make_otel_http_span<B>(
     // We check for a `CustomTracerKey` in `TracerWrapper`, and use it to dispatch to a
     // dynamically-created `SdkTracer` with additional headers set.
     let mut context =
-        tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers());
+        tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers())
+            // See the docs on `InFlightSpan` for more information.
+            .with_value(InFlightSpan {
+                token: tracer_wrapper.in_flight_spans.token(),
+            });
     // If we had custom OTEL headers, and we've enabled otel export, then create a custom tracer
     // that attaches our custom headers on export.
     // This is stored in the span's `Context`, which is automatically propagated to descendants.
@@ -714,18 +778,32 @@ impl TracerWrapper {
             })
     }
 
+    /// Shuts down all OpenTelemetry exporters.
+    /// This ensures that the batch exporter flushes all pending spans.
+    /// No new requests should be *started* after this method is called:
+    /// * In the HTTP gateway, we call this after the axum server has exited
+    /// * If we ever support OTEL in an embedded client, it should be called
+    ///   in a method that takes `self` by value (to prevent starting any new requests afterwards)
+    ///
+    /// This method will correctly wait for any processing related to *previous* requests to finish
+    /// (e.g. rate-limiting `return_tickets` calls) to finish before shutting down the exporters.
     pub async fn shutdown(&self) {
-        // First, spawn shutdown tasks for all of our custom tracers.
-        // This might happen in parallel for the same custom tracer, but opentelemetry
+        // See the docs on `InFlightSpan` for more information.
+        self.in_flight_spans.close();
+        self.in_flight_spans.wait().await;
+        // Now that all of our OpenTelemetry spans have closed (including spans in background tasks),
+        // shut down all of our custom tracers.
+        // This might happen in parallel for the same custom tracer (if moka evicts its cache entry), but opentelemetry
         // documents that it's safe to call `shutdown` multiple times.
         for (_key, tracer) in &self.custom_tracers {
             if let Some(provider) = &tracer.provider {
                 self.shutdown_tasks.spawn(shutdown_otel(provider.clone()));
             }
         }
+        // Also shut down our default tracer.
         self.shutdown_tasks
             .spawn(shutdown_otel(self.default_provider.clone()));
-        // Then, wait for all of the custom tracers to shut down.
+        // Then, wait for all all of the shutdown tasks to finish.
         self.shutdown_tasks.close();
         self.shutdown_tasks.wait().await;
     }

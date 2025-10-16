@@ -11,6 +11,7 @@ use sqlx::postgres::PgPoolOptions;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::config::{Config, ConfigFileGlob};
@@ -81,6 +82,20 @@ impl Drop for GatewayHandle {
             });
             tracing::info!("ClickHouse batch writer finished");
         }
+        self.app_state.deferred_tasks.close();
+        // The 'wait' future will resolve immediately if the pool is empty.
+        // Closing the pool doesn't block more futures from being added, so checking
+        // if it's empty doesn't introduce any new race conditions (it's still possible
+        // for some existing tokio task to spawn something in this pool after 'wait' resolves).
+        // This check makes it easier to write tests (since we don't need to use a multi-threaded runtime),
+        // as well as reducing the number of log messages in the common case.
+        if !self.app_state.deferred_tasks.is_empty() {
+            tokio::task::block_in_place(|| {
+                tracing::info!("Waiting for deferred tasks to finish");
+                Handle::current().block_on(self.app_state.deferred_tasks.wait());
+                tracing::info!("Deferred tasks finished");
+            });
+        }
     }
 }
 
@@ -93,6 +108,9 @@ pub struct AppStateData {
     pub http_client: TensorzeroHttpClient,
     pub clickhouse_connection_info: ClickHouseConnectionInfo,
     pub postgres_connection_info: PostgresConnectionInfo,
+    /// Holds any background tasks that we want to wait on during shutdown
+    /// We wait for these tasks to finish when `GatewayHandle` is dropped
+    pub deferred_tasks: TaskTracker,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -140,6 +158,7 @@ impl GatewayHandle {
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                deferred_tasks: TaskTracker::new(),
                 _private: (),
             },
             cancel_token,
@@ -151,7 +170,10 @@ impl GatewayHandle {
     pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
         let config = Arc::new(Config::default());
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
+        #[cfg(test)]
         let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
+        #[cfg(not(test))]
+        let postgres_connection_info = PostgresConnectionInfo::new_disabled();
         let cancel_token = CancellationToken::new();
         Self {
             app_state: AppStateData {
@@ -159,6 +181,7 @@ impl GatewayHandle {
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                deferred_tasks: TaskTracker::new(),
                 _private: (),
             },
             cancel_token,
@@ -185,6 +208,7 @@ impl GatewayHandle {
                     Arc::new(clickhouse_connection_info.clone())
                         as Arc<dyn FeedbackQueries + Send + Sync>,
                     function_name,
+                    &postgres_connection_info,
                     cancel_token.clone(),
                 )
                 .await?;
@@ -195,6 +219,7 @@ impl GatewayHandle {
                 http_client,
                 clickhouse_connection_info,
                 postgres_connection_info,
+                deferred_tasks: TaskTracker::new(),
                 _private: (),
             },
             cancel_token,

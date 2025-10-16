@@ -65,7 +65,7 @@ use crate::{
     db::{
         feedback::{FeedbackByVariant, FeedbackQueries},
         postgres::PostgresConnectionInfo,
-        ExperimentationQueries,
+        ExperimentationQueries, HealthCheckable,
     },
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     variant::VariantInfo,
@@ -284,8 +284,36 @@ impl VariantSampler for TrackAndStopConfig {
         &self,
         db: Arc<dyn FeedbackQueries + Send + Sync>,
         function_name: &str,
+        postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
     ) -> Result<(), Error> {
+        // Track-and-Stop requires PostgreSQL for episode-to-variant mapping
+        match postgres {
+            PostgresConnectionInfo::Disabled => {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is not available. \
+                        Track-and-Stop requires PostgreSQL for episode-to-variant consistency. \
+                        Please set the TENSORZERO_POSTGRES_URL environment variable.",
+                    ),
+                }));
+            }
+            PostgresConnectionInfo::Enabled { .. } => {}
+            // Accept Mock postgres for testing purposes
+            #[cfg(test)]
+            PostgresConnectionInfo::Mock { .. } => {}
+        }
+
+        // Check if postgres is healthy
+        postgres.health().await.map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Track-and-Stop experimentation is configured for function '{function_name}' but PostgreSQL is unhealthy: {e}. \
+                    Track-and-Stop requires a healthy PostgreSQL connection for episode-to-variant consistency.",
+                ),
+            })
+        })?;
+
         // Check if a task has already been spawned for this function
         // Use compare_exchange to atomically check and set the flag
         if self
@@ -836,6 +864,7 @@ impl TrackAndStopState {
 mod tests {
     use super::*;
     use crate::config::{ErrorContext, SchemaData};
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::db::feedback::FeedbackByVariant;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
 
@@ -1744,9 +1773,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_setup_prevents_duplicate_task_spawning() {
-        use crate::db::clickhouse::ClickHouseConnectionInfo;
-        use std::sync::atomic::AtomicBool;
-
         // Create a TrackAndStopConfig instance
         let config = TrackAndStopConfig {
             metric: "test_metric".to_string(),
@@ -1765,17 +1791,18 @@ mod tests {
 
         let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
             as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_mock(true);
         let cancel_token = CancellationToken::new();
 
         // First call to setup should succeed
         let result1 = config
-            .setup(db.clone(), "test_function", cancel_token.clone())
+            .setup(db.clone(), "test_function", &postgres, cancel_token.clone())
             .await;
         assert!(result1.is_ok(), "First setup call should succeed");
 
         // Second call to setup should fail with an error
         let result2 = config
-            .setup(db, "test_function", cancel_token.clone())
+            .setup(db, "test_function", &postgres, cancel_token.clone())
             .await;
         assert!(result2.is_err(), "Second setup call should fail");
 
@@ -1788,5 +1815,74 @@ mod tests {
 
         // Clean up: cancel the spawned task
         cancel_token.cancel();
+    }
+
+    #[tokio::test]
+    async fn test_setup_requires_postgres() {
+        // Create a TrackAndStopConfig instance
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec!["C".to_string()],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.1,
+            update_period: Duration::from_secs(60),
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(
+                TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
+            ))),
+            task_spawned: AtomicBool::new(false),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let cancel_token = CancellationToken::new();
+
+        // Test with disabled Postgres
+        let postgres_disabled = PostgresConnectionInfo::new_disabled();
+        let result = config
+            .setup(
+                db.clone(),
+                "test_function",
+                &postgres_disabled,
+                cancel_token.clone(),
+            )
+            .await;
+
+        assert!(
+            result.is_err(),
+            "Setup should fail when Postgres is disabled"
+        );
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("Track-and-Stop"),
+            "Error message should mention Track-and-Stop, got: {err_msg}"
+        );
+        assert!(
+            err_msg.contains("PostgreSQL"),
+            "Error message should mention PostgreSQL, got: {err_msg}"
+        );
+        assert!(
+            err_msg.contains("test_function"),
+            "Error message should mention the function name, got: {err_msg}"
+        );
+
+        // Test with mock Postgres (unhealthy)
+        let postgres_unhealthy = PostgresConnectionInfo::new_mock(false);
+        let result = config
+            .setup(
+                db.clone(),
+                "test_function",
+                &postgres_unhealthy,
+                cancel_token.clone(),
+            )
+            .await;
+
+        assert!(
+            result.is_err(),
+            "Setup should fail when Postgres is unhealthy"
+        );
     }
 }

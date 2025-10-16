@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
+use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::{
@@ -36,6 +37,7 @@ pub async fn embeddings(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    deferred_tasks: TaskTracker,
     params: Params,
 ) -> Result<EmbeddingResponse, Error> {
     let span = tracing::Span::current();
@@ -75,6 +77,7 @@ pub async fn embeddings(
         tags: Arc::new(HashMap::default()),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
+        deferred_tasks,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
@@ -160,6 +163,7 @@ mod tests {
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            tokio_util::task::TaskTracker::new(),
             params,
         )
         .await;
@@ -195,6 +199,7 @@ mod tests {
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            tokio_util::task::TaskTracker::new(),
             params,
         )
         .await;
