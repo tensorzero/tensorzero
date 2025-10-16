@@ -173,8 +173,9 @@ test("should be able to add, edit and save a chat datapoint", async ({
   await page.getByRole("button", { name: "Edit" }).click();
 
   // Edit the input (first contenteditable element)
+  // Note: write_haiku function has a user_schema that expects {"topic": "string"}
   const inputTopic = v7();
-  const inputMessage = `Tell me about ${inputTopic}`;
+  const inputMessage = JSON.stringify({ topic: inputTopic });
   await page.locator("div[contenteditable='true']").first().fill(inputMessage);
 
   // Edit the output (last contenteditable element)
@@ -192,7 +193,8 @@ test("should be able to add, edit and save a chat datapoint", async ({
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 
   // Assert that both input and output are updated
-  await expect(page.getByText(inputMessage, { exact: true })).toBeVisible();
+  // The input topic should be visible in the JSON
+  await expect(page.getByText(inputTopic)).toBeVisible();
   await expect(page.getByText(output, { exact: true })).toBeVisible();
 
   // Should show "Custom" badge and link original inference
@@ -253,8 +255,9 @@ test("should be able to add, edit and save a chat datapoint with tool call", asy
   await page.getByRole("button", { name: "Edit" }).click();
 
   // Edit the input (first contenteditable element)
+  // Note: write_haiku function has a user_schema that expects {"topic": "string"}
   const inputTopic = v7();
-  const inputMessage = `Tell me about ${inputTopic}`;
+  const inputMessage = JSON.stringify({ topic: inputTopic });
   await page.locator("div[contenteditable='true']").first().fill(inputMessage);
 
   // Edit the output (last contenteditable element)
@@ -271,7 +274,8 @@ test("should be able to add, edit and save a chat datapoint with tool call", asy
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 
   // Assert that both input and output are updated
-  await expect(page.getByText(inputMessage, { exact: true })).toBeVisible();
+  // The input topic should be visible in the JSON
+  await expect(page.getByText(inputTopic)).toBeVisible();
   await expect(page.getByText("bagel for lunch")).toBeVisible();
 
   // Should show "Custom" badge and link original inference

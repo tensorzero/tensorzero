@@ -1,6 +1,6 @@
 import {
   getDatasetMetadata,
-  getNumberOfDatasets,
+  countDatasets,
 } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetTable from "./DatasetTable";
@@ -27,7 +27,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     page_size: pageSize,
     offset,
   });
-  const numberOfDatasets = await getNumberOfDatasets();
+  const numberOfDatasets = await countDatasets();
   return { counts: datasetMetadata, pageSize, offset, numberOfDatasets };
 }
 

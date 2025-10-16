@@ -189,7 +189,11 @@ export async function action({ request }: Route.ActionArgs) {
       const newName = formData.get("newName") as string;
 
       // We need to get the datapoint to pass to renameDatapoint
-      const datapoint = await getDatapoint(dataset_name, datapoint_id);
+      const datapoint = await getDatapoint({
+        dataset_name,
+        datapoint_id,
+        allow_stale: true,
+      });
       if (!datapoint) {
         return data(
           {
@@ -206,6 +210,7 @@ export async function action({ request }: Route.ActionArgs) {
       await renameDatapoint({
         functionType,
         datasetName: dataset_name,
+        // TODO: convert to Rust-generated bindings
         datapoint,
         newName,
       });

@@ -8,11 +8,11 @@ test("checkClickHouseConnection", async () => {
 });
 
 describe("parsing storageKind", () => {
-  test("storagekind with null region", () => {
+  test("storagekind with undefined region", () => {
     const storageKind = {
       type: "s3_compatible",
       bucket_name: "tensorzero",
-      region: null,
+      region: undefined,
       endpoint: "http://minio:9000",
       allow_http: true,
     };

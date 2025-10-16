@@ -9,7 +9,7 @@ function createChatDatapoint(): DatapointFormData {
   return {
     dataset_name: "chat-dataset",
     function_name: "reply",
-    name: null,
+    name: undefined,
     id: "00000000-0000-0000-0000-000000000001",
     episode_id: "00000000-0000-0000-0000-000000000002",
     input: {
@@ -143,7 +143,6 @@ describe("parseDatapointFormData", () => {
       updated_at: "2024-02-01T12:00:00.000Z",
       source_inference_id: "00000000-0000-0000-0000-000000000012",
       is_custom: true,
-      name: null,
     });
     expect(parsed.staled_at).toBeNull();
     expect("output" in parsed).toBe(false);

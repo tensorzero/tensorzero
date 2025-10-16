@@ -49,7 +49,7 @@ export function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
     function_name: formData.get("function_name"),
     id: formData.get("id"),
     episode_id: formData.get("episode_id"),
-    name: formData.get("name") || null,
+    name: formData.get("name") || undefined,
     input: JSON.parse(formData.get("input") as string),
     output: formData.get("output")
       ? JSON.parse(formData.get("output") as string)
@@ -61,7 +61,7 @@ export function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
       ? JSON.parse(formData.get("tool_params") as string)
       : undefined,
     tags: JSON.parse(formData.get("tags") as string),
-    auxiliary: formData.get("auxiliary"),
+    auxiliary: formData.get("auxiliary") || "", // Convert null to empty string
     is_deleted: formData.get("is_deleted") === "true",
     updated_at: formData.get("updated_at"),
     staled_at: formData.get("staled_at"),
@@ -69,6 +69,9 @@ export function parseDatapointFormData(formData: FormData): ParsedDatasetRow {
     is_custom: formData.get("is_custom") === "true",
   };
 
+  // Filter out undefined values to help Zod discriminate between chat and json datapoints
+  // - For chat datapoints: tool_params is present, output_schema is not
+  // - For json datapoints: output_schema is present, tool_params is not
   const cleanedData = Object.fromEntries(
     Object.entries(rawData).filter(([, value]) => value !== undefined),
   );
