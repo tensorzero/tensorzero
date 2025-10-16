@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
 use tokio_stream::StreamExt;
+use tokio_util::task::TaskTracker;
 use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
@@ -152,6 +153,7 @@ pub async fn inference_handler(
         http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        deferred_tasks,
         ..
     }): AppState,
     StructuredJson(params): StructuredJson<Params>,
@@ -161,6 +163,7 @@ pub async fn inference_handler(
         &http_client,
         clickhouse_connection_info,
         postgres_connection_info,
+        deferred_tasks,
         params,
     )
     .await?;
@@ -218,6 +221,7 @@ pub async fn inference(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    deferred_tasks: TaskTracker,
     mut params: Params,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
@@ -339,6 +343,7 @@ pub async fn inference(
         tags: Arc::new(params.tags.clone()),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
+        deferred_tasks,
     };
 
     let inference_models = InferenceModels {
@@ -1271,6 +1276,7 @@ pub struct InferenceClients {
     pub tags: Arc<HashMap<String, String>>,
     pub rate_limiting_config: Arc<RateLimitingConfig>,
     pub otlp_config: OtlpConfig,
+    pub deferred_tasks: TaskTracker,
 }
 
 // Carryall struct for models used in inference
