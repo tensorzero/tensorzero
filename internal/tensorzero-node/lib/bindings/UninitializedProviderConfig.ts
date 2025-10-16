@@ -61,6 +61,7 @@ export type UninitializedProviderConfig =
       api_base: string | null;
       api_key_location: string | null;
       api_type: OpenAIAPIType;
+      include_encrypted_reasoning: boolean;
       provider_tools: Array<JsonValue>;
     }
   | { type: "openrouter"; model_name: string; api_key_location: string | null }
