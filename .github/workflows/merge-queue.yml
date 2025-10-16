@@ -1,7 +1,7 @@
 name: Merge Queue Checks
 run-name: Merge Queue Checks for ${{ github.ref }}
 
-# This workflow is called from 'general.yml' (so that it can depends on artifacts from other jobs)
+# This workflow is called from 'general.yml' (so that it can depend on artifacts from other jobs)
 on:
   workflow_dispatch:
   workflow_call:
