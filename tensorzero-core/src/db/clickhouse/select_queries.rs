@@ -51,15 +51,15 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let query = format!(
             r"
             SELECT
-                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_end,
+                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_start,
                 model_name,
                 sumMerge(total_input_tokens) as input_tokens,
                 sumMerge(total_output_tokens) as output_tokens,
                 countMerge(count) as count
             FROM ModelProviderStatistics
             WHERE {time_filter}
-            GROUP BY period_end, model_name
-            ORDER BY period_end DESC, model_name
+            GROUP BY period_start, model_name
+            ORDER BY period_start DESC, model_name
             FORMAT JSONEachRow
             ",
         );
