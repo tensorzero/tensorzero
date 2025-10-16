@@ -2219,14 +2219,38 @@ async fn test_responses_api_reasoning() {
         "Missing thought block in output: {content_blocks:?}"
     );
 
-    let has_encrypted_thought = content_blocks.iter().any(|block| {
+    let encrypted_thought = content_blocks.iter().find(|block| {
         block.get("type").unwrap().as_str().unwrap() == "thought"
             && block.get("signature").unwrap().as_str().is_some()
     });
     assert!(
-        has_encrypted_thought,
+        encrypted_thought.is_some(),
         "Missing encrypted thought block in output: {content_blocks:?}"
     );
+    let encrypted_thought = encrypted_thought.unwrap();
+
+    assert_eq!(
+        encrypted_thought.get("text").unwrap(),
+        &Value::Null,
+        "Text should be null in encrypted thought: {encrypted_thought:?}"
+    );
+    let summary = encrypted_thought
+        .get("summary")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(
+        !summary.is_empty(),
+        "Missing summary in encrypted thought: {encrypted_thought:?}"
+    );
+    for item in summary {
+        assert_eq!(item.get("type").unwrap().as_str().unwrap(), "summary_text");
+        let summary_text = item.get("text").unwrap().as_str().unwrap();
+        assert!(
+            !summary_text.is_empty(),
+            "Missing summary text in item: {item:?}"
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
