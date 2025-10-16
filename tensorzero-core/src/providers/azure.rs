@@ -593,7 +593,7 @@ struct AzureRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    max_tokens: Option<u32>,
+    max_completion_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
     stream: bool,
@@ -630,7 +630,7 @@ impl<'a> AzureRequest<'a> {
             stop: request.borrow_stop_sequences(),
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
-            max_tokens: request.max_tokens,
+            max_completion_tokens: request.max_tokens,
             stream: request.stream,
             response_format,
             seed: request.seed,
@@ -815,7 +815,7 @@ mod tests {
 
         assert_eq!(azure_request.messages.len(), 1);
         assert_eq!(azure_request.temperature, Some(0.5));
-        assert_eq!(azure_request.max_tokens, Some(100));
+        assert_eq!(azure_request.max_completion_tokens, Some(100));
         assert!(!azure_request.stream);
         assert_eq!(azure_request.seed, Some(69));
         assert_eq!(azure_request.response_format, None);
@@ -861,7 +861,7 @@ mod tests {
 
         assert_eq!(azure_request.messages.len(), 2);
         assert_eq!(azure_request.temperature, Some(0.5));
-        assert_eq!(azure_request.max_tokens, Some(100));
+        assert_eq!(azure_request.max_completion_tokens, Some(100));
         assert_eq!(azure_request.top_p, Some(0.9));
         assert_eq!(azure_request.presence_penalty, Some(0.1));
         assert_eq!(azure_request.frequency_penalty, Some(0.2));

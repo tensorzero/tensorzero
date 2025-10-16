@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
-use crate::experimentation::VariantSampler;
 use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
 use serde::de::DeserializeOwned;

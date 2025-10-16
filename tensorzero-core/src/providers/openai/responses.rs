@@ -15,11 +15,12 @@ use url::Url;
 use crate::{
     error::{warn_discarded_thought_block, Error, ErrorDetails},
     inference::types::{
-        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, Latency,
+        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
         ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
         TextChunk, Thought, ThoughtChunk, Usage,
     },
+    model::fully_qualified_name,
     providers::openai::{
         prepare_file_message, prepare_system_or_developer_message_helper, OpenAIContentBlock,
         OpenAIFile, OpenAIMessagesConfig, OpenAITool, OpenAIToolType, SystemOrDeveloper,
@@ -33,9 +34,7 @@ pub struct OpenAIResponsesRequest<'a> {
     model: &'a str,
     input: Vec<OpenAIResponsesInput<'a>>,
     text: OpenAIResponsesTextConfig,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    // TODO: add support for built-in tools
-    tools: Option<Vec<OpenAIResponsesTool<'a>>>,
+    tools: Vec<OpenAIResponsesTool<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,7 +51,15 @@ pub struct OpenAIResponsesRequest<'a> {
     presence_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    include: Option<Vec<OpenAIResponsesInclude>>,
     stream: bool,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub enum OpenAIResponsesInclude {
+    #[serde(rename = "reasoning.encrypted_content")]
+    ReasoningEncryptedContent,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -108,11 +115,13 @@ impl OpenAIResponsesResponse<'_> {
         raw_request: String,
         raw_response: String,
         generic_request: &ModelInferenceRequest<'_>,
+        model_name: &str,
+        provider_name: &str,
     ) -> Result<ProviderInferenceResponse, Error> {
         let mut output = Vec::new();
         for message in self.output {
             match message {
-                OpenAIResponsesOutput::Message(message) => {
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::Message(message)) => {
                     if message.role != "assistant" {
                         return Err(Error::new(ErrorDetails::InferenceServer {
                             message:
@@ -143,14 +152,26 @@ impl OpenAIResponsesResponse<'_> {
                         }
                     }
                 }
-                OpenAIResponsesOutput::FunctionCall(function_call) => {
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::FunctionCall(function_call)) => {
                     output.push(ContentBlockOutput::ToolCall(ToolCall {
                         id: function_call.call_id.to_string(),
                         arguments: function_call.arguments.to_string(),
                         name: function_call.name.to_string(),
                     }));
                 }
-                OpenAIResponsesOutput::Reasoning { summary } => {
+
+                FlattenUnknown::Normal(OpenAIResponsesOutputInner::Reasoning {
+                    encrypted_content,
+                    summary,
+                }) => {
+                    if let Some(encrypted_content) = encrypted_content {
+                        output.push(ContentBlockOutput::Thought(Thought {
+                            text: None,
+                            signature: Some(encrypted_content),
+                            provider_type: Some(PROVIDER_TYPE.to_string()),
+                        }));
+                    }
+
                     for summary in summary {
                         match summary {
                             OpenAIResponsesReasoningSummary::SummaryText { text } => {
@@ -162,6 +183,12 @@ impl OpenAIResponsesResponse<'_> {
                             }
                         }
                     }
+                }
+                FlattenUnknown::Unknown(data) => {
+                    output.push(ContentBlockOutput::Unknown {
+                        data: data.into_owned(),
+                        model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                    });
                 }
             }
         }
@@ -209,18 +236,25 @@ pub(super) fn get_responses_url(base_url: &Url) -> Result<Url, Error> {
 
 impl<'a> OpenAITool<'a> {
     pub fn into_openai_responses_tool(self) -> OpenAIResponsesTool<'a> {
-        OpenAIResponsesTool {
+        OpenAIResponsesTool::Function(OpenAIResponsesFunctionTool {
             r#type: self.r#type,
             name: self.function.name,
             description: self.function.description,
             parameters: self.function.parameters,
             strict: self.strict,
-        }
+        })
     }
 }
 
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum OpenAIResponsesTool<'a> {
+    Function(OpenAIResponsesFunctionTool<'a>),
+    BuiltIn(Value),
+}
+
 #[derive(Serialize, Debug)]
-pub struct OpenAIResponsesTool<'a> {
+pub struct OpenAIResponsesFunctionTool<'a> {
     r#type: OpenAIToolType,
     name: &'a str,
     description: Option<&'a str>,
@@ -277,14 +311,26 @@ impl<'a> OpenAIResponsesRequest<'a> {
     pub async fn new(
         model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
+        include_encrypted_reasoning: bool,
+        built_in_tools: &[Value],
     ) -> Result<OpenAIResponsesRequest<'a>, Error> {
-        let tools = request.tool_config.as_ref().map(|tool_config| {
-            tool_config
-                .tools_available
+        let mut tools: Vec<OpenAIResponsesTool> = request
+            .tool_config
+            .as_ref()
+            .map(|tool_config| {
+                tool_config
+                    .tools_available
+                    .iter()
+                    .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
+                    .collect()
+            })
+            .unwrap_or_default();
+        // If we have built_in_tools we should extend the list with them
+        tools.extend(
+            built_in_tools
                 .iter()
-                .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
-                .collect()
-        });
+                .map(|tool| OpenAIResponsesTool::BuiltIn(tool.clone())),
+        );
 
         // For now, we don't allow selecting any built-in tools
         let tool_choice =
@@ -367,19 +413,28 @@ impl<'a> OpenAIResponsesRequest<'a> {
             top_p: request.top_p,
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
+            include: if include_encrypted_reasoning {
+                Some(vec![OpenAIResponsesInclude::ReasoningEncryptedContent])
+            } else {
+                None
+            },
             stream: request.stream,
         })
     }
 }
 
+pub type OpenAIResponsesOutput<'a> = FlattenUnknown<'a, OpenAIResponsesOutputInner<'a>>;
+
 #[derive(Clone, Deserialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum OpenAIResponsesOutput<'a> {
+pub enum OpenAIResponsesOutputInner<'a> {
     #[serde(borrow)]
     Message(OpenAIResponsesInputMessage<'a>),
     #[serde(borrow)]
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
     Reasoning {
+        #[serde(default)]
+        encrypted_content: Option<String>,
         summary: Vec<OpenAIResponsesReasoningSummary<'a>>,
     },
 }
@@ -392,19 +447,29 @@ pub enum OpenAIResponsesReasoningSummary<'a> {
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum OpenAIResponsesInput<'a> {
+pub enum OpenAIResponsesInputInner<'a> {
     #[serde(borrow)]
     Message(OpenAIResponsesInputMessage<'a>),
     #[serde(borrow)]
     FunctionCallOutput(OpenAIResponsesFunctionCallOutput<'a>),
     #[serde(borrow)]
     FunctionCall(OpenAIResponsesFunctionCall<'a>),
+    #[serde(borrow)]
+    Reasoning(OpenAIResponsesReasoning<'a>),
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+#[serde(untagged)]
+pub enum OpenAIResponsesInput<'a> {
+    #[serde(borrow)]
+    Known(OpenAIResponsesInputInner<'a>),
+    Unknown(Cow<'a, Value>),
 }
 
 impl OpenAIResponsesInput<'_> {
     pub fn content_contains_case_insensitive(&self, value: &str) -> bool {
         match self {
-            OpenAIResponsesInput::Message(msg) => {
+            OpenAIResponsesInput::Known(OpenAIResponsesInputInner::Message(msg)) => {
                 for block in &msg.content {
                     if let OpenAIResponsesInputMessageContent::InputText { text } = block {
                         if text.to_lowercase().contains(value) {
@@ -415,9 +480,12 @@ impl OpenAIResponsesInput<'_> {
                 false
             }
             // Don't consider the content of non-text blocks
-            OpenAIResponsesInput::FunctionCallOutput(_) | OpenAIResponsesInput::FunctionCall(_) => {
-                false
-            }
+            OpenAIResponsesInput::Known(
+                OpenAIResponsesInputInner::FunctionCallOutput(_)
+                | OpenAIResponsesInputInner::FunctionCall(_)
+                | OpenAIResponsesInputInner::Reasoning(_),
+            )
+            | OpenAIResponsesInput::Unknown(_) => false,
         }
     }
 }
@@ -458,9 +526,11 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
     OutputText {
         text: Cow<'a, str>,
     },
-    Unknown {
-        data: Cow<'a, Value>,
-    },
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct OpenAIResponsesReasoning<'a> {
+    encrypted_content: Cow<'a, str>,
 }
 
 impl Serialize for OpenAIResponsesInputMessageContent<'_> {
@@ -498,7 +568,6 @@ impl Serialize for OpenAIResponsesInputMessageContent<'_> {
             OpenAIResponsesInputMessageContent::OutputText { text } => {
                 Helper::OutputText { text }.serialize(serializer)
             }
-            OpenAIResponsesInputMessageContent::Unknown { data } => data.serialize(serializer),
         }
     }
 }
@@ -565,13 +634,15 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
     for block in content_blocks {
         match block {
             ContentBlock::Text(Text { text }) => {
-                messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "user",
-                    content: vec![OpenAIResponsesInputMessageContent::InputText {
-                        text: Cow::Borrowed(text),
-                    }],
-                }));
+                messages.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                        id: None,
+                        role: "user",
+                        content: vec![OpenAIResponsesInputMessageContent::InputText {
+                            text: Cow::Borrowed(text),
+                        }],
+                    }),
+                ));
             }
             ContentBlock::ToolCall(_) => {
                 return Err(Error::new(ErrorDetails::InvalidMessage {
@@ -579,31 +650,39 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                 }));
             }
             ContentBlock::ToolResult(tool_result) => {
-                messages.push(OpenAIResponsesInput::FunctionCallOutput(
-                    OpenAIResponsesFunctionCallOutput {
-                        output: Cow::Borrowed(&tool_result.result),
-                        call_id: Cow::Borrowed(&tool_result.id),
-                    },
+                messages.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::FunctionCallOutput(
+                        OpenAIResponsesFunctionCallOutput {
+                            output: Cow::Borrowed(&tool_result.result),
+                            call_id: Cow::Borrowed(&tool_result.id),
+                        },
+                    ),
                 ));
             }
             ContentBlock::File(file) => {
                 let content_block = prepare_file_message(file, messages_config).await?;
                 match content_block {
                     OpenAIContentBlock::ImageUrl { image_url } => {
-                        messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                            id: None,
-                            role: "user",
-                            content: vec![OpenAIResponsesInputMessageContent::InputImage {
-                                image_url: Cow::Owned(image_url.url),
-                            }],
-                        }));
+                        messages.push(OpenAIResponsesInput::Known(
+                            OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                                id: None,
+                                role: "user",
+                                content: vec![OpenAIResponsesInputMessageContent::InputImage {
+                                    image_url: Cow::Owned(image_url.url),
+                                }],
+                            }),
+                        ));
                     }
                     OpenAIContentBlock::File { file } => {
-                        messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                            id: None,
-                            role: "user",
-                            content: vec![OpenAIResponsesInputMessageContent::InputFile { file }],
-                        }));
+                        messages.push(OpenAIResponsesInput::Known(
+                            OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                                id: None,
+                                role: "user",
+                                content: vec![OpenAIResponsesInputMessageContent::InputFile {
+                                    file,
+                                }],
+                            }),
+                        ));
                     }
                     _ => {
                         return Err(Error::new(ErrorDetails::InternalError {
@@ -620,14 +699,8 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                 model_provider_name: _,
             } => {
                 // The user included an 'unknown' content block inside of the user message,
-                // so push a new user message that includes their custom JSON valuei
-                messages.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "user",
-                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
-                        data: Cow::Borrowed(data),
-                    }],
-                }));
+                // so push a new user message that includes their custom JSON value
+                messages.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
             }
         };
     }
@@ -648,39 +721,43 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
     for block in content_block_cows {
         match block {
             Cow::Borrowed(ContentBlock::Text(Text { text })) => {
-                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "assistant",
-                    content: vec![OpenAIResponsesInputMessageContent::OutputText {
-                        text: Cow::Borrowed(text),
-                    }],
-                }));
+                output.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                        id: None,
+                        role: "assistant",
+                        content: vec![OpenAIResponsesInputMessageContent::OutputText {
+                            text: Cow::Borrowed(text),
+                        }],
+                    }),
+                ));
             }
             Cow::Owned(ContentBlock::Text(Text { text })) => {
-                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "assistant",
-                    content: vec![OpenAIResponsesInputMessageContent::OutputText {
-                        text: Cow::Owned(text),
-                    }],
-                }));
+                output.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::Message(OpenAIResponsesInputMessage {
+                        id: None,
+                        role: "assistant",
+                        content: vec![OpenAIResponsesInputMessageContent::OutputText {
+                            text: Cow::Owned(text),
+                        }],
+                    }),
+                ));
             }
             Cow::Borrowed(ContentBlock::ToolCall(tool_call)) => {
-                output.push(OpenAIResponsesInput::FunctionCall(
-                    OpenAIResponsesFunctionCall {
+                output.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::FunctionCall(OpenAIResponsesFunctionCall {
                         call_id: Cow::Borrowed(&tool_call.id),
                         name: Cow::Borrowed(&tool_call.name),
                         arguments: Cow::Borrowed(&tool_call.arguments),
-                    },
+                    }),
                 ));
             }
             Cow::Owned(ContentBlock::ToolCall(tool_call)) => {
-                output.push(OpenAIResponsesInput::FunctionCall(
-                    OpenAIResponsesFunctionCall {
+                output.push(OpenAIResponsesInput::Known(
+                    OpenAIResponsesInputInner::FunctionCall(OpenAIResponsesFunctionCall {
                         call_id: Cow::Owned(tool_call.id),
                         name: Cow::Owned(tool_call.name),
                         arguments: Cow::Owned(tool_call.arguments),
-                    },
+                    }),
                 ));
             }
             Cow::Borrowed(ContentBlock::ToolResult(_))
@@ -702,25 +779,13 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
                 data,
                 model_provider_name: _,
             }) => {
-                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "assistant",
-                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
-                        data: Cow::Borrowed(data),
-                    }],
-                }));
+                output.push(OpenAIResponsesInput::Unknown(Cow::Borrowed(data)));
             }
             Cow::Owned(ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
             }) => {
-                output.push(OpenAIResponsesInput::Message(OpenAIResponsesInputMessage {
-                    id: None,
-                    role: "assistant",
-                    content: vec![OpenAIResponsesInputMessageContent::Unknown {
-                        data: Cow::Owned(data),
-                    }],
-                }));
+                output.push(OpenAIResponsesInput::Unknown(Cow::Owned(data)));
             }
         }
     }
@@ -1130,6 +1195,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::FunctionType;
+
     use super::*;
     use std::time::Duration;
 
@@ -1902,5 +1969,240 @@ mod tests {
 
         // Should fail to parse
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_deserialize_unknown_output_block() {
+        // Test that unknown output block types (like web_search_call) are deserialized as FlattenUnknown::Unknown
+        let json = r#"{
+            "type": "web_search_call",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "test query"
+            }
+        }"#;
+
+        let result: OpenAIResponsesOutput = serde_json::from_str(json).unwrap();
+
+        match result {
+            FlattenUnknown::Unknown(data) => {
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("web_search_call")
+                );
+                assert_eq!(
+                    data.get("status").and_then(|v| v.as_str()),
+                    Some("completed")
+                );
+            }
+            FlattenUnknown::Normal(_) => panic!("Expected FlattenUnknown::Unknown variant"),
+        }
+    }
+
+    #[test]
+    fn test_convert_unknown_block_to_content_block_output() {
+        // Test that unknown blocks are converted to ContentBlockOutput::Unknown with proper model_provider_name
+        let json = r#"{
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "id": "ws_123",
+                    "status": "completed"
+                }
+            ],
+            "usage": {
+                "input_tokens": 10,
+                "output_tokens": 20
+            }
+        }"#;
+
+        let response: OpenAIResponsesResponse = serde_json::from_str(json).unwrap();
+        let generic_request = ModelInferenceRequest {
+            inference_id: uuid::Uuid::new_v4(),
+            messages: vec![],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            stop_sequences: None,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
+            extra_cache_key: None,
+        };
+
+        let result = response.into_provider_response(
+            Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+            "test_request".to_string(),
+            "test_response".to_string(),
+            &generic_request,
+            "test-model",
+            "test-provider",
+        );
+
+        assert!(result.is_ok());
+        let provider_response = result.unwrap();
+        assert_eq!(provider_response.output.len(), 1);
+
+        match &provider_response.output[0] {
+            ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("web_search_call")
+                );
+                assert_eq!(
+                    model_provider_name.as_deref(),
+                    Some("tensorzero::model_name::test-model::provider_name::test-provider")
+                );
+            }
+            _ => panic!("Expected ContentBlockOutput::Unknown"),
+        }
+    }
+
+    #[test]
+    fn test_mixed_output_with_known_and_unknown_blocks() {
+        // Test that responses with both known and unknown blocks are handled correctly
+        let json = r#"{
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "id": "msg_1",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "Hello, world!"
+                        }
+                    ]
+                },
+                {
+                    "type": "web_search_call",
+                    "id": "ws_123",
+                    "status": "completed",
+                    "action": {
+                        "type": "search",
+                        "query": "test"
+                    }
+                },
+                {
+                    "type": "function_call",
+                    "call_id": "fc_456",
+                    "name": "get_weather",
+                    "arguments": "{}"
+                },
+                {
+                    "type": "another_unknown_type",
+                    "custom_field": "custom_value"
+                }
+            ],
+            "usage": {
+                "input_tokens": 50,
+                "output_tokens": 100
+            }
+        }"#;
+
+        let response: OpenAIResponsesResponse = serde_json::from_str(json).unwrap();
+        let generic_request = ModelInferenceRequest {
+            inference_id: uuid::Uuid::new_v4(),
+            messages: vec![],
+            system: None,
+            temperature: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            stop_sequences: None,
+            extra_body: Default::default(),
+            extra_headers: Default::default(),
+            fetch_and_encode_input_files_before_inference: false,
+            extra_cache_key: None,
+        };
+
+        let result = response.into_provider_response(
+            Latency::NonStreaming {
+                response_time: Duration::from_millis(100),
+            },
+            "test_request".to_string(),
+            "test_response".to_string(),
+            &generic_request,
+            "gpt-5-nano",
+            "openai",
+        );
+
+        assert!(result.is_ok());
+        let provider_response = result.unwrap();
+
+        // Should have 4 output blocks: 1 text, 2 unknown, 1 tool call
+        assert_eq!(provider_response.output.len(), 4);
+
+        // First should be text
+        match &provider_response.output[0] {
+            ContentBlockOutput::Text(text) => {
+                assert_eq!(text.text, "Hello, world!");
+            }
+            _ => panic!("Expected ContentBlockOutput::Text"),
+        }
+
+        // Second should be unknown (web_search_call)
+        match &provider_response.output[1] {
+            ContentBlockOutput::Unknown { data, .. } => {
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("web_search_call")
+                );
+            }
+            _ => panic!("Expected ContentBlockOutput::Unknown for web_search_call"),
+        }
+
+        // Third should be tool call
+        match &provider_response.output[2] {
+            ContentBlockOutput::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_weather");
+                assert_eq!(tool_call.id, "fc_456");
+            }
+            _ => panic!("Expected ContentBlockOutput::ToolCall"),
+        }
+
+        // Fourth should be unknown (another_unknown_type)
+        match &provider_response.output[3] {
+            ContentBlockOutput::Unknown {
+                data,
+                model_provider_name,
+            } => {
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("another_unknown_type")
+                );
+                assert_eq!(
+                    data.get("custom_field").and_then(|v| v.as_str()),
+                    Some("custom_value")
+                );
+                assert_eq!(
+                    model_provider_name.as_deref(),
+                    Some("tensorzero::model_name::gpt-5-nano::provider_name::openai")
+                );
+            }
+            _ => panic!("Expected ContentBlockOutput::Unknown for another_unknown_type"),
+        }
     }
 }

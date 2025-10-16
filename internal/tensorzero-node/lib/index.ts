@@ -1,13 +1,17 @@
 import { createRequire } from "module";
 import type {
   CacheEnabledMode,
+  AdjacentDatapointIds,
   ClientInferenceParams,
   Config,
+  CountDatapointsForDatasetFunctionParams,
+  DatapointInsert,
   DatasetDetailRow,
   DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
   EvaluationRunEvent,
+  GetAdjacentDatapointIdsParams,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
   InferenceResponse,
@@ -16,6 +20,7 @@ import type {
   ModelUsageTimePoint,
   OptimizationJobHandle,
   OptimizationJobInfo,
+  StaleDatapointParams,
   StaleDatasetResponse,
   TableBoundsWithCount,
   FeedbackRow,
@@ -26,6 +31,8 @@ import type {
   CountFeedbackByTargetIdParams,
   QueryDemonstrationFeedbackByInferenceIdParams,
   DemonstrationFeedbackRow,
+  GetDatapointParams,
+  Datapoint,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -221,6 +228,12 @@ export class DatabaseClient {
     );
   }
 
+  async getDatapoint(params: GetDatapointParams): Promise<Datapoint> {
+    const paramsString = safeStringify(params);
+    const result = await this.nativeDatabaseClient.getDatapoint(paramsString);
+    return JSON.parse(result) as Datapoint;
+  }
+
   async getModelUsageTimeseries(
     timeWindow: TimeWindow,
     maxPeriods: number,
@@ -339,5 +352,37 @@ export class DatabaseClient {
     const paramsString = safeStringify(params);
     const result = await this.nativeDatabaseClient.getDatasetRows(paramsString);
     return JSON.parse(result) as DatasetDetailRow[];
+  }
+
+  async countDatasets(): Promise<number> {
+    return this.nativeDatabaseClient.countDatasets();
+  }
+
+  async staleDatapoint(params: StaleDatapointParams): Promise<void> {
+    const paramsString = safeStringify(params);
+    await this.nativeDatabaseClient.staleDatapoint(paramsString);
+  }
+
+  async insertDatapoint(params: DatapointInsert): Promise<void> {
+    const paramsString = safeStringify(params);
+    await this.nativeDatabaseClient.insertDatapoint(paramsString);
+  }
+
+  async countDatapointsForDatasetFunction(
+    params: CountDatapointsForDatasetFunctionParams,
+  ): Promise<number> {
+    const paramsString = safeStringify(params);
+    return this.nativeDatabaseClient.countDatapointsForDatasetFunction(
+      paramsString,
+    );
+  }
+
+  async getAdjacentDatapointIds(
+    params: GetAdjacentDatapointIdsParams,
+  ): Promise<AdjacentDatapointIds> {
+    const paramsString = safeStringify(params);
+    const result =
+      await this.nativeDatabaseClient.getAdjacentDatapointIds(paramsString);
+    return JSON.parse(result) as AdjacentDatapointIds;
   }
 }

@@ -93,7 +93,7 @@ export type ImageContent = z.infer<typeof ImageContentSchema>;
 export const UnknownContentSchema = z.object({
   type: z.literal("unknown"),
   data: JsonValueSchema,
-  model_provider_name: z.string().nullable(),
+  model_provider_name: z.string().nullish(),
 });
 export type UnknownContent = z.infer<typeof UnknownContentSchema>;
 

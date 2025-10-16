@@ -3,6 +3,7 @@ import type { EndpointLocation } from "./EndpointLocation";
 import type { HostedProviderKind } from "./HostedProviderKind";
 import type { OpenAIAPIType } from "./OpenAIAPIType";
 import type { TimeoutsConfig } from "./TimeoutsConfig";
+import type { JsonValue } from "./serde_json/JsonValue";
 
 export type UninitializedModelProvider = {
   timeouts: TimeoutsConfig;
@@ -71,6 +72,8 @@ export type UninitializedModelProvider = {
       api_base: string | null;
       api_key_location: string | null;
       api_type: OpenAIAPIType;
+      include_encrypted_reasoning: boolean;
+      provider_tools: Array<JsonValue>;
     }
   | { type: "openrouter"; model_name: string; api_key_location: string | null }
   | {
