@@ -116,7 +116,11 @@ impl ExperimentationConfig {
                     .await
             }
             #[cfg(test)]
-            Self::AlwaysFails(config) => config.setup(db, function_name, cancel_token).await,
+            Self::AlwaysFails(config) => {
+                config
+                    .setup(db, function_name, postgres, cancel_token)
+                    .await
+            }
         }
     }
 
@@ -247,6 +251,7 @@ impl VariantSampler for AlwaysFailsConfig {
         &self,
         _db: Arc<dyn SelectQueries + Send + Sync>,
         _function_name: &str,
+        _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
     ) -> Result<(), Error> {
         Ok(())
