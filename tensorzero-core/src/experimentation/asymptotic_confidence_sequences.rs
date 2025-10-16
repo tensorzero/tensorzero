@@ -1,4 +1,5 @@
-/// Asymptotic confidence sequences for means
+/// Asymptotic confidence sequences for the average conditional mean of
+/// possibly time-varying means, under martingale dependence.
 pub fn asymp_cs(
     means: Vec<f64>,
     variances: Vec<f64>,
@@ -6,31 +7,27 @@ pub fn asymp_cs(
     alpha: f64,
     rho: f64,
 ) -> (Vec<f64>, Vec<f64>) {
-    // Margin calculated at a single timepoint
-    let single_timepoint_margin = |variance: f64, count: f64| -> f64 {
-        let rho2 = rho * rho;
-        ((count * variance * rho2 + 1.0) / (count * count * rho2)
-            * ((count * variance * rho2 + 1.0) / (alpha * alpha)).ln())
-        .sqrt()
-    };
-    // Compute margins over all timepoints
-    let margins: Vec<f64> = variances
+    let rho2 = rho * rho;
+    let alpha2 = alpha * alpha;
+
+    // Compute lower and upper confidence bounds
+    let (cs_lower, cs_upper): (Vec<f64>, Vec<f64>) = means
         .iter()
+        .zip(variances.iter())
         .zip(counts.iter())
-        .map(|(v, c)| single_timepoint_margin(*v, *c as f64))
-        .collect();
+        .map(|((mean, variance), count)| {
+            let count_f64 = *count as f64;
+            // Factor out common term: count * variance * rho^2
+            let cv_rho2 = count_f64 * variance * rho2;
 
-    let cs_lower: Vec<f64> = means
-        .iter()
-        .zip(margins.iter())
-        .map(|(mean, margin)| mean - margin)
-        .collect();
+            // Compute margin: sqrt(((n*v*rho^2 + 1) / (n^2 * rho^2)) * ln((n*v*rho^2 + 1) / alpha^2))
+            let margin = ((cv_rho2 + 1.0) / (count_f64 * count_f64 * rho2)
+                * ((cv_rho2 + 1.0) / alpha2).ln())
+            .sqrt();
 
-    let cs_upper: Vec<f64> = means
-        .iter()
-        .zip(margins.iter())
-        .map(|(mean, margin)| mean + margin)
-        .collect();
+            (mean - margin, mean + margin)
+        })
+        .unzip();
 
     (cs_lower, cs_upper)
 }
