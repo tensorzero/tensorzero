@@ -492,7 +492,7 @@ export class TensorZeroClient {
     datasetName: string,
     datapoint: Datapoint,
   ): Promise<DatapointResponse> {
-    // TODO(shuyangli): Move to native Rust client.
+    // TODO(#3921): Move to native Rust client.
     if (!datasetName || typeof datasetName !== "string") {
       throw new Error("Dataset name must be a non-empty string");
     }

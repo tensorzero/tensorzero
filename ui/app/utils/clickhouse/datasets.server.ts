@@ -84,10 +84,22 @@ export async function getDatasetRows(
 
 export async function getDatapoint(
   params: GetDatapointParams,
-): Promise<ParsedDatasetRow> {
+): Promise<ParsedDatasetRow | null> {
+  // Swallow the error and return null if the datapoint is not found, to preserve existing behavior.
   const dbClient = await getNativeDatabaseClient();
-  const datapoint = await dbClient.getDatapoint(params);
-  // TODO(shuyangli): Remove this type conversion.
+  let datapoint: Datapoint | null = null;
+  try {
+    datapoint = await dbClient.getDatapoint(params);
+    // TODO(shuyangli): Rename ParsedDatasetRow to be more clear.
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.includes("Datapoint not found")
+    ) {
+      return null;
+    }
+    throw error;
+  }
   return await datapointToParsedDatasetRow(datapoint);
 }
 
