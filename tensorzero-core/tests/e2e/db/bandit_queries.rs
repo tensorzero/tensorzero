@@ -407,12 +407,12 @@ async fn test_clickhouse_get_feedback_timeseries_with_variant_filter() {
     // Verify the variant is present
     let variant_names: std::collections::HashSet<_> = feedback_timeseries
         .iter()
-        .map(|p| &p.variant_name)
+        .map(|p| p.variant_name.as_str())
         .collect();
-    assert!(variant_names.contains(&"gpt4o_mini_initial_prompt".to_string()));
+    assert!(variant_names.contains(&"gpt4o_mini_initial_prompt"));
     // Should NOT contain the filtered-out variants
-    assert!(!variant_names.contains(&"gpt4o_initial_prompt".to_string()));
-    assert!(!variant_names.contains(&"llama_8b_initial_prompt".to_string()));
+    assert!(!variant_names.contains(&"gpt4o_initial_prompt"));
+    assert!(!variant_names.contains(&"llama_8b_initial_prompt"));
 
     // Verify final cumulative value matches what we expect
     let final_point = feedback_timeseries
