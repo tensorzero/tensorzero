@@ -51,15 +51,15 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let query = format!(
             r"
             SELECT
-                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_start,
+                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_end,
                 model_name,
                 sumMerge(total_input_tokens) as input_tokens,
                 sumMerge(total_output_tokens) as output_tokens,
                 countMerge(count) as count
             FROM ModelProviderStatistics
             WHERE {time_filter}
-            GROUP BY period_start, model_name
-            ORDER BY period_start DESC, model_name
+            GROUP BY period_end, model_name
+            ORDER BY period_end DESC, model_name
             FORMAT JSONEachRow
             ",
         );
@@ -349,13 +349,16 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let escaped_function_name = escape_string_for_clickhouse_literal(&function_name);
         let escaped_metric_name = escape_string_for_clickhouse_literal(&metric_name);
 
-        // Using toStartOfInterval + interval to get end of each period since we're computing cumulative stats "up to" each time point
+        // Clickhouse has no `toEndOfInterval` function, so we use toStartOfInterval + interval to get
+        // the end of each period, since we're computing cumulative stats up to each time point
         let time_grouping = format!("toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE");
         let time_filter = format!(
             "minute >= (SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
         );
 
-        // Build variant filter if provided
+        // If variants are passed, build variant filter.
+        // If None we don't filter at all;
+        // If empty, we'll return an empty vector for consistency
         let variant_filter = match variant_names {
             None => String::new(),
             Some(names) if names.is_empty() => {
@@ -388,7 +391,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     {variant_filter}
             )
             SELECT
-                formatDateTime(any(tb.period), '%Y-%m-%dT%H:%i:%SZ') as period_start,
+                formatDateTime(any(tb.period), '%Y-%m-%dT%H:%i:%SZ') as period_end,
                 any(vl.variant_name) as variant_name,
                 avgMerge(f.feedback_mean) as mean,
                 varSampStableMerge(f.feedback_variance) as variance,
@@ -401,7 +404,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 AND f.metric_name = '{escaped_metric_name}'
                 AND f.minute <= tb.period
             GROUP BY tb.period, vl.variant_name
-            ORDER BY period_start ASC, variant_name ASC
+            ORDER BY period_end ASC, variant_name ASC
             FORMAT JSONEachRow
             ",
         );

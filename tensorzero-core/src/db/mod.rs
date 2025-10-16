@@ -53,7 +53,7 @@ pub trait SelectQueries {
     ) -> Result<Vec<FeedbackByVariant>, Error>;
 
     /// Retrieves a time series of feedback statistics for a given metric and function,
-    /// optionally filtered by variant names. Returns CUMULATIVE statistics
+    /// optionally filtered by variant names. Returns cumulative statistics
     /// (mean, variance, count) for each variant at each time point - each time point
     /// includes all data from the beginning up to that point. This will return max_periods
     /// complete time periods worth of data if present as well as the current time period's data.
@@ -190,11 +190,15 @@ pub struct FeedbackByVariant {
 #[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct FeedbackTimeSeriesPoint {
-    pub period_start: DateTime<Utc>,
+    // Time point up to which cumulative statistics are computed
+    pub period_end: DateTime<Utc>,
     pub variant_name: String,
+    // Mean of feedback values up to time point `period_end`
     pub mean: f32,
+    // Variance of feedback values up to time point `period_end`
     pub variance: f32,
     #[serde(deserialize_with = "deserialize_u64")]
+    // Number of feedback values up to time point `period_end`
     pub count: u64,
 }
 
