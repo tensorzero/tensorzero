@@ -765,7 +765,7 @@ impl TracerWrapper {
         // See the docs on `InFlightSpan` for more information.
         self.in_flight_spans.close();
         self.in_flight_spans.wait().await;
-        // Now that all of our OpenTelemetry spans have closed (including spans in backgorund tasks),
+        // Now that all of our OpenTelemetry spans have closed (including spans in background tasks),
         // shut down all of our custom tracers.
         // This might happen in parallel for the same custom tracer (if moka evicts its cache entry), but opentelemetry
         // documents that it's safe to call `shutdown` multiple times.
