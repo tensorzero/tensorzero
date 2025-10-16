@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     db::{ModelLatencyDatapoint, ModelUsageTimePoint, SelectQueries, TimeWindow},
     error::{Error, ErrorDetails},
+    experimentation::asymptotic_confidence_sequences::asymp_cs,
 };
 
 use super::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo};
@@ -412,7 +413,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous_no_params(query).await?;
 
         // Deserialize the results into FeedbackTimeSeriesPoint
-        response
+        let feedback = response
             .response
             .trim()
             .lines()
@@ -423,6 +424,9 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     })
                 })
             })
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Add confidence sequence
+        asymp_cs(feedback, 0.05, None)
     }
 }

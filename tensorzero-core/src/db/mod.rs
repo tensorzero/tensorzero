@@ -193,6 +193,21 @@ pub struct FeedbackByVariant {
     pub count: u64,
 }
 
+// make non-public, add larger struct with confidence sequence values
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+pub struct InternalFeedbackTimeSeriesPoint {
+    // Time point up to which cumulative statistics are computed
+    pub period_end: DateTime<Utc>,
+    pub variant_name: String,
+    // Mean of feedback values up to time point `period_end`
+    pub mean: f32,
+    // Variance of feedback values up to time point `period_end`
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    // Number of feedback values up to time point `period_end`
+    pub count: u64,
+}
+
 #[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct FeedbackTimeSeriesPoint {
@@ -206,6 +221,11 @@ pub struct FeedbackTimeSeriesPoint {
     #[serde(deserialize_with = "deserialize_u64")]
     // Number of feedback values up to time point `period_end`
     pub count: u64,
+    // 1 - confidence level for the asymptotic confidence sequence
+    pub alpha: f32,
+    // Confidence sequence lower and upper bounds
+    pub cs_lower: f32,
+    pub cs_upper: f32,
 }
 
 impl<T: RateLimitQueries + ExperimentationQueries + HealthCheckable + Send + Sync>
