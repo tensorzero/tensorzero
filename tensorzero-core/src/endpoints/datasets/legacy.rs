@@ -1523,7 +1523,7 @@ pub(crate) fn validate_dataset_name(dataset_name: &str) -> Result<(), Error> {
 
 /// Puts a chat datapoint into ClickHouse
 /// Returns the number of rows written to ClickHouse
-async fn put_chat_datapoints(
+pub(crate) async fn put_chat_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     datapoints: &[ChatInferenceDatapoint],
 ) -> Result<u64, Error> {
@@ -1539,45 +1539,49 @@ async fn put_chat_datapoints(
         .collect::<Result<Vec<_>, _>>()?;
 
     let query = r"
-     INSERT INTO ChatInferenceDatapoint
-         (
-             dataset_name,
-             function_name,
-             name,
-             id,
-             episode_id,
-             input,
-             output,
-             tool_params,
-             tags,
-             auxiliary,
-             is_deleted,
-             is_custom,
-             source_inference_id
-         )
-         SELECT
-             new_data.dataset_name,
-             new_data.function_name,
-             new_data.name,
-             new_data.id,
-             new_data.episode_id,
-             new_data.input,
-             new_data.output,
-             new_data.tool_params,
-             new_data.tags,
-             new_data.auxiliary,
-             new_data.is_deleted,
-             new_data.is_custom,
-             new_data.source_inference_id
-         FROM new_data
-         ";
+    INSERT INTO ChatInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            tags,
+            auxiliary,
+            is_deleted,
+            is_custom,
+            source_inference_id,
+            updated_at,
+            staled_at
+        )
+        SELECT
+            new_data.dataset_name,
+            new_data.function_name,
+            new_data.name,
+            new_data.id,
+            new_data.episode_id,
+            new_data.input,
+            new_data.output,
+            new_data.tool_params,
+            new_data.tags,
+            new_data.auxiliary,
+            new_data.is_deleted,
+            new_data.is_custom,
+            new_data.source_inference_id,
+            new_data.updated_at,
+            new_data.staled_at
+        FROM new_data
+        ";
 
     let external_data = ExternalDataInfo {
-         external_data_name: "new_data".to_string(),
-         structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), updated_at String".to_string(),
-         format: "JSONEachRow".to_string(),
-         data: serialized_datapoints.join("\n"),
-     };
+        external_data_name: "new_data".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), updated_at String, staled_at Nullable(String)".to_string(),
+        format: "JSONEachRow".to_string(),
+        data: serialized_datapoints.join("\n"),
+    };
     let result = clickhouse
         .run_query_with_external_data(external_data, query.to_string())
         .await?;
@@ -1586,7 +1590,7 @@ async fn put_chat_datapoints(
 
 /// Puts a json datapoint into ClickHouse
 /// Returns the number of rows written to ClickHouse
-async fn put_json_datapoints(
+pub(crate) async fn put_json_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
     datapoints: &[JsonInferenceDatapoint],
 ) -> Result<u64, Error> {
@@ -1602,45 +1606,49 @@ async fn put_json_datapoints(
         .collect::<Result<Vec<_>, _>>()?;
 
     let query = r"
-         INSERT INTO JsonInferenceDatapoint
-         (
-             dataset_name,
-             function_name,
-             name,
-             id,
-             episode_id,
-             input,
-             output,
-             output_schema,
-             tags,
-             auxiliary,
-             is_deleted,
-             is_custom,
-             source_inference_id
-         )
-         SELECT
-             new_data.dataset_name,
-             new_data.function_name,
-             new_data.name,
-             new_data.id,
-             new_data.episode_id,
-             new_data.input,
-             new_data.output,
-             new_data.output_schema,
-             new_data.tags,
-             new_data.auxiliary,
-             new_data.is_deleted,
-             new_data.is_custom,
-             new_data.source_inference_id
-         FROM new_data
-         ";
+        INSERT INTO JsonInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            name,
+            id,
+            episode_id,
+            input,
+            output,
+            output_schema,
+            tags,
+            auxiliary,
+            is_deleted,
+            is_custom,
+            source_inference_id,
+            updated_at,
+            staled_at
+        )
+        SELECT
+            new_data.dataset_name,
+            new_data.function_name,
+            new_data.name,
+            new_data.id,
+            new_data.episode_id,
+            new_data.input,
+            new_data.output,
+            new_data.output_schema,
+            new_data.tags,
+            new_data.auxiliary,
+            new_data.is_deleted,
+            new_data.is_custom,
+            new_data.source_inference_id,
+            new_data.updated_at,
+            new_data.staled_at
+        FROM new_data
+        ";
 
     let external_data = ExternalDataInfo {
-         external_data_name: "new_data".to_string(),
-         structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), updated_at String".to_string(),
-         format: "JSONEachRow".to_string(),
-         data: serialized_datapoints.join("\n"),
-     };
+        external_data_name: "new_data".to_string(),
+        structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), updated_at String, staled_at Nullable(String)".to_string(),
+        format: "JSONEachRow".to_string(),
+        data: serialized_datapoints.join("\n"),
+    };
     let result = clickhouse
         .run_query_with_external_data(external_data, query.to_string())
         .await?;

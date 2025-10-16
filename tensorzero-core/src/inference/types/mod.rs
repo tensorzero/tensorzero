@@ -134,6 +134,8 @@ pub use streams::{
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
@@ -426,6 +428,8 @@ impl LazyResolvedInputMessageContent {
 /// prior to any processing into LLM representations below.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct InputMessage {
     pub role: Role,
     #[serde(deserialize_with = "deserialize_content")]
@@ -442,6 +446,8 @@ pub struct TemplateInput {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
 pub enum InputMessageContent {
     Text(TextKind),
     Template(TemplateInput),
