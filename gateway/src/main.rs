@@ -267,6 +267,10 @@ async fn main() {
             delete(endpoints::datasets::stale_dataset_handler),
         )
         .route(
+            "/v1/datasets/{dataset_name}/datapoints/update",
+            post(endpoints::datasets::v1::update_datapoints_handler),
+        )
+        .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
             get(endpoints::datasets::get_datapoint_handler),
         )
