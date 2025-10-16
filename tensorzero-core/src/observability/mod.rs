@@ -767,7 +767,7 @@ impl TracerWrapper {
         self.in_flight_spans.wait().await;
         // Now that all of our OpenTelemetry spans have closed (including spans in backgorund tasks),
         // shut down all of our custom tracers.
-        // This might happen in parallel for the same custom tracer (if moka evicts its), but opentelemetry
+        // This might happen in parallel for the same custom tracer (if moka evicts its cache entry), but opentelemetry
         // documents that it's safe to call `shutdown` multiple times.
         for (_key, tracer) in &self.custom_tracers {
             if let Some(provider) = &tracer.provider {
