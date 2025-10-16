@@ -2251,6 +2251,107 @@ async fn test_responses_api_reasoning() {
             "Missing summary text in item: {item:?}"
         );
     }
+
+    let payload = json!({
+        "function_name": "openai_responses_gpt5",
+        "variant_name": "openai",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "How many letters are in the word potato?"
+                },
+                {
+                    "role": "assistant",
+                    "content": content_blocks,
+                },
+                {
+                    "role": "user",
+                    "content": "What were you thinking about during your last response?"
+                }
+            ]},
+        "extra_body": [
+            {
+                "variant_name": "openai",
+                "pointer": "/reasoning",
+                "value": {
+                    "effort": "low",
+                    "summary": "auto"
+                }
+            }
+        ]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("New API response: {response_json}");
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_responses_api_invalid_thought() {
+    let payload = json!({
+        "function_name": "openai_responses_gpt5",
+        "variant_name": "openai",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "How many letters are in the word potato?"
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thought",
+                            "signature": "My fake signature",
+                            "summary": [
+                                {
+                                    "type": "summary_text",
+                                    "text": "I thought about responding to the next message with the word 'potato'"
+                                }
+                            ]
+                        },
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": "What time is it?"
+                }
+            ]},
+        "extra_body": [
+            {
+                "variant_name": "openai",
+                "pointer": "/reasoning",
+                "value": {
+                    "effort": "low",
+                    "summary": "auto"
+                }
+            }
+        ]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_text = response.text().await.unwrap();
+    println!("API response: {response_text}");
+    assert!(response_text.contains("could not be verified"));
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 }
 
 #[tokio::test(flavor = "multi_thread")]

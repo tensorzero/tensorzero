@@ -443,7 +443,7 @@ pub enum OpenAIResponsesOutputInner<'a> {
     },
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIResponsesReasoningSummary<'a> {
     SummaryText { text: Cow<'a, str> },
@@ -535,6 +535,7 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct OpenAIResponsesReasoning<'a> {
     encrypted_content: Cow<'a, str>,
+    summary: Vec<OpenAIResponsesReasoningSummary<'a>>,
 }
 
 impl Serialize for OpenAIResponsesInputMessageContent<'_> {
@@ -714,7 +715,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
 
 pub fn tensorzero_to_openai_responses_assistant_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
-    provider_type: &str,
+    _provider_type: &str,
 ) -> Result<Vec<OpenAIResponsesInput<'a>>, Error> {
     let mut output = Vec::new();
     let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
@@ -777,8 +778,31 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
             }
             Cow::Borrowed(ContentBlock::Thought(ref thought))
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
-                warn_discarded_thought_block(provider_type, thought);
+                if let Some(encrypted_content) = &thought.signature {
+                    output.push(OpenAIResponsesInput::Known(
+                        OpenAIResponsesInputInner::Reasoning(OpenAIResponsesReasoning {
+                            encrypted_content: Cow::Owned(encrypted_content.clone()),
+                            summary: thought
+                                .summary
+                                .as_ref()
+                                .map(|summary| {
+                                    summary
+                                        .iter()
+                                        .map(|block| match block {
+                                            ThoughtSummaryBlock::SummaryText { text } => {
+                                                OpenAIResponsesReasoningSummary::SummaryText {
+                                                    text: Cow::Owned(text.to_string()),
+                                                }
+                                            }
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
+                        }),
+                    ));
+                }
             }
+
             Cow::Borrowed(ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
