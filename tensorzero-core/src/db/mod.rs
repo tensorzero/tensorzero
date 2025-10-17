@@ -65,14 +65,14 @@ pub trait SelectQueries {
     /// includes all data from the beginning up to that point. This will return max_periods
     /// complete time periods worth of data if present as well as the current time period's data.
     /// So there are at most max_periods + 1 time periods worth of data returned.
-    async fn get_feedback_timeseries(
+    async fn get_cumulative_feedback_timeseries(
         &self,
         function_name: String,
         metric_name: String,
         variant_names: Option<Vec<String>>,
         time_window: TimeWindow,
         max_periods: u32,
-    ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error>;
+    ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -196,7 +196,7 @@ pub struct FeedbackByVariant {
 
 // make non-public, add larger struct with confidence sequence values
 #[derive(Clone, Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-pub struct InternalFeedbackTimeSeriesPoint {
+pub struct InternalCumulativeFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
     pub period_end: DateTime<Utc>,
     pub variant_name: String,
@@ -211,7 +211,7 @@ pub struct InternalFeedbackTimeSeriesPoint {
 
 #[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
-pub struct FeedbackTimeSeriesPoint {
+pub struct CumulativeFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
     pub period_end: DateTime<Utc>,
     pub variant_name: String,

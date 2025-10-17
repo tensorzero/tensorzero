@@ -64,7 +64,8 @@ async fn get_providers() -> E2ETestProviders {
             ),
             (
                 "api_base".to_string(),
-                "https://tensorzero--sglang-inference-sglang-inference.modal.run/v1/".to_string(),
+                "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
+                    .to_string(),
             ),
         ]),
         use_modal_headers: true,

@@ -133,7 +133,7 @@ async fn test_clickhouse_metrics_by_variant_episode_float() {
 }
 
 #[tokio::test]
-async fn test_clickhouse_get_feedback_timeseries_minute_level() {
+async fn test_clickhouse_get_cumulative_feedback_timeseries_minute_level() {
     let clickhouse = get_clickhouse().await;
     let function_name = "extract_entities".to_string();
     let metric_name =
@@ -142,7 +142,7 @@ async fn test_clickhouse_get_feedback_timeseries_minute_level() {
     // Test minute-level aggregation
     // Fixture data is from April 2025, so we need to look back far enough
     let feedback_timeseries = clickhouse
-        .get_feedback_timeseries(
+        .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
             None,
@@ -213,7 +213,7 @@ async fn test_clickhouse_get_feedback_timeseries_minute_level() {
 }
 
 #[tokio::test]
-async fn test_clickhouse_get_feedback_timeseries_hourly() {
+async fn test_clickhouse_get_cumulative_feedback_timeseries_hourly() {
     let clickhouse = get_clickhouse().await;
     let function_name = "extract_entities".to_string();
     let metric_name =
@@ -221,7 +221,7 @@ async fn test_clickhouse_get_feedback_timeseries_hourly() {
 
     // Test hourly aggregation
     let feedback_timeseries = clickhouse
-        .get_feedback_timeseries(
+        .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
             None,
@@ -291,7 +291,7 @@ async fn test_clickhouse_get_feedback_timeseries_hourly() {
 }
 
 #[tokio::test]
-async fn test_clickhouse_get_feedback_timeseries_daily() {
+async fn test_clickhouse_get_cumulative_feedback_timeseries_daily() {
     let clickhouse = get_clickhouse().await;
     let function_name = "extract_entities".to_string();
     let metric_name =
@@ -299,7 +299,7 @@ async fn test_clickhouse_get_feedback_timeseries_daily() {
 
     // Test daily aggregation
     let feedback_timeseries = clickhouse
-        .get_feedback_timeseries(
+        .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
             None,
@@ -368,7 +368,7 @@ async fn test_clickhouse_get_feedback_timeseries_daily() {
 }
 
 #[tokio::test]
-async fn test_clickhouse_get_feedback_timeseries_weekly() {
+async fn test_clickhouse_get_cumulative_feedback_timeseries_weekly() {
     let clickhouse = get_clickhouse().await;
     let function_name = "extract_entities".to_string();
     let metric_name =
@@ -376,7 +376,7 @@ async fn test_clickhouse_get_feedback_timeseries_weekly() {
 
     // Test weekly aggregation
     let feedback_timeseries = clickhouse
-        .get_feedback_timeseries(
+        .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
             None,
@@ -442,7 +442,7 @@ async fn test_clickhouse_get_feedback_timeseries_weekly() {
 }
 
 #[tokio::test]
-async fn test_clickhouse_get_feedback_timeseries_monthly() {
+async fn test_clickhouse_get_cumulative_feedback_timeseries_monthly() {
     let clickhouse = get_clickhouse().await;
     let function_name = "extract_entities".to_string();
     let metric_name =
@@ -450,7 +450,7 @@ async fn test_clickhouse_get_feedback_timeseries_monthly() {
 
     // Test monthly aggregation
     let feedback_timeseries = clickhouse
-        .get_feedback_timeseries(
+        .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
             None,
@@ -516,7 +516,7 @@ async fn test_clickhouse_get_feedback_timeseries_monthly() {
 }
 
 #[tokio::test]
-async fn test_clickhouse_get_feedback_timeseries_cumulative_returns_error() {
+async fn test_clickhouse_get_cumulative_feedback_timeseries_cumulative_returns_error() {
     let clickhouse = get_clickhouse().await;
     let function_name = "extract_entities".to_string();
     let metric_name =
@@ -524,7 +524,7 @@ async fn test_clickhouse_get_feedback_timeseries_cumulative_returns_error() {
 
     // Test that Cumulative time window returns an error
     let result = clickhouse
-        .get_feedback_timeseries(
+        .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
             None,
@@ -546,7 +546,7 @@ async fn test_clickhouse_get_feedback_timeseries_cumulative_returns_error() {
 }
 
 #[tokio::test]
-async fn test_clickhouse_get_feedback_timeseries_with_variant_filter() {
+async fn test_clickhouse_get_cumulative_feedback_timeseries_with_variant_filter() {
     let clickhouse = get_clickhouse().await;
     let function_name = "extract_entities".to_string();
     let metric_name =
@@ -554,7 +554,7 @@ async fn test_clickhouse_get_feedback_timeseries_with_variant_filter() {
 
     // Test with specific variant (filter to only one)
     let feedback_timeseries = clickhouse
-        .get_feedback_timeseries(
+        .get_cumulative_feedback_timeseries(
             function_name.clone(),
             metric_name.clone(),
             Some(vec!["gpt4o_mini_initial_prompt".to_string()]),
@@ -605,7 +605,7 @@ async fn test_clickhouse_get_feedback_timeseries_with_variant_filter() {
 
     // Test with empty variant list - should return empty result
     let empty_result = clickhouse
-        .get_feedback_timeseries(
+        .get_cumulative_feedback_timeseries(
             function_name,
             metric_name,
             Some(vec![]),

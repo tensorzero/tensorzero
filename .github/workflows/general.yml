@@ -493,6 +493,11 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
+      - name: Set Postgres database URL for tests
+        run: |
+          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
@@ -553,6 +558,9 @@ jobs:
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Test (Rust)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
+          TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
         run: cargo test-e2e-no-creds
 
       - name: Print docker compose logs (replicated)

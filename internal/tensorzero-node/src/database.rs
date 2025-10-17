@@ -67,12 +67,15 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn get_feedback_timeseries(&self, params: String) -> Result<String, napi::Error> {
+    pub async fn get_cumulative_feedback_timeseries(
+        &self,
+        params: String,
+    ) -> Result<String, napi::Error> {
         napi_call!(
             &self,
-            get_feedback_timeseries,
+            get_cumulative_feedback_timeseries,
             params,
-            GetFeedbackTimeseriesParams {
+            GetCumulativeFeedbackTimeseriesParams {
                 function_name,
                 metric_name,
                 variant_names,
@@ -174,7 +177,7 @@ struct QueryEpisodeTableParams {
 
 #[derive(Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-struct GetFeedbackTimeseriesParams {
+struct GetCumulativeFeedbackTimeseriesParams {
     pub function_name: String,
     pub metric_name: String,
     pub variant_names: Option<Vec<String>>,
