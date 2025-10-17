@@ -17,12 +17,10 @@ export function useInferenceHover(episodeRoute: string) {
   const handleInferenceHover = (inferenceId: string) => {
     setHoveredInferenceId(inferenceId);
     
-    // Clear any existing timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
-    // Don't fetch if we already have the data or are currently loading
     if (inferenceData[inferenceId] || loadingInferences.has(inferenceId)) {
       return;
     }
@@ -42,30 +40,23 @@ export function useInferenceHover(episodeRoute: string) {
     }, 300);
   };
 
-  // Handle fetcher response
   useEffect(() => {
-    if (fetcher.state === "idle" && fetcher.data) {
-      if (fetcher.data.inference && hoveredInferenceId) {
+    if (fetcher.state === "idle" && fetcher.data && hoveredInferenceId) {
+       setLoadingInferences(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(hoveredInferenceId);
+          return newSet;
+        });
+
+      if (fetcher.data.inference) {
         setInferenceData(prev => ({
           ...prev,
           [hoveredInferenceId]: fetcher.data!.inference!
         }));
-        setLoadingInferences(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(hoveredInferenceId);
-          return newSet;
-        });
-      } else if (fetcher.data.error && hoveredInferenceId) {
-        setLoadingInferences(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(hoveredInferenceId);
-          return newSet;
-        });
       }
     }
   }, [fetcher.state, fetcher.data, hoveredInferenceId]);
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {

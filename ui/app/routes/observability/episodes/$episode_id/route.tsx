@@ -39,7 +39,7 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
-import { useInferenceHover } from "~/hooks/useInferenceHover";
+import { useInferenceHover } from "~/hooks/use-inference-hover";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
 
 export const handle: RouteHandle = {
