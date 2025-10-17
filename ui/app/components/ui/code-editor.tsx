@@ -211,12 +211,16 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     [onChange],
   );
 
-  // Cleanup debounce on unmount
+  // Flush pending changes on unmount to prevent data loss
   useEffect(() => {
     return () => {
       debouncedOnChange?.cancel();
+      // If there are unflushed changes, send them to parent
+      if (onChange && internalValue !== value) {
+        onChange(internalValue);
+      }
     };
-  }, [debouncedOnChange]);
+  }, [debouncedOnChange, onChange, internalValue, value]);
 
   // Custom theme to remove dotted border and add focus styles
   const extensions = useMemo(() => {
