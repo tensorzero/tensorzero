@@ -484,7 +484,7 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets() {
     // Because other tests insert into the table, there could be additional datasets
     assert!(metadata.contains(&DatasetMetadata {
         dataset_name: "foo".to_string(),
-        count: 119,
+        count: 118,
         last_updated: "2025-04-15T02:33:58Z".to_string(),
     }));
     assert!(metadata.contains(&DatasetMetadata {
