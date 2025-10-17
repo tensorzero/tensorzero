@@ -25,35 +25,9 @@ import {
   X,
 } from "lucide-react";
 import type { JsonValue } from "tensorzero-node";
+import debounce from "lodash-es/debounce";
 
 export type Language = "json" | "markdown" | "jinja2" | "text";
-
-// Simple debounce implementation
-function debounce<T extends (...args: never[]) => void>(
-  fn: T,
-  delay: number,
-): T & { cancel: () => void } {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  const debounced = ((...args: Parameters<T>) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    timeoutId = setTimeout(() => {
-      fn(...args);
-      timeoutId = null;
-    }, delay);
-  }) as T & { cancel: () => void };
-
-  debounced.cancel = () => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-      timeoutId = null;
-    }
-  };
-
-  return debounced;
-}
 
 /** Try to format the given string/object if it's JSON. Passthrough gracefully if it's not JSON. */
 export function useFormattedJson(initialValue: string | JsonValue): string {
@@ -180,20 +154,76 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   // Internal state for semi-uncontrolled mode
   const [internalValue, setInternalValue] = useState(value);
 
-  // Track latest values in ref to avoid stale closures in debounce/cleanup
-  const latestValuesRef = useRef<{
-    internalValue: string;
-    value: string;
-    onChange?: (next: string) => void;
-  }>({ internalValue, value, onChange });
+  // Track external callbacks and the latest flushed/pending values
+  const onChangeRef = useRef(onChange);
+  const onBlurRef = useRef(onBlur);
   useEffect(() => {
-    latestValuesRef.current = { internalValue, value, onChange };
-  }, [internalValue, value, onChange]);
+    onChangeRef.current = onChange;
+    onBlurRef.current = onBlur;
+  }, [onChange, onBlur]);
 
+  const committedValueRef = useRef(value);
+  const pendingValueRef = useRef(value);
+
+  const flushPending = useCallback(() => {
+    const next = pendingValueRef.current;
+    if (next !== committedValueRef.current) {
+      committedValueRef.current = next;
+      onChangeRef.current?.(next);
+    }
+  }, []);
+
+  const debouncedFlush = useMemo(
+    () =>
+      debounce(() => {
+        flushPending();
+      }, 100),
+    [flushPending],
+  );
+
+  // Sync external value changes to internal state and cancel pending debounces
+  useEffect(() => {
+    setInternalValue(value);
+    pendingValueRef.current = value;
+    committedValueRef.current = value;
+    debouncedFlush.cancel();
+  }, [value, debouncedFlush]);
+
+  // Flush pending changes on unmount to prevent data loss
+  useEffect(() => {
+    return () => {
+      debouncedFlush.flush();
+      debouncedFlush.cancel();
+    };
+  }, [debouncedFlush]);
+
+  // Handle internal value changes
+  const handleChange = useCallback(
+    (val: string) => {
+      setInternalValue(val);
+      pendingValueRef.current = val;
+      if (!onChangeRef.current) {
+        committedValueRef.current = val;
+        return;
+      }
+      debouncedFlush();
+    },
+    [debouncedFlush],
+  );
+
+  // Handle blur: cancel debounce and flush immediately
+  const handleBlur = useCallback(() => {
+    debouncedFlush.flush();
+    debouncedFlush.cancel();
+    onBlurRef.current?.();
+  }, [debouncedFlush]);
+
+  // Update language when value changes if auto-detection is enabled
   const [language, setLanguage] = useState<Language>(() =>
     autoDetectLanguage ? detectLanguage(value) : allowedLanguages[0],
   );
 
+  // Handle wrapping behavior
   const [wordWrap, setWordWrap] = useLocalStorage(
     "word-wrap",
     DEFAULT_WORD_WRAP_LANGUAGES.includes(language),
@@ -204,40 +234,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const { copy, didCopy, isCopyAvailable } = useCopy();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-
-  // Debounced onChange to reduce parent updates during typing
-  const debouncedOnChange = useMemo(
-    () =>
-      debounce((val: string) => {
-        const callback = latestValuesRef.current.onChange;
-        if (!callback) {
-          return;
-        }
-        callback(val);
-      }, 100),
-    [],
-  );
-
-  // Sync external value changes to internal state and cancel pending debounces
-  useEffect(() => {
-    setInternalValue(value);
-    latestValuesRef.current.internalValue = value;
-    latestValuesRef.current.value = value;
-    debouncedOnChange.cancel();
-  }, [value, debouncedOnChange]);
-
-  // Flush pending changes on unmount to prevent data loss
-  useEffect(() => {
-    return () => {
-      debouncedOnChange.cancel();
-      const { internalValue: latest, value: prop, onChange: cb } =
-        latestValuesRef.current;
-      // If there are unflushed changes, send them to parent
-      if (cb && latest !== prop) {
-        cb(latest);
-      }
-    };
-  }, [debouncedOnChange]);
 
   // Custom theme to remove dotted border and add focus styles
   const extensions = useMemo(() => {
@@ -299,27 +295,6 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
     }),
     [showLineNumbers, readOnly],
   );
-
-  // Handle internal value changes
-  const handleChange = useCallback(
-    (val: string) => {
-      setInternalValue(val);
-      latestValuesRef.current.internalValue = val;
-      if (latestValuesRef.current.onChange) {
-        debouncedOnChange(val);
-      }
-    },
-    [debouncedOnChange],
-  );
-
-  // Handle blur: cancel debounce and flush immediately
-  const handleBlur = useCallback(() => {
-    debouncedOnChange.cancel();
-    const latest = latestValuesRef.current.internalValue;
-    latestValuesRef.current.value = latest;
-    onChange?.(latest);
-    onBlur?.();
-  }, [onChange, onBlur, debouncedOnChange]);
 
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
