@@ -20,6 +20,8 @@ env:
 
 jobs:
   check-version-consistency:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -123,6 +125,8 @@ jobs:
     uses: ./.github/workflows/python-client-build.yml
 
   check-node-bindings:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -171,6 +175,8 @@ jobs:
         run: pnpm --filter=tensorzero-node run check-exports
 
   build-windows:
+    permissions:
+      contents: read
     runs-on: windows-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -196,6 +202,8 @@ jobs:
         run: cargo build --workspace
 
   validate:
+    permissions:
+      contents: read
     runs-on: namespace-profile-tensorzero-32x64
 
     timeout-minutes: 30
@@ -417,6 +425,8 @@ jobs:
 
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
+    permissions:
+      contents: read
     needs: [build-gateway-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
@@ -601,6 +611,8 @@ jobs:
 
   # Run 'cargo test-optimization' against mock-inference-provider
   mock-optimization-tests:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     env:
@@ -699,6 +711,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
+    permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
