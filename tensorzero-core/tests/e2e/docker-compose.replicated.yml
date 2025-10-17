@@ -125,6 +125,27 @@ services:
       - "5778:5778"
       - "9411:9411"
 
+  gateway-postgres-migrations:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+      ]
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_period: 5s
+
   # This is not a gateway to use but rather one that just sets up migrations for the ClickHouse db
   # If you need to add fixtures that reference newly-added database columns, you'll need to temporarily
   # bump this to a locally-built image (or published 'sha' tag)
