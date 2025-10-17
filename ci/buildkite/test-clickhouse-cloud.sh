@@ -45,6 +45,7 @@ cleanup_database() {
             echo "Cleanup completed for database: $DB_NAME"
         fi
     fi
+    docker compose -f tensorzero-core/tests/e2e/docker-compose.yml down -v || true
     cat e2e_logs.txt || echo "e2e logs don't exist"
 }
 
@@ -75,7 +76,13 @@ source $HOME/.local/bin/env
 curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ~/.cargo/bin
 uv run ./ui/fixtures/download-fixtures.py
 ./ci/delete-clickhouse-dbs.sh
+
+# Start postgres service for migrations
+docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
+export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
+
 cargo build-e2e
+cargo run-e2e -- --run-postgres-migrations
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
     max_attempts=90
