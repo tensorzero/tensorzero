@@ -195,8 +195,33 @@ jobs:
       - name: Build Rust
         run: cargo build --workspace
 
+  lint-rust:
+    runs-on: namespace-profile-tensorzero-8x16
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # We install the latest rust when running lints, since we don't care if older rust versions lint successfully.
+      # This avoids the need to deal with linter bugs in older rust versions.
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable && rustup default stable; then
+              break
+            fi
+          done
+        shell: bash
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-hack
+
+      - name: Lint (Rust)
+        run: |
+          cargo fmt -- --check
+          cargo hack clippy --all-targets --each-feature -- -D warnings
+
   validate:
-    runs-on: namespace-profile-tensorzero-32x64
+    runs-on: ubuntu-latest
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
@@ -711,6 +736,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         validate,
+        lint-rust,
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,
