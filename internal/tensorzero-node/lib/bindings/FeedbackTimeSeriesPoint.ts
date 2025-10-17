@@ -6,4 +6,7 @@ export type FeedbackTimeSeriesPoint = {
   mean: number;
   variance: number;
   count: bigint;
+  alpha: number;
+  cs_lower: number;
+  cs_upper: number;
 };
