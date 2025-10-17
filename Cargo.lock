@@ -5797,7 +5797,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.10.3"
+version = "2025.10.4"
 dependencies = [
  "hex",
  "secrecy",
