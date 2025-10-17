@@ -150,6 +150,7 @@ class UnknownContentBlock(ContentBlock):
 
 class FinishReason(str, Enum):
     STOP = "stop"
+    STOP_SEQUENCE = "stop_sequence"
     LENGTH = "length"
     TOOL_CALL = "tool_call"
     CONTENT_FILTER = "content_filter"
