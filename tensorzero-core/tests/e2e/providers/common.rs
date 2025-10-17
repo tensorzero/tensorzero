@@ -7696,7 +7696,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
     if provider.model_provider_name == "sglang" {
         // Sglang likes to emit lots of duplicate tool calls
         assert!(
-            tool_call_blocks.len() >= 1,
+            !tool_call_blocks.is_empty(),
             "Expected at least one tool call"
         );
     } else {
@@ -8069,7 +8069,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
     // Sglang likes to emit lots of tool calls
     if provider.model_provider_name == "sglang" {
         assert!(
-            tool_call_blocks.len() >= 1,
+            !tool_call_blocks.is_empty(),
             "Expected at least one tool call"
         );
     } else {
