@@ -27,6 +27,7 @@ import type {
   TimeWindow,
   GetDatapointParams,
   Datapoint,
+  GetFeedbackTimeseriesParams,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -278,21 +279,11 @@ export class DatabaseClient {
   }
 
   async getFeedbackTimeseries(
-    functionName: string,
-    metricName: string,
-    variantNames: string[] | undefined,
-    intervalMinutes: number,
-    maxPeriods: number,
+    params: GetFeedbackTimeseriesParams,
   ): Promise<FeedbackTimeSeriesPoint[]> {
-    const params = safeStringify({
-      function_name: functionName,
-      metric_name: metricName,
-      variant_names: variantNames,
-      interval_minutes: intervalMinutes,
-      max_periods: maxPeriods,
-    });
+    const paramsString = safeStringify(params);
     const feedbackTimeseriesString =
-      await this.nativeDatabaseClient.getFeedbackTimeseries(params);
+      await this.nativeDatabaseClient.getFeedbackTimeseries(paramsString);
     return JSON.parse(feedbackTimeseriesString) as FeedbackTimeSeriesPoint[];
   }
 
