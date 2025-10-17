@@ -514,8 +514,6 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                 return configuredVariants?.[editingVariant.name];
               case "edited":
                 return editingVariant.config;
-              default:
-                return undefined;
             }
           })();
           if (!variantInfo) {

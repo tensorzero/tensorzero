@@ -3,9 +3,11 @@ use std::{
     collections::{BTreeMap, HashMap},
     sync::Arc,
 };
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{
+    db::{postgres::PostgresConnectionInfo, SelectQueries},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     experimentation::get_uniform_value,
     variant::VariantInfo,
@@ -121,7 +123,13 @@ impl StaticWeightsConfig {
 }
 
 impl VariantSampler for StaticWeightsConfig {
-    async fn setup(&self) -> Result<(), Error> {
+    async fn setup(
+        &self,
+        _db: Arc<dyn SelectQueries + Send + Sync>,
+        _function_name: &str,
+        _postgres: &PostgresConnectionInfo,
+        _cancel_token: CancellationToken,
+    ) -> Result<(), Error> {
         // We just assert that all weights are non-negative
         for weight in self.candidate_variants.values() {
             if *weight < 0.0 {
@@ -142,6 +150,7 @@ impl VariantSampler for StaticWeightsConfig {
         function_name: &str,
         episode_id: Uuid,
         active_variants: &mut BTreeMap<String, Arc<VariantInfo>>,
+        _postgres: &PostgresConnectionInfo,
     ) -> Result<(String, Arc<VariantInfo>), Error> {
         let uniform_sample = get_uniform_value(function_name, &episode_id);
         let selected_variant_name = sample_static_weights(
@@ -161,6 +170,13 @@ impl VariantSampler for StaticWeightsConfig {
                 })
             })
     }
+
+    fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
+        self.candidate_variants
+            .keys()
+            .map(String::as_str)
+            .chain(self.fallback_variants.iter().map(String::as_str))
+    }
 }
 
 #[cfg(test)]
@@ -169,6 +185,7 @@ mod tests {
 
     use super::*;
     use crate::config::{Config, ConfigFileGlob, ErrorContext, SchemaData, TimeoutsConfig};
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::variant::chat_completion::ChatCompletionConfig;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
     use tempfile::NamedTempFile;
@@ -211,9 +228,10 @@ mod tests {
         );
         let mut active_variants = variants_map;
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let (variant_name, _) = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await
             .unwrap();
         assert!(["A", "B", "C"].contains(&variant_name.as_str()));
@@ -231,9 +249,10 @@ mod tests {
         );
         let mut active_variants = variants_map;
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let (variant_name, _) = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await
             .unwrap();
         assert!(["B", "C"].contains(&variant_name.as_str())); // Should pick from fallback variants
@@ -247,9 +266,10 @@ mod tests {
         };
         let mut active_variants = BTreeMap::new();
         let episode_id = Uuid::now_v7();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         let result = config
-            .sample("test_function", episode_id, &mut active_variants)
+            .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await;
         assert!(result.is_err());
     }
@@ -267,6 +287,7 @@ mod tests {
 
         let sample_size = 10_000;
         let mut counts = std::collections::HashMap::new();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         // Sample many times to build distribution
         for i in 0..sample_size {
@@ -274,7 +295,7 @@ mod tests {
             // Use different episode IDs to get different samples
             let episode_id = Uuid::from_u128(i as u128);
             let (variant_name, _) = config
-                .sample("test_function", episode_id, &mut active_variants)
+                .sample("test_function", episode_id, &mut active_variants, &postgres)
                 .await
                 .unwrap();
             *counts.entry(variant_name).or_insert(0) += 1;
@@ -339,13 +360,24 @@ mod tests {
         .await
         .unwrap();
         let experiment = config.functions.get("test").unwrap().experimentation();
+        let postgres = PostgresConnectionInfo::new_disabled();
         // no-op but we call it for completeness
-        experiment.setup().await.unwrap();
+        experiment
+            .setup(
+                Arc::new(ClickHouseConnectionInfo::new_disabled())
+                    as Arc<dyn SelectQueries + Send + Sync>,
+                "test",
+                &postgres,
+                CancellationToken::new(),
+            )
+            .await
+            .unwrap();
 
         // Test sampling distribution with many samples
         let sample_size = 10_000;
         let mut first_sample_counts = std::collections::HashMap::new();
         let mut third_sample_counts = std::collections::HashMap::new();
+        let postgres = PostgresConnectionInfo::new_disabled();
 
         for i in 0..sample_size {
             let mut variants = BTreeMap::from([
@@ -377,7 +409,7 @@ mod tests {
 
             // Sample first variant (should be from candidate variants: foo or bar)
             let (first_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
             *first_sample_counts
@@ -386,7 +418,7 @@ mod tests {
 
             // Sample second variant
             let (second_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
 
@@ -394,7 +426,7 @@ mod tests {
 
             // Sample third variant (should always be baz since it's the fallback)
             let (third_sample_name, _) = experiment
-                .sample("test", episode_id, &mut variants)
+                .sample("test", episode_id, &mut variants, &postgres)
                 .await
                 .unwrap();
             *third_sample_counts.entry(third_sample_name).or_insert(0) += 1;
@@ -419,6 +451,9 @@ mod tests {
     }
 
     fn create_test_variants(names: &[&str]) -> BTreeMap<String, Arc<VariantInfo>> {
+        use crate::config::{ErrorContext, SchemaData};
+        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
+
         names
             .iter()
             .map(|&name| {

@@ -13,7 +13,7 @@ use std::{collections::HashMap, path::PathBuf, sync::Arc, time::Duration};
 use evaluations::{run_evaluation_core_streaming, EvaluationCoreArgs};
 use futures::StreamExt;
 use pyo3::{
-    exceptions::{PyStopAsyncIteration, PyStopIteration, PyValueError},
+    exceptions::{PyDeprecationWarning, PyStopAsyncIteration, PyStopIteration, PyValueError},
     ffi::c_str,
     prelude::*,
     types::{PyDict, PyList, PyString, PyType},
@@ -882,12 +882,44 @@ impl TensorZeroGateway {
         }
     }
 
-    ///  Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
     /// :param datapoints: A list of datapoints to insert.
     /// :return: None.
     #[pyo3(signature = (*, dataset_name, datapoints))]
+    fn create_datapoints(
+        this: PyRef<'_, Self>,
+        dataset_name: String,
+        datapoints: Vec<Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyList>> {
+        let client = this.as_super().client.clone();
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(this.py(), dp))
+            .collect::<Result<Vec<_>, _>>()?;
+        let params = InsertDatapointParams { datapoints };
+        let fut = client.create_datapoints(dataset_name, params);
+        let self_module = PyModule::import(this.py(), "uuid")?;
+        let uuid = self_module.getattr("UUID")?.unbind();
+        let res =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        let uuids = res
+            .iter()
+            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
+            .collect::<Result<Vec<_>, _>>()?;
+        PyList::new(this.py(), uuids).map(Bound::unbind)
+    }
+
+    /// DEPRECATED: Use `create_datapoints` instead.
+    ///
+    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset to insert the datapoints into.
+    /// :param datapoints: A list of datapoints to insert.
+    /// :return: None.
+    #[pyo3(signature = (*, dataset_name, datapoints))]
+    #[pyo3(warn(message = "Please use `create_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.", category = PyDeprecationWarning))]
     fn bulk_insert_datapoints(
         this: PyRef<'_, Self>,
         dataset_name: String,
@@ -1628,12 +1660,50 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    ///  Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to insert the datapoints into.
     /// :param datapoints: A list of datapoints to insert.
     /// :return: None.
     #[pyo3(signature = (*, dataset_name, datapoints))]
+    fn create_datapoints<'a>(
+        this: PyRef<'a, Self>,
+        dataset_name: String,
+        datapoints: Vec<Bound<'a, PyAny>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(this.py(), dp))
+            .collect::<Result<Vec<_>, _>>()?;
+        let params = InsertDatapointParams { datapoints };
+        let self_module = PyModule::import(this.py(), "uuid")?;
+        let uuid = self_module.getattr("UUID")?.unbind();
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.create_datapoints(dataset_name, params).await;
+            Python::attach(|py| match res {
+                Ok(uuids) => Ok(PyList::new(
+                    py,
+                    uuids
+                        .iter()
+                        .map(|id| uuid.call(py, (id.to_string(),), None))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )?
+                .unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// DEPRECATED: Use `create_datapoints` instead.
+    ///
+    /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset to insert the datapoints into.
+    /// :param datapoints: A list of datapoints to insert.
+    /// :return: None.
+    #[pyo3(signature = (*, dataset_name, datapoints))]
+    #[pyo3(warn(message = "Please use `create_datapoints` instead of `bulk_insert_datapoints`. In a future release, `bulk_insert_datapoints` will be removed.", category = PyDeprecationWarning))]
     fn bulk_insert_datapoints<'a>(
         this: PyRef<'a, Self>,
         dataset_name: String,

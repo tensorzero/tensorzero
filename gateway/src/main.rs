@@ -214,13 +214,8 @@ async fn main() {
         .expect_pretty("Failed to initialize AppState");
 
     // Create a new observability_enabled_pretty string for the log message below
-    let postgres_enabled_pretty = match &gateway_handle.app_state.postgres_connection_info {
-        PostgresConnectionInfo::Disabled => "disabled".to_string(),
-        PostgresConnectionInfo::Mock { healthy, .. } => {
-            format!("mocked (healthy={healthy})")
-        }
-        PostgresConnectionInfo::Enabled { .. } => "enabled".to_string(),
-    };
+    let postgres_enabled_pretty =
+        get_postgres_status_string(&gateway_handle.app_state.postgres_connection_info);
 
     // Set debug mode
     error::set_debug(config.gateway.debug).expect_pretty("Failed to set debug mode");
@@ -246,10 +241,15 @@ async fn main() {
         // Everything above this layer has OpenTelemetry tracing enabled
         // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
         // (the only response header is `traceresponse` for a completed trace)
-        .apply_otel_http_trace_layer()
+        .apply_otel_http_trace_layer(delayed_log_config.otel_tracer.clone())
         // Everything below the Otel layers does not have OpenTelemetry tracing enabled
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
+        .route(
+            "/datasets/{dataset_name}/datapoints",
+            post(endpoints::datasets::create_datapoints_handler),
+        )
+        // TODO(#3459): Deprecated in #3721. Remove in a future release.
         .route(
             "/datasets/{dataset_name}/datapoints/bulk",
             post(endpoints::datasets::bulk_insert_datapoints_handler),
@@ -410,6 +410,17 @@ async fn main() {
         tracing::info!("Shutting down OpenTelemetry exporter");
         tracer_wrapper.shutdown().await;
         tracing::info!("OpenTelemetry exporter shut down");
+    }
+}
+
+fn get_postgres_status_string(postgres: &PostgresConnectionInfo) -> String {
+    match postgres {
+        PostgresConnectionInfo::Disabled => "disabled".to_string(),
+        PostgresConnectionInfo::Enabled { .. } => "enabled".to_string(),
+        // Mock variant only exists in test builds, but the gateway binary should never use it
+        #[cfg(test)]
+        #[expect(unreachable_patterns)]
+        _ => "test".to_string(),
     }
 }
 

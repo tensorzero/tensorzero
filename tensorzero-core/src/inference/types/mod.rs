@@ -558,6 +558,7 @@ pub struct Thought {
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
     pub signature: Option<String>,
     /// When set, this 'Thought' block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
@@ -566,6 +567,7 @@ pub struct Thought {
         rename = "_internal_provider_type",
         skip_serializing_if = "Option::is_none"
     )]
+    #[ts(optional)]
     pub provider_type: Option<String>,
 }
 
@@ -1194,7 +1196,10 @@ pub struct JsonInferenceResult {
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct JsonInferenceOutput {
+    /// This is never omitted from the response even if it's None. A `null` value indicates no output from the model.
+    /// It's rare and unexpected from the model, but it's possible.
     pub raw: Option<String>,
+    /// This is never omitted from the response even if it's None.
     pub parsed: Option<Value>,
 }
 

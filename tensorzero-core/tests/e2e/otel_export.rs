@@ -1,4 +1,3 @@
-#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -6,6 +5,7 @@ use base64::prelude::*;
 use chrono::DateTime;
 use chrono::Utc;
 use http::StatusCode;
+use opentelemetry::KeyValue;
 use opentelemetry::SpanId;
 use opentelemetry::TraceId;
 use opentelemetry_sdk::trace::IdGenerator;
@@ -26,7 +26,7 @@ struct ExistingTraceData {
 
 #[tokio::test]
 async fn test_otel_export_trace_export_no_parent() {
-    test_otel_export_trace_export(None, None, Arc::new(Semaphore::new(1))).await;
+    test_otel_export_trace_export(None, None, None, Arc::new(Semaphore::new(1))).await;
 }
 
 #[tokio::test]
@@ -36,6 +36,7 @@ async fn test_otel_export_trace_export_with_parent() {
     let span_id = id_gen.new_span_id();
     test_otel_export_trace_export(
         Some(ExistingTraceData { trace_id, span_id }),
+        None,
         None,
         Arc::new(Semaphore::new(1)),
     )
@@ -49,12 +50,15 @@ async fn test_otel_export_trace_export_with_custom_header() {
     let mut futures = JoinSet::new();
     let num_tasks = 100;
     for _ in 0..num_tasks {
-        let random_id = Uuid::now_v7();
         futures.spawn(test_otel_export_trace_export(
             None,
             Some((
                 "TensorZero-OTLP-Traces-Extra-Header-x-dummy-tensorzero".to_string(),
-                random_id.to_string(),
+                Uuid::now_v7().to_string(),
+            )),
+            Some(KeyValue::new(
+                "my-custom-resource",
+                Uuid::now_v7().to_string(),
             )),
             semaphore.clone(),
         ));
@@ -99,8 +103,11 @@ async fn test_otel_export_http_error() {
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     let _response_json = response.json::<Value>().await.unwrap();
 
-    let (function_inference_span, span_by_id) =
-        get_tempo_spans(episode_id, start_time, &Semaphore::new(1)).await;
+    let TempoSpans {
+        target_span: function_inference_span,
+        span_by_id,
+        resources: _,
+    } = get_tempo_spans(episode_id, start_time, &Semaphore::new(1)).await;
 
     let parent_id = function_inference_span["parentSpanId"].as_str().unwrap();
     let parent_span = span_by_id.get(parent_id).unwrap();
@@ -128,11 +135,17 @@ async fn test_otel_export_http_error() {
     );
 }
 
+pub struct TempoSpans {
+    pub target_span: Value,
+    pub span_by_id: HashMap<String, Value>,
+    pub resources: Vec<Value>,
+}
+
 pub async fn get_tempo_spans(
     episode_id: Uuid,
     start_time: DateTime<Utc>,
     tempo_semaphore: &Semaphore,
-) -> (Value, HashMap<String, Value>) {
+) -> TempoSpans {
     // It takes some time for the span to show up in Tempo
     tokio::time::sleep(std::time::Duration::from_secs(25)).await;
 
@@ -174,8 +187,10 @@ pub async fn get_tempo_spans(
 
     let mut span_by_id = HashMap::new();
     let mut target_span = None;
+    let mut resources = Vec::new();
 
     for batch in trace_data["batches"].as_array().unwrap() {
+        resources.push(batch["resource"].clone());
         for scope_span in batch["scopeSpans"].as_array().unwrap() {
             for span in scope_span["spans"].as_array().unwrap() {
                 span_by_id.insert(span["spanId"].as_str().unwrap().to_string(), span.clone());
@@ -205,18 +220,20 @@ pub async fn get_tempo_spans(
             }
         }
     }
-    (
-        target_span.unwrap_or_else(|| {
+    TempoSpans {
+        target_span: target_span.unwrap_or_else(|| {
             panic!("No function_inference span found with matching episode: {episode_id}")
         }),
         span_by_id,
-    )
+        resources,
+    }
 }
 
 // TODO - investigate why this test is sometimes flaky when running locally
 async fn test_otel_export_trace_export(
     existing_trace_parent: Option<ExistingTraceData>,
     custom_header: Option<(String, String)>,
+    custom_resource: Option<KeyValue>,
     tempo_semaphore: Arc<Semaphore>,
 ) {
     let client = reqwest::Client::new();
@@ -247,6 +264,15 @@ async fn test_otel_export_trace_export(
     if let Some((custom_key, custom_value)) = &custom_header {
         builder = builder.header(custom_key, custom_value);
     }
+    if let Some(custom_resource) = &custom_resource {
+        builder = builder.header(
+            format!(
+                "tensorzero-otlp-traces-extra-resource-{}",
+                custom_resource.key
+            ),
+            custom_resource.value.to_string(),
+        );
+    }
 
     let existing_trace_header = existing_trace_parent
         // Version 00, with the 'sampled' flag set to 1
@@ -261,8 +287,30 @@ async fn test_otel_export_trace_export(
     // Check that the API response is ok
     assert_eq!(response.status(), StatusCode::OK);
     let _response_json = response.json::<Value>().await.unwrap();
-    let (function_inference_span, span_by_id) =
-        get_tempo_spans(episode_id, start_time, &tempo_semaphore).await;
+    let TempoSpans {
+        target_span: function_inference_span,
+        span_by_id,
+        resources,
+    } = get_tempo_spans(episode_id, start_time, &tempo_semaphore).await;
+
+    // Each tempo 'batch' has its own resources object
+    for batch_resources in resources {
+        let attrs: HashMap<&str, serde_json::Value> = batch_resources["attributes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| (a["key"].as_str().unwrap(), a["value"].clone()))
+            .collect();
+        assert_eq!(attrs["service.name"]["stringValue"], "tensorzero-gateway");
+        if let Some(custom_resource) = &custom_resource {
+            assert_eq!(
+                attrs[custom_resource.key.as_str()]["stringValue"]
+                    .as_str()
+                    .unwrap(),
+                custom_resource.value.to_string()
+            );
+        }
+    }
 
     // Just check a couple of spans - we already have more comprehensive tests that check the exact spans
     // send to the global `opentelemetry` exporter.

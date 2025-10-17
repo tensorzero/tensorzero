@@ -82,14 +82,14 @@ pub fn skip_credential_validation() -> bool {
 #[cfg_attr(test, ts(export))]
 pub struct Config {
     pub gateway: GatewayConfig,
-    pub models: ModelTable,                    // model name => model config
-    pub embedding_models: EmbeddingModelTable, // embedding model name => embedding model config
+    pub models: Arc<ModelTable>, // model name => model config
+    pub embedding_models: Arc<EmbeddingModelTable>, // embedding model name => embedding model config
     pub functions: HashMap<String, Arc<FunctionConfig>>, // function name => function config
-    pub metrics: HashMap<String, MetricConfig>, // metric name => metric config
+    pub metrics: HashMap<String, MetricConfig>,     // metric name => metric config
     pub tools: HashMap<String, Arc<StaticToolConfig>>, // tool name => tool config
     pub evaluations: HashMap<String, Arc<EvaluationConfig>>, // evaluation name => evaluation config
     #[serde(skip)]
-    pub templates: TemplateConfig<'static>,
+    pub templates: Arc<TemplateConfig<'static>>,
     pub object_store_info: Option<ObjectStoreInfo>,
     pub provider_types: ProviderTypesConfig,
     pub optimizers: HashMap<String, OptimizerInfo>,
@@ -691,12 +691,16 @@ impl Config {
         }
         let uninitialized_config = UninitializedConfig::try_from(table)?;
 
-        let templates = TemplateConfig::new();
+        let mut templates = TemplateConfig::new();
 
         let functions = uninitialized_config
             .functions
             .into_iter()
-            .map(|(name, config)| config.load(&name).map(|c| (name, Arc::new(c))))
+            .map(|(name, config)| {
+                config
+                    .load(&name, &uninitialized_config.metrics)
+                    .map(|c| (name, Arc::new(c)))
+            })
             .collect::<Result<HashMap<String, Arc<FunctionConfig>>, Error>>()?;
 
         let tools = uninitialized_config
@@ -768,13 +772,13 @@ impl Config {
 
         let mut config = Config {
             gateway: uninitialized_config.gateway.load()?,
-            models,
-            embedding_models,
+            models: Arc::new(models),
+            embedding_models: Arc::new(embedding_models),
             functions,
             metrics: uninitialized_config.metrics,
             tools,
             evaluations: HashMap::new(),
-            templates,
+            templates: Arc::new(TemplateConfig::new()), // Will be populated below
             object_store_info,
             provider_types: uninitialized_config.provider_types,
             optimizers,
@@ -815,9 +819,8 @@ impl Config {
         } else {
             None
         };
-        config
-            .templates
-            .initialize(template_paths, template_fs_base_path.as_deref())?;
+        templates.initialize(template_paths, template_fs_base_path.as_deref())?;
+        config.templates = Arc::new(templates.clone());
 
         // Validate the config
         config.validate().await?;
@@ -842,7 +845,7 @@ impl Config {
                 }
                 for variant in evaluation_function_config.variants().values() {
                     for template in variant.get_all_template_paths() {
-                        config.templates.add_template(
+                        templates.add_template(
                             template.path.get_template_key(),
                             template.contents.clone(),
                         )?;
@@ -851,9 +854,9 @@ impl Config {
                 evaluation_function_config
                     .validate(
                         &config.tools,
-                        &mut config.models,
+                        &config.models,
                         &config.embedding_models,
-                        &config.templates,
+                        &templates,
                         &evaluation_function_name,
                     )
                     .await?;
@@ -874,6 +877,7 @@ impl Config {
             }
         }
         config.evaluations = evaluations;
+        config.templates = Arc::new(templates);
 
         Ok(config)
     }
@@ -915,7 +919,7 @@ impl Config {
             function
                 .validate(
                     &self.tools,
-                    &mut self.models, // NOTE: in here there might be some models created using shorthand initialization
+                    &self.models,
                     &self.embedding_models,
                     &self.templates,
                     function_name,
@@ -1341,7 +1345,11 @@ impl SchemaData {
 }
 
 impl UninitializedFunctionConfig {
-    pub fn load(self, function_name: &str) -> Result<FunctionConfig, Error> {
+    pub fn load(
+        self,
+        function_name: &str,
+        metrics: &HashMap<String, MetricConfig>,
+    ) -> Result<FunctionConfig, Error> {
         match self {
             UninitializedFunctionConfig::Chat(params) => {
                 let schema_data = SchemaData::load(
@@ -1391,7 +1399,8 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(UninitializedExperimentationConfig::load)
+                    .map(|config| config.load(&variants, metrics))
+                    .transpose()?
                     .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Chat(FunctionConfigChat {
                     variants,
@@ -1484,7 +1493,8 @@ impl UninitializedFunctionConfig {
                 }
                 let experimentation = params
                     .experimentation
-                    .map(UninitializedExperimentationConfig::load)
+                    .map(|config| config.load(&variants, metrics))
+                    .transpose()?
                     .unwrap_or_else(|| ExperimentationConfig::legacy_from_variants_map(&variants));
                 Ok(FunctionConfig::Json(FunctionConfigJson {
                     variants,

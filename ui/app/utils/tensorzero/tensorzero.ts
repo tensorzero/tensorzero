@@ -90,10 +90,11 @@ export type ImageContent = z.infer<typeof ImageContentSchema>;
 /**
  * Unknown content type for model-specific content
  */
+// TODO(shuyangli): There's a lot of duplication between this and ui/app/utils/clickhouse/common.ts. We should get rid of all of them and use Rust-generated bindings.
 export const UnknownContentSchema = z.object({
   type: z.literal("unknown"),
   data: JsonValueSchema,
-  model_provider_name: z.string().nullable(),
+  model_provider_name: z.string().nullish(),
 });
 export type UnknownContent = z.infer<typeof UnknownContentSchema>;
 
@@ -259,15 +260,15 @@ export type ToolParams = z.infer<typeof ToolParamsSchema>;
 const BaseDatapointSchema = z.object({
   function_name: z.string(),
   id: z.string().uuid(),
-  episode_id: z.string().uuid().nullable(),
+  episode_id: z.string().uuid().nullish(),
   input: InputSchema,
   output: JsonValueSchema,
   tags: z.record(z.string()).optional(),
   auxiliary: z.string().optional(),
   is_custom: z.boolean(),
-  source_inference_id: z.string().uuid().nullable(),
-  name: z.string().nullable(),
-  staled_at: z.string().datetime().nullable(),
+  source_inference_id: z.string().uuid().nullish(),
+  name: z.string().nullish(),
+  staled_at: z.string().datetime().nullish(),
 });
 
 /**
@@ -491,6 +492,7 @@ export class TensorZeroClient {
     datasetName: string,
     datapoint: Datapoint,
   ): Promise<DatapointResponse> {
+    // TODO(#3921): Move to native Rust client.
     if (!datasetName || typeof datasetName !== "string") {
       throw new Error("Dataset name must be a non-empty string");
     }

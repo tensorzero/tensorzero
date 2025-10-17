@@ -1,7 +1,6 @@
-#![allow(clippy::print_stdout)]
 use std::collections::HashMap;
 
-use crate::providers::common::{E2ETestProvider, E2ETestProviders};
+use crate::providers::common::{E2ETestProvider, E2ETestProviders, ModelTestProvider};
 
 crate::generate_provider_tests!(get_providers);
 crate::generate_batch_inference_tests!(get_providers);
@@ -96,6 +95,12 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
+    let credential_fallbacks = vec![ModelTestProvider {
+        provider_type: "groq".to_string(),
+        model_info: HashMap::from([("model_name".to_string(), "qwen/qwen3-32b".to_string())]),
+        use_modal_headers: false,
+    }];
+
     E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
@@ -116,5 +121,6 @@ async fn get_providers() -> E2ETestProviders {
         pdf_inference: vec![],
         shorthand_inference: shorthand_providers,
         json_mode_off_inference: vec![],
+        credential_fallbacks,
     }
 }

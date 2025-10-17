@@ -177,7 +177,10 @@ pub struct FeedbackByVariant {
     pub count: u64,
 }
 
-impl<T: RateLimitQueries + HealthCheckable + Send + Sync> PostgresConnection for T {}
+impl<T: RateLimitQueries + ExperimentationQueries + HealthCheckable + Send + Sync>
+    PostgresConnection for T
+{
+}
 
 pub trait ExperimentationQueries {
     async fn check_and_set_variant_by_episode(

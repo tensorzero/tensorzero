@@ -581,6 +581,7 @@ pub async fn test_render_datapoints_no_function() {
         is_deleted: false,
         source_inference_id: None,
         staled_at: None,
+        updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
     })];
 
@@ -621,6 +622,7 @@ pub async fn test_render_datapoints_no_variant() {
         is_deleted: false,
         source_inference_id: None,
         staled_at: None,
+        updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
     })];
 
@@ -669,6 +671,7 @@ pub async fn test_render_datapoints_missing_variable() {
         is_deleted: false,
         source_inference_id: None,
         staled_at: None,
+        updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
     })];
 
@@ -712,6 +715,7 @@ pub async fn test_render_datapoints_normal() {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
         Datapoint::Json(JsonInferenceDatapoint {
@@ -739,6 +743,7 @@ pub async fn test_render_datapoints_normal() {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
         Datapoint::Chat(ChatInferenceDatapoint {
@@ -778,6 +783,7 @@ pub async fn test_render_datapoints_normal() {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
         Datapoint::Chat(ChatInferenceDatapoint {
@@ -820,6 +826,7 @@ pub async fn test_render_datapoints_normal() {
             is_deleted: false,
             source_inference_id: None,
             staled_at: None,
+            updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
     ];
@@ -1007,6 +1014,7 @@ pub async fn test_render_datapoints_template_no_schema() {
         is_deleted: false,
         source_inference_id: None,
         staled_at: None,
+        updated_at: "2025-10-13T20:17:36Z".to_string(),
         is_custom: false,
     })];
 

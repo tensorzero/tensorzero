@@ -524,6 +524,8 @@ mod tests {
             );
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         let handle = tokio::spawn(axum::serve(listener, app).into_future());
         (addr, handle)
     }

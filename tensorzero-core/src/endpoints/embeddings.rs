@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
+use tokio_util::task::TaskTracker;
 use tracing::instrument;
 
 use crate::{
@@ -36,6 +37,7 @@ pub async fn embeddings(
     http_client: &TensorzeroHttpClient,
     clickhouse_connection_info: ClickHouseConnectionInfo,
     postgres_connection_info: PostgresConnectionInfo,
+    deferred_tasks: TaskTracker,
     params: Params,
 ) -> Result<EmbeddingResponse, Error> {
     let span = tracing::Span::current();
@@ -65,16 +67,17 @@ pub async fn embeddings(
     };
     let dryrun = params.dryrun.unwrap_or(false);
     let clients = InferenceClients {
-        http_client,
-        credentials: &params.credentials,
-        cache_options: &(params.cache_options, dryrun).into(),
-        clickhouse_connection_info: &clickhouse_connection_info,
-        postgres_connection_info: &postgres_connection_info,
+        http_client: http_client.clone(),
+        credentials: Arc::new(params.credentials.clone()),
+        cache_options: (params.cache_options, dryrun).into(),
+        clickhouse_connection_info: clickhouse_connection_info.clone(),
+        postgres_connection_info: postgres_connection_info.clone(),
         // NOTE: we do not support tags for embeddings yet
         // we should fix this once the tags are implemented
-        tags: &HashMap::default(),
-        rate_limiting_config: &config.rate_limiting,
-        otlp_config: &config.gateway.export.otlp,
+        tags: Arc::new(HashMap::default()),
+        rate_limiting_config: Arc::new(config.rate_limiting.clone()),
+        otlp_config: config.gateway.export.otlp.clone(),
+        deferred_tasks,
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
@@ -130,11 +133,13 @@ mod tests {
 
         let provider_types = ProviderTypesConfig::default();
         let config = Config {
-            embedding_models: crate::embeddings::EmbeddingModelTable::new(
-                embedding_models,
-                Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
-            )
-            .unwrap(),
+            embedding_models: Arc::new(
+                crate::embeddings::EmbeddingModelTable::new(
+                    embedding_models,
+                    Arc::new(ProviderTypeDefaultCredentials::new(&provider_types)),
+                )
+                .unwrap(),
+            ),
             ..Default::default()
         };
 
@@ -158,6 +163,7 @@ mod tests {
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            tokio_util::task::TaskTracker::new(),
             params,
         )
         .await;
@@ -193,6 +199,7 @@ mod tests {
             &http_client,
             clickhouse_connection_info,
             PostgresConnectionInfo::Disabled,
+            tokio_util::task::TaskTracker::new(),
             params,
         )
         .await;

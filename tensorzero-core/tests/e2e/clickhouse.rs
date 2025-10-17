@@ -9,18 +9,13 @@ use async_trait::async_trait;
 use paste::paste;
 use secrecy::ExposeSecret;
 use serde_json::json;
-use tensorzero_core::config::BatchWritesConfig;
-use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
-use tensorzero_core::db::clickhouse::migration_manager::{
-    RunMigrationArgs, RunMigrationManagerArgs,
-};
-use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
-use tensorzero_core::error::{Error, ErrorDetails};
 use tokio::runtime::Handle;
 use tokio::time::sleep;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
+use tensorzero_core::config::BatchWritesConfig;
+use tensorzero_core::db::clickhouse::migration_manager::migration_trait::Migration;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::check_table_exists;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0000::Migration0000;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0002::Migration0002;
@@ -33,14 +28,16 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
-use tensorzero_core::db::SelectQueries;
-use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
-
 use tensorzero_core::db::clickhouse::migration_manager::{
     self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
+    RunMigrationArgs, RunMigrationManagerArgs,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
+use tensorzero_core::db::SelectQueries;
+use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tensorzero_core::error::{Error, ErrorDetails};
+use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -1042,6 +1039,8 @@ async fn test_concurrent_clickhouse_migrations() {
     let mut handles = Vec::with_capacity(num_concurrent_starts);
     for _ in 0..num_concurrent_starts {
         let clickhouse_clone = clickhouse.clone();
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         handles.push(tokio::spawn(async move {
             migration_manager::run(RunMigrationManagerArgs {
                 clickhouse: &clickhouse_clone,

@@ -1,4 +1,3 @@
-#![allow(clippy::print_stdout)]
 use std::{
     collections::HashMap,
     time::{Duration, SystemTime, UNIX_EPOCH},

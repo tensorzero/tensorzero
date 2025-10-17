@@ -28,7 +28,7 @@ use crate::{
         current_timestamp, Latency, ModelInferenceResponseWithMetadata, RequestMessage, Role, Usage,
     },
     model::ProviderConfig,
-    providers::openai::OpenAIProvider,
+    providers::openai::{OpenAIAPIType, OpenAIProvider},
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
@@ -58,8 +58,11 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
                 OpenAIKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
+                // TODO: handle the fact that there are also embeddings
+                OpenAIAPIType::ChatCompletions,
                 false,
-            )),
+                Vec::new(),
+            )?),
             #[cfg(any(test, feature = "e2e_tests"))]
             "dummy" => EmbeddingProviderConfig::Dummy(DummyProvider::new(model_name, None)?),
             _ => {
@@ -156,7 +159,7 @@ impl EmbeddingModelConfig {
         &self,
         request: &EmbeddingRequest,
         model_name: &str,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
     ) -> Result<EmbeddingModelResponse, Error> {
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_embedding_models = async {
@@ -170,12 +173,12 @@ impl EmbeddingModelConfig {
                     request,
                     model_name,
                     provider_name,
-                    otlp_config: clients.otlp_config,
+                    otlp_config: &clients.otlp_config,
                 };
                 // TODO: think about how to best handle errors here
                 if clients.cache_options.enabled.read() {
                     let cache_lookup = embedding_cache_lookup(
-                        clients.clickhouse_connection_info,
+                        &clients.clickhouse_connection_info,
                         &provider_request,
                         clients.cache_options.max_age_s,
                     )
@@ -203,7 +206,7 @@ impl EmbeddingModelConfig {
                             .into());
                             };
                             let _ = start_cache_write(
-                                clients.clickhouse_connection_info,
+                                &clients.clickhouse_connection_info,
                                 provider_request.get_cache_key()?,
                                 CacheData {
                                     output: EmbeddingCacheData {
@@ -562,18 +565,18 @@ impl EmbeddingProviderInfo {
     pub async fn embed(
         &self,
         request: &EmbeddingRequest,
-        clients: &InferenceClients<'_>,
+        clients: &InferenceClients,
         scope_info: &ScopeInfo<'_>,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
             .rate_limiting_config
-            .consume_tickets(clients.postgres_connection_info, scope_info, request)
+            .consume_tickets(&clients.postgres_connection_info, scope_info, request)
             .await?;
         let response_fut = self.inner.embed(
             request,
-            clients.http_client,
-            clients.credentials,
+            &clients.http_client,
+            &clients.credentials,
             model_provider_data,
         );
         let response = if let Some(timeout_ms) = self.timeout_ms {
@@ -592,7 +595,8 @@ impl EmbeddingProviderInfo {
         };
         let postgres_connection_info = clients.postgres_connection_info.clone();
         let resource_usage = response.resource_usage();
-        tokio::spawn(
+        // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
+        clients.deferred_tasks.spawn(
             async move {
                 if let Err(e) = ticket_borrow
                     .return_tickets(&postgres_connection_info, resource_usage)
@@ -809,17 +813,18 @@ mod tests {
                 &request,
                 "fallback",
                 &InferenceClients {
-                    http_client: &TensorzeroHttpClient::new().unwrap(),
-                    clickhouse_connection_info: &ClickHouseConnectionInfo::new_disabled(),
-                    postgres_connection_info: &PostgresConnectionInfo::Disabled,
-                    credentials: &InferenceCredentials::default(),
-                    cache_options: &CacheOptions {
+                    http_client: TensorzeroHttpClient::new().unwrap(),
+                    clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
+                    postgres_connection_info: PostgresConnectionInfo::Disabled,
+                    credentials: Arc::new(InferenceCredentials::default()),
+                    cache_options: CacheOptions {
                         max_age_s: None,
                         enabled: CacheEnabledMode::Off,
                     },
-                    tags: &Default::default(),
-                    rate_limiting_config: &Default::default(),
-                    otlp_config: &Default::default(),
+                    tags: Arc::new(Default::default()),
+                    rate_limiting_config: Arc::new(Default::default()),
+                    otlp_config: Default::default(),
+                    deferred_tasks: tokio_util::task::TaskTracker::new(),
                 },
             )
             .await;
@@ -845,11 +850,15 @@ mod tests {
         };
 
         let uninitialized_config = UninitializedEmbeddingProviderConfig {
-            config: crate::model::UninitializedProviderConfig::OpenAI {
+            config: UninitializedProviderConfig::OpenAI {
                 model_name: "text-embedding-ada-002".to_string(),
                 api_base: None,
-                api_key_location: Some(crate::model::CredentialLocation::None),
+                api_key_location: Some(crate::model::CredentialLocationWithFallback::Single(
+                    crate::model::CredentialLocation::None,
+                )),
                 api_type: Default::default(),
+                include_encrypted_reasoning: false,
+                provider_tools: Vec::new(),
             },
             timeout_ms: None,
             timeouts: TimeoutsConfig::default(),

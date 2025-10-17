@@ -81,6 +81,10 @@ pub enum TGICredentials {
     Static(SecretString),
     Dynamic(String),
     None,
+    WithFallback {
+        default: Box<TGICredentials>,
+        fallback: Box<TGICredentials>,
+    },
 }
 
 impl TryFrom<Credential> for TGICredentials {
@@ -92,6 +96,10 @@ impl TryFrom<Credential> for TGICredentials {
             Credential::Dynamic(key_name) => Ok(TGICredentials::Dynamic(key_name)),
             Credential::None => Ok(TGICredentials::None),
             Credential::Missing => Ok(TGICredentials::None),
+            Credential::WithFallback { default, fallback } => Ok(TGICredentials::WithFallback {
+                default: Box::new((*default).try_into()?),
+                fallback: Box::new((*fallback).try_into()?),
+            }),
             _ => Err(Error::new(ErrorDetails::Config {
                 message: "Invalid api_key_location for TGI provider".to_string(),
             })),
@@ -115,6 +123,16 @@ impl TGICredentials {
                     .into()
                 }))
                 .transpose()
+            }
+            TGICredentials::WithFallback { default, fallback } => {
+                // Try default first, fall back to fallback if it fails
+                default.get_api_key(dynamic_api_keys).or_else(|_| {
+                    tracing::info!(
+                        "Default credential for {} is unavailable, attempting fallback",
+                        PROVIDER_NAME
+                    );
+                    fallback.get_api_key(dynamic_api_keys)
+                })
             }
             TGICredentials::None => Ok(None),
         }
@@ -154,6 +172,8 @@ impl WrappedProvider for TGIProvider {
         raw_request: String,
         raw_response: String,
         latency: Latency,
+        _model_name: &str,
+        _provider_name: &str,
     ) -> Result<ProviderInferenceResponse, Error> {
         let response = serde_json::from_str(&raw_response).map_err(|e| {
             Error::new(ErrorDetails::InferenceServer {
@@ -239,6 +259,8 @@ impl InferenceProvider for TGIProvider {
                 raw_request,
                 raw_response,
                 latency,
+                model_provider_request.model_name,
+                model_provider_request.provider_name,
             )
         } else {
             Err(handle_tgi_error(
