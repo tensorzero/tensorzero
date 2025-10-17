@@ -346,9 +346,6 @@ impl SelectQueries for ClickHouseConnectionInfo {
         interval_minutes: u32,
         max_periods: u32,
     ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error> {
-        let escaped_function_name = escape_string_for_clickhouse_literal(&function_name);
-        let escaped_metric_name = escape_string_for_clickhouse_literal(&metric_name);
-
         // If variants are passed, build variant filter.
         // If None we don't filter at all;
         // If empty, we'll return an empty vector for consistency
@@ -410,7 +407,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 -- CTE 1: Aggregate ALL historical data into time periods (no time filter)
                 AggregatedFilteredFeedbackByVariantStatistics AS (
                     SELECT
-                        toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE AS period_end,
+                        toStartOfInterval(minute, INTERVAL {{interval_minutes:UInt32}} MINUTE) + INTERVAL {{interval_minutes:UInt32}} MINUTE AS period_end,
                         variant_name,
 
                         -- Apply -MergeState combinator to merge and keep as state for later merging
@@ -421,8 +418,8 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     FROM FeedbackByVariantStatistics
 
                     WHERE
-                        function_name = '{escaped_function_name}'
-                        AND metric_name = '{escaped_metric_name}'
+                        function_name = {{function_name:String}}
+                        AND metric_name = {{metric_name:String}}
                         {variant_filter}
 
                     GROUP BY
@@ -485,7 +482,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     WHERE period_end >= (
                         SELECT max(period_end)
                         FROM AllCumulativeStats
-                    ) - INTERVAL {max_periods} * {interval_minutes} MINUTE
+                    ) - INTERVAL {{max_periods:UInt32}} * {{interval_minutes:UInt32}} MINUTE
                 )
 
             -- Final SELECT: Format the DateTime to string
@@ -503,7 +500,17 @@ impl SelectQueries for ClickHouseConnectionInfo {
             ",
         );
 
-        let response = self.run_query_synchronous_no_params(query).await?;
+        // Create parameters HashMap
+        let interval_minutes_str = interval_minutes.to_string();
+        let max_periods_str = max_periods.to_string();
+        let params = std::collections::HashMap::from([
+            ("function_name", function_name.as_str()),
+            ("metric_name", metric_name.as_str()),
+            ("interval_minutes", interval_minutes_str.as_str()),
+            ("max_periods", max_periods_str.as_str()),
+        ]);
+
+        let response = self.run_query_synchronous(query, &params).await?;
 
         // Deserialize the results into FeedbackTimeSeriesPoint
         response
