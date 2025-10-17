@@ -152,6 +152,8 @@ async fn test_cas_concurrency_and_atomicity(pool: PgPool) {
             let barrier_clone = barrier.clone();
             let variant_name = format!("concurrent_variant_{i}");
 
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+            #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 // Wait for all tasks to be ready for maximum contention
                 barrier_clone.wait().await;
@@ -324,6 +326,8 @@ async fn test_cas_stress_test(pool: PgPool) {
                 let function_name = function_name.clone();
                 let variant_name = format!("stress_var_{ep_idx}_{fn_idx}_{op_num}");
 
+                // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+                #[expect(clippy::disallowed_methods)]
                 let handle = tokio::spawn(async move {
                     let result = conn_clone
                         .check_and_set_variant_by_episode(episode_id, &function_name, &variant_name)

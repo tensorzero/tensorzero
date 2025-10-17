@@ -8,14 +8,15 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::{
     ContentBlockOutput, ContentBlockOutputType, FinishReason, FunctionConfigType, InferenceConfig,
     Latency, ModelInferenceResponse, ModelInferenceResponseWithMetadata, ProviderInferenceResponse,
-    ProviderInferenceResponseArgs, RequestMessage, Text, Thought, ToolCall, Usage,
+    ProviderInferenceResponseArgs, RequestMessage, Text, Thought, ThoughtSummaryBlock, ToolCall,
+    Usage,
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::tool::{ToolCallChunk, ToolCallConfig};
 use futures::stream::Peekable;
 use futures::Stream;
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -53,6 +54,9 @@ pub struct ThoughtChunk {
     pub id: String,
     pub text: Option<String>,
     pub signature: Option<String>,
+    pub summary_id: Option<String>,
+    pub summary_text: Option<String>,
+
     /// See `Thought.provider_type`
     #[serde(
         rename = "_internal_provider_type",
@@ -262,6 +266,12 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         .latency();
     // We'll take the finish reason from the last chunk
     let mut finish_reason: Option<FinishReason> = None;
+
+    // Maps a chunk id to a map of summary ids to summary texts
+    // This is used to build up a thought summary list for each thought,
+    // which is used to construct the final 'summary' field on Thought.
+    let mut thought_summaries: IndexMap<String, IndexSet<String>> = IndexMap::new();
+
     for chunk in value {
         if let Some(chunk_usage) = chunk.usage() {
             usage.input_tokens = usage.input_tokens.saturating_add(chunk_usage.input_tokens);
@@ -295,15 +305,23 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                             );
                         }
                         ContentBlockChunk::Thought(thought) => {
+                            let ThoughtChunk {
+                                id,
+                                text,
+                                signature,
+                                summary_id,
+                                summary_text,
+                                provider_type,
+                            } = thought;
                             // We check for both 'text' and 'signature', in case a provider produces
                             // both in the same chunk.
                             // These two cases update different fields ('text' vs 'signature') on the
                             // thought with id 'thought.id' - this is how providers attach a signature
                             // to a thought.
-                            if let Some(text) = thought.text {
+                            if let Some(text) = text {
                                 handle_textual_content_block(
                                     &mut blocks,
-                                    (ContentBlockOutputType::Thought, thought.id.clone()),
+                                    (ContentBlockOutputType::Thought, id.clone()),
                                     text,
                                     &mut ttft,
                                     chunk.latency,
@@ -311,7 +329,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                         ContentBlockOutput::Thought(Thought {
                                             text: Some(text),
                                             signature: None,
-                                            provider_type: thought.provider_type.clone(),
+                                            provider_type: provider_type.clone(),
+                                            summary: None,
                                         })
                                     },
                                     |block, text| {
@@ -321,10 +340,10 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                     },
                                 );
                             }
-                            if let Some(signature) = thought.signature {
+                            if let Some(signature) = signature {
                                 handle_textual_content_block(
                                     &mut blocks,
-                                    (ContentBlockOutputType::Thought, thought.id),
+                                    (ContentBlockOutputType::Thought, id.clone()),
                                     signature,
                                     &mut ttft,
                                     chunk.latency,
@@ -332,7 +351,8 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                         ContentBlockOutput::Thought(Thought {
                                             text: None,
                                             signature: Some(signature),
-                                            provider_type: thought.provider_type,
+                                            summary: None,
+                                            provider_type: provider_type.clone(),
                                         })
                                     },
                                     |block, signature| {
@@ -341,6 +361,75 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                                 Some(existing) => existing.push_str(signature),
                                                 None => {
                                                     thought.signature = Some(signature.to_string());
+                                                }
+                                            }
+                                        }
+                                    },
+                                );
+                            }
+                            if summary_id.is_some() && summary_text.is_none() {
+                                tracing::error!("Summary id is present but summary text is missing for thought {}", id);
+                            }
+                            if summary_id.is_none() && summary_text.is_some() {
+                                tracing::error!("Summary text is present but summary id is missing for thought {}", id);
+                            }
+                            if let (Some(summary_id), Some(summary_text)) =
+                                (summary_id, summary_text)
+                            {
+                                // Determine the index to use for our thought summary id
+                                // The string ids are mapped to indices in the order that we first encounter them.
+                                // There's an edge case here - if see a chunk with summary id "1", then "0",
+                                // then the concatenated summary with id "1" will come first in the array
+                                // (even though the underlying provider was presumably providing integer ids).
+                                // Thought summaries are not used by models in input, so this should be fine.
+                                let summary_set = thought_summaries.entry(id.clone()).or_default();
+                                let (index, _) = summary_set.insert_full(summary_id.clone());
+
+                                handle_textual_content_block(
+                                    &mut blocks,
+                                    (ContentBlockOutputType::Thought, id),
+                                    summary_text,
+                                    &mut ttft,
+                                    chunk.latency,
+                                    |summary_text| {
+                                        ContentBlockOutput::Thought(Thought {
+                                            text: None,
+                                            signature: None,
+                                            summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                                                text: summary_text,
+                                            }]),
+                                            provider_type,
+                                        })
+                                    },
+                                    |block, summary_text| {
+                                        if let ContentBlockOutput::Thought(thought) = block {
+                                            match &mut thought.summary {
+                                                Some(existing) => {
+                                                    // Create entries in the array for the missing index
+                                                    // (since we get the index from our `IndexSet`, there should be at most one missing entry)
+                                                    if index >= existing.len() {
+                                                        existing.resize(
+                                                            index + 1,
+                                                            ThoughtSummaryBlock::SummaryText {
+                                                                text: String::new(),
+                                                            },
+                                                        );
+                                                    }
+                                                    // Concatenate our summary text to the (possibly freshly created) summary entry.
+                                                    match &mut existing[index] {
+                                                        ThoughtSummaryBlock::SummaryText {
+                                                            text,
+                                                        } => {
+                                                            text.push_str(summary_text);
+                                                        }
+                                                    }
+                                                }
+                                                None => {
+                                                    thought.summary = Some(vec![
+                                                        ThoughtSummaryBlock::SummaryText {
+                                                            text: summary_text.to_string(),
+                                                        },
+                                                    ]);
                                                 }
                                             }
                                         }
@@ -421,6 +510,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 (ContentBlockOutputType::Thought, String::new()),
                                 ContentBlockOutput::Thought(Thought {
                                     text: Some(thought),
+                                    summary: None,
                                     signature: None,
                                     provider_type: None,
                                 }),
@@ -671,6 +761,7 @@ mod tests {
                 ContentBlockOutput::Thought(Thought {
                     text: Some(text),
                     signature: None,
+                    summary: None,
                     provider_type: None,
                 })
             },
@@ -690,6 +781,7 @@ mod tests {
                 text,
                 signature: _,
                 provider_type: _,
+                summary: _,
             }) => {
                 assert_eq!(text, &Some("Thinking...".to_string()));
             }
@@ -1083,6 +1175,7 @@ mod tests {
                         }),
                         ContentBlockChatOutput::Thought(Thought {
                             text: Some("Thought 2".to_string()),
+                            summary: None,
                             signature: None,
                             provider_type: None,
                         }),
@@ -1358,12 +1451,48 @@ mod tests {
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: Some("Some thou".to_string()),
                         id: "0".to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         signature: None,
                         provider_type: None,
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         text: Some("My other interleaved thought".to_string()),
                         id: "1".to_string(),
+                        summary_id: Some("abc".to_string()),
+                        summary_text: Some("Inline summary".to_string()),
+                        signature: None,
+                        provider_type: None,
+                    }),
+                    ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        id: "0".to_string(),
+                        summary_id: Some("abc".to_string()),
+                        summary_text: Some("First summary".to_string()),
+                        signature: None,
+                        provider_type: None,
+                    }),
+                    ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        id: "0".to_string(),
+                        summary_id: Some("2".to_string()),
+                        summary_text: Some("Second summary".to_string()),
+                        signature: None,
+                        provider_type: None,
+                    }),
+                    ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        id: "0".to_string(),
+                        summary_id: Some("abc".to_string()),
+                        summary_text: Some(" content.".to_string()),
+                        signature: None,
+                        provider_type: None,
+                    }),
+                    ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        id: "0".to_string(),
+                        summary_id: Some("2".to_string()),
+                        summary_text: Some(" message.".to_string()),
                         signature: None,
                         provider_type: None,
                     }),
@@ -1392,6 +1521,8 @@ mod tests {
                 content: vec![ContentBlockChunk::Thought(ThoughtChunk {
                     text: Some("ght".to_string()),
                     id: "0".to_string(),
+                    summary_id: None,
+                    summary_text: None,
                     signature: None,
                     provider_type: None,
                 })],
@@ -1460,11 +1591,22 @@ mod tests {
             }),
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("Some thought".to_string()),
+                summary: Some(vec![
+                    ThoughtSummaryBlock::SummaryText {
+                        text: "First summary content.".to_string(),
+                    },
+                    ThoughtSummaryBlock::SummaryText {
+                        text: "Second summary message.".to_string(),
+                    },
+                ]),
                 signature: None,
                 provider_type: None,
             }),
             ContentBlockChatOutput::Thought(Thought {
                 text: Some("My other interleaved thought".to_string()),
+                summary: Some(vec![ThoughtSummaryBlock::SummaryText {
+                    text: "Inline summary".to_string(),
+                }]),
                 signature: None,
                 provider_type: None,
             }),
@@ -2068,6 +2210,8 @@ mod tests {
             content: vec![ContentBlockChunk::Thought(ThoughtChunk {
                 id: "123".to_string(),
                 text: Some("thinking...".to_string()),
+                summary_id: None,
+                summary_text: None,
                 signature: None,
                 provider_type: None,
             })],
@@ -2097,6 +2241,8 @@ mod tests {
                 ContentBlockChunk::Thought(ThoughtChunk {
                     id: "789".to_string(),
                     text: Some("final thought".to_string()),
+                    summary_id: None,
+                    summary_text: None,
                     signature: None,
                     provider_type: None,
                 }),

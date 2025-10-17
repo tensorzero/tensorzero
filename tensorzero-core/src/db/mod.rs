@@ -4,12 +4,13 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
 
-use crate::db::clickhouse::dataset_queries::DatasetQueries;
+use crate::db::datasets::DatasetQueries;
 use crate::error::Error;
 use crate::rate_limiting::ActiveRateLimitKey;
 use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
 pub mod clickhouse;
+pub mod datasets;
 pub mod postgres;
 
 #[async_trait]

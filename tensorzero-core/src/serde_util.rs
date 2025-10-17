@@ -1,3 +1,4 @@
+use serde::de::IntoDeserializer;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
@@ -229,6 +230,32 @@ where
         value => Ok(Some(
             serde_json::from_value(value).map_err(serde::de::Error::custom)?,
         )),
+    }
+}
+
+/// Deserializes an `Option<Option<T>>`, distinguishing between an omitted field (`None`),
+/// an explicit JSON `null` (`Some(None)`), and a concrete value (`Some(Some(T))`).
+///
+/// This is useful for API structs where we need to distinguish between an omitted field, JSON null, and a concrete value.
+/// Use it like this:
+/// ```ignore
+/// #[derive(Deserialize)]
+/// struct ParamsStruct {
+///     #[serde(default, deserialize_with = "deserialize_double_option")]
+///     maybe_null_field: Option<Option<String>>,
+/// }
+/// ```
+pub fn deserialize_double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+    if value.is_null() {
+        Ok(Some(None))
+    } else {
+        let inner = T::deserialize(value.into_deserializer()).map_err(serde::de::Error::custom)?;
+        Ok(Some(Some(inner)))
     }
 }
 
@@ -692,5 +719,75 @@ mod tests {
         let json = r#"{"inner": ""}"#;
         let result: TestDefaultedOuter = serde_json::from_str(json).unwrap();
         assert_eq!(result.inner, TestStruct::default());
+    }
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct TestDoubleOptionStruct<T: for<'a> Deserialize<'a>> {
+        #[serde(default, deserialize_with = "deserialize_double_option")]
+        maybe_null_field: Option<Option<T>>,
+    }
+
+    #[derive(Debug, Default, Deserialize, PartialEq)]
+    struct TestDoubleOptionStructInnerStruct {
+        inner_field: i32,
+    }
+
+    #[derive(Debug, Default, Deserialize, PartialEq)]
+    struct TestDoubleOptionStructInnerOptionStruct {
+        #[serde(default)]
+        inner_option_field: Option<i32>,
+    }
+
+    #[test]
+    fn test_deserialize_double_option_for_omitted_field() {
+        let json = r"{}";
+        let result: TestDoubleOptionStruct<String> = serde_json::from_str(json).unwrap();
+        assert_eq!(result.maybe_null_field, None);
+    }
+
+    #[test]
+    fn test_deserialize_double_option_for_null_field() {
+        let json = r#"{"maybe_null_field": null}"#;
+        let result: TestDoubleOptionStruct<String> = serde_json::from_str(json).unwrap();
+        assert_eq!(result.maybe_null_field, Some(None));
+    }
+
+    #[test]
+    fn test_deserialize_double_option_for_concrete_value() {
+        let json = r#"{"maybe_null_field": "test"}"#;
+        let result: TestDoubleOptionStruct<String> = serde_json::from_str(json).unwrap();
+        assert_eq!(result.maybe_null_field, Some(Some("test".to_string())));
+    }
+
+    #[test]
+    fn test_deserialize_double_option_for_nested_struct_with_null() {
+        let json = r#"{"maybe_null_field": null}"#;
+        let result: TestDoubleOptionStruct<TestDoubleOptionStructInnerStruct> =
+            serde_json::from_str(json).unwrap();
+        assert_eq!(result.maybe_null_field, Some(None));
+    }
+
+    #[test]
+    fn test_deserialize_double_option_for_nested_struct() {
+        let json = r#"{"maybe_null_field": {"inner_field": 123}}"#;
+        let result: TestDoubleOptionStruct<TestDoubleOptionStructInnerStruct> =
+            serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.maybe_null_field,
+            Some(Some(TestDoubleOptionStructInnerStruct { inner_field: 123 }))
+        );
+    }
+
+    #[test]
+    fn test_deserialize_double_option_does_not_affect_inner_option() {
+        let json = r#"{"maybe_null_field": {"inner_option_field": null}}"#;
+        let result: TestDoubleOptionStruct<TestDoubleOptionStructInnerOptionStruct> =
+            serde_json::from_str(json).unwrap();
+        assert_eq!(
+            result.maybe_null_field,
+            Some(Some(TestDoubleOptionStructInnerOptionStruct {
+                inner_option_field: None
+            }))
+        );
     }
 }
