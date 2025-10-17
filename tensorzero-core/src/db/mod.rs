@@ -58,12 +58,28 @@ pub trait SelectQueries {
         function_name: &str,
         variant_names: Option<&Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, Error>;
+
+    /// Retrieves a time series of feedback statistics for a given metric and function,
+    /// optionally filtered by variant names. Returns cumulative statistics
+    /// (mean, variance, count) for each variant at each time point - each time point
+    /// includes all data from the beginning up to that point. This will return max_periods
+    /// complete time periods worth of data if present as well as the current time period's data.
+    /// So there are at most max_periods + 1 time periods worth of data returned.
+    async fn get_feedback_timeseries(
+        &self,
+        function_name: String,
+        metric_name: String,
+        variant_names: Option<Vec<String>>,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimeWindow {
+    Minute,
     Hour,
     Day,
     Week,
@@ -176,6 +192,41 @@ pub struct FeedbackByVariant {
     pub variance: f32,
     #[serde(deserialize_with = "deserialize_u64")]
     pub count: u64,
+}
+
+// make non-public, add larger struct with confidence sequence values
+#[derive(Clone, Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+pub struct InternalFeedbackTimeSeriesPoint {
+    // Time point up to which cumulative statistics are computed
+    pub period_end: DateTime<Utc>,
+    pub variant_name: String,
+    // Mean of feedback values up to time point `period_end`
+    pub mean: f32,
+    // Variance of feedback values up to time point `period_end`
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    // Number of feedback values up to time point `period_end`
+    pub count: u64,
+}
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct FeedbackTimeSeriesPoint {
+    // Time point up to which cumulative statistics are computed
+    pub period_end: DateTime<Utc>,
+    pub variant_name: String,
+    // Mean of feedback values up to time point `period_end`
+    pub mean: f32,
+    // Variance of feedback values up to time point `period_end`
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    // Number of feedback values up to time point `period_end`
+    pub count: u64,
+    // 1 - confidence level for the asymptotic confidence sequence
+    pub alpha: f32,
+    // Confidence sequence lower and upper bounds
+    pub cs_lower: f32,
+    pub cs_upper: f32,
 }
 
 impl<T: RateLimitQueries + ExperimentationQueries + HealthCheckable + Send + Sync>

@@ -67,6 +67,22 @@ impl DatabaseClient {
     }
 
     #[napi]
+    pub async fn get_feedback_timeseries(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            get_feedback_timeseries,
+            params,
+            GetFeedbackTimeseriesParams {
+                function_name,
+                metric_name,
+                variant_names,
+                time_window,
+                max_periods
+            }
+        )
+    }
+
+    #[napi]
     pub async fn count_rows_for_dataset(&self, params: String) -> Result<u32, napi::Error> {
         napi_call_no_deserializing!(&self, count_rows_for_dataset, params, DatasetQueryParams)
     }
@@ -154,4 +170,14 @@ struct QueryEpisodeTableParams {
     pub page_size: u32,
     pub before: Option<Uuid>,
     pub after: Option<Uuid>,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct GetFeedbackTimeseriesParams {
+    pub function_name: String,
+    pub metric_name: String,
+    pub variant_names: Option<Vec<String>>,
+    pub time_window: TimeWindow,
+    pub max_periods: u32,
 }
