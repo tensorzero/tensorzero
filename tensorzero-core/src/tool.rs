@@ -85,6 +85,18 @@ pub enum ProviderToolScope {
     },
 }
 
+impl ProviderToolScope {
+    fn matches(&self, scope_model_name: &str, scope_model_provider_name: &str) -> bool {
+        match self {
+            ProviderToolScope::Unscoped => true,
+            ProviderToolScope::ModelProvider {
+                model_name,
+                model_provider_name,
+            } => scope_model_name == model_name && scope_model_provider_name == model_provider_name,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -279,8 +291,20 @@ impl ToolCallConfig {
             ToolConfig::DynamicImplicit(_config) => false,
         })
     }
-}
 
+    pub fn get_scoped_provider_tools(
+        &self,
+        model_name: &str,
+        model_provider_name: &str,
+    ) -> Option<Vec<&ProviderTool>> {
+        self.provider_tools
+            .as_ref()?
+            .iter()
+            .filter(|t| t.scope.matches(model_name, model_provider_name))
+            .collect::<Vec<_>>()
+            .into()
+    }
+}
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
 #[cfg_attr(test, derive(ts_rs::TS))]
