@@ -365,6 +365,7 @@ impl RateLimitedResponse for EmbeddingProviderResponse {
         RateLimitResourceUsage {
             model_inferences: 1,
             tokens: self.usage.total_tokens() as u64,
+            is_estimate: false,
         }
     }
 }

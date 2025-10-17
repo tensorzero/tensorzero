@@ -38,8 +38,7 @@ use crate::providers::helpers::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::peek_first_chunk;
-use super::openai::convert_stream_error;
+use super::helpers::{convert_stream_error, peek_first_chunk};
 
 lazy_static! {
     static ref ANTHROPIC_BASE_URL: Url = {

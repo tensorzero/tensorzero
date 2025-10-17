@@ -56,8 +56,8 @@ use crate::providers::openai::responses::{
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-    warn_cannot_forward_url_if_missing_mime_type,
+    convert_stream_error, inject_extra_request_data_and_send,
+    inject_extra_request_data_and_send_eventsource, warn_cannot_forward_url_if_missing_mime_type,
 };
 
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -874,21 +874,6 @@ impl EmbeddingProvider for OpenAIProvider {
             ))
         }
     }
-}
-
-pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
-    let message = e.to_string();
-    let mut raw_response = None;
-    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
-        raw_response = resp.text().await.ok();
-    }
-    ErrorDetails::InferenceServer {
-        message,
-        raw_request: None,
-        raw_response,
-        provider_type,
-    }
-    .into()
 }
 
 pub fn stream_openai(

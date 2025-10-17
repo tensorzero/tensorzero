@@ -389,6 +389,11 @@ pub enum RateLimitResource {
 pub struct RateLimitResourceUsage {
     pub model_inferences: u64,
     pub tokens: u64,
+    /// If `true`, we were only able to estimate the usage (e.g. if an error occurred in an inference stream)
+    /// We'll still consume tokens/inferences if we went over the initial estimate, but we will *not*
+    /// return tickets if our initial estimate seems to be too high (since the error could have
+    /// hidden the actual usage).
+    pub is_estimate: bool,
 }
 
 impl RateLimitResourceUsage {
@@ -680,9 +685,13 @@ impl TicketBorrows {
                     requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
                 }
                 std::cmp::Ordering::Less => {
-                    // Borrowed exceeds actual usage, add the difference to returns
-                    let difference = receipt.tickets_consumed - actual_usage_this_request;
-                    returns.push(active_limit.get_return_tickets_request(difference)?);
+                    // If our returned usage is only an estimate, then don't return any tickets,
+                    // even if it looks like we over-borrowed.
+                    if !actual_usage.is_estimate {
+                        // Borrowed exceeds actual usage, add the difference to returns
+                        let difference = receipt.tickets_consumed - actual_usage_this_request;
+                        returns.push(active_limit.get_return_tickets_request(difference)?);
+                    }
                 }
                 std::cmp::Ordering::Equal => (),
             };
