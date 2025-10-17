@@ -103,7 +103,7 @@ impl ProviderToolScope {
 pub struct ProviderTool {
     #[serde(default)]
     scope: ProviderToolScope,
-    tool: Value,
+    pub tool: Value,
 }
 
 impl std::fmt::Display for ProviderTool {
@@ -296,13 +296,16 @@ impl ToolCallConfig {
         &self,
         model_name: &str,
         model_provider_name: &str,
-    ) -> Option<Vec<&ProviderTool>> {
+    ) -> Vec<&ProviderTool> {
         self.provider_tools
-            .as_ref()?
-            .iter()
-            .filter(|t| t.scope.matches(model_name, model_provider_name))
-            .collect::<Vec<_>>()
-            .into()
+            .as_ref()
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter(|t| t.scope.matches(model_name, model_provider_name))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
