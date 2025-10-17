@@ -159,7 +159,7 @@ pub struct DynamicImplicitToolConfig {
 #[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
-
+    pub provider_tools: Option<Vec<ProviderTool>>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
 }
@@ -263,6 +263,7 @@ impl ToolCallConfig {
             Some(Self {
                 tools_available,
                 tool_choice,
+                provider_tools: dynamic_tool_params.provider_tools,
                 parallel_tool_calls,
             })
         };
@@ -516,6 +517,7 @@ impl ToolCallConfig {
             tools_available: vec![implicit_tool_config],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
+            provider_tools: None,
         }
     }
 }
@@ -680,6 +682,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
+        provider_tools: None,
     }
 }
 
@@ -819,6 +822,8 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
                 .collect(),
             tool_choice: db_insert.tool_choice,
             parallel_tool_calls: db_insert.parallel_tool_calls,
+            provider_tools: None, // TODO(Viraj): address this once we start storing
+                                  // provider tools
         }
     }
 }
@@ -831,6 +836,7 @@ pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallCon
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
+        provider_tools: None,
     }
 }
 

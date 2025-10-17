@@ -1328,6 +1328,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         });
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
@@ -1352,6 +1353,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         });
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
@@ -1384,6 +1386,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         });
         let err = validate_parse_demonstration(
             function_config_chat_tools,
@@ -1407,6 +1410,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         });
         let err = validate_parse_demonstration(
             function_config_chat_tools,
@@ -1505,6 +1509,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         });
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await

@@ -1323,6 +1323,7 @@ mod tests {
             tools_available: vec![], // Invalid: should have exactly 1 implicit tool
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
 
         FunctionConfig::Json(FunctionConfigJson {
