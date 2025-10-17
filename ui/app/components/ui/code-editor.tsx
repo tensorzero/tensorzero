@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCopy } from "~/hooks/use-copy";
 import { useLocalStorage } from "~/hooks/use-local-storage";
 import CodeMirror from "@uiw/react-codemirror";
@@ -180,10 +180,15 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   // Internal state for semi-uncontrolled mode
   const [internalValue, setInternalValue] = useState(value);
 
-  // Sync external value changes to internal state
+  // Track latest values in ref to avoid stale closures in debounce/cleanup
+  const latestValuesRef = useRef<{
+    internalValue: string;
+    value: string;
+    onChange?: (next: string) => void;
+  }>({ internalValue, value, onChange });
   useEffect(() => {
-    setInternalValue(value);
-  }, [value]);
+    latestValuesRef.current = { internalValue, value, onChange };
+  }, [internalValue, value, onChange]);
 
   const [language, setLanguage] = useState<Language>(() =>
     autoDetectLanguage ? detectLanguage(value) : allowedLanguages[0],
@@ -203,24 +208,36 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   // Debounced onChange to reduce parent updates during typing
   const debouncedOnChange = useMemo(
     () =>
-      onChange
-        ? debounce((val: string) => {
-            onChange(val);
-          }, 100)
-        : undefined,
-    [onChange],
+      debounce((val: string) => {
+        const callback = latestValuesRef.current.onChange;
+        if (!callback) {
+          return;
+        }
+        callback(val);
+      }, 100),
+    [],
   );
+
+  // Sync external value changes to internal state and cancel pending debounces
+  useEffect(() => {
+    setInternalValue(value);
+    latestValuesRef.current.internalValue = value;
+    latestValuesRef.current.value = value;
+    debouncedOnChange.cancel();
+  }, [value, debouncedOnChange]);
 
   // Flush pending changes on unmount to prevent data loss
   useEffect(() => {
     return () => {
-      debouncedOnChange?.cancel();
+      debouncedOnChange.cancel();
+      const { internalValue: latest, value: prop, onChange: cb } =
+        latestValuesRef.current;
       // If there are unflushed changes, send them to parent
-      if (onChange && internalValue !== value) {
-        onChange(internalValue);
+      if (cb && latest !== prop) {
+        cb(latest);
       }
     };
-  }, [debouncedOnChange, onChange, internalValue, value]);
+  }, [debouncedOnChange]);
 
   // Custom theme to remove dotted border and add focus styles
   const extensions = useMemo(() => {
@@ -287,17 +304,22 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const handleChange = useCallback(
     (val: string) => {
       setInternalValue(val);
-      debouncedOnChange?.(val);
+      latestValuesRef.current.internalValue = val;
+      if (latestValuesRef.current.onChange) {
+        debouncedOnChange(val);
+      }
     },
     [debouncedOnChange],
   );
 
   // Handle blur: cancel debounce and flush immediately
   const handleBlur = useCallback(() => {
-    debouncedOnChange?.cancel();
-    onChange?.(internalValue);
+    debouncedOnChange.cancel();
+    const latest = latestValuesRef.current.internalValue;
+    latestValuesRef.current.value = latest;
+    onChange?.(latest);
     onBlur?.();
-  }, [internalValue, onChange, onBlur, debouncedOnChange]);
+  }, [onChange, onBlur, debouncedOnChange]);
 
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
