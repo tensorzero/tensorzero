@@ -80,6 +80,7 @@ uv run ./ui/fixtures/download-fixtures.py
 # Start postgres service for migrations
 docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait postgres
 export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
 cargo build-e2e
 cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
