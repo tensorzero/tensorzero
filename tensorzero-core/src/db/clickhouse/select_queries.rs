@@ -341,7 +341,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
             })
     }
 
-    async fn get_feedback_timeseries(
+    async fn get_cumulative_feedback_timeseries(
         &self,
         function_name: String,
         metric_name: String,

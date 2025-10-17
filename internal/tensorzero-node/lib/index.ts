@@ -27,7 +27,7 @@ import type {
   TimeWindow,
   GetDatapointParams,
   Datapoint,
-  GetFeedbackTimeseriesParams,
+  GetCumulativeFeedbackTimeseriesParams,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -278,12 +278,14 @@ export class DatabaseClient {
     return JSON.parse(bounds) as TableBoundsWithCount;
   }
 
-  async getFeedbackTimeseries(
-    params: GetFeedbackTimeseriesParams,
+  async getCumulativeFeedbackTimeseries(
+    params: GetCumulativeFeedbackTimeseriesParams,
   ): Promise<FeedbackTimeSeriesPoint[]> {
     const paramsString = safeStringify(params);
     const feedbackTimeseriesString =
-      await this.nativeDatabaseClient.getFeedbackTimeseries(paramsString);
+      await this.nativeDatabaseClient.getCumulativeFeedbackTimeseries(
+        paramsString,
+      );
     return JSON.parse(feedbackTimeseriesString) as FeedbackTimeSeriesPoint[];
   }
 

@@ -65,7 +65,7 @@ pub trait SelectQueries {
     /// includes all data from the beginning up to that point. This will return max_periods
     /// complete time periods worth of data if present as well as the current time period's data.
     /// So there are at most max_periods + 1 time periods worth of data returned.
-    async fn get_feedback_timeseries(
+    async fn get_cumulative_feedback_timeseries(
         &self,
         function_name: String,
         metric_name: String,
