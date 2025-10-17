@@ -26,6 +26,10 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // TODO: probably factor this out into common code as other queries will likely need similar logic
         // NOTE: this filter pattern will likely include some extra data since the current period is likely incomplete.
         let (time_grouping, time_filter) = match time_window {
+            TimeWindow::Minute => (
+                "toStartOfMinute(minute)".to_string(),
+                format!("minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"),
+            ),
             TimeWindow::Hour => (
                 "toStartOfHour(minute)".to_string(),
                 format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
@@ -86,6 +90,10 @@ impl SelectQueries for ClickHouseConnectionInfo {
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
         let time_filter = match time_window {
+            TimeWindow::Minute => {
+                "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MINUTE"
+                    .to_string()
+            }
             TimeWindow::Hour => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 HOUR"
                     .to_string()
@@ -343,9 +351,24 @@ impl SelectQueries for ClickHouseConnectionInfo {
         function_name: String,
         metric_name: String,
         variant_names: Option<Vec<String>>,
-        interval_minutes: u32,
+        time_window: TimeWindow,
         max_periods: u32,
     ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error> {
+        // Convert TimeWindow to ClickHouse INTERVAL syntax and interval functions
+        let (interval_str, interval_function) = match time_window {
+            TimeWindow::Minute => ("INTERVAL 1 MINUTE", "toIntervalMinute"),
+            TimeWindow::Hour => ("INTERVAL 1 HOUR", "toIntervalHour"),
+            TimeWindow::Day => ("INTERVAL 1 DAY", "toIntervalDay"),
+            TimeWindow::Week => ("INTERVAL 1 WEEK", "toIntervalWeek"),
+            TimeWindow::Month => ("INTERVAL 1 MONTH", "toIntervalMonth"),
+            TimeWindow::Cumulative => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cumulative time window is not supported for feedback timeseries"
+                        .to_string(),
+                }))
+            }
+        };
+
         // If variants are passed, build variant filter.
         // If None we don't filter at all;
         // If empty, we'll return an empty vector for consistency
@@ -370,7 +393,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                 -- CTE 1: Aggregate ALL historical data into time periods (no time filter)
                 AggregatedFilteredFeedbackByVariantStatistics AS (
                     SELECT
-                        toStartOfInterval(minute, INTERVAL {{interval_minutes:UInt32}} MINUTE) + INTERVAL {{interval_minutes:UInt32}} MINUTE AS period_end,
+                        toStartOfInterval(minute, {interval_str}) + {interval_str} AS period_end,
                         variant_name,
 
                         -- Apply -MergeState combinator to merge and keep as state for later merging
@@ -445,7 +468,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     WHERE period_end >= (
                         SELECT max(period_end)
                         FROM AllCumulativeStats
-                    ) - INTERVAL {{max_periods:UInt32}} * {{interval_minutes:UInt32}} MINUTE
+                    ) - {interval_function}({{max_periods:UInt32}})
                 )
 
             -- Final SELECT: Format the DateTime to string
@@ -464,12 +487,10 @@ impl SelectQueries for ClickHouseConnectionInfo {
         );
 
         // Create parameters HashMap
-        let interval_minutes_str = interval_minutes.to_string();
         let max_periods_str = max_periods.to_string();
         let params = std::collections::HashMap::from([
             ("function_name", function_name.as_str()),
             ("metric_name", metric_name.as_str()),
-            ("interval_minutes", interval_minutes_str.as_str()),
             ("max_periods", max_periods_str.as_str()),
         ]);
 

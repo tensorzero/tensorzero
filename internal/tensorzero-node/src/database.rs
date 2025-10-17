@@ -76,7 +76,7 @@ impl DatabaseClient {
                 function_name,
                 metric_name,
                 variant_names,
-                interval_minutes,
+                time_window,
                 max_periods
             }
         )
@@ -178,6 +178,6 @@ struct GetFeedbackTimeseriesParams {
     pub function_name: String,
     pub metric_name: String,
     pub variant_names: Option<Vec<String>>,
-    pub interval_minutes: u32,
+    pub time_window: TimeWindow,
     pub max_periods: u32,
 }

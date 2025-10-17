@@ -64,13 +64,12 @@ pub trait SelectQueries {
     /// includes all data from the beginning up to that point. This will return max_periods
     /// complete time periods worth of data if present as well as the current time period's data.
     /// So there are at most max_periods + 1 time periods worth of data returned.
-    /// The interval_minutes parameter determines the time interval in minutes (e.g., 1, 20, 60, 1440).
     async fn get_feedback_timeseries(
         &self,
         function_name: String,
         metric_name: String,
         variant_names: Option<Vec<String>>,
-        interval_minutes: u32,
+        time_window: TimeWindow,
         max_periods: u32,
     ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error>;
 }
@@ -79,6 +78,7 @@ pub trait SelectQueries {
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimeWindow {
+    Minute,
     Hour,
     Day,
     Week,
