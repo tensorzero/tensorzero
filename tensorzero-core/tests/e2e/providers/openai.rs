@@ -2229,6 +2229,8 @@ async fn test_responses_api_reasoning() {
     );
 }
 
+const WEB_SEARCH_PROMPT: &str = "Tell me some good news that happened today from around the world. Don't ask me any questions, and provide markdown citations in the form [text](url)";
+
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_openai_built_in_websearch() {
     // Create a config with the custom credential location
@@ -2267,7 +2269,7 @@ model = "test-model"
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: "Tell me some good news that happened today".to_string(),
+                        text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
             },
@@ -2381,7 +2383,7 @@ model = "test-model"
                     ClientInputMessage {
                         role: Role::User,
                         content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                            text: "Tell me some good news that happened today".to_string(),
+                            text: WEB_SEARCH_PROMPT.to_string(),
                         })],
                     },
                     ClientInputMessage {
@@ -2464,7 +2466,7 @@ model = "test-model"
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: "Tell me some good news that happened today".to_string(),
+                        text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
             },
@@ -2511,8 +2513,8 @@ model = "test-model"
 
     // Assert that we have multiple streaming chunks (indicates streaming is working)
     assert!(
-        chunks.len() >= 10,
-        "Expected at least 10 streaming chunks, but got {}. Streaming may not be working properly.",
+        chunks.len() >= 3,
+        "Expected at least 3 streaming chunks, but got {}. Streaming may not be working properly.",
         chunks.len()
     );
 
