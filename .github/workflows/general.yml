@@ -223,7 +223,7 @@ jobs:
 
       - name: Lint (Rust)
         run: |
-          cargo fmt -- --check
+          cargo fmt --all --check
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
   validate:
