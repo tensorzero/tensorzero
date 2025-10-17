@@ -24,7 +24,14 @@ import type {
   StaleDatapointParams,
   StaleDatasetResponse,
   TableBoundsWithCount,
+  FeedbackRow,
+  FeedbackBounds,
   TimeWindow,
+  QueryFeedbackBoundsByTargetIdParams,
+  QueryFeedbackByTargetIdParams,
+  CountFeedbackByTargetIdParams,
+  QueryDemonstrationFeedbackByInferenceIdParams,
+  DemonstrationFeedbackRow,
   GetDatapointParams,
   Datapoint,
   GetCumulativeFeedbackTimeseriesParams,
@@ -278,6 +285,37 @@ export class DatabaseClient {
     return JSON.parse(bounds) as TableBoundsWithCount;
   }
 
+  async queryFeedbackByTargetId(
+    params: QueryFeedbackByTargetIdParams,
+  ): Promise<FeedbackRow[]> {
+    const paramsString = safeStringify(params);
+    const feedbackString =
+      await this.nativeDatabaseClient.queryFeedbackByTargetId(paramsString);
+    return JSON.parse(feedbackString) as FeedbackRow[];
+  }
+
+  async queryDemonstrationFeedbackByInferenceId(
+    params: QueryDemonstrationFeedbackByInferenceIdParams,
+  ): Promise<DemonstrationFeedbackRow[]> {
+    const paramsString = safeStringify(params);
+    const feedbackString =
+      await this.nativeDatabaseClient.queryDemonstrationFeedbackByInferenceId(
+        paramsString,
+      );
+    return JSON.parse(feedbackString) as DemonstrationFeedbackRow[];
+  }
+
+  async queryFeedbackBoundsByTargetId(
+    params: QueryFeedbackBoundsByTargetIdParams,
+  ): Promise<FeedbackBounds> {
+    const paramsString = safeStringify(params);
+    const boundsString =
+      await this.nativeDatabaseClient.queryFeedbackBoundsByTargetId(
+        paramsString,
+      );
+    return JSON.parse(boundsString) as FeedbackBounds;
+  }
+
   async getCumulativeFeedbackTimeseries(
     params: GetCumulativeFeedbackTimeseriesParams,
   ): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
@@ -289,6 +327,15 @@ export class DatabaseClient {
     return JSON.parse(
       feedbackTimeseriesString,
     ) as CumulativeFeedbackTimeSeriesPoint[];
+  }
+
+  async countFeedbackByTargetId(
+    params: CountFeedbackByTargetIdParams,
+  ): Promise<number> {
+    const paramsString = safeStringify(params);
+    const countString =
+      await this.nativeDatabaseClient.countFeedbackByTargetId(paramsString);
+    return JSON.parse(countString) as number;
   }
 
   async countRowsForDataset(params: DatasetQueryParams): Promise<number> {

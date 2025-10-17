@@ -4,11 +4,9 @@ import {
 } from "~/utils/clickhouse/inference.server";
 import {
   pollForFeedbackItem,
-  queryDemonstrationFeedbackByInferenceId,
-  queryFeedbackBoundsByTargetId,
-  queryFeedbackByTargetId,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -78,14 +76,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   // --- Define all promises, conditionally choosing the feedback promise ---
 
+  const dbClient = await getNativeDatabaseClient();
+
   const inferencePromise = queryInferenceById(inference_id);
   const modelInferencesPromise =
     queryModelInferencesByInferenceId(inference_id);
-  const demonstrationFeedbackPromise = queryDemonstrationFeedbackByInferenceId({
-    inference_id,
-    page_size: 1, // Only need to know if *any* exist
-  });
-  const feedbackBoundsPromise = queryFeedbackBoundsByTargetId({
+  const demonstrationFeedbackPromise =
+    dbClient.queryDemonstrationFeedbackByInferenceId({
+      inference_id,
+      page_size: 1, // Only need to know if *any* exist
+    });
+  const feedbackBoundsPromise = dbClient.queryFeedbackBoundsByTargetId({
     target_id: inference_id,
   });
 
@@ -94,7 +95,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // In this case, we poll for the feedback item until it is found but eventually time out and log a warning.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(inference_id, newFeedbackId, pageSize)
-    : queryFeedbackByTargetId({
+    : dbClient.queryFeedbackByTargetId({
         target_id: inference_id,
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
