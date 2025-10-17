@@ -40,6 +40,7 @@ export * from "./CumulativeFeedbackTimeSeriesPoint";
 export * from "./Datapoint";
 export * from "./DatapointInsert";
 export * from "./DatapointKind";
+export * from "./DatapointMetadataUpdate";
 export * from "./DatasetDetailRow";
 export * from "./DatasetMetadata";
 export * from "./DatasetOutputSource";

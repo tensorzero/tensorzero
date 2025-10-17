@@ -5,13 +5,14 @@ use std::collections::HashMap;
 use std::num::ParseIntError;
 use uuid::Uuid;
 
-use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
+use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
-    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetDetailRow, DatasetMetadata, DatasetOutputSource, DatasetQueries, DatasetQueryParams,
-    GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatasetMetadataParams,
-    GetDatasetRowsParams, StaleDatapointParams,
+    AdjacentDatapointIds, ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams,
+    DatapointInsert, DatasetDetailRow, DatasetMetadata, DatasetOutputSource, DatasetQueries,
+    DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
+    GetDatasetMetadataParams, GetDatasetRowsParams, JsonInferenceDatapointInsert,
+    StaleDatapointParams,
 };
 use crate::endpoints::datasets::{validate_dataset_name, Datapoint, DatapointKind};
 use crate::error::{Error, ErrorDetails};
@@ -373,90 +374,8 @@ impl DatasetQueries for ClickHouseConnectionInfo {
     }
 
     async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error> {
-        match datapoint {
-            DatapointInsert::Chat(chat_datapoint) => {
-                validate_dataset_name(&chat_datapoint.dataset_name)?;
-
-                // Build the struct for the insert; to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
-                // tool_params in clickhouse is a non-null String
-                let tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_params {
-                    serde_json::to_value(tool_params)?
-                } else {
-                    json!("")
-                };
-                // Tags in clickhouse is a Non-null Map(String, String)
-                let tags_value = if let Some(tags) = &chat_datapoint.tags {
-                    serde_json::to_value(tags)?
-                } else {
-                    json!({})
-                };
-                let value = json!({
-                    "dataset_name": chat_datapoint.dataset_name,
-                    "function_name": chat_datapoint.function_name,
-                    "id": chat_datapoint.id,
-                    "name": chat_datapoint.name,
-                    "episode_id": chat_datapoint.episode_id,
-                    "input": chat_datapoint.input,
-                    "output": chat_datapoint.output,
-                    "tool_params": tool_params_value,
-                    "tags": tags_value,
-                    "auxiliary": chat_datapoint.auxiliary,
-                    "source_inference_id": chat_datapoint.source_inference_id,
-                    "is_custom": chat_datapoint.is_custom,
-                });
-
-                // Serialize to JSON string
-                let value_str = serde_json::to_string(&value).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: e.to_string(),
-                    })
-                })?;
-
-                self.write_non_batched::<()>(
-                    Rows::Serialized(&[value_str]),
-                    TableName::ChatInferenceDatapoint,
-                )
-                .await?;
-            }
-            DatapointInsert::Json(json_datapoint) => {
-                validate_dataset_name(&json_datapoint.dataset_name)?;
-
-                // Tags in clickhouse is a Non-null Map(String, String)
-                let tags_value = if let Some(tags) = &json_datapoint.tags {
-                    serde_json::to_value(tags)?
-                } else {
-                    json!({})
-                };
-                let value = json!({
-                    "dataset_name": json_datapoint.dataset_name,
-                    "function_name": json_datapoint.function_name,
-                    "id": json_datapoint.id,
-                    "name": json_datapoint.name,
-                    "episode_id": json_datapoint.episode_id,
-                    "input": json_datapoint.input,
-                    "output": json_datapoint.output,
-                    "output_schema": json_datapoint.output_schema,
-                    "tags": tags_value,
-                    "auxiliary": json_datapoint.auxiliary,
-                    "source_inference_id": json_datapoint.source_inference_id,
-                    "is_custom": json_datapoint.is_custom,
-                });
-
-                // Serialize to JSON string
-                let value_str = serde_json::to_string(&value).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: e.to_string(),
-                    })
-                })?;
-
-                self.write_non_batched::<()>(
-                    Rows::Serialized(&[value_str]),
-                    TableName::JsonInferenceDatapoint,
-                )
-                .await?;
-            }
-        }
-
+        self.insert_datapoints(std::slice::from_ref(datapoint))
+            .await?;
         Ok(())
     }
 
@@ -654,6 +573,246 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         }
 
         Ok(datapoints)
+    }
+
+    /// Inserts a batch of datapoints into the database. Internally, separate chat and JSON datapoints and write them to the appropriate tables. Note that this is not very atomic: the Chat table and Json table updates are not rolled back if one fails.
+    ///
+    /// Requires us to take ownership of each datapoint in `datapoints` since we split them into two Vecs internally.
+    ///
+    /// Returns the number of rows written.
+    async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {
+        // Separate chat and JSON datapoints
+        let mut chat_datapoints: Vec<&ChatInferenceDatapointInsert> = Vec::new();
+        let mut json_datapoints: Vec<&JsonInferenceDatapointInsert> = Vec::new();
+
+        for datapoint in datapoints {
+            match datapoint {
+                DatapointInsert::Chat(chat) => chat_datapoints.push(chat),
+                DatapointInsert::Json(json) => json_datapoints.push(json),
+            }
+        }
+
+        let mut written_rows = 0;
+
+        let (chat_written_rows, json_written_rows) = futures::join!(
+            self.insert_chat_datapoints_internal(&chat_datapoints),
+            self.insert_json_datapoints_internal(&json_datapoints),
+        );
+
+        written_rows += chat_written_rows?;
+        written_rows += json_written_rows?;
+        Ok(written_rows)
+    }
+}
+
+/// Internal helper: Build the JSON value for the insert to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
+/// TODO(shuyangli): Consider restructuring the types so this takes a RawChatDatapointInsert (or something that directly corresponds to the internal ClickHouse structure).
+fn convert_chat_datapoint_to_json_string(
+    chat_datapoint: &ChatInferenceDatapointInsert,
+) -> Result<String, Error> {
+    // tool_params in clickhouse is a non-null String
+    let tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_params {
+        serde_json::to_value(tool_params)?
+    } else {
+        json!("")
+    };
+    // Tags in clickhouse is a Non-null Map(String, String)
+    let tags_value = if let Some(tags) = &chat_datapoint.tags {
+        serde_json::to_value(tags)?
+    } else {
+        json!({})
+    };
+
+    let json_value = json!({
+        "dataset_name": chat_datapoint.dataset_name,
+        "function_name": chat_datapoint.function_name,
+        "id": chat_datapoint.id,
+        "name": chat_datapoint.name,
+        "episode_id": chat_datapoint.episode_id,
+        "input": chat_datapoint.input,
+        "output": chat_datapoint.output,
+        "tool_params": tool_params_value,
+        "tags": tags_value,
+        "auxiliary": chat_datapoint.auxiliary,
+        "source_inference_id": chat_datapoint.source_inference_id,
+        "is_custom": chat_datapoint.is_custom,
+        "staled_at": chat_datapoint.staled_at,
+    });
+    serde_json::to_string(&json_value).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize chat datapoint: {e}"),
+        })
+    })
+}
+
+/// Internal helper: Build the JSON value for the insert to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
+/// TODO(shuyangli): Consider restructuring the types so this takes a RawJsonDatapointInsert (or something that directly corresponds to the internal ClickHouse structure).
+fn convert_json_datapoint_to_json_string(
+    json_datapoint: &JsonInferenceDatapointInsert,
+) -> Result<String, Error> {
+    // Tags in clickhouse is a Non-null Map(String, String)
+    let tags_value = if let Some(tags) = &json_datapoint.tags {
+        serde_json::to_value(tags)?
+    } else {
+        json!({})
+    };
+    let json_value = json!({
+        "dataset_name": json_datapoint.dataset_name,
+        "function_name": json_datapoint.function_name,
+        "id": json_datapoint.id,
+        "name": json_datapoint.name,
+        "episode_id": json_datapoint.episode_id,
+        "input": json_datapoint.input,
+        "output": json_datapoint.output,
+        "output_schema": json_datapoint.output_schema,
+        "tags": tags_value,
+        "auxiliary": json_datapoint.auxiliary,
+        "source_inference_id": json_datapoint.source_inference_id,
+        "is_custom": json_datapoint.is_custom,
+        "staled_at": json_datapoint.staled_at,
+    });
+    serde_json::to_string(&json_value).map_err(|e| {
+        Error::new(ErrorDetails::Serialization {
+            message: format!("Failed to serialize json datapoint: {e}"),
+        })
+    })
+}
+
+impl ClickHouseConnectionInfo {
+    /// Internal helper: Puts chat datapoints into the database
+    /// Returns the number of rows written
+    async fn insert_chat_datapoints_internal(
+        &self,
+        datapoints: &[&ChatInferenceDatapointInsert],
+    ) -> Result<u64, Error> {
+        if datapoints.is_empty() {
+            return Ok(0);
+        }
+        for datapoint in datapoints {
+            validate_dataset_name(&datapoint.dataset_name)?;
+        }
+
+        let serialized_datapoints = datapoints
+            .iter()
+            .map(|datapoint| convert_chat_datapoint_to_json_string(datapoint))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let query = r"
+        INSERT INTO ChatInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            name,
+            id,
+            episode_id,
+            input,
+            output,
+            tool_params,
+            tags,
+            auxiliary,
+            is_deleted,
+            is_custom,
+            source_inference_id,
+            updated_at,
+            staled_at
+        )
+        SELECT
+            new_data.dataset_name,
+            new_data.function_name,
+            new_data.name,
+            new_data.id,
+            new_data.episode_id,
+            new_data.input,
+            new_data.output,
+            new_data.tool_params,
+            new_data.tags,
+            new_data.auxiliary,
+            new_data.is_deleted,
+            new_data.is_custom,
+            new_data.source_inference_id,
+            now64() as updated_at,
+            new_data.staled_at
+        FROM new_data
+        ";
+
+        let external_data = ExternalDataInfo {
+            external_data_name: "new_data".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)".to_string(),
+            format: "JSONEachRow".to_string(),
+            data: serialized_datapoints.join("\n"),
+        };
+        let result = self
+            .run_query_with_external_data(external_data, query.to_string())
+            .await?;
+        Ok(result.metadata.written_rows)
+    }
+
+    /// Internal helper: Puts JSON datapoints into the database
+    /// Returns the number of rows written
+    async fn insert_json_datapoints_internal(
+        &self,
+        datapoints: &[&JsonInferenceDatapointInsert],
+    ) -> Result<u64, Error> {
+        if datapoints.is_empty() {
+            return Ok(0);
+        }
+        for datapoint in datapoints {
+            validate_dataset_name(&datapoint.dataset_name)?;
+        }
+
+        let serialized_datapoints = datapoints
+            .iter()
+            .map(|datapoint| convert_json_datapoint_to_json_string(datapoint))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let query = r"
+        INSERT INTO JsonInferenceDatapoint
+        (
+            dataset_name,
+            function_name,
+            name,
+            id,
+            episode_id,
+            input,
+            output,
+            output_schema,
+            tags,
+            auxiliary,
+            is_deleted,
+            is_custom,
+            source_inference_id,
+            updated_at,
+            staled_at
+        )
+        SELECT
+            new_data.dataset_name,
+            new_data.function_name,
+            new_data.name,
+            new_data.id,
+            new_data.episode_id,
+            new_data.input,
+            new_data.output,
+            new_data.output_schema,
+            new_data.tags,
+            new_data.auxiliary,
+            new_data.is_deleted,
+            new_data.is_custom,
+            new_data.source_inference_id,
+            now64() as updated_at,
+            new_data.staled_at
+        FROM new_data
+        ";
+
+        let external_data = ExternalDataInfo {
+            external_data_name: "new_data".to_string(),
+            structure: "dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)".to_string(),
+            format: "JSONEachRow".to_string(),
+            data: serialized_datapoints.join("\n"),
+        };
+        let result = self
+            .run_query_with_external_data(external_data, query.to_string())
+            .await?;
+        Ok(result.metadata.written_rows)
     }
 }
 
@@ -1879,15 +2038,21 @@ mod tests {
     async fn test_insert_chat_datapoint_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
-            .expect_write_non_batched_internal()
-            .withf(|rows, table| {
-                assert_eq!(
-                    *table,
-                    TableName::ChatInferenceDatapoint,
-                    "Should write to ChatInferenceDatapoint"
-                );
+            .expect_run_query_with_external_data()
+            .withf(|external_data, query| {
+                // Verify the query is correct
+                assert!(query.contains("INSERT INTO ChatInferenceDatapoint"));
 
-                let actual_row_as_json: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                // Verify the external data structure
+                assert_eq!(external_data.external_data_name, "new_data");
+                assert_eq!(external_data.format, "JSONEachRow");
+                assert!(external_data
+                    .structure
+                    .contains("dataset_name LowCardinality(String)"));
+
+                // Parse and verify the data
+                let actual_row_as_json: serde_json::Value =
+                    serde_json::from_str(&external_data.data).unwrap();
                 let expected_row_as_json = json!({
                     "dataset_name": "test_dataset",
                     "function_name": "test_function",
@@ -1903,6 +2068,7 @@ mod tests {
                     "auxiliary": "",
                     "source_inference_id": null,
                     "is_custom": true,
+                    "staled_at": null,
                 });
                 assert_eq!(
                     actual_row_as_json, expected_row_as_json,
@@ -1911,7 +2077,15 @@ mod tests {
 
                 true
             })
-            .returning(|_, _| Ok(()));
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        written_rows: 1,
+                        read_rows: 0,
+                    },
+                })
+            });
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
         let datapoint = ChatInferenceDatapointInsert {
@@ -1949,15 +2123,21 @@ mod tests {
     async fn test_insert_json_datapoint_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
         mock_clickhouse_client
-            .expect_write_non_batched_internal()
-            .withf(|rows, table| {
-                assert_eq!(
-                    *table,
-                    TableName::JsonInferenceDatapoint,
-                    "Should write to JsonInferenceDatapoint"
-                );
+            .expect_run_query_with_external_data()
+            .withf(|external_data, query| {
+                // Verify the query is correct
+                assert!(query.contains("INSERT INTO JsonInferenceDatapoint"));
 
-                let actual_row_as_json: serde_json::Value = serde_json::from_str(&rows[0]).unwrap();
+                // Verify the external data structure
+                assert_eq!(external_data.external_data_name, "new_data");
+                assert_eq!(external_data.format, "JSONEachRow");
+                assert!(external_data
+                    .structure
+                    .contains("dataset_name LowCardinality(String)"));
+
+                // Parse and verify the data
+                let actual_row_as_json: serde_json::Value =
+                    serde_json::from_str(&external_data.data).unwrap();
                 let expected_row_as_json = json!({
                     "dataset_name": "test_dataset",
                     "function_name": "test_function",
@@ -1973,6 +2153,7 @@ mod tests {
                     "auxiliary": "",
                     "source_inference_id": null,
                     "is_custom": true,
+                    "staled_at": null,
                 });
 
                 assert_eq!(
@@ -1982,7 +2163,15 @@ mod tests {
 
                 true
             })
-            .returning(|_, _| Ok(()));
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        written_rows: 1,
+                        read_rows: 0,
+                    },
+                })
+            });
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
         let datapoint = JsonInferenceDatapointInsert {
@@ -2014,6 +2203,585 @@ mod tests {
                 .await
                 .is_ok(),
             "Should insert json datapoint successfully"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_datapoints_with_only_chat_datapoints() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // Expect exactly one call to run_query_with_external_data for chat datapoints
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .times(1)
+            .withf(|external_data, query| {
+                // Verify the query targets ChatInferenceDatapoint
+                assert_query_contains(query,
+                    "INSERT INTO ChatInferenceDatapoint (
+                    dataset_name,
+                    function_name,
+                    name,
+                    id,
+                    episode_id,
+                    input,
+                    output,
+                    tool_params,
+                    tags,
+                    auxiliary,
+                    is_deleted,
+                    is_custom,
+                    source_inference_id,
+                    updated_at,
+                    staled_at
+                )"
+                );
+                assert_query_contains(query,
+                    "SELECT
+                    new_data.dataset_name,
+                    new_data.function_name,
+                    new_data.name,
+                    new_data.id,
+                    new_data.episode_id,
+                    new_data.input,
+                    new_data.output,
+                    new_data.tool_params,
+                    new_data.tags,
+                    new_data.auxiliary,
+                    new_data.is_deleted,
+                    new_data.is_custom,
+                    new_data.source_inference_id,
+                    now64() as updated_at,
+                    new_data.staled_at
+                FROM new_data"
+                );
+
+                // Verify the external data structure
+                assert_eq!(external_data.external_data_name, "new_data");
+                assert_eq!(external_data.format, "JSONEachRow");
+                assert!(external_data
+                    .structure
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), tool_params String, tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
+                assert!(!external_data.structure.contains("updated_at"));
+
+                // Parse the data - should contain 3 datapoints separated by newlines
+                let lines: Vec<&str> = external_data.data.lines().collect();
+                assert_eq!(lines.len(), 3, "Should have 3 chat datapoints");
+
+                // Verify first datapoint
+                let first_datapoint: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+                assert_eq!(first_datapoint["dataset_name"], "test_dataset");
+                assert_eq!(first_datapoint["function_name"], "test_function_1");
+                assert_eq!(
+                    first_datapoint["id"],
+                    "11111111-1111-1111-1111-111111111111"
+                );
+
+                // Verify second datapoint
+                let second_datapoint: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+                assert_eq!(second_datapoint["dataset_name"], "test_dataset");
+                assert_eq!(second_datapoint["function_name"], "test_function_2");
+                assert_eq!(
+                    second_datapoint["id"],
+                    "22222222-2222-2222-2222-222222222222"
+                );
+
+                // Verify third datapoint
+                let third_datapoint: serde_json::Value = serde_json::from_str(lines[2]).unwrap();
+                assert_eq!(third_datapoint["dataset_name"], "test_dataset");
+                assert_eq!(third_datapoint["function_name"], "test_function_3");
+                assert_eq!(
+                    third_datapoint["id"],
+                    "33333333-3333-3333-3333-333333333333"
+                );
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        written_rows: 3,
+                        read_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let datapoints = vec![
+            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "test_function_1".to_string(),
+                id: Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap(),
+                name: Some("datapoint_1".to_string()),
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "response_1".to_string(),
+                })]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+            }),
+            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "test_function_2".to_string(),
+                id: Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
+                name: Some("datapoint_2".to_string()),
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "response_2".to_string(),
+                })]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+            }),
+            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "test_function_3".to_string(),
+                id: Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap(),
+                name: Some("datapoint_3".to_string()),
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "response_3".to_string(),
+                })]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+            }),
+        ];
+
+        let result = conn.insert_datapoints(&datapoints).await;
+        assert!(result.is_ok(), "Should insert datapoints successfully");
+        assert_eq!(result.unwrap(), 3, "Should return 3 written rows");
+    }
+
+    #[tokio::test]
+    async fn test_insert_datapoints_with_only_json_datapoints() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // Expect exactly one call to run_query_with_external_data for JSON datapoints
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .times(1)
+            .withf(|external_data, query| {
+                // Verify the query targets JsonInferenceDatapoint
+                assert_query_contains(
+                    query,
+                    "INSERT INTO JsonInferenceDatapoint
+                    (
+                        dataset_name,
+                        function_name,
+                        name,
+                        id,
+                        episode_id,
+                        input,
+                        output,
+                        output_schema,
+                        tags,
+                        auxiliary,
+                        is_deleted,
+                        is_custom,
+                        source_inference_id,
+                        updated_at,
+                        staled_at
+                    )",
+                );
+                assert_query_contains(
+                    query,
+                    "SELECT
+                        new_data.dataset_name,
+                        new_data.function_name,
+                        new_data.name,
+                        new_data.id,
+                        new_data.episode_id,
+                        new_data.input,
+                        new_data.output,
+                        new_data.output_schema,
+                        new_data.tags,
+                        new_data.auxiliary,
+                        new_data.is_deleted,
+                        new_data.is_custom,
+                        new_data.source_inference_id,
+                        now64() as updated_at,
+                        new_data.staled_at
+                    FROM new_data",
+                );
+
+                // Verify the external data structure
+                assert_eq!(external_data.external_data_name, "new_data");
+                assert_eq!(external_data.format, "JSONEachRow");
+                assert!(external_data
+                    .structure
+                    .contains("dataset_name LowCardinality(String), function_name LowCardinality(String), name Nullable(String), id UUID, episode_id Nullable(UUID), input String, output Nullable(String), output_schema Nullable(String), tags Map(String, String), auxiliary String, is_deleted Bool, is_custom Bool, source_inference_id Nullable(UUID), staled_at Nullable(String)"));
+
+                // Parse the data - should contain 2 datapoints separated by newlines
+                let lines: Vec<&str> = external_data.data.lines().collect();
+                assert_eq!(lines.len(), 2, "Should have 2 JSON datapoints");
+
+                // Verify first datapoint
+                let first_datapoint: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+                assert_eq!(first_datapoint["dataset_name"], "test_dataset");
+                assert_eq!(first_datapoint["function_name"], "json_function_1");
+                assert_eq!(
+                    first_datapoint["id"],
+                    "44444444-4444-4444-4444-444444444444"
+                );
+                assert!(first_datapoint["output_schema"].is_object());
+
+                // Verify second datapoint
+                let second_datapoint: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+                assert_eq!(second_datapoint["dataset_name"], "test_dataset");
+                assert_eq!(second_datapoint["function_name"], "json_function_2");
+                assert_eq!(
+                    second_datapoint["id"],
+                    "55555555-5555-5555-5555-555555555555"
+                );
+                assert!(second_datapoint["output_schema"].is_object());
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        written_rows: 2,
+                        read_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let datapoints = vec![
+            DatapointInsert::Json(JsonInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "json_function_1".to_string(),
+                id: Uuid::parse_str("44444444-4444-4444-4444-444444444444").unwrap(),
+                name: Some("json_datapoint_1".to_string()),
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(JsonInferenceOutput {
+                    parsed: Some(json!({"result": "data_1"})),
+                    raw: Some("{\"result\":\"data_1\"}".to_string()),
+                }),
+                output_schema: json!({"type": "object"}),
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+            }),
+            DatapointInsert::Json(JsonInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "json_function_2".to_string(),
+                id: Uuid::parse_str("55555555-5555-5555-5555-555555555555").unwrap(),
+                name: Some("json_datapoint_2".to_string()),
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(JsonInferenceOutput {
+                    parsed: Some(json!({"result": "data_2"})),
+                    raw: Some("{\"result\":\"data_2\"}".to_string()),
+                }),
+                output_schema: json!({"type": "object"}),
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+            }),
+        ];
+
+        let result = conn.insert_datapoints(&datapoints).await;
+        assert!(result.is_ok(), "Should insert datapoints successfully");
+        assert_eq!(result.unwrap(), 2, "Should return 2 written rows");
+    }
+
+    #[tokio::test]
+    async fn test_insert_datapoints_with_mixed_datapoints() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // Expect two calls: one for chat datapoints, one for JSON datapoints
+        // The order of calls is determined by futures::join!, which runs concurrently
+        // So we need to handle both orders
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .times(2)
+            .withf(|external_data, query| {
+                if query.contains("INSERT INTO ChatInferenceDatapoint") {
+                    // Verify chat datapoints
+                    assert_eq!(external_data.external_data_name, "new_data");
+                    assert_eq!(external_data.format, "JSONEachRow");
+                    assert!(external_data.structure.contains("tool_params String"));
+
+                    let lines: Vec<&str> = external_data.data.lines().collect();
+                    assert_eq!(lines.len(), 2, "Should have 2 chat datapoints");
+
+                    let first: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+                    assert_eq!(first["dataset_name"], "test_dataset");
+                    assert_eq!(first["function_name"], "chat_function_1");
+
+                    let second: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+                    assert_eq!(second["dataset_name"], "test_dataset");
+                    assert_eq!(second["function_name"], "chat_function_2");
+
+                    true
+                } else if query.contains("INSERT INTO JsonInferenceDatapoint") {
+                    // Verify JSON datapoints
+                    assert_eq!(external_data.external_data_name, "new_data");
+                    assert_eq!(external_data.format, "JSONEachRow");
+                    assert!(external_data
+                        .structure
+                        .contains("output_schema Nullable(String)"));
+
+                    let lines: Vec<&str> = external_data.data.lines().collect();
+                    assert_eq!(lines.len(), 2, "Should have 2 JSON datapoints");
+
+                    let first: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+                    assert_eq!(first["dataset_name"], "test_dataset");
+                    assert_eq!(first["function_name"], "json_function_1");
+
+                    let second: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+                    assert_eq!(second["dataset_name"], "test_dataset");
+                    assert_eq!(second["function_name"], "json_function_2");
+
+                    true
+                } else {
+                    panic!("Unexpected query: {query}");
+                }
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        // Both Chat and Json inserts have 2 rows.
+                        written_rows: 2,
+                        read_rows: 0,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let datapoints = vec![
+            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "chat_function_1".to_string(),
+                id: Uuid::parse_str("66666666-6666-6666-6666-666666666666").unwrap(),
+                name: None,
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "chat response 1".to_string(),
+                })]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: false,
+            }),
+            DatapointInsert::Json(JsonInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "json_function_1".to_string(),
+                id: Uuid::parse_str("77777777-7777-7777-7777-777777777777").unwrap(),
+                name: None,
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(JsonInferenceOutput {
+                    parsed: Some(json!({"value": 1})),
+                    raw: Some("{\"value\":1}".to_string()),
+                }),
+                output_schema: json!({"type": "object"}),
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: false,
+            }),
+            DatapointInsert::Chat(ChatInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "chat_function_2".to_string(),
+                id: Uuid::parse_str("88888888-8888-8888-8888-888888888888").unwrap(),
+                name: None,
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "chat response 2".to_string(),
+                })]),
+                tool_params: None,
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: false,
+            }),
+            DatapointInsert::Json(JsonInferenceDatapointInsert {
+                dataset_name: "test_dataset".to_string(),
+                function_name: "json_function_2".to_string(),
+                id: Uuid::parse_str("99999999-9999-9999-9999-999999999999").unwrap(),
+                name: None,
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: Some(JsonInferenceOutput {
+                    parsed: Some(json!({"value": 2})),
+                    raw: Some("{\"value\":2}".to_string()),
+                }),
+                output_schema: json!({"type": "object"}),
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: false,
+            }),
+        ];
+
+        let result = conn.insert_datapoints(&datapoints).await;
+        assert!(
+            result.is_ok(),
+            "Should insert mixed datapoints successfully"
+        );
+        assert_eq!(
+            result.unwrap(),
+            4,
+            "Should return 4 total written rows (2 chat + 2 JSON)"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_datapoints_with_empty_slice() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // Expect no calls to run_query_with_external_data when given an empty slice
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .times(0);
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let datapoints: Vec<DatapointInsert> = vec![];
+
+        let result = conn.insert_datapoints(&datapoints).await;
+        assert!(result.is_ok(), "Should handle empty slice successfully");
+        assert_eq!(
+            result.unwrap(),
+            0,
+            "Should return 0 written rows for empty slice"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_insert_datapoints_validates_dataset_names() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // Expect no calls to run_query_with_external_data when validation fails
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .times(0);
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        // Test with reserved name "builder"
+        let datapoints_with_builder = vec![DatapointInsert::Chat(ChatInferenceDatapointInsert {
+            dataset_name: "builder".to_string(), // This should fail validation
+            function_name: "test_function".to_string(),
+            id: Uuid::parse_str("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa").unwrap(),
+            name: None,
+            episode_id: None,
+            input: StoredInput {
+                system: None,
+                messages: vec![],
+            },
+            output: None,
+            tool_params: None,
+            tags: None,
+            auxiliary: String::new(),
+            staled_at: None,
+            source_inference_id: None,
+            is_custom: false,
+        })];
+
+        let result = conn.insert_datapoints(&datapoints_with_builder).await;
+        assert!(
+            result.is_err(),
+            "Should fail with reserved dataset name 'builder'"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err.get_details(), ErrorDetails::InvalidDatasetName { .. }),
+            "Should return InvalidDatasetName error"
+        );
+
+        // Test with reserved prefix "tensorzero::"
+        let datapoints_with_tensorzero_prefix =
+            vec![DatapointInsert::Json(JsonInferenceDatapointInsert {
+                dataset_name: "tensorzero::reserved".to_string(), // This should fail validation
+                function_name: "test_function".to_string(),
+                id: Uuid::parse_str("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").unwrap(),
+                name: None,
+                episode_id: None,
+                input: StoredInput {
+                    system: None,
+                    messages: vec![],
+                },
+                output: None,
+                output_schema: json!({"type": "object"}),
+                tags: None,
+                auxiliary: String::new(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: false,
+            })];
+
+        let result = conn
+            .insert_datapoints(&datapoints_with_tensorzero_prefix)
+            .await;
+        assert!(
+            result.is_err(),
+            "Should fail with reserved dataset name prefix 'tensorzero::'"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err.get_details(), ErrorDetails::InvalidDatasetName { .. }),
+            "Should return InvalidDatasetName error"
         );
     }
 
@@ -2279,7 +3047,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":"223e4567-e89b-12d3-a456-426614174000","input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":"223e4567-e89b-12d3-a456-426614174000","input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -2329,7 +3097,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: String::from(r#"{"type":"json","dataset_name":"json_dataset","function_name":"json_function","name":null,"id":"323e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"{\"parsed\":{\"key\":\"value\"}}","output_schema":"{\"type\":\"object\"}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
+                    response: String::from(r#"{"type":"json","dataset_name":"json_dataset","function_name":"json_function","name":null,"id":"323e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"{\"parsed\":{\"key\":\"value\"}}","output_schema":"{\"type\":\"object\"}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -2506,7 +3274,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":"223e4567-e89b-12d3-a456-426614174000","input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":"223e4567-e89b-12d3-a456-426614174000","input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -2553,9 +3321,9 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test1","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output 1\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}
-{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test2","id":"223e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output 2\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}
-{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test3","id":"323e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output 3\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test1","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output 1\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}
+{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test2","id":"223e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output 2\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}
+{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test3","id":"323e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output 3\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 3,
                         written_rows: 0,
@@ -2631,7 +3399,7 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":"2023-01-01T00:00:00Z","updated_at":"2023-01-01T00:00:00Z"}"#),
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":"2023-01-01T00:00:00Z","updated_at":"2023-01-01T00:00:00Z"}"#),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 1,
                         written_rows: 0,
@@ -2678,8 +3446,8 @@ mod tests {
             })
             .returning(|_, _| {
                 Ok(ClickHouseResponse {
-                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"chat_function","name":"chat1","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"chat output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}
-{"type":"json","dataset_name":"test_dataset","function_name":"json_function","name":"json1","id":"223e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"{\"parsed\":{\"key\":\"value\"}}","output_schema":"{\"type\":\"object\"}","tags":{},"auxiliary":"{}","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"chat_function","name":"chat1","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"chat output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}
+{"type":"json","dataset_name":"test_dataset","function_name":"json_function","name":"json1","id":"223e4567-e89b-12d3-a456-426614174000","episode_id":null,"input":"{\"messages\":[]}","output":"{\"parsed\":{\"key\":\"value\"}}","output_schema":"{\"type\":\"object\"}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
                     metadata: ClickHouseResponseMetadata {
                         read_rows: 2,
                         written_rows: 0,
