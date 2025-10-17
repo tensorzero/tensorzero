@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCopy } from "~/hooks/use-copy";
 import { useLocalStorage } from "~/hooks/use-local-storage";
 import CodeMirror from "@uiw/react-codemirror";
@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import type { JsonValue } from "tensorzero-node";
+import debounce from "lodash-es/debounce";
 
 export type Language = "json" | "markdown" | "jinja2" | "text";
 
@@ -150,10 +151,79 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   placeholder,
   className,
 }) => {
+  // Internal state for semi-uncontrolled mode
+  const [internalValue, setInternalValue] = useState(value);
+
+  // Track external callbacks and the latest flushed/pending values
+  const onChangeRef = useRef(onChange);
+  const onBlurRef = useRef(onBlur);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onBlurRef.current = onBlur;
+  }, [onChange, onBlur]);
+
+  const committedValueRef = useRef(value);
+  const pendingValueRef = useRef(value);
+
+  const flushPending = useCallback(() => {
+    const next = pendingValueRef.current;
+    if (next !== committedValueRef.current) {
+      committedValueRef.current = next;
+      onChangeRef.current?.(next);
+    }
+  }, []);
+
+  const debouncedFlush = useMemo(
+    () =>
+      debounce(() => {
+        flushPending();
+      }, 100),
+    [flushPending],
+  );
+
+  // Sync external value changes to internal state and cancel pending debounces
+  useEffect(() => {
+    setInternalValue(value);
+    pendingValueRef.current = value;
+    committedValueRef.current = value;
+    debouncedFlush.cancel();
+  }, [value, debouncedFlush]);
+
+  // Flush pending changes on unmount to prevent data loss
+  useEffect(() => {
+    return () => {
+      debouncedFlush.flush();
+      debouncedFlush.cancel();
+    };
+  }, [debouncedFlush]);
+
+  // Handle internal value changes
+  const handleChange = useCallback(
+    (val: string) => {
+      setInternalValue(val);
+      pendingValueRef.current = val;
+      if (!onChangeRef.current) {
+        committedValueRef.current = val;
+        return;
+      }
+      debouncedFlush();
+    },
+    [debouncedFlush],
+  );
+
+  // Handle blur: cancel debounce and flush immediately
+  const handleBlur = useCallback(() => {
+    debouncedFlush.flush();
+    debouncedFlush.cancel();
+    onBlurRef.current?.();
+  }, [debouncedFlush]);
+
+  // Update language when value changes if auto-detection is enabled
   const [language, setLanguage] = useState<Language>(() =>
     autoDetectLanguage ? detectLanguage(value) : allowedLanguages[0],
   );
 
+  // Handle wrapping behavior
   const [wordWrap, setWordWrap] = useLocalStorage(
     "word-wrap",
     DEFAULT_WORD_WRAP_LANGUAGES.includes(language),
@@ -194,6 +264,38 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const buttonClassName =
     "flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs";
 
+  const theme = useMemo(
+    () =>
+      githubLightInit({
+        settings: {
+          fontFamily:
+            language === "text" ? "var(--font-sans)" : "var(--font-mono)",
+          fontSize: "var(--text-xs)",
+          gutterBorder: "transparent",
+          background: "transparent",
+        },
+      }),
+    [language],
+  );
+
+  const basicSetup = useMemo(
+    () => ({
+      // Line numbers
+      lineNumbers: showLineNumbers,
+      foldGutter: showLineNumbers,
+
+      // Read-only mode
+      autocompletion: !readOnly,
+      searchKeymap: !readOnly,
+      closeBrackets: !readOnly,
+      dropCursor: !readOnly,
+      allowMultipleSelections: !readOnly,
+      highlightActiveLine: !readOnly,
+      highlightActiveLineGutter: !readOnly,
+    }),
+    [showLineNumbers, readOnly],
+  );
+
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
     <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
@@ -201,7 +303,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         <Button
           variant="secondary"
           size="iconSm"
-          onClick={() => copy(value)}
+          onClick={() => copy(internalValue)}
           className={buttonClassName}
           disabled={!mounted || !isCopyAvailable}
           title={didCopy ? "Copied!" : "Copy to clipboard"}
@@ -261,34 +363,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       {/* `overflow-clip` so gutter does not render on top of focus ring */}
       <div className="overflow-clip rounded-sm transition focus-within:ring-2 focus-within:ring-blue-500">
         <CodeMirror
-          value={value}
-          onChange={onChange}
-          onBlur={onBlur}
+          value={internalValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
           extensions={extensions}
-          theme={githubLightInit({
-            settings: {
-              fontFamily:
-                language === "text" ? "var(--font-sans)" : "var(--font-mono)",
-              fontSize: "var(--text-xs)",
-              gutterBorder: "transparent",
-              background: "transparent",
-            },
-          })}
+          theme={theme}
           placeholder={placeholder}
-          basicSetup={{
-            // Line numbers
-            lineNumbers: showLineNumbers,
-            foldGutter: showLineNumbers,
-
-            // Read-only mode
-            autocompletion: !readOnly,
-            searchKeymap: !readOnly,
-            closeBrackets: !readOnly,
-            dropCursor: !readOnly,
-            allowMultipleSelections: !readOnly,
-            highlightActiveLine: !readOnly,
-            highlightActiveLineGutter: !readOnly,
-          }}
+          basicSetup={basicSetup}
           className="min-h-9 overflow-auto"
         />
       </div>
