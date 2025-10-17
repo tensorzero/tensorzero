@@ -63,8 +63,9 @@ use uuid::Uuid;
 use crate::{
     config::{MetricConfig, MetricConfigOptimize},
     db::{
-        postgres::PostgresConnectionInfo, ExperimentationQueries, FeedbackByVariant,
-        HealthCheckable, SelectQueries,
+        feedback::{FeedbackByVariant, FeedbackQueries},
+        postgres::PostgresConnectionInfo,
+        ExperimentationQueries, HealthCheckable,
     },
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     variant::VariantInfo,
@@ -281,7 +282,7 @@ impl UninitializedTrackAndStopConfig {
 impl VariantSampler for TrackAndStopConfig {
     async fn setup(
         &self,
-        db: Arc<dyn SelectQueries + Send + Sync>,
+        db: Arc<dyn FeedbackQueries + Send + Sync>,
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
@@ -410,7 +411,7 @@ impl VariantSampler for TrackAndStopConfig {
 }
 
 struct ProbabilityUpdateTaskArgs {
-    db: Arc<dyn SelectQueries + Send + Sync>,
+    db: Arc<dyn FeedbackQueries + Send + Sync>,
     candidate_variants: Arc<Vec<String>>,
     metric_name: String,
     function_name: String,
@@ -480,7 +481,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
 }
 
 struct UpdateProbabilitiesArgs<'a> {
-    db: &'a (dyn SelectQueries + Send + Sync),
+    db: &'a (dyn FeedbackQueries + Send + Sync),
     candidate_variants: &'a Arc<Vec<String>>,
     metric_name: &'a str,
     function_name: &'a str,
@@ -865,7 +866,8 @@ impl TrackAndStopState {
 mod tests {
     use super::*;
     use crate::config::{ErrorContext, SchemaData};
-    use crate::db::{clickhouse::ClickHouseConnectionInfo, FeedbackByVariant};
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::feedback::FeedbackByVariant;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
 
     // Helper function to create test variants
@@ -1790,7 +1792,7 @@ mod tests {
         };
 
         let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
-            as Arc<dyn SelectQueries + Send + Sync>;
+            as Arc<dyn FeedbackQueries + Send + Sync>;
         let postgres = PostgresConnectionInfo::new_mock(true);
         let cancel_token = CancellationToken::new();
 
@@ -1836,7 +1838,7 @@ mod tests {
         };
 
         let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
-            as Arc<dyn SelectQueries + Send + Sync>;
+            as Arc<dyn FeedbackQueries + Send + Sync>;
         let cancel_token = CancellationToken::new();
 
         // Test with disabled Postgres

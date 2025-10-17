@@ -42,4 +42,19 @@ describe("TagsBadges component logic", () => {
     expect(tags["experiment"]).toBe("A");
     expect(tags["tensorzero::human_feedback"]).toBe("true");
   });
+
+  it("should ignore tags with undefined values", () => {
+    const tags = {
+      defined: "value",
+      optional: undefined,
+    } as Record<string, string | undefined>;
+
+    const tagEntries = Object.entries(tags).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    );
+
+    expect(tagEntries.length).toBe(1);
+    expect(tagEntries[0][0]).toBe("defined");
+    expect(tagEntries[0][1]).toBe("value");
+  });
 });

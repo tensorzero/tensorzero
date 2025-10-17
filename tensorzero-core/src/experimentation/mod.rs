@@ -6,8 +6,8 @@ use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::db::feedback::FeedbackQueries;
 use crate::db::postgres::PostgresConnectionInfo;
-use crate::db::SelectQueries;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
@@ -59,7 +59,7 @@ impl UninitializedExperimentationConfig {
 pub trait VariantSampler {
     async fn setup(
         &self,
-        db: Arc<dyn SelectQueries + Send + Sync>,
+        db: Arc<dyn FeedbackQueries + Send + Sync>,
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
@@ -98,7 +98,7 @@ impl ExperimentationConfig {
 
     pub async fn setup(
         &self,
-        db: Arc<dyn SelectQueries + Send + Sync>,
+        db: Arc<dyn FeedbackQueries + Send + Sync>,
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
@@ -249,7 +249,7 @@ impl AlwaysFailsConfig {
 impl VariantSampler for AlwaysFailsConfig {
     async fn setup(
         &self,
-        _db: Arc<dyn SelectQueries + Send + Sync>,
+        _db: Arc<dyn FeedbackQueries + Send + Sync>,
         _function_name: &str,
         _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
