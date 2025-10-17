@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { FeedbackRow } from "./feedback";
+import type { FeedbackRow } from "tensorzero-node";
 import type { ParsedModelInferenceRow } from "./inference";
 
 // Since demonstrations and comments do not have a metric_name, we need to
