@@ -349,13 +349,6 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let escaped_function_name = escape_string_for_clickhouse_literal(&function_name);
         let escaped_metric_name = escape_string_for_clickhouse_literal(&metric_name);
 
-        // Clickhouse has no `toEndOfInterval` function, so we use toStartOfInterval + interval to get
-        // the end of each period, since we're computing cumulative stats up to each time point
-        let time_grouping = format!("toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE");
-        let time_filter = format!(
-            "minute >= (SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
-        );
-
         // If variants are passed, build variant filter.
         // If None we don't filter at all;
         // If empty, we'll return an empty vector for consistency
@@ -373,30 +366,139 @@ impl SelectQueries for ClickHouseConnectionInfo {
             }
         };
 
-        // Query to compute cumulative statistics: for each time bucket, aggregate all data from start up to that bucket
+        // Old implementation using time_buckets CTE and self-join
+        // Clickhouse has no `toEndOfInterval` function, so we use toStartOfInterval + interval to get
+        // the end of each period, since we're computing cumulative stats up to each time point
+        // let time_grouping = format!("toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE");
+        // let time_filter = format!(
+        //     "minute >= (SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
+        // );
+        //
+        // // Query to compute cumulative statistics: for each time bucket, aggregate all data from start up to that bucket
+        // let query = format!(
+        //     r"
+        //     WITH time_buckets AS (
+        //         SELECT DISTINCT {time_grouping} as period
+        //         FROM FeedbackByVariantStatistics
+        //         WHERE function_name = '{escaped_function_name}'
+        //             AND metric_name = '{escaped_metric_name}'
+        //             AND {time_filter}
+        //     )
+        //     SELECT
+        //         formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_end,
+        //         f.variant_name,
+        //         avgMerge(f.feedback_mean) as mean,
+        //         varSampStableMerge(f.feedback_variance) as variance,
+        //         sum(f.count) as count
+        //     FROM time_buckets tb
+        //     INNER JOIN FeedbackByVariantStatistics f
+        //         ON f.function_name = '{escaped_function_name}'
+        //         AND f.metric_name = '{escaped_metric_name}'
+        //         AND f.minute <= tb.period
+        //         {variant_filter}
+        //     GROUP BY tb.period, f.variant_name
+        //     ORDER BY period_end ASC, f.variant_name ASC
+        //     FORMAT JSONEachRow
+        //     ",
+        // );
+
+        // New implementation using window functions for better performance
+        // This computes true cumulative statistics from all historical data
         let query = format!(
             r"
-            WITH time_buckets AS (
-                SELECT DISTINCT {time_grouping} as period
-                FROM FeedbackByVariantStatistics
-                WHERE function_name = '{escaped_function_name}'
-                    AND metric_name = '{escaped_metric_name}'
-                    AND {time_filter}
-            )
+            WITH
+                -- CTE 1: Aggregate ALL historical data into time periods (no time filter)
+                AggregatedFilteredFeedbackByVariantStatistics AS (
+                    SELECT
+                        toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE AS period_end,
+                        variant_name,
+
+                        -- Apply -MergeState combinator to merge and keep as state for later merging
+                        avgMergeState(feedback_mean) AS merged_mean_state,
+                        varSampStableMergeState(feedback_variance) AS merged_var_state,
+                        sum(count) AS period_count
+
+                    FROM FeedbackByVariantStatistics
+
+                    WHERE
+                        function_name = '{escaped_function_name}'
+                        AND metric_name = '{escaped_metric_name}'
+                        {variant_filter}
+
+                    GROUP BY
+                        period_end,
+                        variant_name
+                ),
+
+                -- CTE 2: For each variant, create sorted arrays of the periodic data.
+                ArraysByVariant AS (
+                    SELECT
+                        variant_name,
+                        -- 3. Unzip the sorted tuples back into individual arrays
+                        arrayMap(x -> x.1, sorted_zipped_arrays) AS periods,
+                        arrayMap(x -> x.2, sorted_zipped_arrays) AS mean_states,
+                        arrayMap(x -> x.3, sorted_zipped_arrays) AS var_states,
+                        arrayMap(x -> x.4, sorted_zipped_arrays) AS counts
+                    FROM (
+                        SELECT
+                            variant_name,
+                            (
+                                -- 2. Sort the array of tuples based on the first element (the period_end)
+                                arraySort(x -> x.1,
+                                    -- 1. Zip the unsorted arrays together into an array of tuples
+                                    arrayZip(
+                                        groupArray(period_end),
+                                        groupArray(merged_mean_state),
+                                        groupArray(merged_var_state),
+                                        groupArray(period_count)
+                                    )
+                                )
+                            ) AS sorted_zipped_arrays
+                        FROM AggregatedFilteredFeedbackByVariantStatistics
+                        GROUP BY variant_name
+                    )
+                ),
+
+                -- CTE 3: Compute cumulative stats for all periods
+                AllCumulativeStats AS (
+                    SELECT
+                        periods[i] AS period_end,
+                        variant_name,
+
+                        arrayReduce('avgMerge', arraySlice(mean_states, 1, i)) AS mean,
+                        arrayReduce('varSampStableMerge', arraySlice(var_states, 1, i)) AS variance,
+                        arraySum(arraySlice(counts, 1, i)) AS count
+
+                    FROM ArraysByVariant
+                    ARRAY JOIN arrayEnumerate(periods) AS i
+                ),
+
+                -- CTE 4: Filter to only the most recent max_periods (DateTime arithmetic on DateTime types)
+                FilteredCumulativeStats AS (
+                    SELECT
+                        period_end,
+                        variant_name,
+                        mean,
+                        variance,
+                        count
+                    FROM AllCumulativeStats
+                    WHERE period_end >= (
+                        SELECT max(period_end)
+                        FROM AllCumulativeStats
+                    ) - INTERVAL {max_periods} * {interval_minutes} MINUTE
+                )
+
+            -- Final SELECT: Format the DateTime to string
             SELECT
-                formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_end,
-                f.variant_name,
-                avgMerge(f.feedback_mean) as mean,
-                varSampStableMerge(f.feedback_variance) as variance,
-                sum(f.count) as count
-            FROM time_buckets tb
-            INNER JOIN FeedbackByVariantStatistics f
-                ON f.function_name = '{escaped_function_name}'
-                AND f.metric_name = '{escaped_metric_name}'
-                AND f.minute <= tb.period
-                {variant_filter}
-            GROUP BY tb.period, f.variant_name
-            ORDER BY period_end ASC, f.variant_name ASC
+                formatDateTime(period_end, '%Y-%m-%dT%H:%i:%SZ') AS period_end,
+                variant_name,
+                mean,
+                variance,
+                count
+            FROM FilteredCumulativeStats
+            ORDER BY
+                period_end ASC,
+                variant_name ASC
             FORMAT JSONEachRow
             ",
         );
