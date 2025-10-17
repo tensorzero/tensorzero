@@ -28,6 +28,33 @@ import type { JsonValue } from "tensorzero-node";
 
 export type Language = "json" | "markdown" | "jinja2" | "text";
 
+// Simple debounce implementation
+function debounce<T extends (...args: never[]) => void>(
+  fn: T,
+  delay: number,
+): T & { cancel: () => void } {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const debounced = ((...args: Parameters<T>) => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    timeoutId = setTimeout(() => {
+      fn(...args);
+      timeoutId = null;
+    }, delay);
+  }) as T & { cancel: () => void };
+
+  debounced.cancel = () => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+      timeoutId = null;
+    }
+  };
+
+  return debounced;
+}
+
 /** Try to format the given string/object if it's JSON. Passthrough gracefully if it's not JSON. */
 export function useFormattedJson(initialValue: string | JsonValue): string {
   return useMemo(() => {
@@ -150,6 +177,14 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   placeholder,
   className,
 }) => {
+  // Internal state for semi-uncontrolled mode
+  const [internalValue, setInternalValue] = useState(value);
+
+  // Sync external value changes to internal state
+  useEffect(() => {
+    setInternalValue(value);
+  }, [value]);
+
   const [language, setLanguage] = useState<Language>(() =>
     autoDetectLanguage ? detectLanguage(value) : allowedLanguages[0],
   );
@@ -164,6 +199,24 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const { copy, didCopy, isCopyAvailable } = useCopy();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // Debounced onChange to reduce parent updates during typing
+  const debouncedOnChange = useMemo(
+    () =>
+      onChange
+        ? debounce((val: string) => {
+            onChange(val);
+          }, 100)
+        : undefined,
+    [onChange],
+  );
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      debouncedOnChange?.cancel();
+    };
+  }, [debouncedOnChange]);
 
   // Custom theme to remove dotted border and add focus styles
   const extensions = useMemo(() => {
@@ -194,6 +247,54 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   const buttonClassName =
     "flex h-6 w-6 cursor-pointer items-center justify-center p-3 text-xs";
 
+  const theme = useMemo(
+    () =>
+      githubLightInit({
+        settings: {
+          fontFamily:
+            language === "text" ? "var(--font-sans)" : "var(--font-mono)",
+          fontSize: "var(--text-xs)",
+          gutterBorder: "transparent",
+          background: "transparent",
+        },
+      }),
+    [language],
+  );
+
+  const basicSetup = useMemo(
+    () => ({
+      // Line numbers
+      lineNumbers: showLineNumbers,
+      foldGutter: showLineNumbers,
+
+      // Read-only mode
+      autocompletion: !readOnly,
+      searchKeymap: !readOnly,
+      closeBrackets: !readOnly,
+      dropCursor: !readOnly,
+      allowMultipleSelections: !readOnly,
+      highlightActiveLine: !readOnly,
+      highlightActiveLineGutter: !readOnly,
+    }),
+    [showLineNumbers, readOnly],
+  );
+
+  // Handle internal value changes
+  const handleChange = useCallback(
+    (val: string) => {
+      setInternalValue(val);
+      debouncedOnChange?.(val);
+    },
+    [debouncedOnChange],
+  );
+
+  // Handle blur: cancel debounce and flush immediately
+  const handleBlur = useCallback(() => {
+    debouncedOnChange?.cancel();
+    onChange?.(internalValue);
+    onBlur?.();
+  }, [internalValue, onChange, onBlur, debouncedOnChange]);
+
   return (
     // `min-width: 0` If within a grid parent, prevent editor from overflowing its grid cell and force horizontal scrolling
     <div className={cn("group relative isolate min-w-0 rounded-sm", className)}>
@@ -201,7 +302,7 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
         <Button
           variant="secondary"
           size="iconSm"
-          onClick={() => copy(value)}
+          onClick={() => copy(internalValue)}
           className={buttonClassName}
           disabled={!mounted || !isCopyAvailable}
           title={didCopy ? "Copied!" : "Copy to clipboard"}
@@ -261,34 +362,13 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
       {/* `overflow-clip` so gutter does not render on top of focus ring */}
       <div className="overflow-clip rounded-sm transition focus-within:ring-2 focus-within:ring-blue-500">
         <CodeMirror
-          value={value}
-          onChange={onChange}
-          onBlur={onBlur}
+          value={internalValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
           extensions={extensions}
-          theme={githubLightInit({
-            settings: {
-              fontFamily:
-                language === "text" ? "var(--font-sans)" : "var(--font-mono)",
-              fontSize: "var(--text-xs)",
-              gutterBorder: "transparent",
-              background: "transparent",
-            },
-          })}
+          theme={theme}
           placeholder={placeholder}
-          basicSetup={{
-            // Line numbers
-            lineNumbers: showLineNumbers,
-            foldGutter: showLineNumbers,
-
-            // Read-only mode
-            autocompletion: !readOnly,
-            searchKeymap: !readOnly,
-            closeBrackets: !readOnly,
-            dropCursor: !readOnly,
-            allowMultipleSelections: !readOnly,
-            highlightActiveLine: !readOnly,
-            highlightActiveLineGutter: !readOnly,
-          }}
+          basicSetup={basicSetup}
           className="min-h-9 overflow-auto"
         />
       </div>
