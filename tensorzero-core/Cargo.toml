@@ -109,7 +109,11 @@ scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.31.0"
 opentelemetry = "0.31.0"
 tracing-opentelemetry = "0.32.0"
-opentelemetry-otlp = { version = "0.31.0", features = ["grpc-tonic", "tls", "tls-roots"] }
+opentelemetry-otlp = { version = "0.31.0", features = [
+    "grpc-tonic",
+    "tls",
+    "tls-roots",
+] }
 opentelemetry-semantic-conventions = "0.31.0"
 init-tracing-opentelemetry = "0.32.1"
 tracing-futures = { version = "0.2.5", features = ["futures-03"] }

@@ -1,6 +1,6 @@
 use crate::db::{
     clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
-    FeedbackByVariant, TableBoundsWithCount,
+    FeedbackByVariant, FeedbackTimeSeriesPoint, TableBoundsWithCount,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     db::{ModelLatencyDatapoint, ModelUsageTimePoint, SelectQueries, TimeWindow},
     error::{Error, ErrorDetails},
+    experimentation::asymptotic_confidence_sequences::asymp_cs,
 };
 
 use super::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo};
@@ -26,6 +27,10 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // TODO: probably factor this out into common code as other queries will likely need similar logic
         // NOTE: this filter pattern will likely include some extra data since the current period is likely incomplete.
         let (time_grouping, time_filter) = match time_window {
+            TimeWindow::Minute => (
+                "toStartOfMinute(minute)",
+                format!("minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"),
+            ),
             TimeWindow::Hour => (
                 "toStartOfHour(minute)",
                 format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
@@ -86,23 +91,22 @@ impl SelectQueries for ClickHouseConnectionInfo {
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
         let time_filter = match time_window {
+            TimeWindow::Minute => {
+                "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MINUTE"
+            }
             TimeWindow::Hour => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 HOUR"
-                    .to_string()
             }
             TimeWindow::Day => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 DAY"
-                    .to_string()
             }
             TimeWindow::Week => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 WEEK"
-                    .to_string()
             }
             TimeWindow::Month => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MONTH"
-                    .to_string()
             }
-            TimeWindow::Cumulative => "1 = 1".to_string(),
+            TimeWindow::Cumulative => "1 = 1",
         };
         let qs = quantiles_sql_args();
         let query = format!(
@@ -336,5 +340,173 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     message: format!("Failed to deserialize FeedbackByVariant: {e}"),
                 })
             })
+    }
+
+    async fn get_feedback_timeseries(
+        &self,
+        function_name: String,
+        metric_name: String,
+        variant_names: Option<Vec<String>>,
+        time_window: TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error> {
+        // Convert TimeWindow to ClickHouse INTERVAL syntax and interval functions
+        let (interval_str, interval_function) = match time_window {
+            TimeWindow::Minute => ("INTERVAL 1 MINUTE", "toIntervalMinute"),
+            TimeWindow::Hour => ("INTERVAL 1 HOUR", "toIntervalHour"),
+            TimeWindow::Day => ("INTERVAL 1 DAY", "toIntervalDay"),
+            TimeWindow::Week => ("INTERVAL 1 WEEK", "toIntervalWeek"),
+            TimeWindow::Month => ("INTERVAL 1 MONTH", "toIntervalMonth"),
+            TimeWindow::Cumulative => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cumulative time window is not supported for feedback timeseries"
+                        .to_string(),
+                }))
+            }
+        };
+
+        // If variants are passed, build variant filter.
+        // If None we don't filter at all;
+        // If empty, we'll return an empty vector for consistency
+        let variant_filter = match variant_names {
+            None => String::new(),
+            Some(names) if names.is_empty() => {
+                return Ok(vec![]);
+            }
+            Some(names) => {
+                let escaped_names: Vec<String> = names
+                    .iter()
+                    .map(|name| format!("'{}'", escape_string_for_clickhouse_literal(name)))
+                    .collect();
+                format!(" AND variant_name IN ({})", escaped_names.join(", "))
+            }
+        };
+
+        // Compute cumulative statistics from all historical data
+        let query = format!(
+            r"
+            WITH
+                -- CTE 1: Aggregate ALL historical data into time periods (no time filter)
+                AggregatedFilteredFeedbackByVariantStatistics AS (
+                    SELECT
+                        toStartOfInterval(minute, {interval_str}) + {interval_str} AS period_end,
+                        variant_name,
+
+                        -- Apply -MergeState combinator to merge and keep as state for later merging
+                        avgMergeState(feedback_mean) AS merged_mean_state,
+                        varSampStableMergeState(feedback_variance) AS merged_var_state,
+                        sum(count) AS period_count
+
+                    FROM FeedbackByVariantStatistics
+
+                    WHERE
+                        function_name = {{function_name:String}}
+                        AND metric_name = {{metric_name:String}}
+                        {variant_filter}
+
+                    GROUP BY
+                        period_end,
+                        variant_name
+                ),
+
+                -- CTE 2: For each variant, create sorted arrays of the periodic data.
+                ArraysByVariant AS (
+                    SELECT
+                        variant_name,
+                        -- 3. Unzip the sorted tuples back into individual arrays
+                        arrayMap(x -> x.1, sorted_zipped_arrays) AS periods,
+                        arrayMap(x -> x.2, sorted_zipped_arrays) AS mean_states,
+                        arrayMap(x -> x.3, sorted_zipped_arrays) AS var_states,
+                        arrayMap(x -> x.4, sorted_zipped_arrays) AS counts
+                    FROM (
+                        SELECT
+                            variant_name,
+                            (
+                                -- 2. Sort the array of tuples based on the first element (the period_end)
+                                arraySort(x -> x.1,
+                                    -- 1. Zip the unsorted arrays together into an array of tuples
+                                    arrayZip(
+                                        groupArray(period_end),
+                                        groupArray(merged_mean_state),
+                                        groupArray(merged_var_state),
+                                        groupArray(period_count)
+                                    )
+                                )
+                            ) AS sorted_zipped_arrays
+                        FROM AggregatedFilteredFeedbackByVariantStatistics
+                        GROUP BY variant_name
+                    )
+                ),
+
+                -- CTE 3: Compute cumulative stats for all periods
+                AllCumulativeStats AS (
+                    SELECT
+                        periods[i] AS period_end,
+                        variant_name,
+
+                        arrayReduce('avgMerge', arraySlice(mean_states, 1, i)) AS mean,
+                        arrayReduce('varSampStableMerge', arraySlice(var_states, 1, i)) AS variance,
+                        arraySum(arraySlice(counts, 1, i)) AS count
+
+                    FROM ArraysByVariant
+                    ARRAY JOIN arrayEnumerate(periods) AS i
+                ),
+
+                -- CTE 4: Filter to only the most recent max_periods (DateTime arithmetic on DateTime types)
+                FilteredCumulativeStats AS (
+                    SELECT
+                        period_end,
+                        variant_name,
+                        mean,
+                        variance,
+                        count
+                    FROM AllCumulativeStats
+                    WHERE period_end >= (
+                        SELECT max(period_end)
+                        FROM AllCumulativeStats
+                    ) - {interval_function}({{max_periods:UInt32}})
+                )
+
+            -- Final SELECT: Format the DateTime to string
+            SELECT
+                formatDateTime(period_end, '%Y-%m-%dT%H:%i:%SZ') AS period_end,
+                variant_name,
+                mean,
+                variance,
+                count
+            FROM FilteredCumulativeStats
+            ORDER BY
+                period_end ASC,
+                variant_name ASC
+            FORMAT JSONEachRow
+            ",
+        );
+
+        // Create parameters HashMap
+        let max_periods_str = max_periods.to_string();
+        let params = std::collections::HashMap::from([
+            ("function_name", function_name.as_str()),
+            ("metric_name", metric_name.as_str()),
+            ("max_periods", max_periods_str.as_str()),
+        ]);
+
+        let response = self.run_query_synchronous(query, &params).await?;
+
+        // Deserialize the results into FeedbackTimeSeriesPoint
+        let feedback = response
+            .response
+            .trim()
+            .lines()
+            .map(|row| {
+                serde_json::from_str(row).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize FeedbackTimeSeriesPoint: {e}"),
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Add confidence sequence
+        asymp_cs(feedback, 0.05, None)
     }
 }
