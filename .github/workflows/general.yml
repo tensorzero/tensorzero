@@ -227,7 +227,7 @@ jobs:
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
   validate:
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-tensorzero-8x16
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
@@ -274,6 +274,14 @@ jobs:
 
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
+
+      - name: Configure Namespace cache for Rust, Python (pip), and pnpm
+        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
+        with:
+          cache: |
+            pnpm
+            rust
+            uv
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
