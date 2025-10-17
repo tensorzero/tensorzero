@@ -127,6 +127,7 @@ base64 = { workspace = true }
 thiserror = { workspace = true }
 globset = "0.4.15"
 walkdir = "2.5.0"
+enum-map = "2.7.3"
 tokio-util = { workspace = true, features = ["rt"] }
 tempfile = { workspace = true }
 ts-rs = { workspace = true }
