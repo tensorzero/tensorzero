@@ -139,8 +139,10 @@ mod tests {
         assert_eq!(
             format!(
                 "{:?}",
-                TensorZeroApiKey::parse("sk-t0-123456789012-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-                    .unwrap()
+                TensorZeroApiKey::parse(
+                    "sk-t0-123456789012-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                )
+                .unwrap()
             ),
             "TensorZeroApiKey { short_id: \"123456789012\", hashed_long_key: SecretBox<str>([REDACTED]) }"
         );
