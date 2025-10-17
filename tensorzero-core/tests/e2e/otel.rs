@@ -309,12 +309,11 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
 async fn test_stream_fatal_error_usage() {
     let exporter = install_capturing_otel_exporter().await;
 
-    let config = format!(
-        "
+    let config = "
     [gateway.export.otlp.traces]
     enabled = true
     "
-    );
+    .to_string();
 
     let client = make_embedded_gateway_with_config(&config).await;
     let model_name = "dummy::fatal_stream_error";

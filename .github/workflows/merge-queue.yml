@@ -307,6 +307,7 @@ jobs:
           uv run pytest
 
       - name: Terminate the gateway and wait for it to exit
+        if: always()
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
