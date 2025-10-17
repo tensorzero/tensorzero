@@ -159,6 +159,7 @@ pub struct DynamicImplicitToolConfig {
 #[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
+
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
 }
@@ -333,7 +334,7 @@ pub struct DynamicToolParams {
     pub additional_tools: Option<Vec<Tool>>,
     pub tool_choice: Option<ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
-    pub provider_tools: Vec<ProviderTool>,
+    pub provider_tools: Option<Vec<ProviderTool>>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -697,7 +698,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                     additional_tools: None,
                     tool_choice: None,
                     parallel_tool_calls: None,
-                    provider_tools: vec![],
+                    provider_tools: None,
                 };
                 num_inferences
             ]);
@@ -794,7 +795,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                 additional_tools: additional_tools_iter.next().unwrap_or(None),
                 tool_choice: tool_choice_iter.next().unwrap_or(None),
                 parallel_tool_calls: parallel_tool_calls_iter.next().unwrap_or(None),
-                provider_tools: provider_tools_iter.next().unwrap_or(None).unwrap_or(vec![]),
+                provider_tools: provider_tools_iter.next().unwrap_or(None),
             });
         }
         Ok(all_dynamic_tool_params)

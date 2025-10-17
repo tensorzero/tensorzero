@@ -568,7 +568,7 @@ pub struct OpenAICompatibleParams {
     #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
     tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     #[serde(default, rename = "tensorzero::provider_tools")]
-    tensorzero_provider_tools: Vec<ProviderTool>,
+    tensorzero_provider_tools: Option<Vec<ProviderTool>>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -1446,7 +1446,7 @@ mod tests {
             stream_options: None,
             stop: None,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(params.function_name, Some("test_function".to_string()));
@@ -1940,7 +1940,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(params.cache_options, CacheParamsOptions::default());
@@ -1979,7 +1979,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(
@@ -2024,7 +2024,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(
@@ -2069,7 +2069,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
-            tensorzero_provider_tools: vec![],
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(

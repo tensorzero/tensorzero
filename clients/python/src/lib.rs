@@ -463,13 +463,16 @@ impl BaseTensorZeroGateway {
             None
         };
 
-        let provider_tools: Vec<ProviderTool> = if let Some(provider_tools) = provider_tools {
-            provider_tools
-                .iter()
-                .map(|x| deserialize_from_pyobj(py, x))
-                .collect::<PyResult<Vec<_>>>()?
+        let provider_tools: Option<Vec<ProviderTool>> = if let Some(provider_tools) = provider_tools
+        {
+            Some(
+                provider_tools
+                    .iter()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .collect::<PyResult<Vec<_>>>()?,
+            )
         } else {
-            vec![]
+            None
         };
 
         let tool_choice = if let Some(tool_choice) = tool_choice {
