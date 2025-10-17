@@ -81,16 +81,24 @@ pub enum ProviderToolScope {
     Unscoped,
     ModelProvider {
         model_name: String,
-        provider_name: String,
+        model_provider_name: String,
     },
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
     #[serde(default)]
     scope: ProviderToolScope,
     tool: Value,
+}
+
+impl std::fmt::Display for ProviderTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
