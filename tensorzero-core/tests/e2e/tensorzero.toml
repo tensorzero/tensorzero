@@ -403,7 +403,7 @@ routing = ["sglang"]
 [models."Qwen/Qwen2.5-1.5B-Instruct".providers.sglang]
 type = "sglang"
 model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-api_base = "https://tensorzero--sglang-inference-sglang-inference.modal.run/v1/"
+api_base = "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
 
 [models."qwen2.5-0.5b-instruct-vllm"]
 routing = ["vllm"]
