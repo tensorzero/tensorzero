@@ -363,44 +363,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
             }
         };
 
-        // Old implementation using time_buckets CTE and self-join
-        // Clickhouse has no `toEndOfInterval` function, so we use toStartOfInterval + interval to get
-        // the end of each period, since we're computing cumulative stats up to each time point
-        // let time_grouping = format!("toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE");
-        // let time_filter = format!(
-        //     "minute >= (SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
-        // );
-        //
-        // // Query to compute cumulative statistics: for each time bucket, aggregate all data from start up to that bucket
-        // let query = format!(
-        //     r"
-        //     WITH time_buckets AS (
-        //         SELECT DISTINCT {time_grouping} as period
-        //         FROM FeedbackByVariantStatistics
-        //         WHERE function_name = '{escaped_function_name}'
-        //             AND metric_name = '{escaped_metric_name}'
-        //             AND {time_filter}
-        //     )
-        //     SELECT
-        //         formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_end,
-        //         f.variant_name,
-        //         avgMerge(f.feedback_mean) as mean,
-        //         varSampStableMerge(f.feedback_variance) as variance,
-        //         sum(f.count) as count
-        //     FROM time_buckets tb
-        //     INNER JOIN FeedbackByVariantStatistics f
-        //         ON f.function_name = '{escaped_function_name}'
-        //         AND f.metric_name = '{escaped_metric_name}'
-        //         AND f.minute <= tb.period
-        //         {variant_filter}
-        //     GROUP BY tb.period, f.variant_name
-        //     ORDER BY period_end ASC, f.variant_name ASC
-        //     FORMAT JSONEachRow
-        //     ",
-        // );
-
-        // New implementation using window functions for better performance
-        // This computes true cumulative statistics from all historical data
+        // Compute cumulative statistics from all historical data
         let query = format!(
             r"
             WITH
