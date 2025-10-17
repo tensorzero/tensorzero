@@ -23,7 +23,7 @@ curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" \
 
 echo "Warming up SGLang Modal instance..."
 curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" \
-     https://tensorzero--sglang-inference-sglang-inference.modal.run/ \
+     https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/ \
      > sglang_modal_logs.txt &
 
 echo "Waiting for warmup requests to complete..."
