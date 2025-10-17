@@ -454,6 +454,7 @@ impl<'a> GeminiContent<'a> {
                     thought @ Thought {
                         text,
                         signature,
+                        summary: _,
                         provider_type: _,
                     },
                 ) => {
@@ -879,6 +880,8 @@ fn content_part_to_tensorzero_chunk(
                     id: last_thought_id.to_string(),
                     text: Some(text),
                     signature: part.thought_signature,
+                    summary_id: None,
+                    summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -891,6 +894,8 @@ fn content_part_to_tensorzero_chunk(
                     id: last_thought_id.to_string(),
                     text: None,
                     signature: part.thought_signature,
+                    summary_id: None,
+                    summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -923,6 +928,8 @@ fn content_part_to_tensorzero_chunk(
         output.push(ContentBlockChunk::Thought(ThoughtChunk {
             id: last_thought_id.to_string(),
             text: None,
+            summary_id: None,
+            summary_text: None,
             signature: Some(thought_signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
         }));
@@ -988,6 +995,7 @@ fn convert_part_to_output(
                 output.push(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: Some(text),
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -998,6 +1006,7 @@ fn convert_part_to_output(
                 output.push(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: None,
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -1026,6 +1035,7 @@ fn convert_part_to_output(
         output.push(ContentBlockOutput::Thought(Thought {
             signature: Some(thought_signature),
             text: None,
+            summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
         }));
     }

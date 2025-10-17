@@ -773,6 +773,8 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
     } else if model_name.starts_with("claude-3-7-sonnet")
         || model_name.starts_with("claude-sonnet-4-202")
         || model_name == "claude-sonnet-4-0"
+        || model_name.starts_with("claude-haiku-4-5")
+        || model_name.starts_with("claude-sonnet-4-5")
     {
         Ok(64_000)
     } else if model_name.starts_with("claude-opus-4-202")
@@ -942,12 +944,14 @@ fn convert_to_output(
         }) => Ok(ContentBlockOutput::Thought(Thought {
             text: Some(thinking),
             signature: Some(signature),
+            summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
         })),
         FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
                 text: None,
                 signature: Some(data),
+                summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
@@ -1204,6 +1208,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: Some(thinking),
                         signature: None,
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
@@ -1218,6 +1224,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: None,
                         signature: Some(signature),
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
@@ -1269,6 +1277,8 @@ fn anthropic_to_tensorzero_stream_message(
                     text: Some(thinking),
                     signature: Some(signature),
                     id: index.to_string(),
+                    summary_id: None,
+                    summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })],
                 None,
@@ -1282,6 +1292,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: None,
                         signature: Some(data),
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,

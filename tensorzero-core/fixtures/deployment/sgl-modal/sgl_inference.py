@@ -7,7 +7,9 @@ tag = f"{cuda_version}-{flavor}-{operating_system}"
 
 sgl_image = (
     modal.Image.from_registry(f"nvidia/cuda:{tag}", add_python="3.12")
-    .pip_install("sglang[all]>=0.4.6.post1", "huggingface_hub[hf_transfer]==0.30.2")
+    # This is the last version of sglang that supports SM75 GPUs (e.g. the Nvidia T4)
+    .pip_install("sglang[all]==0.4.10.post2", "huggingface_hub[hf_transfer]==0.34")
+    .apt_install("numactl")
     .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
 )
 
@@ -20,7 +22,7 @@ hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=Tru
 sglang_cache_vol = modal.Volume.from_name("sglang-cache", create_if_missing=True)
 
 N_GPU = 1
-app = modal.App(name="sglang-inference")
+app = modal.App(name="sglang-0.4.10-inference")
 
 
 @app.function(
@@ -47,6 +49,8 @@ def sglang_inference():
         "python",
         "-m",
         "sglang.launch_server",
+        # This prevents the container from OOMing on startup
+        "--disable-cuda-graph",
         "--model-path",
         MODEL_NAME,
         "--tool-call-parser",
