@@ -2389,6 +2389,8 @@ fn openai_to_tensorzero_chunk(
                 signature: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
                 id: "1".to_string(),
+                summary_id: None,
+                summary_text: None,
             }));
         }
         if let Some(text) = choice.delta.content {

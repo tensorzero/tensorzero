@@ -2379,7 +2379,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
     let res = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
-            variant_name: Some(provider.variant_name),
+            variant_name: Some(provider.variant_name.clone()),
             input: ClientInput {
                 system: Some(serde_json::json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![
@@ -2388,6 +2388,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
                         content: vec![ClientInputMessageContent::Thought(Thought {
                             text: Some("My TensorZero thought".to_string()),
                             signature: Some("My new TensorZero signature".to_string()),
+                            summary: None,
                             provider_type: None,
                         })],
                     },
@@ -2406,6 +2407,10 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
 
     if "anthropic" == provider.model_provider_name.as_str() {
         // Anthropic rejects requests with invalid thought signatures
+        let err = res.unwrap_err();
+        assert!(err.to_string().contains("signature"));
+    } else if "openai-responses" == provider.variant_name.as_str() {
+        // OpenAI Responses rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
     } else {

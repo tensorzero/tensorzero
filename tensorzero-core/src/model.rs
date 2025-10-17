@@ -214,6 +214,7 @@ impl ModelConfig {
                 ContentBlock::Thought(Thought {
                     text: _,
                     signature: _,
+                    summary: _,
                     provider_type,
                 }) => provider_type
                     .as_ref()
@@ -243,6 +244,7 @@ impl ModelConfig {
                             ContentBlock::Thought(Thought {
                                 text: _,
                                 signature: _,
+                                summary: _,
                                 provider_type,
                             }) => {
                                 // When a thought is scoped to a particular provider type, we discard

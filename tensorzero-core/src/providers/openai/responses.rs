@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::inference::types::ProviderInferenceResponseStreamInner;
+use crate::inference::types::{ProviderInferenceResponseStreamInner, ThoughtSummaryBlock};
 use crate::providers::openai::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
@@ -164,25 +164,29 @@ impl OpenAIResponsesResponse<'_> {
                     encrypted_content,
                     summary,
                 }) => {
+                    let mut thought = Thought {
+                        text: None,
+                        signature: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        summary: None,
+                    };
+
                     if let Some(encrypted_content) = encrypted_content {
-                        output.push(ContentBlockOutput::Thought(Thought {
-                            text: None,
-                            signature: Some(encrypted_content),
-                            provider_type: Some(PROVIDER_TYPE.to_string()),
-                        }));
+                        thought.signature = Some(encrypted_content);
                     }
 
-                    for summary in summary {
-                        match summary {
+                    let tensorzero_summary = summary
+                        .into_iter()
+                        .map(|summary| match summary {
                             OpenAIResponsesReasoningSummary::SummaryText { text } => {
-                                output.push(ContentBlockOutput::Thought(Thought {
-                                    text: Some(text.to_string()),
-                                    signature: None,
-                                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                                }));
+                                ThoughtSummaryBlock::SummaryText {
+                                    text: text.to_string(),
+                                }
                             }
-                        }
-                    }
+                        })
+                        .collect::<Vec<ThoughtSummaryBlock>>();
+                    thought.summary = Some(tensorzero_summary);
+                    output.push(ContentBlockOutput::Thought(thought));
                 }
                 FlattenUnknown::Unknown(data) => {
                     output.push(ContentBlockOutput::Unknown {
@@ -439,7 +443,7 @@ pub enum OpenAIResponsesOutputInner<'a> {
     },
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIResponsesReasoningSummary<'a> {
     SummaryText { text: Cow<'a, str> },
@@ -531,6 +535,7 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct OpenAIResponsesReasoning<'a> {
     encrypted_content: Cow<'a, str>,
+    summary: Vec<OpenAIResponsesReasoningSummary<'a>>,
 }
 
 impl Serialize for OpenAIResponsesInputMessageContent<'_> {
@@ -710,7 +715,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
 
 pub fn tensorzero_to_openai_responses_assistant_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
-    provider_type: &str,
+    _provider_type: &str,
 ) -> Result<Vec<OpenAIResponsesInput<'a>>, Error> {
     let mut output = Vec::new();
     let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
@@ -773,8 +778,31 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
             }
             Cow::Borrowed(ContentBlock::Thought(ref thought))
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
-                warn_discarded_thought_block(provider_type, thought);
+                if let Some(encrypted_content) = &thought.signature {
+                    output.push(OpenAIResponsesInput::Known(
+                        OpenAIResponsesInputInner::Reasoning(OpenAIResponsesReasoning {
+                            encrypted_content: Cow::Owned(encrypted_content.clone()),
+                            summary: thought
+                                .summary
+                                .as_ref()
+                                .map(|summary| {
+                                    summary
+                                        .iter()
+                                        .map(|block| match block {
+                                            ThoughtSummaryBlock::SummaryText { text } => {
+                                                OpenAIResponsesReasoningSummary::SummaryText {
+                                                    text: Cow::Owned(text.to_string()),
+                                                }
+                                            }
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
+                        }),
+                    ));
+                }
             }
+
             Cow::Borrowed(ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -1002,13 +1030,16 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
         // Reasoning (thought) delta
         OpenAIResponsesStreamEvent::ResponseReasoningSummaryTextDelta {
             delta,
+            output_index,
             summary_index,
             ..
         } => Ok(Some(ProviderInferenceResponseChunk::new(
             vec![ContentBlockChunk::Thought(ThoughtChunk {
-                text: Some(delta),
+                text: None,
                 signature: None,
-                id: summary_index.to_string(),
+                id: output_index.to_string(),
+                summary_id: Some(summary_index.to_string()),
+                summary_text: Some(delta),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             })],
             None,
@@ -1455,7 +1486,7 @@ mod tests {
             delta: "Let me think...".to_string(),
             item_id: "rs_1".to_string(),
             output_index: 0,
-            summary_index: 1,
+            summary_index: 3,
         };
 
         let mut tool_id = None;
@@ -1474,8 +1505,13 @@ mod tests {
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
             ContentBlockChunk::Thought(thought_chunk) => {
-                assert_eq!(thought_chunk.text, Some("Let me think...".to_string()));
-                assert_eq!(thought_chunk.id, "1");
+                assert_eq!(thought_chunk.text, None);
+                assert_eq!(thought_chunk.id, "0");
+                assert_eq!(thought_chunk.summary_id, Some("3".to_string()));
+                assert_eq!(
+                    thought_chunk.summary_text,
+                    Some("Let me think...".to_string())
+                );
                 assert_eq!(thought_chunk.provider_type, Some(PROVIDER_TYPE.to_string()));
             }
             _ => panic!("Expected Thought chunk"),

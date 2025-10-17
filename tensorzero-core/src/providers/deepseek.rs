@@ -546,6 +546,8 @@ fn deepseek_to_tensorzero_chunk(
                 text: Some(reasoning),
                 signature: None,
                 id: "0".to_string(),
+                summary_id: None,
+                summary_text: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
@@ -699,6 +701,7 @@ impl<'a> TryFrom<DeepSeekResponseWithMetadata<'a>> for ProviderInferenceResponse
             content.push(ContentBlockOutput::Thought(Thought {
                 text: Some(reasoning),
                 signature: None,
+                summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
@@ -1010,6 +1013,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("I'm thinking about the weather".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             })
         );

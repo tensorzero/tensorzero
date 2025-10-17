@@ -841,6 +841,7 @@ mod tests {
             ClientInputMessageContent::Thought(Thought {
                 text: Some("thought".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             }),
         ];

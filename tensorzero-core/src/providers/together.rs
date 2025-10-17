@@ -577,6 +577,7 @@ impl<'a> TryFrom<TogetherResponseWithMetadata<'a>> for ProviderInferenceResponse
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: Some(reasoning),
                     signature: None,
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -702,6 +703,8 @@ fn together_to_tensorzero_chunk(
                             content.push(ContentBlockChunk::Thought(ThoughtChunk {
                                 text: Some(text),
                                 signature: None,
+                                summary_id: None,
+                                summary_text: None,
                                 id: thinking_state.get_id(),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
                             }));
@@ -1006,6 +1009,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("hmmm".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: Some("together".to_string()),
             })
         );
@@ -1054,6 +1058,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("hmmm".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: Some("together".to_string()),
             })
         );
@@ -1524,6 +1529,8 @@ mod tests {
             vec![ContentBlockChunk::Thought(ThoughtChunk {
                 text: Some("some thinking content".to_string()),
                 signature: None,
+                summary_id: None,
+                summary_text: None,
                 id: "1".to_string(),
                 provider_type: Some("together".to_string()),
             })]

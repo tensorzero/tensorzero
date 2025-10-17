@@ -669,6 +669,8 @@ fn fireworks_to_tensorzero_chunk(
             content.push(ContentBlockChunk::Thought(ThoughtChunk {
                 text: Some(reasoning),
                 signature: None,
+                summary_id: None,
+                summary_text: None,
                 id: THINK_CHUNK_ID.to_string(),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
@@ -687,6 +689,8 @@ fn fireworks_to_tensorzero_chunk(
                             content.push(ContentBlockChunk::Thought(ThoughtChunk {
                                 text: Some(text.to_string()),
                                 signature: None,
+                                summary_id: None,
+                                summary_text: None,
                                 id: thinking_state.get_id(),
                                 provider_type: Some(PROVIDER_TYPE.to_string()),
                             }));
@@ -792,6 +796,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
             content.push(ContentBlockOutput::Thought(Thought {
                 text: Some(reasoning),
                 signature: None,
+                summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }
@@ -802,6 +807,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
                 content.push(ContentBlockOutput::Thought(Thought {
                     text: Some(reasoning),
                     signature: None,
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }

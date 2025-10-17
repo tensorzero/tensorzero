@@ -425,6 +425,7 @@ impl<'a> TryFrom<VLLMResponseWithMetadata<'a>> for ProviderInferenceResponse {
             content.push(ContentBlockOutput::Thought(Thought {
                 text: Some(reasoning),
                 signature: None,
+                summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }));
         }

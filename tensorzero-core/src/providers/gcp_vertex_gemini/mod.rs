@@ -2177,6 +2177,8 @@ fn content_part_to_tensorzero_chunk(
                 return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: Some(text),
+                    summary_id: None,
+                    summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })));
@@ -2188,6 +2190,8 @@ fn content_part_to_tensorzero_chunk(
                 return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: None,
+                    summary_id: None,
+                    summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })));
@@ -2275,6 +2279,7 @@ fn convert_to_output(
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: Some(text),
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -2285,6 +2290,7 @@ fn convert_to_output(
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: None,
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }

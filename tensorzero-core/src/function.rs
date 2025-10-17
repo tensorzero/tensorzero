@@ -2288,11 +2288,13 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("thinking...".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             }),
             ContentBlockOutput::Thought(Thought {
                 text: Some("still thinking".to_string()),
                 signature: Some("sig".to_string()),
+                summary: None,
                 provider_type: None,
             }),
         ];
@@ -2307,6 +2309,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("first thought".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             }),
             ContentBlockOutput::Text(Text {
@@ -2315,6 +2318,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("second thought".to_string()),
                 signature: Some("sig2".to_string()),
+                summary: None,
                 provider_type: None,
             }),
             ContentBlockOutput::ToolCall(ToolCall {
@@ -2367,6 +2371,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("final thought".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             }),
         ];
