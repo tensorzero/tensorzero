@@ -210,6 +210,12 @@ jobs:
           done
         shell: bash
 
+      - name: Configure Namespace cache for Rust
+        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
+        with:
+          cache: |
+            rust
+
       - name: Install cargo-hack
         uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
         with:
@@ -268,14 +274,6 @@ jobs:
 
       - name: Install uv
         run: curl -LsSf --retry 2 --retry-delay 10 --retry-max-time 60 https://astral.sh/uv/0.6.17/install.sh | sh
-
-      - name: Configure Namespace cache for Rust, Python (pip), and pnpm
-        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
-        with:
-          cache: |
-            pnpm
-            rust
-            uv
 
       - name: Install JS dependencies
         run: pnpm install --frozen-lockfile
