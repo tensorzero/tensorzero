@@ -226,6 +226,7 @@ export * from "./TemplateWithSchema";
 export * from "./Text";
 export * from "./TextKind";
 export * from "./Thought";
+export * from "./ThoughtSummaryBlock";
 export * from "./TimeComparisonOperator";
 export * from "./TimeFilter";
 export * from "./TimeWindow";
