@@ -39,6 +39,8 @@ pub async fn get_tool_params_args(
                 additional_tools: Some(additional_tools),
                 tool_choice: Some(tool_params.tool_choice.clone()),
                 parallel_tool_calls: tool_params.parallel_tool_calls,
+                // TODO (Viraj): once we have this stored in the database, be sure to add it
+                provider_tools: vec![],
             }
         }
         // This branch is actually unreachable
@@ -47,6 +49,7 @@ pub async fn get_tool_params_args(
             additional_tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            provider_tools: vec![],
         },
     }
 }
@@ -176,6 +179,7 @@ mod tests {
                     parameters: json!({}),
                     strict: true,
                 }]),
+                provider_tools: vec![],
             }
         );
 
@@ -208,6 +212,7 @@ mod tests {
                 parallel_tool_calls: None,
                 allowed_tools: Some(vec!["tool_1".to_string()]),
                 additional_tools: Some(vec![]),
+                provider_tools: vec![],
             }
         );
     }

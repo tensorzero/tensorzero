@@ -74,6 +74,25 @@ impl Tool {
     }
 }
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[serde(untagged)]
+pub enum ProviderToolScope {
+    #[default]
+    Unscoped,
+    ModelProvider {
+        model_name: String,
+        provider_name: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ProviderTool {
+    #[serde(default)]
+    scope: ProviderToolScope,
+    tool: Value,
+}
+
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -306,6 +325,7 @@ pub struct DynamicToolParams {
     pub additional_tools: Option<Vec<Tool>>,
     pub tool_choice: Option<ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
+    pub provider_tools: Vec<ProviderTool>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -314,6 +334,7 @@ pub struct BatchDynamicToolParams {
     pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,
     pub tool_choice: Option<Vec<Option<ToolChoice>>>,
     pub parallel_tool_calls: Option<Vec<Option<bool>>>,
+    pub provider_tools: Option<Vec<Option<Vec<ProviderTool>>>>,
 }
 
 // Helper type for converting BatchDynamicToolParams into a Vec<DynamicToolParams>
@@ -668,6 +689,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                     additional_tools: None,
                     tool_choice: None,
                     parallel_tool_calls: None,
+                    provider_tools: vec![],
                 };
                 num_inferences
             ]);
@@ -677,6 +699,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
             additional_tools,
             tool_choice,
             parallel_tool_calls,
+            provider_tools,
         } = batch_dynamic_tool_params;
 
         // Verify all provided Vecs have the same length
@@ -728,17 +751,30 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                 .into());
             }
         }
+        if let Some(provider_tools) = &provider_tools {
+            if provider_tools.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "provider_tools vector length ({}) does not match number of inferences ({})",
+                        provider_tools.len(),
+                        num_inferences
+                    )
+                }.into());
+            }
+        }
         // Convert Option<Vec<Option<T>>> into Vec<Option<T>> by unwrapping or creating empty vec
         let allowed_tools = allowed_tools.unwrap_or_default();
         let additional_tools = additional_tools.unwrap_or_default();
         let tool_choice = tool_choice.unwrap_or_default();
         let parallel_tool_calls = parallel_tool_calls.unwrap_or_default();
+        let provider_tools = provider_tools.unwrap_or_default();
 
         // Create iterators that take ownership
         let mut allowed_tools_iter = allowed_tools.into_iter();
         let mut additional_tools_iter = additional_tools.into_iter();
         let mut tool_choice_iter = tool_choice.into_iter();
         let mut parallel_tool_calls_iter = parallel_tool_calls.into_iter();
+        let mut provider_tools_iter = provider_tools.into_iter();
 
         // Build params using the iterators
         let mut all_dynamic_tool_params = Vec::with_capacity(num_inferences);
@@ -750,6 +786,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                 additional_tools: additional_tools_iter.next().unwrap_or(None),
                 tool_choice: tool_choice_iter.next().unwrap_or(None),
                 parallel_tool_calls: parallel_tool_calls_iter.next().unwrap_or(None),
+                provider_tools: provider_tools_iter.next().unwrap_or(None).unwrap_or(vec![]),
             });
         }
         Ok(all_dynamic_tool_params)
