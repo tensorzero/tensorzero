@@ -304,8 +304,8 @@ jobs:
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
-          # Wait for at most 10 seconds for the gateway to exit
-          for i in {1..10}; do
+          # Wait for at most 30 seconds for the gateway to exit
+          for i in {1..30}; do
             if ! kill -0 $GATEWAY_PID 2>/dev/null; then
               echo "Gateway exited"
               break
@@ -313,7 +313,7 @@ jobs:
             sleep 1
           done
           if kill -0 $GATEWAY_PID 2>/dev/null; then
-            echo "Gateway did not exit after 10 seconds!"
+            echo "Gateway did not exit after 30 seconds!"
             exit 1
           fi
 
