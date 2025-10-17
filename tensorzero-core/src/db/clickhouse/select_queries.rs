@@ -27,27 +27,27 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // NOTE: this filter pattern will likely include some extra data since the current period is likely incomplete.
         let (time_grouping, time_filter) = match time_window {
             TimeWindow::Minute => (
-                "toStartOfMinute(minute)".to_string(),
+                "toStartOfMinute(minute)",
                 format!("minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"),
             ),
             TimeWindow::Hour => (
-                "toStartOfHour(minute)".to_string(),
+                "toStartOfHour(minute)",
                 format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
             ),
             TimeWindow::Day => (
-                "toStartOfDay(minute)".to_string(),
+                "toStartOfDay(minute)",
                 format!("minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"),
             ),
             TimeWindow::Week => (
-                "toStartOfWeek(minute)".to_string(),
+                "toStartOfWeek(minute)",
                 format!("minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"),
             ),
             TimeWindow::Month => (
-                "toStartOfMonth(minute)".to_string(),
+                "toStartOfMonth(minute)",
                 format!("minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"),
             ),
             TimeWindow::Cumulative => (
-                "toDateTime('1970-01-01 00:00:00')".to_string(),
+                "toDateTime('1970-01-01 00:00:00')",
                 "1 = 1".to_string(), // No time filter for cumulative
             ),
         };
@@ -92,25 +92,20 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let time_filter = match time_window {
             TimeWindow::Minute => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MINUTE"
-                    .to_string()
             }
             TimeWindow::Hour => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 HOUR"
-                    .to_string()
             }
             TimeWindow::Day => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 DAY"
-                    .to_string()
             }
             TimeWindow::Week => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 WEEK"
-                    .to_string()
             }
             TimeWindow::Month => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MONTH"
-                    .to_string()
             }
-            TimeWindow::Cumulative => "1 = 1".to_string(),
+            TimeWindow::Cumulative => "1 = 1",
         };
         let qs = quantiles_sql_args();
         let query = format!(
