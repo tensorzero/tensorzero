@@ -1,3 +1,4 @@
+#!/bin/bash
 set -euxo pipefail
 
 curl -u "aaronhill_foWj4v:$BROWSERSTACK_KEY" -vvv \
