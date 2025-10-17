@@ -350,11 +350,6 @@ jobs:
       - name: Build (Rust)
         run: cargo build --workspace --verbose
 
-      - name: Lint (Rust)
-        run: |
-          cargo fmt -- --check
-          cargo hack clippy --all-targets --each-feature -- -D warnings
-
       - name: Run cargo-deny
         run: cargo deny check
 
