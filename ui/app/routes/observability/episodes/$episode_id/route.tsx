@@ -4,12 +4,10 @@ import {
   queryInferenceTableByEpisodeId,
 } from "~/utils/clickhouse/inference.server";
 import {
-  countFeedbackByTargetId,
   pollForFeedbackItem,
-  queryFeedbackBoundsByTargetId,
-  queryFeedbackByTargetId,
   queryLatestFeedbackIdByMetric,
 } from "~/utils/clickhouse/feedback";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { Route } from "./+types/route";
 import {
   data,
@@ -56,12 +54,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
 
+  const dbClient = await getNativeDatabaseClient();
+
   // If there is a freshly inserted feedback, ClickHouse may take some time to
   // update the feedback table as it is eventually consistent.
   // In this case, we poll for the feedback item until it is found but time out and log a warning.
   const feedbackDataPromise = newFeedbackId
     ? pollForFeedbackItem(episode_id, newFeedbackId, pageSize)
-    : queryFeedbackByTargetId({
+    : dbClient.queryFeedbackByTargetId({
         target_id: episode_id,
         before: beforeFeedback || undefined,
         after: afterFeedback || undefined,
@@ -87,11 +87,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       episode_id,
     }),
     feedbackDataPromise,
-    queryFeedbackBoundsByTargetId({
+    dbClient.queryFeedbackBoundsByTargetId({
       target_id: episode_id,
     }),
     countInferencesForEpisode(episode_id),
-    countFeedbackByTargetId(episode_id),
+    dbClient.countFeedbackByTargetId({
+      target_id: episode_id,
+    }),
     queryLatestFeedbackIdByMetric({ target_id: episode_id }),
   ]);
   if (inferences.length === 0) {

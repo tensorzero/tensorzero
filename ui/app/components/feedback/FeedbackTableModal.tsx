@@ -1,4 +1,4 @@
-import type { FeedbackRow } from "~/utils/clickhouse/feedback";
+import type { FeedbackRow } from "tensorzero-node";
 import {
   PageLayout,
   PageHeader,

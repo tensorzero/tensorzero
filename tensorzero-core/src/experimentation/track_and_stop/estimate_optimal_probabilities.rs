@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 use crate::config::MetricConfigOptimize;
-use crate::db::FeedbackByVariant;
+use crate::db::feedback::FeedbackByVariant;
 use crate::experimentation::track_and_stop::check_stopping::choose_leader;
 
 /// Arguments for computing optimal sampling probabilities.

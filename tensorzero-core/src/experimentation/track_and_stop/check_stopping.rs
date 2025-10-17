@@ -1,10 +1,8 @@
-#![allow(dead_code)]
-
 use core::f64;
 use std::cmp::Ordering;
 use thiserror::Error;
 
-use crate::{config::MetricConfigOptimize, db::FeedbackByVariant};
+use crate::{config::MetricConfigOptimize, db::feedback::FeedbackByVariant};
 
 /// Find all indices with the maximum value in `values`.
 ///
