@@ -1,4 +1,4 @@
 pub mod types;
-pub mod update;
+mod update_datapoints;
 
-pub use update::update_datapoints_handler;
+pub use update_datapoints::update_datapoints_handler;

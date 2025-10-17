@@ -4,7 +4,7 @@ use axum::{
     extract::{DefaultBodyLimit, Request},
     middleware::Next,
     response::Response,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
@@ -138,8 +138,8 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
             get(endpoints::datasets::get_datapoint_handler),
         )
         .route(
-            "/v1/datasets/{dataset_name}/datapoints/update",
-            post(endpoints::datasets::v1::update_datapoints_handler),
+            "/v1/datasets/{dataset_name}/datapoints",
+            patch(endpoints::datasets::v1::update_datapoints_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",

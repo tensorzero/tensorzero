@@ -48,7 +48,8 @@ use crate::endpoints::object_storage::get_object;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
-    FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
+    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
+    LazyResolvedInputMessageContent,
 };
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
@@ -180,6 +181,24 @@ impl LazyResolvedInput {
             messages,
         })
     }
+
+    /// Turns the input into a StoredInput, avoiding resolving network resources if possible.
+    pub async fn into_stored_input(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInput, Error> {
+        let stored_messages = futures::future::try_join_all(
+            self.messages
+                .into_iter()
+                .map(|message| message.into_stored_input_message(object_store_info)),
+        )
+        .await?;
+
+        Ok(StoredInput {
+            system: self.system,
+            messages: stored_messages,
+        })
+    }
 }
 
 impl InputMessage {
@@ -199,6 +218,7 @@ impl InputMessage {
 }
 
 impl LazyResolvedInputMessage {
+    /// Turns the input into a ResolvedInputMessage by fetching network resources for Files.
     pub async fn resolve(self) -> Result<ResolvedInputMessage, Error> {
         let content = futures::future::try_join_all(
             self.content
@@ -207,6 +227,24 @@ impl LazyResolvedInputMessage {
         )
         .await?;
         Ok(ResolvedInputMessage {
+            role: self.role,
+            content,
+        })
+    }
+
+    /// Turns the input into a StoredInputMessage by converting Files to StoredFiles, bypassing resolving network resources if possible.
+    pub async fn into_stored_input_message(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInputMessage, Error> {
+        let content = futures::future::try_join_all(
+            self.content
+                .into_iter()
+                .map(|content| content.into_stored_input_message_content(object_store_info)),
+        )
+        .await?;
+
+        Ok(StoredInputMessage {
             role: self.role,
             content,
         })
@@ -420,6 +458,45 @@ impl LazyResolvedInputMessageContent {
                 data,
                 model_provider_name,
             },
+        })
+    }
+
+    /// Converts the message content into a StoredInputMessageContent,
+    /// bypassing fetching files / resolving network resources if possible.
+    pub async fn into_stored_input_message_content(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
+            // When the input file already contains the ObjectStorage path, we discard the future without awaiting
+            // (which doesn't trigger the pending network request), and directly convert the metadata and
+            // storage_path into a StoredFile.
+            LazyResolvedInputMessageContent::File(file) => match *file {
+                LazyFile::ObjectStorage {
+                    metadata,
+                    storage_path,
+                    future: _,
+                } => StoredInputMessageContent::File(Box::new(StoredFile {
+                    file: metadata,
+                    storage_path,
+                })),
+                // All other file types need to be resolved first.
+                other => {
+                    let file = other.resolve().await?.into_owned();
+                    // Because this may trigger during a datapoint update,
+                    // we need to try and write the file to object storage first.
+                    write_file(
+                        object_store_info,
+                        file.file.clone(),
+                        file.storage_path.clone(),
+                    )
+                    .await?;
+
+                    StoredInputMessageContent::File(Box::new(file.into_stored_file()))
+                }
+            },
+            // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
+            other => other.resolve().await?.into_stored_input_message_content(),
         })
     }
 }
