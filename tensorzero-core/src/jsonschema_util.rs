@@ -160,6 +160,8 @@ impl DynamicJSONSchema {
         // Kick off the schema compilation in the background.
         // The first call to `validate` will either get the compiled schema (if the task finished),
         // or wait on the task to complete via the `OnceCell`
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         tokio::spawn(async move {
             // If this errors, then we'll just get the error when we call 'validate'
             let _ = this_clone.get_or_init_compiled_schema().await;
