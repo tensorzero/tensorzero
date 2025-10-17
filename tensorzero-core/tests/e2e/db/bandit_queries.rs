@@ -157,15 +157,16 @@ async fn test_clickhouse_get_feedback_timeseries_minute_level() {
         println!("Minute: {point:?}");
     }
 
-    // Verify basic properties
-    // CROSS JOIN generates all combinations, but INNER JOIN filters to only variants with data
-    // Period 1-2: 2 variants each (gpt4o_mini, llama_8b)
-    // Period 3-4: 3 variants each (all variants now have data)
-    // Total: 2 + 2 + 3 + 3 = 10 points
+    // Data that's expected:
+    // - Period 1 (22:46): 1 variant (llama_8b)
+    // - Period 2 (22:47): 2 variants (gpt4o_mini, llama_8b)
+    // - Period 3 (23:08): 2 variants (gpt4o_initial_prompt, gpt4o_mini)
+    // - Period 4 (02:35): 1 variant (gpt4o_mini)
+    // Total: 1 + 2 + 2 + 1 = 6 points
     assert_eq!(
         feedback_timeseries.len(),
-        10,
-        "Should have 10 data points across all variants and periods"
+        6,
+        "Should have 6 data points across all variants and periods"
     );
 
     // Count unique time periods
@@ -235,16 +236,15 @@ async fn test_clickhouse_get_feedback_timeseries_hourly() {
         println!("Hourly: {point:?}");
     }
 
-    // Verify basic properties
-    // CROSS JOIN generates all combinations, but INNER JOIN filters to only variants with data
-    // Period 1 (23:00): 2 variants (gpt4o_mini, llama_8b)
-    // Period 2 (00:00): 3 variants (gpt4o_initial_prompt now has data)
-    // Period 3 (03:00): 3 variants
-    // Total: 2 + 3 + 3 = 8 points
+    // Data that's expected:
+    // - Period 1 (23:00): 2 variants (gpt4o_mini, llama_8b)
+    // - Period 2 (00:00): 2 variants (gpt4o_initial_prompt, gpt4o_mini)
+    // - Period 3 (03:00): 1 variant (gpt4o_mini)
+    // Total: 2 + 2 + 1 = 5 points
     assert_eq!(
         feedback_timeseries.len(),
-        8,
-        "Should have 8 data points across all variants and periods"
+        5,
+        "Should have 5 data points across all variants and periods"
     );
 
     // Count unique time periods
@@ -314,12 +314,14 @@ async fn test_clickhouse_get_feedback_timeseries_daily() {
         println!("Daily: {point:?}");
     }
 
-    // Verify basic properties
-    // With CROSS JOIN, we get all variants × all periods = 3 variants × 2 periods = 6 points
+    // Data that's expected:
+    // - Period 1 (2025-04-15): 3 variants (gpt4o_initial_prompt, gpt4o_mini, , llama_8b)
+    // - Period 2 (2025-04-16): 1 variant (only gpt4o_mini has new data)
+    // Total: 3 + 1 = 4 points
     assert_eq!(
         feedback_timeseries.len(),
-        6,
-        "Should have 6 data points (3 variants × 2 periods)"
+        4,
+        "Should have 4 data points across variants and periods"
     );
 
     // Count unique time periods
