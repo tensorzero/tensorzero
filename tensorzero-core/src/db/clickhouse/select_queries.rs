@@ -27,24 +27,28 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // TODO: probably factor this out into common code as other queries will likely need similar logic
         // NOTE: this filter pattern will likely include some extra data since the current period is likely incomplete.
         let (time_grouping, time_filter) = match time_window {
+            TimeWindow::Minute => (
+                "toStartOfMinute(minute)",
+                format!("minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"),
+            ),
             TimeWindow::Hour => (
-                "toStartOfHour(minute)".to_string(),
+                "toStartOfHour(minute)",
                 format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
             ),
             TimeWindow::Day => (
-                "toStartOfDay(minute)".to_string(),
+                "toStartOfDay(minute)",
                 format!("minute >= (SELECT max(toStartOfDay(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} DAY"),
             ),
             TimeWindow::Week => (
-                "toStartOfWeek(minute)".to_string(),
+                "toStartOfWeek(minute)",
                 format!("minute >= (SELECT max(toStartOfWeek(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} WEEK"),
             ),
             TimeWindow::Month => (
-                "toStartOfMonth(minute)".to_string(),
+                "toStartOfMonth(minute)",
                 format!("minute >= (SELECT max(toStartOfMonth(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MONTH"),
             ),
             TimeWindow::Cumulative => (
-                "toDateTime('1970-01-01 00:00:00')".to_string(),
+                "toDateTime('1970-01-01 00:00:00')",
                 "1 = 1".to_string(), // No time filter for cumulative
             ),
         };
@@ -52,15 +56,15 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let query = format!(
             r"
             SELECT
-                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_end,
+                formatDateTime({time_grouping}, '%Y-%m-%dT%H:%i:%SZ') as period_start,
                 model_name,
                 sumMerge(total_input_tokens) as input_tokens,
                 sumMerge(total_output_tokens) as output_tokens,
                 countMerge(count) as count
             FROM ModelProviderStatistics
             WHERE {time_filter}
-            GROUP BY period_end, model_name
-            ORDER BY period_end DESC, model_name
+            GROUP BY period_start, model_name
+            ORDER BY period_start DESC, model_name
             FORMAT JSONEachRow
             ",
         );
@@ -87,23 +91,22 @@ impl SelectQueries for ClickHouseConnectionInfo {
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
         let time_filter = match time_window {
+            TimeWindow::Minute => {
+                "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MINUTE"
+            }
             TimeWindow::Hour => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 HOUR"
-                    .to_string()
             }
             TimeWindow::Day => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 DAY"
-                    .to_string()
             }
             TimeWindow::Week => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 WEEK"
-                    .to_string()
             }
             TimeWindow::Month => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MONTH"
-                    .to_string()
             }
-            TimeWindow::Cumulative => "1 = 1".to_string(),
+            TimeWindow::Cumulative => "1 = 1",
         };
         let qs = quantiles_sql_args();
         let query = format!(
@@ -344,18 +347,23 @@ impl SelectQueries for ClickHouseConnectionInfo {
         function_name: String,
         metric_name: String,
         variant_names: Option<Vec<String>>,
-        interval_minutes: u32,
+        time_window: TimeWindow,
         max_periods: u32,
     ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error> {
-        let escaped_function_name = escape_string_for_clickhouse_literal(&function_name);
-        let escaped_metric_name = escape_string_for_clickhouse_literal(&metric_name);
-
-        // Clickhouse has no `toEndOfInterval` function, so we use toStartOfInterval + interval to get
-        // the end of each period, since we're computing cumulative stats up to each time point
-        let time_grouping = format!("toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE");
-        let time_filter = format!(
-            "minute >= (SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
-        );
+        // Convert TimeWindow to ClickHouse INTERVAL syntax and interval functions
+        let (interval_str, interval_function) = match time_window {
+            TimeWindow::Minute => ("INTERVAL 1 MINUTE", "toIntervalMinute"),
+            TimeWindow::Hour => ("INTERVAL 1 HOUR", "toIntervalHour"),
+            TimeWindow::Day => ("INTERVAL 1 DAY", "toIntervalDay"),
+            TimeWindow::Week => ("INTERVAL 1 WEEK", "toIntervalWeek"),
+            TimeWindow::Month => ("INTERVAL 1 MONTH", "toIntervalMonth"),
+            TimeWindow::Cumulative => {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "Cumulative time window is not supported for feedback timeseries"
+                        .to_string(),
+                }))
+            }
+        };
 
         // If variants are passed, build variant filter.
         // If None we don't filter at all;
@@ -374,35 +382,115 @@ impl SelectQueries for ClickHouseConnectionInfo {
             }
         };
 
-        // Query to compute cumulative statistics: for each time bucket, aggregate all data from start up to that bucket
+        // Compute cumulative statistics from all historical data
         let query = format!(
             r"
-            WITH time_buckets AS (
-                SELECT DISTINCT {time_grouping} as period
-                FROM FeedbackByVariantStatistics
-                WHERE function_name = '{escaped_function_name}'
-                    AND metric_name = '{escaped_metric_name}'
-                    AND {time_filter}
-            )
+            WITH
+                -- CTE 1: Aggregate ALL historical data into time periods (no time filter)
+                AggregatedFilteredFeedbackByVariantStatistics AS (
+                    SELECT
+                        toStartOfInterval(minute, {interval_str}) + {interval_str} AS period_end,
+                        variant_name,
+
+                        -- Apply -MergeState combinator to merge and keep as state for later merging
+                        avgMergeState(feedback_mean) AS merged_mean_state,
+                        varSampStableMergeState(feedback_variance) AS merged_var_state,
+                        sum(count) AS period_count
+
+                    FROM FeedbackByVariantStatistics
+
+                    WHERE
+                        function_name = {{function_name:String}}
+                        AND metric_name = {{metric_name:String}}
+                        {variant_filter}
+
+                    GROUP BY
+                        period_end,
+                        variant_name
+                ),
+
+                -- CTE 2: For each variant, create sorted arrays of the periodic data.
+                ArraysByVariant AS (
+                    SELECT
+                        variant_name,
+                        -- 3. Unzip the sorted tuples back into individual arrays
+                        arrayMap(x -> x.1, sorted_zipped_arrays) AS periods,
+                        arrayMap(x -> x.2, sorted_zipped_arrays) AS mean_states,
+                        arrayMap(x -> x.3, sorted_zipped_arrays) AS var_states,
+                        arrayMap(x -> x.4, sorted_zipped_arrays) AS counts
+                    FROM (
+                        SELECT
+                            variant_name,
+                            (
+                                -- 2. Sort the array of tuples based on the first element (the period_end)
+                                arraySort(x -> x.1,
+                                    -- 1. Zip the unsorted arrays together into an array of tuples
+                                    arrayZip(
+                                        groupArray(period_end),
+                                        groupArray(merged_mean_state),
+                                        groupArray(merged_var_state),
+                                        groupArray(period_count)
+                                    )
+                                )
+                            ) AS sorted_zipped_arrays
+                        FROM AggregatedFilteredFeedbackByVariantStatistics
+                        GROUP BY variant_name
+                    )
+                ),
+
+                -- CTE 3: Compute cumulative stats for all periods
+                AllCumulativeStats AS (
+                    SELECT
+                        periods[i] AS period_end,
+                        variant_name,
+
+                        arrayReduce('avgMerge', arraySlice(mean_states, 1, i)) AS mean,
+                        arrayReduce('varSampStableMerge', arraySlice(var_states, 1, i)) AS variance,
+                        arraySum(arraySlice(counts, 1, i)) AS count
+
+                    FROM ArraysByVariant
+                    ARRAY JOIN arrayEnumerate(periods) AS i
+                ),
+
+                -- CTE 4: Filter to only the most recent max_periods (DateTime arithmetic on DateTime types)
+                FilteredCumulativeStats AS (
+                    SELECT
+                        period_end,
+                        variant_name,
+                        mean,
+                        variance,
+                        count
+                    FROM AllCumulativeStats
+                    WHERE period_end >= (
+                        SELECT max(period_end)
+                        FROM AllCumulativeStats
+                    ) - {interval_function}({{max_periods:UInt32}})
+                )
+
+            -- Final SELECT: Format the DateTime to string
             SELECT
-                formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_end,
-                f.variant_name,
-                avgMerge(f.feedback_mean) as mean,
-                varSampStableMerge(f.feedback_variance) as variance,
-                sum(f.count) as count
-            FROM time_buckets tb
-            INNER JOIN FeedbackByVariantStatistics f
-                ON f.function_name = '{escaped_function_name}'
-                AND f.metric_name = '{escaped_metric_name}'
-                AND f.minute <= tb.period
-                {variant_filter}
-            GROUP BY tb.period, f.variant_name
-            ORDER BY period_end ASC, f.variant_name ASC
+                formatDateTime(period_end, '%Y-%m-%dT%H:%i:%SZ') AS period_end,
+                variant_name,
+                mean,
+                variance,
+                count
+            FROM FilteredCumulativeStats
+            ORDER BY
+                period_end ASC,
+                variant_name ASC
             FORMAT JSONEachRow
             ",
         );
 
-        let response = self.run_query_synchronous_no_params(query).await?;
+        // Create parameters HashMap
+        let max_periods_str = max_periods.to_string();
+        let params = std::collections::HashMap::from([
+            ("function_name", function_name.as_str()),
+            ("metric_name", metric_name.as_str()),
+            ("max_periods", max_periods_str.as_str()),
+        ]);
+
+        let response = self.run_query_synchronous(query, &params).await?;
 
         // Deserialize the results into FeedbackTimeSeriesPoint
         let feedback = response
