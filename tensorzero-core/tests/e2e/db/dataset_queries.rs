@@ -7,12 +7,12 @@ use tensorzero::{
     GetDatasetMetadataParams, Role,
 };
 use tensorzero_core::config::{MetricConfigLevel, MetricConfigType};
-use tensorzero_core::db::clickhouse::dataset_queries::{
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
     GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter, StaleDatapointParams,
 };
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,

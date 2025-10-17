@@ -1246,6 +1246,12 @@ Alongside the response, we also store information about what happened during the
 For this we convert the InferenceResult into a ChatInferenceDatabaseInsert or JsonInferenceDatabaseInsert and ModelInferenceDatabaseInserts,
 which are written to ClickHouse tables of the same name asynchronously.
 */
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, tag = "function_type", rename_all = "snake_case")]
+pub enum TaggedInferenceDatabaseInsert {
+    Chat(ChatInferenceDatabaseInsert),
+    Json(JsonInferenceDatabaseInsert),
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ChatInferenceDatabaseInsert {
