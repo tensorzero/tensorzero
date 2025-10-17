@@ -184,12 +184,14 @@ pub struct ReturnTicketsReceipt {
     pub balance: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
     pub mean: f32,
     pub variance: f32,
     #[serde(deserialize_with = "deserialize_u64")]
+    #[ts(type = "number")]
     pub count: u64,
 }
 
