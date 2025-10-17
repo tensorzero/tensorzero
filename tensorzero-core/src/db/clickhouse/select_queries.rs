@@ -428,22 +428,35 @@ impl SelectQueries for ClickHouseConnectionInfo {
                     GROUP BY
                         period_end,
                         variant_name
-                    ORDER BY
-                        variant_name ASC,
-                        period_end ASC
                 ),
 
-                -- CTE 2: For each variant, create arrays of the periodic data.
-                -- Data is already ordered by variant_name and period_end from CTE 1
+                -- CTE 2: For each variant, create sorted arrays of the periodic data.
                 ArraysByVariant AS (
                     SELECT
                         variant_name,
-                        groupArray(period_end) AS periods,
-                        groupArray(merged_mean_state) AS mean_states,
-                        groupArray(merged_var_state) AS var_states,
-                        groupArray(period_count) AS counts
-                    FROM AggregatedFilteredFeedbackByVariantStatistics
-                    GROUP BY variant_name
+                        -- 3. Unzip the sorted tuples back into individual arrays
+                        arrayMap(x -> x.1, sorted_zipped_arrays) AS periods,
+                        arrayMap(x -> x.2, sorted_zipped_arrays) AS mean_states,
+                        arrayMap(x -> x.3, sorted_zipped_arrays) AS var_states,
+                        arrayMap(x -> x.4, sorted_zipped_arrays) AS counts
+                    FROM (
+                        SELECT
+                            variant_name,
+                            (
+                                -- 2. Sort the array of tuples based on the first element (the period_end)
+                                arraySort(x -> x.1,
+                                    -- 1. Zip the unsorted arrays together into an array of tuples
+                                    arrayZip(
+                                        groupArray(period_end),
+                                        groupArray(merged_mean_state),
+                                        groupArray(merged_var_state),
+                                        groupArray(period_count)
+                                    )
+                                )
+                            ) AS sorted_zipped_arrays
+                        FROM AggregatedFilteredFeedbackByVariantStatistics
+                        GROUP BY variant_name
+                    )
                 ),
 
                 -- CTE 3: Compute cumulative stats for all periods
