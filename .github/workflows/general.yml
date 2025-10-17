@@ -204,7 +204,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable && rustup default stable; then
+            if rustup toolchain install stable --component clippy,rustfmt && rustup default stable; then
               break
             fi
           done
@@ -233,7 +233,7 @@ jobs:
       - name: Install Rust 1.86.0
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.86.0 --component clippy,rustfmt && rustup default 1.86.0; then
+            if rustup install 1.86.0 && rustup default 1.86.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
