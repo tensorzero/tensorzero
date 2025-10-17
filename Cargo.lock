@@ -5796,6 +5796,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tensorzero-auth"
+version = "2025.10.4"
+dependencies = [
+ "hex",
+ "secrecy",
+ "sha2",
+ "sqlx",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "tensorzero-core"
 version = "2025.10.4"
 dependencies = [
