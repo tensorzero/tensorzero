@@ -458,20 +458,31 @@ impl SelectQueries for ClickHouseConnectionInfo {
 
                     FROM ArraysByVariant
                     ARRAY JOIN arrayEnumerate(periods) AS i
+                ),
+
+                -- CTE 4: Filter to only the most recent max_periods (DateTime arithmetic on DateTime types)
+                FilteredCumulativeStats AS (
+                    SELECT
+                        period_end,
+                        variant_name,
+                        mean,
+                        variance,
+                        count
+                    FROM AllCumulativeStats
+                    WHERE period_end >= (
+                        SELECT max(period_end)
+                        FROM AllCumulativeStats
+                    ) - INTERVAL {max_periods} * {interval_minutes} MINUTE
                 )
 
-            -- Final SELECT: Filter to only the most recent max_periods and format
+            -- Final SELECT: Format the DateTime to string
             SELECT
                 formatDateTime(period_end, '%Y-%m-%dT%H:%i:%SZ') AS period_end,
                 variant_name,
                 mean,
                 variance,
                 count
-            FROM AllCumulativeStats
-            WHERE period_end >= (
-                SELECT max(period_end)
-                FROM AllCumulativeStats
-            ) - INTERVAL {max_periods} * {interval_minutes} MINUTE
+            FROM FilteredCumulativeStats
             ORDER BY
                 period_end ASC,
                 variant_name ASC
