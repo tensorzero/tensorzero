@@ -403,50 +403,75 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // );
 
         // New implementation using window functions for better performance
+        // This computes true cumulative statistics from all historical data
         let query = format!(
             r"
+            WITH
+                -- CTE 1: Aggregate ALL historical data into time periods (no time filter)
+                AggregatedFilteredFeedbackByVariantStatistics AS (
+                    SELECT
+                        toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE AS period_end,
+                        variant_name,
+
+                        -- Apply -MergeState combinator to merge and keep as state for later merging
+                        avgMergeState(feedback_mean) AS merged_mean_state,
+                        varSampStableMergeState(feedback_variance) AS merged_var_state,
+                        sum(count) AS period_count
+
+                    FROM FeedbackByVariantStatistics
+
+                    WHERE
+                        function_name = '{escaped_function_name}'
+                        AND metric_name = '{escaped_metric_name}'
+                        {variant_filter}
+
+                    GROUP BY
+                        period_end,
+                        variant_name
+                    ORDER BY
+                        variant_name ASC,
+                        period_end ASC
+                ),
+
+                -- CTE 2: For each variant, create arrays of the periodic data.
+                -- Data is already ordered by variant_name and period_end from CTE 1
+                ArraysByVariant AS (
+                    SELECT
+                        variant_name,
+                        groupArray(period_end) AS periods,
+                        groupArray(merged_mean_state) AS mean_states,
+                        groupArray(merged_var_state) AS var_states,
+                        groupArray(period_count) AS counts
+                    FROM AggregatedFilteredFeedbackByVariantStatistics
+                    GROUP BY variant_name
+                ),
+
+                -- CTE 3: Compute cumulative stats for all periods
+                AllCumulativeStats AS (
+                    SELECT
+                        periods[i] AS period_end,
+                        variant_name,
+
+                        arrayReduce('avgMerge', arraySlice(mean_states, 1, i)) AS mean,
+                        arrayReduce('varSampStableMerge', arraySlice(var_states, 1, i)) AS variance,
+                        arraySum(arraySlice(counts, 1, i)) AS count
+
+                    FROM ArraysByVariant
+                    ARRAY JOIN arrayEnumerate(periods) AS i
+                )
+
+            -- Final SELECT: Filter to only the most recent max_periods and format
             SELECT
-                formatDateTime(period_end, '%Y-%m-%dT%%H:%%i:%%SZ') as period_end,
+                formatDateTime(period_end, '%Y-%m-%dT%H:%i:%SZ') AS period_end,
                 variant_name,
-
-                -- Apply the final -Merge combinator over the window of states
-                avgMerge(mean_state) OVER cumulative_window as mean,
-                varSampStableMerge(var_state) OVER cumulative_window as variance,
-                sum(count) OVER cumulative_window as count
-
-            FROM (
-                -- Subquery to aggregate minute-level data into the desired interval buckets
-                SELECT
-                    toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE AS period_end,
-                    variant_name,
-
-                    -- The GROUP BY merges the AggregateFunction states into a single state per bucket
-                    avgState(feedback_mean) as mean_state,
-                    varSampStableState(feedback_variance) as var_state,
-                    sum(count)
-
-                FROM FeedbackByVariantStatistics
-
-                WHERE
-                    -- Apply all filters here for maximum efficiency
-                    function_name = '{escaped_function_name}'
-                    AND metric_name = '{escaped_metric_name}'
-                    AND minute >= (
-                        SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE))
-                        FROM FeedbackByVariantStatistics
-                    ) - INTERVAL {max_periods} * {interval_minutes} MINUTE
-                    {variant_filter}
-
-                GROUP BY
-                    period_end,
-                    variant_name
-            )
-            -- The WINDOW clause defines the cumulative frame for each variant
-            WINDOW cumulative_window AS (
-                PARTITION BY variant_name
-                ORDER BY period_end ASC
-                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-            )
+                mean,
+                variance,
+                count
+            FROM AllCumulativeStats
+            WHERE period_end >= (
+                SELECT max(period_end)
+                FROM AllCumulativeStats
+            ) - INTERVAL {max_periods} * {interval_minutes} MINUTE
             ORDER BY
                 period_end ASC,
                 variant_name ASC
