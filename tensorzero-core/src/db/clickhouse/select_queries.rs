@@ -349,13 +349,6 @@ impl SelectQueries for ClickHouseConnectionInfo {
         let escaped_function_name = escape_string_for_clickhouse_literal(&function_name);
         let escaped_metric_name = escape_string_for_clickhouse_literal(&metric_name);
 
-        // Clickhouse has no `toEndOfInterval` function, so we use toStartOfInterval + interval to get
-        // the end of each period, since we're computing cumulative stats up to each time point
-        let time_grouping = format!("toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE");
-        let time_filter = format!(
-            "minute >= (SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
-        );
-
         // If variants are passed, build variant filter.
         // If None we don't filter at all;
         // If empty, we'll return an empty vector for consistency
@@ -373,30 +366,90 @@ impl SelectQueries for ClickHouseConnectionInfo {
             }
         };
 
-        // Query to compute cumulative statistics: for each time bucket, aggregate all data from start up to that bucket
+        // Old implementation using time_buckets CTE and self-join
+        // Clickhouse has no `toEndOfInterval` function, so we use toStartOfInterval + interval to get
+        // the end of each period, since we're computing cumulative stats up to each time point
+        // let time_grouping = format!("toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE");
+        // let time_filter = format!(
+        //     "minute >= (SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE)) FROM FeedbackByVariantStatistics) - INTERVAL {max_periods} * {interval_minutes} MINUTE"
+        // );
+        //
+        // // Query to compute cumulative statistics: for each time bucket, aggregate all data from start up to that bucket
+        // let query = format!(
+        //     r"
+        //     WITH time_buckets AS (
+        //         SELECT DISTINCT {time_grouping} as period
+        //         FROM FeedbackByVariantStatistics
+        //         WHERE function_name = '{escaped_function_name}'
+        //             AND metric_name = '{escaped_metric_name}'
+        //             AND {time_filter}
+        //     )
+        //     SELECT
+        //         formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_end,
+        //         f.variant_name,
+        //         avgMerge(f.feedback_mean) as mean,
+        //         varSampStableMerge(f.feedback_variance) as variance,
+        //         sum(f.count) as count
+        //     FROM time_buckets tb
+        //     INNER JOIN FeedbackByVariantStatistics f
+        //         ON f.function_name = '{escaped_function_name}'
+        //         AND f.metric_name = '{escaped_metric_name}'
+        //         AND f.minute <= tb.period
+        //         {variant_filter}
+        //     GROUP BY tb.period, f.variant_name
+        //     ORDER BY period_end ASC, f.variant_name ASC
+        //     FORMAT JSONEachRow
+        //     ",
+        // );
+
+        // New implementation using window functions for better performance
         let query = format!(
             r"
-            WITH time_buckets AS (
-                SELECT DISTINCT {time_grouping} as period
-                FROM FeedbackByVariantStatistics
-                WHERE function_name = '{escaped_function_name}'
-                    AND metric_name = '{escaped_metric_name}'
-                    AND {time_filter}
-            )
             SELECT
-                formatDateTime(tb.period, '%Y-%m-%dT%H:%i:%SZ') as period_end,
-                f.variant_name,
-                avgMerge(f.feedback_mean) as mean,
-                varSampStableMerge(f.feedback_variance) as variance,
-                sum(f.count) as count
-            FROM time_buckets tb
-            INNER JOIN FeedbackByVariantStatistics f
-                ON f.function_name = '{escaped_function_name}'
-                AND f.metric_name = '{escaped_metric_name}'
-                AND f.minute <= tb.period
-                {variant_filter}
-            GROUP BY tb.period, f.variant_name
-            ORDER BY period_end ASC, f.variant_name ASC
+                formatDateTime(period_end, '%Y-%m-%dT%%H:%%i:%%SZ') as period_end,
+                variant_name,
+
+                -- Apply the final -Merge combinator over the window of states
+                avgMerge(mean_state) OVER cumulative_window as mean,
+                varSampStableMerge(var_state) OVER cumulative_window as variance,
+                sum(count) OVER cumulative_window as count
+
+            FROM (
+                -- Subquery to aggregate minute-level data into the desired interval buckets
+                SELECT
+                    toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE) + INTERVAL {interval_minutes} MINUTE AS period_end,
+                    variant_name,
+
+                    -- The GROUP BY merges the AggregateFunction states into a single state per bucket
+                    avgState(feedback_mean) as mean_state,
+                    varSampStableState(feedback_variance) as var_state,
+                    sum(count)
+
+                FROM FeedbackByVariantStatistics
+
+                WHERE
+                    -- Apply all filters here for maximum efficiency
+                    function_name = '{escaped_function_name}'
+                    AND metric_name = '{escaped_metric_name}'
+                    AND minute >= (
+                        SELECT max(toStartOfInterval(minute, INTERVAL {interval_minutes} MINUTE))
+                        FROM FeedbackByVariantStatistics
+                    ) - INTERVAL {max_periods} * {interval_minutes} MINUTE
+                    {variant_filter}
+
+                GROUP BY
+                    period_end,
+                    variant_name
+            )
+            -- The WINDOW clause defines the cumulative frame for each variant
+            WINDOW cumulative_window AS (
+                PARTITION BY variant_name
+                ORDER BY period_end ASC
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            )
+            ORDER BY
+                period_end ASC,
+                variant_name ASC
             FORMAT JSONEachRow
             ",
         );
