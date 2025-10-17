@@ -59,6 +59,8 @@ pub fn setup_howdy(
     if clickhouse.client_type() == ClickHouseClientType::Disabled {
         return;
     }
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(howdy_loop(clickhouse, token));
 }
 
@@ -82,6 +84,8 @@ pub async fn howdy_loop(clickhouse: ClickHouseConnectionInfo, token: Cancellatio
             }
             _ = interval.tick() => {}
         }
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         tokio::spawn(async move {
             if let Err(e) =
                 send_howdy(&copied_clickhouse, &copied_client, &copied_deployment_id).await
