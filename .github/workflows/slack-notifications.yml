@@ -61,12 +61,14 @@ jobs:
       - name: Build payload for new issue notification
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issues' && github.event.action == 'opened'
         id: build-issue-payload
+        env:
+          TITLE: ${{ github.event.issue.title }}
         run: |
           PAYLOAD=$(jq -n \
             --arg channel "C09HC3Q2XV2" \
             --arg text "🐛 New issue opened by ${{ github.actor }}" \
             --arg url "${{ github.event.issue.html_url }}" \
-            --arg title "${{ github.event.issue.title }}" \
+            --arg title "$TITLE" \
             --arg actor "${{ github.actor }}" \
             --arg actor_url "https://github.com/${{ github.actor }}" \
             '{
