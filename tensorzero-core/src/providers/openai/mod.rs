@@ -878,11 +878,12 @@ impl EmbeddingProvider for OpenAIProvider {
 
 pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
     let mut raw_response = None;
+    let message = DisplayOrDebugGateway::new(&e).to_string();
     if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
         raw_response = resp.text().await.ok();
     }
     ErrorDetails::InferenceServer {
-        message: format!("Error in SSE stream: {}", DisplayOrDebugGateway::new(e)),
+        message: format!("Error in SSE stream: {message}"),
         raw_request: None,
         raw_response,
         provider_type,
