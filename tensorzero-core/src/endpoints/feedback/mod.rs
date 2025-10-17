@@ -303,6 +303,8 @@ async fn write_comment(
         "tags": tags
     });
     if !dryrun {
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         tokio::spawn(async move {
             let _ = connection_info
                 .write_batched(&[payload], TableName::CommentFeedback)
@@ -344,6 +346,8 @@ async fn write_demonstration(
     })?;
     let payload = json!({"inference_id": inference_id, "value": string_value, "id": feedback_id, "tags": tags});
     if !dryrun {
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         tokio::spawn(async move {
             let _ = connection_info
                 .write_batched(&[payload], TableName::DemonstrationFeedback)
@@ -383,6 +387,8 @@ async fn write_float(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         tokio::spawn(async move {
             let payload = payload;
             let payload_array = [payload];
@@ -433,6 +439,8 @@ async fn write_boolean(
     })?;
     let payload = json!({"target_id": target_id, "value": value, "metric_name": metric_name, "id": feedback_id, "tags": tags});
     if !dryrun {
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         tokio::spawn(async move {
             let payload_array = [payload];
             let clickhouse = connection_info;

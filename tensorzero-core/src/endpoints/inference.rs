@@ -633,6 +633,8 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // not be cancelled partway through execution if the outer '/inference' request
             // is cancelled. This reduces the chances that we only write to some tables and not others
             // (but this is inherently best-effort due to ClickHouse's lack of transactions).
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+            #[expect(clippy::disallowed_methods)]
             let write_future = tokio::spawn(async move {
                 let _: () = write_inference(
                     &clickhouse_connection_info,
@@ -904,6 +906,8 @@ fn create_stream(
                 drop(clickhouse_connection_info);
             };
             if async_write {
+                // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+                #[expect(clippy::disallowed_methods)]
                 tokio::spawn(write_future);
             } else {
                 write_future.await;
