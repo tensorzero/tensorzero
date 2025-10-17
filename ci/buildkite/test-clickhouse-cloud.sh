@@ -82,7 +82,7 @@ docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait post
 export TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
 
-cargo build-e2e
+SQLX_OFFLINE=1 cargo build-e2e
 cargo run --bin gateway --features e2e_tests -- --run-postgres-migrations
 cargo run-e2e > e2e_logs.txt 2>&1 &
     count=0
