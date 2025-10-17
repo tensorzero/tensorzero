@@ -1,6 +1,6 @@
 use crate::db::{
-    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
-    FeedbackByVariant, FeedbackTimeSeriesPoint, TableBoundsWithCount,
+    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
+    CumulativeFeedbackTimeSeriesPoint, EpisodeByIdRow, FeedbackByVariant, TableBoundsWithCount,
 };
 use async_trait::async_trait;
 use uuid::Uuid;
@@ -348,7 +348,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
         variant_names: Option<Vec<String>>,
         time_window: TimeWindow,
         max_periods: u32,
-    ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error> {
+    ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
         // Convert TimeWindow to ClickHouse INTERVAL syntax and interval functions
         let (interval_str, interval_function) = match time_window {
             TimeWindow::Minute => ("INTERVAL 1 MINUTE", "toIntervalMinute"),
@@ -491,7 +491,7 @@ impl SelectQueries for ClickHouseConnectionInfo {
 
         let response = self.run_query_synchronous(query, &params).await?;
 
-        // Deserialize the results into FeedbackTimeSeriesPoint
+        // Deserialize the results into CumulativeFeedbackTimeSeriesPoint
         response
             .response
             .trim()
@@ -499,7 +499,9 @@ impl SelectQueries for ClickHouseConnectionInfo {
             .map(|row| {
                 serde_json::from_str(row).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseDeserialization {
-                        message: format!("Failed to deserialize FeedbackTimeSeriesPoint: {e}"),
+                        message: format!(
+                            "Failed to deserialize CumulativeFeedbackTimeSeriesPoint: {e}"
+                        ),
                     })
                 })
             })

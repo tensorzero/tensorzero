@@ -11,7 +11,7 @@ import type {
   DatasetQueryParams,
   EpisodeByIdRow,
   EvaluationRunEvent,
-  FeedbackTimeSeriesPoint,
+  CumulativeFeedbackTimeSeriesPoint,
   GetAdjacentDatapointIdsParams,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
@@ -280,13 +280,15 @@ export class DatabaseClient {
 
   async getCumulativeFeedbackTimeseries(
     params: GetCumulativeFeedbackTimeseriesParams,
-  ): Promise<FeedbackTimeSeriesPoint[]> {
+  ): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
     const paramsString = safeStringify(params);
     const feedbackTimeseriesString =
       await this.nativeDatabaseClient.getCumulativeFeedbackTimeseries(
         paramsString,
       );
-    return JSON.parse(feedbackTimeseriesString) as FeedbackTimeSeriesPoint[];
+    return JSON.parse(
+      feedbackTimeseriesString,
+    ) as CumulativeFeedbackTimeSeriesPoint[];
   }
 
   async countRowsForDataset(params: DatasetQueryParams): Promise<number> {

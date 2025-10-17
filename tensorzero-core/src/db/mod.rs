@@ -72,7 +72,7 @@ pub trait SelectQueries {
         variant_names: Option<Vec<String>>,
         time_window: TimeWindow,
         max_periods: u32,
-    ) -> Result<Vec<FeedbackTimeSeriesPoint>, Error>;
+    ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -196,7 +196,7 @@ pub struct FeedbackByVariant {
 
 #[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
-pub struct FeedbackTimeSeriesPoint {
+pub struct CumulativeFeedbackTimeSeriesPoint {
     // Time point up to which cumulative statistics are computed
     pub period_end: DateTime<Utc>,
     pub variant_name: String,
