@@ -611,7 +611,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         display_name: Optional[str] = None,
     ) -> DynamicEvaluationRunResponse:
         """
-        Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
+        Make a POST request to the /dynamic_evaluation_run endpoint.
 
         :param variants: A dictionary of variant names to variant values.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
