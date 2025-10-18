@@ -4,7 +4,7 @@ use std::sync::Arc;
 use futures::future::join_all;
 
 use crate::config::Config;
-use crate::endpoints::dynamic_evaluation_run::validate_variant_pins;
+use crate::endpoints::workflow_evaluation_run::validate_variant_pins;
 use crate::error::Error;
 use crate::stored_inference::{render_stored_sample, RenderedSample, StoredSample};
 

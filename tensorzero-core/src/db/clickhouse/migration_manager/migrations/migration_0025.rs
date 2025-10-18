@@ -6,11 +6,17 @@ use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEng
 use crate::error::Error;
 
 /// This migration adds the `DynamicEvaluationRun` and `DynamicEvaluationRunEpisode` tables.
-/// These support TensorZero's dynamic evaluations.
+/// These support TensorZero's workflow evaluations (formerly called "dynamic evaluations").
 /// A `DynamicEvaluationRun` is a related set of `DynamicEvaluationRunEpisode`s with a common
 /// set of variant pins and experiment tags.
 /// A `DynamicEvaluationRunEpisode` is a single evaluation of a model variant under a given set of
 /// variant pins and experiment tags.
+///
+/// IMPORTANT: These tables use "DynamicEvaluation" in their names for historical reasons.
+/// Externally, this feature is now called "Workflow Evaluations" (renamed from "Dynamic Evaluations").
+/// The table names remain unchanged to avoid complex data migrations.
+/// All internal code has been updated to use "workflow_evaluation" terminology,
+/// but continues to read/write to these "DynamicEvaluation" tables.
 pub struct Migration0025<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }

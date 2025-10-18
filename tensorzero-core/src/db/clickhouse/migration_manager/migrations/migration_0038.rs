@@ -2,7 +2,7 @@ use super::check_table_exists;
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, GetMaybeReplicatedTableEngineNameArgs};
 use crate::error::{Error, ErrorDetails};
-use crate::utils::uuid::get_dynamic_evaluation_cutoff_uuid;
+use crate::utils::uuid::get_workflow_evaluation_cutoff_uuid;
 use async_trait::async_trait;
 use std::time::Duration;
 
@@ -91,7 +91,7 @@ impl Migration for Migration0038<'_> {
         } else {
             format!("UUIDv7ToDateTime(id) >= fromUnixTimestamp64Nano({view_timestamp_nanos})")
         };
-        let cutoff_uuid = get_dynamic_evaluation_cutoff_uuid();
+        let cutoff_uuid = get_workflow_evaluation_cutoff_uuid();
 
         // Build MV for ChatInference table
         let query = format!(

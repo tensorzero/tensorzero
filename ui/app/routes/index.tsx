@@ -25,9 +25,9 @@ import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/index";
 import {
-  countDynamicEvaluationProjects,
-  countDynamicEvaluationRuns,
-} from "~/utils/clickhouse/dynamic_evaluations.server";
+  countWorkflowEvaluationProjects,
+  countWorkflowEvaluationRuns,
+} from "~/utils/clickhouse/workflow_evaluations.server";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 
 export const handle: RouteHandle = {
@@ -111,9 +111,9 @@ export async function loader() {
   const episodesPromise = nativeDatabaseClient.queryEpisodeTableBounds();
   const datasetMetadata = getDatasetMetadata({});
   const numEvaluationRunsPromise = countTotalEvaluationRuns();
-  const numDynamicEvaluationRunsPromise = countDynamicEvaluationRuns();
-  const numDynamicEvaluationRunProjectsPromise =
-    countDynamicEvaluationProjects();
+  const numWorkflowEvaluationRunsPromise = countWorkflowEvaluationRuns();
+  const numWorkflowEvaluationRunProjectsPromise =
+    countWorkflowEvaluationProjects();
   const configPromise = getConfig();
   const functionConfigsPromise = getAllFunctionConfigs();
   const numModelsUsedPromise = nativeDatabaseClient.countDistinctModelsUsed();
@@ -153,8 +153,8 @@ export async function loader() {
     (runs) => `evaluations, ${runs} runs`,
   );
 
-  // We need to create a special promise for the static evaluations that includes the config count
-  const staticEvaluationsDesc = Promise.all([
+  // We need to create a special promise for the inference evaluations that includes the config count
+  const inferenceEvaluationsDesc = Promise.all([
     configPromise,
     numEvaluationRunsPromise,
   ]).then(([config, runs]) => {
@@ -163,8 +163,8 @@ export async function loader() {
   });
 
   const dynamicEvaluationsDesc = Promise.all([
-    numDynamicEvaluationRunProjectsPromise,
-    numDynamicEvaluationRunsPromise,
+    numWorkflowEvaluationRunProjectsPromise,
+    numWorkflowEvaluationRunsPromise,
   ]).then(([projects, runs]) => `${projects} projects, ${runs} runs`);
 
   const numModelsUsedDesc = numModelsUsedPromise.then(
@@ -178,7 +178,7 @@ export async function loader() {
     numEpisodesDesc,
     numDatasetsDesc,
     numEvaluationRunsDesc,
-    staticEvaluationsDesc,
+    inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
     numModelsUsedDesc,
   };
@@ -191,7 +191,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     numVariantsDesc,
     numEpisodesDesc,
     numDatasetsDesc,
-    staticEvaluationsDesc,
+    inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
     numModelsUsedDesc,
   } = loaderData;
@@ -265,13 +265,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <DirectoryCard
                 source="/evaluations"
                 icon={GridCheck}
-                title="Static Evaluations"
-                description={staticEvaluationsDesc}
+                title="Inference Evaluations"
+                description={inferenceEvaluationsDesc}
               />
               <DirectoryCard
-                source="/dynamic_evaluations"
+                source="/workflow_evaluations"
                 icon={SequenceChecks}
-                title="Dynamic Evaluations"
+                title="Workflow Evaluations"
                 description={dynamicEvaluationsDesc}
               />
             </div>

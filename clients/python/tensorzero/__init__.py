@@ -46,8 +46,8 @@ from .types import (
     ChatDatapointInsert,
     ChatInferenceResponse,
     ContentBlock,
-    DynamicEvaluationRunEpisodeResponse,
-    DynamicEvaluationRunResponse,
+    DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
+    DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
     FeedbackResponse,
     FileBase64,
@@ -85,6 +85,8 @@ from .types import (
     ToolResult,
     UnknownContentBlock,
     Usage,
+    WorkflowEvaluationRunEpisodeResponse,
+    WorkflowEvaluationRunResponse,
 )
 
 # DEPRECATED: use RenderedSample instead
@@ -133,8 +135,10 @@ __all__ = [
     "Datapoint",
     "DiclOptimizationConfig",  # DEPRECATED
     "DICLOptimizationConfig",
-    "DynamicEvaluationRunEpisodeResponse",
-    "DynamicEvaluationRunResponse",
+    "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
+    "DynamicEvaluationRunResponse",  # DEPRECATED
+    "WorkflowEvaluationRunEpisodeResponse",
+    "WorkflowEvaluationRunResponse",
     "ExtraBody",
     "FeedbackResponse",
     "FileBase64",

@@ -7,7 +7,7 @@ import {
 } from "~/components/layout/BasicInfoLayout";
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
-import type { StaticEvaluationConfig } from "tensorzero-node";
+import type { InferenceEvaluationConfig } from "tensorzero-node";
 import EditableChip from "~/components/ui/EditableChip";
 import {
   toEvaluationUrl,
@@ -25,7 +25,7 @@ import {
 
 interface BasicInfoProps {
   evaluation_name: string;
-  evaluation_config: StaticEvaluationConfig;
+  evaluation_config: InferenceEvaluationConfig;
   dataset_name: string;
   datapoint_id: string;
   datapoint_name: string | null;

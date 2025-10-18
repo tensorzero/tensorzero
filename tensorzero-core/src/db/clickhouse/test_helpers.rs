@@ -6,8 +6,8 @@
 )]
 use crate::config::BatchWritesConfig;
 use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
-use crate::endpoints::dynamic_evaluation_run::{
-    DynamicEvaluationRunEpisodeRow, DynamicEvaluationRunRow,
+use crate::endpoints::workflow_evaluation_run::{
+    WorkflowEvaluationRunEpisodeRow, WorkflowEvaluationRunRow,
 };
 
 #[cfg(feature = "e2e_tests")]
@@ -541,10 +541,10 @@ pub async fn stale_datapoint_clickhouse(
         .await;
 }
 
-pub async fn select_dynamic_evaluation_run_clickhouse(
+pub async fn select_workflow_evaluation_run_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     run_id: Uuid,
-) -> Option<DynamicEvaluationRunRow> {
+) -> Option<WorkflowEvaluationRunRow> {
     let query = format!(
         "SELECT
             uint_to_uuid(run_id_uint) as run_id,
@@ -565,11 +565,11 @@ pub async fn select_dynamic_evaluation_run_clickhouse(
     Some(serde_json::from_str(&text.response).unwrap())
 }
 
-pub async fn select_dynamic_evaluation_run_episode_clickhouse(
+pub async fn select_workflow_evaluation_run_episode_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     run_id: Uuid,
     episode_id: Uuid,
-) -> Option<DynamicEvaluationRunEpisodeRow> {
+) -> Option<WorkflowEvaluationRunEpisodeRow> {
     let query = format!(
         "SELECT run_id, uint_to_uuid(episode_id_uint) as episode_id, variant_pins, datapoint_name AS task_name, tags FROM DynamicEvaluationRunEpisode WHERE run_id = '{run_id}' AND episode_id_uint = toUInt128(toUUID('{episode_id}')) FORMAT JSONEachRow",
     );
@@ -626,7 +626,7 @@ pub async fn select_feedback_tags_clickhouse_with_feedback_id(
 }
 
 #[cfg(feature = "e2e_tests")]
-pub async fn select_human_static_evaluation_feedback_clickhouse(
+pub async fn select_inference_evaluation_human_feedback_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     metric_name: &str,
     datapoint_id: Uuid,

@@ -9,7 +9,20 @@ use super::{check_detached_table_exists, check_table_exists};
 
 /// NOTE: This migration supersedes migration_0023.
 /// Migration 0023 was inefficient due to its use of joins.
+///
+/// ============================================================================
+/// TERMINOLOGY NOTE:
+/// "Static Evaluations" are now called "Inference Evaluations" in the project,
+/// configuration, and user-facing documentation. However, the database table
+/// names and view names created by this migration still use the "StaticEvaluation"
+/// prefix (e.g., StaticEvaluationHumanFeedback, StaticEvaluationFloatHumanFeedbackView,
+/// StaticEvaluationBooleanHumanFeedbackView) for backwards compatibility.
+/// This naming mismatch is intentional and should not be changed in existing
+/// database objects to avoid breaking deployments.
+/// ============================================================================
+///
 /// In this migration, we create the same table StaticEvaluationHumanFeedback if it doesn't exist.
+/// Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
 /// We then drop the old materialized view and create new ones that are more efficient.
 /// This migration adds a table StaticEvaluationHumanFeedback that stores human feedback in an easy-to-reference format.
 /// This is technically an auxiliary table as the primary store is still the various feedback tables.
@@ -28,6 +41,7 @@ use super::{check_detached_table_exists, check_table_exists};
 ///
 ///
 /// NOTE: The views created by this migration are StaticEvaluationFloatHumanFeedbackView and StaticEvaluationBooleanHumanFeedbackView.
+/// Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
 /// The views created by Migration 0023 are StaticEvaluationHumanFeedbackFloatView and StaticEvaluationHumanFeedbackBooleanView.s
 ///
 /// NOTE: The two views created by this migration are required to be separate as ClickHouse only triggers materialized views
@@ -58,6 +72,7 @@ impl Migration for Migration0028<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let human_feedback_table_exists = check_table_exists(
             self.clickhouse,
             "StaticEvaluationHumanFeedback",
@@ -113,6 +128,7 @@ impl Migration for Migration0028<'_> {
             format!("AND UUIDv7ToDateTime(feedback_id) >= toDateTime(toUnixTimestamp({view_timestamp}))")
         };
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let table_engine_name = self.clickhouse.get_maybe_replicated_table_engine_name(
             GetMaybeReplicatedTableEngineNameArgs {
                 table_name: "StaticEvaluationHumanFeedback",
@@ -138,9 +154,11 @@ impl Migration for Migration0028<'_> {
             .await?;
 
         // Since there cannot have been any StaticEvaluationHumanFeedback rows before this migration runs,
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         // we can just create the materialized views in place.
 
         // Create the materialized view for FloatMetricFeedback
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let query = format!(
             r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationFloatHumanFeedbackView{on_cluster_name}
@@ -214,6 +232,7 @@ impl Migration for Migration0028<'_> {
             .await?;
 
         // Create the materialized view for BooleanMetricFeedback
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let query = format!(
             r"
             CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationBooleanHumanFeedbackView{on_cluster_name}
@@ -397,6 +416,7 @@ impl Migration for Migration0028<'_> {
 
     fn rollback_instructions(&self) -> String {
         let on_cluster_name = self.clickhouse.get_on_cluster_name();
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         format!(
             r"
         DROP VIEW IF EXISTS StaticEvaluationFloatHumanFeedbackView{on_cluster_name};

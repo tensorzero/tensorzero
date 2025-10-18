@@ -8,10 +8,10 @@ import {
 import Chip from "~/components/ui/Chip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { toFunctionUrl } from "~/utils/urls";
-import type { StaticEvaluationConfig } from "tensorzero-node";
+import type { InferenceEvaluationConfig } from "tensorzero-node";
 
 interface BasicInfoProps {
-  evaluation_config: StaticEvaluationConfig;
+  evaluation_config: InferenceEvaluationConfig;
 }
 
 export default function BasicInfo({ evaluation_config }: BasicInfoProps) {

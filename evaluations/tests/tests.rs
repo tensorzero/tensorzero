@@ -11,7 +11,7 @@ use serde_json::json;
 use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::clickhouse::test_helpers::{
-    select_human_static_evaluation_feedback_clickhouse, select_model_inferences_clickhouse,
+    select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
 use tensorzero_core::endpoints::datasets::Datapoint;
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
@@ -260,7 +260,7 @@ async fn run_evaluations_json() {
         // Sleep for 5s to make sure the feedback is recorded
         sleep(Duration::from_secs(5)).await;
 
-        let human_feedback = select_human_static_evaluation_feedback_clickhouse(
+        let human_feedback = select_inference_evaluation_human_feedback_clickhouse(
             &clickhouse,
             metric_name,
             datapoint_id,
