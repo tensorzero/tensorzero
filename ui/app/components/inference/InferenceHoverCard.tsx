@@ -9,7 +9,7 @@ interface InferenceHoverCardProps {
   onHover?: () => void;
 }
 
-function truncateText(text: string, maxLength: number = 100): string {
+function truncateText(text: string, maxLength: number): string {
   return text.length <= maxLength ? text : text.slice(0, maxLength) + "...";
 }
 
@@ -33,21 +33,19 @@ function getOutputPreview(inference: ParsedInferenceRow): string {
     const output = inference.output as any[];
     if (!output || output.length === 0) return "Empty output";
 
-    // First pass: look for text
     for (const block of output) {
       if (block?.type === "text" && block.text) {
         return block.text;
       }
     }
 
-    // Second pass: look for thought if no text found
+    // Fallbacks
     for (const block of output) {
       if (block?.type === "thought" && block.text) {
         return block.text;
       }
     }
 
-    // Fallbacks
     const firstBlock = output[0];
     if (firstBlock?.type === "tool_call") {
       const toolName = firstBlock.name || firstBlock.raw_name || "unknown";
@@ -69,11 +67,10 @@ function getOutputPreview(inference: ParsedInferenceRow): string {
       try {
         return JSON.stringify(output.parsed);
       } catch {
-        /* ignore and try raw */
+        // If stringify fails, fall back to raw
       }
     }
-
-    // Fallback to raw string
+    
     if ("raw" in output && typeof output.raw === "string" && output.raw) {
       return output.raw;
     }

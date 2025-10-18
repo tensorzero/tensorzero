@@ -7,10 +7,15 @@ interface ActionData {
   error?: string;
 }
 
+interface InferenceState {
+  data: ParsedInferenceRow | null;
+  loading: boolean;
+  error: string | null;
+}
+
 export function useInferenceHover(episodeRoute: string) {
   const [hoveredInferenceId, setHoveredInferenceId] = useState<string | null>(null);
-  const [inferenceData, setInferenceData] = useState<Record<string, ParsedInferenceRow>>({});
-  const [loadingInferences, setLoadingInferences] = useState<Set<string>>(new Set());
+  const [inferenceCache, setInferenceCache] = useState<Record<string, InferenceState>>({});
   const fetcher = useFetcher<ActionData>();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -21,13 +26,16 @@ export function useInferenceHover(episodeRoute: string) {
       clearTimeout(timeoutRef.current);
     }
 
-    if (inferenceData[inferenceId] || loadingInferences.has(inferenceId)) {
+    const currentState = inferenceCache[inferenceId];
+    if (currentState?.data || currentState?.loading) {
       return;
     }
 
-    // Debounce the fetch request by 300ms
     timeoutRef.current = setTimeout(() => {
-      setLoadingInferences(prev => new Set([...prev, inferenceId]));
+      setInferenceCache(prev => ({
+        ...prev,
+        [inferenceId]: { data: null, loading: true, error: null }
+      }));
       
       const formData = new FormData();
       formData.append("_action", "fetchInference");
@@ -42,18 +50,14 @@ export function useInferenceHover(episodeRoute: string) {
 
   useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data && hoveredInferenceId) {
-       setLoadingInferences(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(hoveredInferenceId);
-          return newSet;
-        });
-
-      if (fetcher.data.inference) {
-        setInferenceData(prev => ({
-          ...prev,
-          [hoveredInferenceId]: fetcher.data!.inference!
-        }));
-      }
+      setInferenceCache(prev => ({
+        ...prev,
+        [hoveredInferenceId]: {
+          data: fetcher.data?.inference || null,
+          loading: false,
+          error: fetcher.data?.error || null
+        }
+      }));
     }
   }, [fetcher.state, fetcher.data, hoveredInferenceId]);
 
@@ -67,7 +71,8 @@ export function useInferenceHover(episodeRoute: string) {
 
   return {
     handleInferenceHover,
-    getInferenceData: (inferenceId: string) => inferenceData[inferenceId] || null,
-    isLoading: (inferenceId: string) => loadingInferences.has(inferenceId),
+    getInferenceData: (inferenceId: string) => inferenceCache[inferenceId]?.data || null,
+    isLoading: (inferenceId: string) => inferenceCache[inferenceId]?.loading || false,
+    getError: (inferenceId: string) => inferenceCache[inferenceId]?.error || null,
   };
 }
