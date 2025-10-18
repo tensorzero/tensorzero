@@ -87,6 +87,7 @@ impl EvaluatorConfig {
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
     #[serde(default)]
     pub cutoff: Option<f32>,
@@ -95,6 +96,7 @@ pub struct ExactMatchConfig {
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
     pub input_format: LLMJudgeInputFormat,
     pub output_type: LLMJudgeOutputType,
@@ -106,6 +108,7 @@ pub struct LLMJudgeConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[serde(deny_unknown_fields)]
 pub struct LLMJudgeIncludeConfig {
     #[serde(default)]
     pub reference_output: bool,
@@ -191,14 +194,6 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "snake_case")]
-        enum Field {
-            Type,
-            #[serde(other)]
-            Other,
-        }
-
         struct EvaluationConfigVisitor;
 
         impl<'de> Visitor<'de> for EvaluationConfigVisitor {
@@ -256,6 +251,7 @@ impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedInferenceEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     function_name: String,
@@ -354,6 +350,7 @@ enum UninitializedEvaluatorConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeConfig {
     #[serde(default)]
     input_format: LLMJudgeInputFormat,
@@ -523,6 +520,7 @@ impl UninitializedEvaluatorConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeVariantInfo {
     #[serde(flatten)]
     inner: UninitializedLLMJudgeVariantConfig,
@@ -641,6 +639,7 @@ fn default_timeout() -> f64 {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
     active: Option<bool>,
@@ -652,6 +651,7 @@ struct UninitializedLLMJudgeBestOfNVariantConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
     active: Option<bool>,
@@ -663,6 +663,7 @@ struct UninitializedLLMJudgeMixtureOfNVariantConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeDiclVariantConfig {
     #[serde(default)]
     active: Option<bool>,
@@ -687,6 +688,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
     #[serde(flatten)]
     inner: UninitializedLLMJudgeChatCompletionVariantConfig,
