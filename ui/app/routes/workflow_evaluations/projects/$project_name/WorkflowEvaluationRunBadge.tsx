@@ -8,17 +8,13 @@ import { Badge } from "../../../../components/ui/badge";
 import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
 import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
+import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
 
 interface WorkflowEvaluationRunBadgeProps {
   runInfo: WorkflowEvaluationRun;
   getColor: (runId: string) => string;
   lastUpdateDate?: Date;
   onRemove?: (e: React.MouseEvent) => void;
-}
-
-// Helper function to get the last 6 digits of a UUID
-export function getLastUuidSegment(uuid: string): string {
-  return uuid.slice(-6);
 }
 
 export default function WorkflowEvaluationRunBadge({
