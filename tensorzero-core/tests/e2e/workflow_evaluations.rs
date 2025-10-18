@@ -452,7 +452,7 @@ async fn test_bad_workflow_evaluation_run() {
     println!("Response: {response:#?}");
     assert!(response
         .to_string()
-        .contains("Dynamic evaluation run not found"));
+        .contains("Workflow evaluation run not found"));
 }
 
 #[tokio::test]
