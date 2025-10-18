@@ -33,6 +33,7 @@ async def test_async_openai_compatible_otlp_traces_extra_headers_tempo():
                     "content": [
                         {
                             "type": "text",
+                            # type: ignore
                             "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
                         }
                     ],
@@ -73,6 +74,7 @@ def test_sync_openai_compatible_otlp_traces_extra_headers_tempo():
                 "content": [
                     {
                         "type": "text",
+                        # type: ignore
                         "tensorzero::arguments": {"assistant_name": "Alfred Pennyworth"},
                     }
                 ],
