@@ -1,18 +1,18 @@
 import { test, expect } from "@playwright/test";
 
-test("dynamic evaluation project page should render and show correct information", async ({
+test("workflow evaluation project page should render and show correct information", async ({
   page,
 }) => {
-  await page.goto("/dynamic_evaluations/projects/beerqa-agentic-rag");
-  await expect(page.getByText("Dynamic Evaluation Project")).toBeVisible();
+  await page.goto("/workflow_evaluations/projects/beerqa-agentic-rag");
+  await expect(page.getByText("Workflow Evaluation Project")).toBeVisible();
   // Check that the run selector is visible
   await expect(
-    page.getByText("Select dynamic evaluation runs to compare..."),
+    page.getByText("Select workflow evaluation runs to compare..."),
   ).toBeVisible();
   // sleep for 500ms
   await page.waitForTimeout(500);
   // Click on the run selector
-  await page.getByText("Select dynamic evaluation runs to compare...").click();
+  await page.getByText("Select workflow evaluation runs to compare...").click();
   await page.waitForTimeout(1000);
 
   // Check that the run selector has the correct runs using CommandItem selectors

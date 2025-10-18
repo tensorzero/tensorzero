@@ -116,7 +116,7 @@ export function WorkflowEvalRunSelector({
         searchParams.set("debounce", "");
       }
       hasInitializedRuns.current = true;
-      loadRunsFetcher(`/api/dynamic_evaluations/search_runs/?${searchParams}`);
+      loadRunsFetcher(`/api/workflow_evaluations/search_runs/?${searchParams}`);
     }
   }
 
@@ -139,7 +139,7 @@ export function WorkflowEvalRunSelector({
               onFocus={loadInitialRuns}
               onClick={loadInitialRuns}
             >
-              <span>Select dynamic evaluation runs to compare...</span>
+              <span>Select workflow evaluation runs to compare...</span>
               <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>

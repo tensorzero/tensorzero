@@ -1,7 +1,7 @@
 import { Outlet, type RouteHandle } from "react-router";
 
 export const handle: RouteHandle = {
-  crumb: () => ["Dynamic Evaluations"],
+  crumb: () => ["Workflow Evaluations"],
 };
 
 export default function DynamicEvaluationsLayout() {

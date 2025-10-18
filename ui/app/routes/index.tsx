@@ -269,9 +269,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 description={inferenceEvaluationsDesc}
               />
               <DirectoryCard
-                source="/dynamic_evaluations"
+                source="/workflow_evaluations"
                 icon={SequenceChecks}
-                title="Dynamic Evaluations"
+                title="Workflow Evaluations"
                 description={dynamicEvaluationsDesc}
               />
             </div>

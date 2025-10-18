@@ -119,7 +119,7 @@ pub async fn workflow_evaluation_run_episode(
     // We add the workflow evaluation run ID to the tags so that we can look it up per-inference later
     let mut tags = params.tags;
     tags.insert(
-        "tensorzero::workflow_evaluation_run_id".to_string(),
+        "tensorzero::dynamic_evaluation_run_id".to_string(),
         run_id_str,
     );
     write_workflow_evaluation_run_episode(

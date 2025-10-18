@@ -50,7 +50,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
   if (workflowEvaluationRuns.length != 1) {
     throw new Error(
-      `Expected exactly one dynamic evaluation run, got ${workflowEvaluationRuns.length}`,
+      `Expected exactly one workflow evaluation run, got ${workflowEvaluationRuns.length}`,
     );
   }
   const workflowEvaluationRun = workflowEvaluationRuns[0];
@@ -90,7 +90,7 @@ export default function WorkflowEvaluationRunSummaryPage({
 
   return (
     <PageLayout>
-      <PageHeader heading={`Dynamic Evaluation Run `} />
+      <PageHeader heading={`Workflow Evaluation Run `} />
       <BasicInfo workflowEvaluationRun={workflowEvaluationRun} count={count} />
       <SectionLayout>
         <WorkflowEvaluationRunEpisodesTable

@@ -127,7 +127,7 @@ async fn test_workflow_evaluation() {
             format!("bop_{i}")
         );
         assert_eq!(
-            tags.get("tensorzero::workflow_evaluation_run_id")
+            tags.get("tensorzero::dynamic_evaluation_run_id")
                 .unwrap()
                 .as_str()
                 .unwrap(),
@@ -157,7 +157,7 @@ async fn test_workflow_evaluation() {
             ("baz".to_string(), format!("baz_{i}")),
             ("zoo".to_string(), format!("zoo_{i}")),
             (
-                "tensorzero::workflow_evaluation_run_id".to_string(),
+                "tensorzero::dynamic_evaluation_run_id".to_string(),
                 run_id.to_string(),
             ),
         ]);

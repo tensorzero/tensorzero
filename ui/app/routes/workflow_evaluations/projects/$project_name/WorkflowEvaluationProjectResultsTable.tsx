@@ -31,7 +31,7 @@ import { TableItemShortUuid } from "~/components/ui/TableItems";
 import { formatDate } from "~/utils/date";
 import type { MetricConfig } from "tensorzero-node";
 
-interface DynamicEvaluationProjectResultsTableProps {
+interface WorkflowEvaluationProjectResultsTableProps {
   selected_run_infos: WorkflowEvaluationRun[];
   evaluation_results: GroupedWorkflowEvaluationRunEpisodeWithFeedback[][];
   evaluation_statistics: Record<
@@ -44,7 +44,7 @@ export function WorkflowEvaluationProjectResultsTable({
   selected_run_infos,
   evaluation_results,
   evaluation_statistics,
-}: DynamicEvaluationProjectResultsTableProps) {
+}: WorkflowEvaluationProjectResultsTableProps) {
   const selectedRunIds = selected_run_infos.map((info) => info.id);
   // Extract all metrics from statistics
   // (we use statistics instead of results because we want to include metrics that are not present in this page)
@@ -223,7 +223,7 @@ const MetricHeader = ({
   summaryStats,
 }: {
   metric_name: string;
-  summaryStats: DynamicEvaluationStatisticsByRunId[];
+  summaryStats: WorkflowEvaluationStatisticsByRunId[];
 }) => {
   const config = useConfig();
   const metricProperties = config.metrics[metric_name];
@@ -266,7 +266,7 @@ const MetricProperties = ({
   summaryStats,
 }: {
   metricConfig: MetricConfig;
-  summaryStats: DynamicEvaluationStatisticsByRunId[];
+  summaryStats: WorkflowEvaluationStatisticsByRunId[];
 }) => {
   const [searchParams] = useSearchParams();
   const selectedRunIdsParam = searchParams.get("run_ids") || "";
@@ -355,7 +355,7 @@ function convertStatsByRunIdToStatsByMetricName(
 ) {
   const statisticsByMetricName = new Map<
     string,
-    DynamicEvaluationStatisticsByRunId[]
+    WorkflowEvaluationStatisticsByRunId[]
   >();
 
   // Initialize the map with empty arrays for each metric name
@@ -378,7 +378,7 @@ function convertStatsByRunIdToStatsByMetricName(
       if (statisticsByMetricName.has(metricName)) {
         statisticsByMetricName
           .get(metricName)
-          ?.push(statWithRunId as DynamicEvaluationStatisticsByRunId);
+          ?.push(statWithRunId as WorkflowEvaluationStatisticsByRunId);
       }
     });
   });
@@ -398,7 +398,7 @@ function convertStatsByRunIdToStatsByMetricName(
   return statisticsByMetricName;
 }
 
-interface DynamicEvaluationStatisticsByRunId {
+interface WorkflowEvaluationStatisticsByRunId {
   evaluation_run_id: string;
   metric_name: string;
   count: number;

@@ -85,7 +85,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   }
 }
 
-export default function DynamicEvaluationProjectPage({
+export default function WorkflowEvaluationProjectPage({
   loaderData,
 }: Route.ComponentProps) {
   const {

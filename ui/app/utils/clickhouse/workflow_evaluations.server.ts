@@ -31,7 +31,7 @@ export async function getWorkflowEvaluationRuns(
           tags,
           project_name,
           formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
-      FROM WorkflowEvaluationRun
+      FROM DynamicEvaluationRun
       ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
       ${project_name ? `WHERE project_name = {project_name:String}` : ""}
       ORDER BY run_id_uint DESC
@@ -91,7 +91,7 @@ export async function getWorkflowEvaluationRunsByIds(
         UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
         '%Y-%m-%dT%H:%i:%SZ'
       ) AS timestamp
-    FROM WorkflowEvaluationRun
+    FROM DynamicEvaluationRun
     WHERE run_id_uint IN (
       /* turn the parameter array of UUID strings into a real table
          expression of UInt128 values so the IN predicate is valid */
@@ -115,7 +115,7 @@ export async function getWorkflowEvaluationRunsByIds(
 
 export async function countWorkflowEvaluationRuns(): Promise<number> {
   const query = `
-    SELECT toUInt32(count()) as count FROM WorkflowEvaluationRun
+    SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
   `;
   const result = await getClickhouseClient().query({
     query,
@@ -127,7 +127,7 @@ export async function countWorkflowEvaluationRuns(): Promise<number> {
 }
 
 /**
- * Returns information about the episodes that were used in a dynamic evaluation run,
+ * Returns information about the episodes that were used in a workflow evaluation run,
  * along with the feedback that was collected for each episode.
  *
  * The feedback is given as arrays feedback_metric_names and feedback_values.
@@ -382,7 +382,7 @@ export async function searchWorkflowEvaluationRuns(
       tags,
       project_name,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') as timestamp
-    FROM WorkflowEvaluationRun
+    FROM DynamicEvaluationRun
     ${whereClause}
     ORDER BY updated_at DESC
     LIMIT {page_size:UInt64}
@@ -399,7 +399,7 @@ export async function searchWorkflowEvaluationRuns(
 }
 
 /**
- * Returns a list of episodes that were part of some set of dynamic evluation runs,
+ * Returns a list of episodes that were part of some set of workflow evluation runs,
  * grouped into sublists that all have the same task_name.
  * If the task_name is NULL, the episode is grouped into a sublist by itself.
  *
