@@ -549,6 +549,14 @@ impl Text {
     }
 }
 
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ThoughtSummaryBlock {
+    SummaryText { text: String },
+}
+
 /// Struct that represents Chain of Thought reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
@@ -560,6 +568,9 @@ pub struct Thought {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub summary: Option<Vec<ThoughtSummaryBlock>>,
     /// When set, this 'Thought' block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
     /// a warning and discard the block.
@@ -576,6 +587,11 @@ impl RateLimitedInputContent for Thought {
         let Thought {
             text,
             signature,
+            // We intentionally do *not* count the summary towards the token usage
+            // Even though OpenAI responses requires passing the summaries back in a multi-turn
+            // conversation, we expect that the actual model will ignore them, since they're
+            // not the internal model thoughts.
+            summary: _,
             provider_type: _,
         } = self;
         text.as_ref().map_or(0, |text| get_estimated_tokens(text))

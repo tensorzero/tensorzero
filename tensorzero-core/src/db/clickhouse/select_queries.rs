@@ -1,8 +1,12 @@
-use crate::db::{
-    clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args, EpisodeByIdRow,
-    FeedbackByVariant, TableBoundsWithCount,
+use crate::{
+    db::{
+        clickhouse::migration_manager::migrations::migration_0037::quantiles_sql_args,
+        EpisodeByIdRow, TableBoundsWithCount,
+    },
+    serde_util::deserialize_u64,
 };
 use async_trait::async_trait;
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -10,7 +14,7 @@ use crate::{
     error::{Error, ErrorDetails},
 };
 
-use super::{escape_string_for_clickhouse_literal, ClickHouseConnectionInfo};
+use super::ClickHouseConnectionInfo;
 
 #[async_trait]
 impl SelectQueries for ClickHouseConnectionInfo {
@@ -284,57 +288,61 @@ impl SelectQueries for ClickHouseConnectionInfo {
             })
         })
     }
+}
 
-    async fn get_feedback_by_variant(
-        &self,
-        metric_name: &str,
-        function_name: &str,
-        variant_names: Option<&Vec<String>>,
-    ) -> Result<Vec<FeedbackByVariant>, Error> {
-        let escaped_function_name = escape_string_for_clickhouse_literal(function_name);
-        let escaped_metric_name = escape_string_for_clickhouse_literal(metric_name);
+// Helper functions for parsing responses
+pub(crate) fn build_pagination_clause(
+    before: Option<Uuid>,
+    after: Option<Uuid>,
+    _id_column: &str,
+) -> (String, Vec<(&'static str, String)>) {
+    match (before, after) {
+        (Some(before), None) => (
+            "AND toUInt128(id) < toUInt128(toUUID({before:UUID}))".to_string(),
+            vec![("before", before.to_string())],
+        ),
+        (None, Some(after)) => (
+            "AND toUInt128(id) > toUInt128(toUUID({after:UUID}))".to_string(),
+            vec![("after", after.to_string())],
+        ),
+        _ => (String::new(), vec![]),
+    }
+}
 
-        // If None we don't filter at all;
-        // If empty, we'll return an empty vector for consistency
-        // If there are variants passed, we'll filter by them
-        let variant_filter = match variant_names {
-            None => String::new(),
-            Some(names) if names.is_empty() => {
-                return Ok(vec![]);
-            }
-            Some(names) => {
-                let escaped_names: Vec<String> = names
-                    .iter()
-                    .map(|name| format!("'{}'", escape_string_for_clickhouse_literal(name)))
-                    .collect();
-                format!(" AND variant_name IN ({})", escaped_names.join(", "))
-            }
-        };
-
-        let query = format!(
-            r"
-            SELECT
-                variant_name,
-                avgMerge(feedback_mean) as mean,
-                varSampStableMerge(feedback_variance) as variance,
-                sum(count) as count
-            FROM FeedbackByVariantStatistics
-            WHERE function_name = '{escaped_function_name}' and metric_name = '{escaped_metric_name}'{variant_filter}
-            GROUP BY variant_name
-            FORMAT JSONEachRow"
-        );
-        // Each row is a JSON encoded FeedbackByVariant struct
-        let res = self.run_query_synchronous_no_params(query).await?;
-
-        res.response
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(serde_json::from_str)
-            .collect::<Result<Vec<FeedbackByVariant>, _>>()
-            .map_err(|e| {
+pub(crate) fn parse_json_rows<T: serde::de::DeserializeOwned>(
+    response: &str,
+) -> Result<Vec<T>, Error> {
+    response
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|row| {
+            serde_json::from_str(row).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseDeserialization {
-                    message: format!("Failed to deserialize FeedbackByVariant: {e}"),
+                    message: format!("Failed to deserialize row: {e}"),
                 })
             })
+        })
+        .collect()
+}
+
+pub(crate) fn parse_count(response: &str) -> Result<u64, Error> {
+    #[derive(Deserialize)]
+    struct CountResult {
+        #[serde(deserialize_with = "deserialize_u64")]
+        count: u64,
     }
+
+    let line = response.trim().lines().next().ok_or_else(|| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: "No count result returned from database".to_string(),
+        })
+    })?;
+
+    let result: CountResult = serde_json::from_str(line).map_err(|e| {
+        Error::new(ErrorDetails::ClickHouseDeserialization {
+            message: format!("Failed to deserialize count: {e}"),
+        })
+    })?;
+
+    Ok(result.count)
 }

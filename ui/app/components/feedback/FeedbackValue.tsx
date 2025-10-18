@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Sheet, SheetContent } from "~/components/ui/sheet";
-import type { FeedbackRow } from "~/utils/clickhouse/feedback";
-import type { MetricConfig } from "tensorzero-node";
+import type { MetricConfig, FeedbackRow } from "tensorzero-node";
 import {
   BooleanItem,
   FloatItem,
