@@ -611,6 +611,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         display_name: Optional[str] = None,
     ) -> DynamicEvaluationRunResponse:
         """
+        DEPRECATED: Use `workflow_evaluation_run` instead.
         Make a POST request to the /dynamic_evaluation_run endpoint.
 
         :param variants: A dictionary of variant names to variant values.
@@ -628,6 +629,8 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
         """
+        DEPRECATED: Use `workflow_evaluation_run_episode` instead.
+
         Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
 
         :param run_id: The run ID to use for the dynamic evaluation run.
@@ -1023,6 +1026,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         display_name: Optional[str] = None,
     ) -> DynamicEvaluationRunResponse:
         """
+        DEPRECATED: Use `workflow_evaluation_run` instead.
+
         Make a POST request to the /dynamic_evaluation_run endpoint.
 
         :param variants: A dictionary of variant names to variant values.
@@ -1040,6 +1045,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
         """
+        DEPRECATED: Use `workflow_evaluation_run_episode` instead.
+
         Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
 
         :param run_id: The run ID to use for the dynamic evaluation run.
