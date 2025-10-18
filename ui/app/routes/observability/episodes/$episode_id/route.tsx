@@ -127,43 +127,52 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const _action = formData.get("_action");
 
-  if (_action === "fetchInference") {
-    const inferenceId = formData.get("inferenceId") as string;
-    if (!inferenceId) {
-      return data<ActionData>({ error: "Inference ID is required" }, { status: 400 });
-    }
-
-    try {
-      const inference = await queryInferenceById(inferenceId);
-      if (!inference) {
-        return data<ActionData>({ error: `Inference ${inferenceId} not found` }, { status: 404 });
+  switch (_action) {
+    case "fetchInference": {
+      const inferenceId = formData.get("inferenceId") as string;
+      if (!inferenceId) {
+        return data<ActionData>({ error: "Inference ID is required" }, { status: 400 });
       }
-      return data<ActionData>({ inference });
-    } catch (error) {
-      console.error('Failed to fetch inference:', error);
-      return data<ActionData>({ error: "Failed to fetch inference details" }, { status: 500 });
-    }
-  }
 
-  // Handle feedback action
-  try {
-    const response = await addHumanFeedback(formData);
-    const url = new URL(request.url);
-    url.searchParams.delete("beforeFeedback");
-    url.searchParams.delete("afterFeedback");
-    url.searchParams.set("newFeedbackId", response.feedback_id);
-    return data<ActionData>({ redirectTo: url.pathname + url.search });
-  } catch (error) {
-    if (isTensorZeroServerError(error)) {
-      return data<ActionData>(
-        { error: error.message },
-        { status: error.status },
-      );
+      try {
+        const inference = await queryInferenceById(inferenceId);
+        if (!inference) {
+          return data<ActionData>({ error: `Inference ${inferenceId} not found` }, { status: 404 });
+        }
+        return data<ActionData>({ inference });
+      } catch (error) {
+        console.error('Failed to fetch inference:', error);
+        return data<ActionData>({ error: "Failed to fetch inference details" }, { status: 500 });
+      }
     }
-    return data<ActionData>(
-      { error: "Unknown server error. Try again." },
-      { status: 500 },
-    );
+
+    case "addFeedback": {
+      try {
+        const response = await addHumanFeedback(formData);
+        const url = new URL(request.url);
+        url.searchParams.delete("beforeFeedback");
+        url.searchParams.delete("afterFeedback");
+        url.searchParams.set("newFeedbackId", response.feedback_id);
+        return data<ActionData>({ redirectTo: url.pathname + url.search });
+      } catch (error) {
+        if (isTensorZeroServerError(error)) {
+          return data<ActionData>(
+            { error: error.message },
+            { status: error.status },
+          );
+        }
+        return data<ActionData>(
+          { error: "Unknown server error. Try again." },
+          { status: 500 },
+        );
+      }
+    }
+
+    default:
+      return data<ActionData>(
+        { error: `Unknown action: ${_action}` },
+        { status: 400 }
+      );
   }
 }
 

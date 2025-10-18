@@ -67,6 +67,7 @@ export function HumanFeedbackForm({
         <input type="hidden" name="metricName" value={selectedMetricName} />
       )}
       <input type="hidden" name="type" value="humanFeedback" />
+      <input type="hidden" name="_action" value="addFeedback" />
 
       <MetricSelector
         metrics={metrics}
