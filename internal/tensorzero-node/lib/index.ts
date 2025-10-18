@@ -11,6 +11,7 @@ import type {
   DatasetQueryParams,
   EpisodeByIdRow,
   EvaluationRunEvent,
+  CumulativeFeedbackTimeSeriesPoint,
   GetAdjacentDatapointIdsParams,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
@@ -33,6 +34,7 @@ import type {
   DemonstrationFeedbackRow,
   GetDatapointParams,
   Datapoint,
+  GetCumulativeFeedbackTimeseriesParams,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -312,6 +314,19 @@ export class DatabaseClient {
         paramsString,
       );
     return JSON.parse(boundsString) as FeedbackBounds;
+  }
+
+  async getCumulativeFeedbackTimeseries(
+    params: GetCumulativeFeedbackTimeseriesParams,
+  ): Promise<CumulativeFeedbackTimeSeriesPoint[]> {
+    const paramsString = safeStringify(params);
+    const feedbackTimeseriesString =
+      await this.nativeDatabaseClient.getCumulativeFeedbackTimeseries(
+        paramsString,
+      );
+    return JSON.parse(
+      feedbackTimeseriesString,
+    ) as CumulativeFeedbackTimeSeriesPoint[];
   }
 
   async countFeedbackByTargetId(

@@ -30,6 +30,10 @@ impl SelectQueries for ClickHouseConnectionInfo {
         // TODO: probably factor this out into common code as other queries will likely need similar logic
         // NOTE: this filter pattern will likely include some extra data since the current period is likely incomplete.
         let (time_grouping, time_filter) = match time_window {
+            TimeWindow::Minute => (
+                "toStartOfMinute(minute)",
+                format!("minute >= (SELECT max(toStartOfMinute(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} MINUTE"),
+            ),
             TimeWindow::Hour => (
                 "toStartOfHour(minute)",
                 format!("minute >= (SELECT max(toStartOfHour(minute)) FROM ModelProviderStatistics) - INTERVAL {max_periods} HOUR"),
@@ -90,23 +94,22 @@ impl SelectQueries for ClickHouseConnectionInfo {
         time_window: TimeWindow,
     ) -> Result<Vec<ModelLatencyDatapoint>, Error> {
         let time_filter = match time_window {
+            TimeWindow::Minute => {
+                "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MINUTE"
+            }
             TimeWindow::Hour => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 HOUR"
-                    .to_string()
             }
             TimeWindow::Day => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 DAY"
-                    .to_string()
             }
             TimeWindow::Week => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 WEEK"
-                    .to_string()
             }
             TimeWindow::Month => {
                 "minute >= (SELECT max(minute) FROM ModelProviderStatistics) - INTERVAL 1 MONTH"
-                    .to_string()
             }
-            TimeWindow::Cumulative => "1 = 1".to_string(),
+            TimeWindow::Cumulative => "1 = 1",
         };
         let qs = quantiles_sql_args();
         let query = format!(

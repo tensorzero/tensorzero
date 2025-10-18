@@ -58,6 +58,7 @@ pub trait SelectQueries {
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimeWindow {
+    Minute,
     Hour,
     Day,
     Week,
