@@ -42,7 +42,7 @@ export async function getWorkflowEvaluationRuns(
       SELECT
         run_id_uint,
         toUInt32(count()) as num_episodes
-      FROM DynamicRunEpisodeByRunId
+      FROM DynamicEvaluationRunEpisodeByRunId
       WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
       GROUP BY run_id_uint
     )
@@ -148,7 +148,7 @@ export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
           updated_at,
           datapoint_name AS task_name, -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
           ifNull(datapoint_name, concat('NULL_EPISODE_', toString(episode_id_uint))) as group_key
-        FROM DynamicRunEpisodeByRunId
+        FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
         LIMIT {page_size:UInt64}
@@ -247,7 +247,7 @@ export async function getWorkflowEvaluationRunStatisticsByMetricName(
           run_id_uint,
           tags,
           datapoint_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
-        FROM DynamicRunEpisodeByRunId
+        FROM DynamicEvaluationRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
       ),
@@ -297,7 +297,7 @@ export async function countWorkflowEvaluationRunEpisodes(
   run_id: string,
 ): Promise<number> {
   const query = `
-    SELECT toUInt32(count()) as count FROM DynamicRunEpisodeByRunId
+    SELECT toUInt32(count()) as count FROM DynamicEvaluationRunEpisodeByRunId
     WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
   `;
   const result = await getClickhouseClient().query({
