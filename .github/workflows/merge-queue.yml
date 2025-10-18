@@ -83,7 +83,7 @@ jobs:
       - name: Warm up Modal instances
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
-          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
           # TODO: Re-enable once we can switch to a T4 GPU
           # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
 

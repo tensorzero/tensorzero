@@ -242,4 +242,12 @@ pub trait DatasetQueries {
 
     /// Gets a single datapoint by dataset name and ID
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error>;
+
+    /// Gets multiple datapoints by dataset name and IDs
+    async fn get_datapoints(
+        &self,
+        dataset_name: &str,
+        datapoint_ids: &[Uuid],
+        allow_stale: bool,
+    ) -> Result<Vec<Datapoint>, Error>;
 }

@@ -9,7 +9,7 @@ import {
 } from "~/components/ui/table";
 import FeedbackValue from "~/components/feedback/FeedbackValue";
 import { getMetricName } from "~/utils/clickhouse/helpers";
-import type { FeedbackRow } from "~/utils/clickhouse/feedback";
+import type { FeedbackRow } from "tensorzero-node";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { TagsBadges } from "~/components/feedback/TagsBadges";
 import { useConfig } from "~/context/config";
