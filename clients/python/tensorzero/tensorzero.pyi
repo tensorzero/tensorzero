@@ -20,8 +20,8 @@ from tensorzero import (
     ChatDatapointInsert,
     ChatInferenceOutput,
     ContentBlock,
-    DynamicEvaluationRunEpisodeResponse,
-    DynamicEvaluationRunResponse,
+    DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
+    DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
     FeedbackResponse,
     InferenceChunk,
@@ -29,6 +29,8 @@ from tensorzero import (
     InferenceResponse,
     JsonDatapointInsert,
     OptimizationConfig,
+    WorkflowEvaluationRunEpisodeResponse,
+    WorkflowEvaluationRunResponse,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
@@ -609,7 +611,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         display_name: Optional[str] = None,
     ) -> DynamicEvaluationRunResponse:
         """
-        Make a POST request to the /dynamic_evaluation_run endpoint.
+        Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
 
         :param variants: A dictionary of variant names to variant values.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
@@ -641,7 +643,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
         project_name: Optional[str] = None,
         display_name: Optional[str] = None,
-    ) -> DynamicEvaluationRunResponse:
+    ) -> WorkflowEvaluationRunResponse:
         """
         Make a POST request to the /workflow_evaluation_run endpoint.
 
@@ -649,7 +651,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param tags: A dictionary of tags to add to the workflow evaluation run.
         :param project_name: The name of the project to use for the workflow evaluation run.
         :param display_name: The display name of the workflow evaluation run.
-        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
+        :return: A `WorkflowEvaluationRunResponse` instance ({"run_id": str}).
         """
 
     def workflow_evaluation_run_episode(
@@ -658,14 +660,14 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         run_id: str | UUID | uuid_utils.UUID,
         task_name: Optional[str] = None,
         tags: Optional[Dict[str, str]] = None,
-    ) -> DynamicEvaluationRunEpisodeResponse:
+    ) -> WorkflowEvaluationRunEpisodeResponse:
         """
-        Make a POST request to the /workflow_evaluation_run_episode endpoint.
+        Make a POST request to the /workflow_evaluation_run/{run_id}/episode endpoint.
 
         :param run_id: The run ID to use for the workflow evaluation run.
         :param task_name: The name of the task to use for the workflow evaluation run.
         :param tags: A dictionary of tags to add to the workflow evaluation run.
-        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
+        :return: A `WorkflowEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
     def create_datapoints(

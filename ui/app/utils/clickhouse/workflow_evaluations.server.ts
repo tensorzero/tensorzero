@@ -22,7 +22,7 @@ export async function getWorkflowEvaluationRuns(
   project_name?: string,
 ): Promise<WorkflowEvaluationRunWithEpisodeCount[]> {
   const query = `
-    WITH FilteredWorkflowEvaluationRuns AS (
+    WITH FilteredDynamicEvaluationRuns AS (
       SELECT
           run_display_name as name,
           uint_to_uuid(run_id_uint) as id,
@@ -38,12 +38,12 @@ export async function getWorkflowEvaluationRuns(
       LIMIT {page_size:UInt64}
       OFFSET {offset:UInt64}
     ),
-    WorkflowEvaluationRunsEpisodeCounts AS (
+    DynamicEvaluationRunsEpisodeCounts AS (
       SELECT
         run_id_uint,
         toUInt32(count()) as num_episodes
       FROM DynamicRunEpisodeByRunId
-      WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredWorkflowEvaluationRuns)
+      WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
       GROUP BY run_id_uint
     )
     SELECT
@@ -54,8 +54,8 @@ export async function getWorkflowEvaluationRuns(
       project_name,
       COALESCE(num_episodes, 0) AS num_episodes,
       timestamp
-    FROM FilteredWorkflowEvaluationRuns
-    LEFT JOIN WorkflowEvaluationRunsEpisodeCounts USING run_id_uint
+    FROM FilteredDynamicEvaluationRuns
+    LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
     ORDER BY run_id_uint DESC
   `;
   const result = await getClickhouseClient().query({
