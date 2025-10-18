@@ -96,7 +96,7 @@ export function InferenceHoverCard({
   onHover 
 }: InferenceHoverCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [hasTriggeredLoad] = useState(false);
+  const [hasTriggeredLoad, setHasTriggeredLoad] = useState(false);
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -106,6 +106,7 @@ export function InferenceHoverCard({
             setIsOpen(true);
             if (onHover && !inference && !isLoading && !hasTriggeredLoad) {
               onHover();
+              setHasTriggeredLoad(true);
             }
           }}
           onMouseLeave={() => setIsOpen(false)}
@@ -139,7 +140,7 @@ export function InferenceHoverCard({
               <div>
                 {inference.function_name} • {inference.variant_name} • {inference.processing_time_ms}ms
               </div>
-              <div >
+              <div>
                 ID: {inference.id}
               </div>
             </div>
