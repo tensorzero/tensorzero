@@ -153,8 +153,8 @@ export async function loader() {
     (runs) => `evaluations, ${runs} runs`,
   );
 
-  // We need to create a special promise for the static evaluations that includes the config count
-  const staticEvaluationsDesc = Promise.all([
+  // We need to create a special promise for the inference evaluations that includes the config count
+  const inferenceEvaluationsDesc = Promise.all([
     configPromise,
     numEvaluationRunsPromise,
   ]).then(([config, runs]) => {
@@ -178,7 +178,7 @@ export async function loader() {
     numEpisodesDesc,
     numDatasetsDesc,
     numEvaluationRunsDesc,
-    staticEvaluationsDesc,
+    inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
     numModelsUsedDesc,
   };
@@ -191,7 +191,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     numVariantsDesc,
     numEpisodesDesc,
     numDatasetsDesc,
-    staticEvaluationsDesc,
+    inferenceEvaluationsDesc,
     dynamicEvaluationsDesc,
     numModelsUsedDesc,
   } = loaderData;
@@ -265,8 +265,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <DirectoryCard
                 source="/evaluations"
                 icon={GridCheck}
-                title="Static Evaluations"
-                description={staticEvaluationsDesc}
+                title="Inference Evaluations"
+                description={inferenceEvaluationsDesc}
               />
               <DirectoryCard
                 source="/dynamic_evaluations"

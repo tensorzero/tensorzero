@@ -182,7 +182,7 @@ name = "get_temperature"
 # │                                EVALUATIONS                                 │
 # └────────────────────────────────────────────────────────────────────────────┘
 [evaluations.evaluation1]
-type = "static"
+type = "inference"
 dataset_name = "dataset1"
 function_name = "generate_draft"
 

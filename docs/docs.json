@@ -80,11 +80,11 @@
             "pages": [
               "evaluations/index",
               {
-                "group": "Static Evaluations",
+                "group": "Inference Evaluations",
                 "pages": [
-                  "evaluations/static-evaluations/tutorial",
-                  "evaluations/static-evaluations/configuration-reference",
-                  "evaluations/static-evaluations/cli-reference"
+                  "evaluations/inference-evaluations/tutorial",
+                  "evaluations/inference-evaluations/configuration-reference",
+                  "evaluations/inference-evaluations/cli-reference"
                 ]
               },
               {
@@ -204,27 +204,27 @@
   "redirects": [
     {
       "source": "/evaluations/cli-reference",
-      "destination": "/evaluations/static-evaluations/cli-reference"
+      "destination": "/evaluations/inference-evaluations/cli-reference"
     },
     {
       "source": "/evaluations/cli-reference/",
-      "destination": "/evaluations/static-evaluations/cli-reference"
+      "destination": "/evaluations/inference-evaluations/cli-reference"
     },
     {
       "source": "/evaluations/configuration-reference",
-      "destination": "/evaluations/static-evaluations/configuration-reference"
+      "destination": "/evaluations/inference-evaluations/configuration-reference"
     },
     {
       "source": "/evaluations/configuration-reference/",
-      "destination": "/evaluations/static-evaluations/configuration-reference"
+      "destination": "/evaluations/inference-evaluations/configuration-reference"
     },
     {
       "source": "/evaluations/tutorial",
-      "destination": "/evaluations/static-evaluations/tutorial"
+      "destination": "/evaluations/inference-evaluations/tutorial"
     },
     {
       "source": "/evaluations/tutorial/",
-      "destination": "/evaluations/static-evaluations/tutorial"
+      "destination": "/evaluations/inference-evaluations/tutorial"
     },
     {
       "source": "/gateway/api-reference",
@@ -337,6 +337,10 @@
     {
       "source": "/gateway/guides/prompt-templates-schemas/",
       "destination": "/gateway/create-a-prompt-template"
+    },
+    {
+      "source": "/evaluations/static-evaluations/:slug*",
+      "destination": "/evaluations/inference-evaluations/:slug*"
     }
   ]
 }

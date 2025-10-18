@@ -175,7 +175,7 @@ parameters = "fixtures/config/tools/get_temperature.json"
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.evaluation1]
-type = "static"
+type = "inference"
 dataset_name = "dataset1"
 function_name = "generate_draft"
 

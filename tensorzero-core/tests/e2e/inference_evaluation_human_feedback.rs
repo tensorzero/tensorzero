@@ -2,7 +2,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_feedback_clickhouse, select_feedback_tags_clickhouse,
-    select_human_static_evaluation_feedback_clickhouse,
+    select_inference_evaluation_human_feedback_clickhouse,
 };
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
@@ -10,8 +10,8 @@ use uuid::Uuid;
 use crate::common::get_gateway_endpoint;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 
-// NOTE: for now human static evaluation feedback is not supported on episodes
-// or for demonstrations or comments as we don't have static evals that do this yet.
+// NOTE: for now inference evaluation human feedback is not supported on episodes
+// or for demonstrations or comments as we don't have inference evaluations that do this yet.
 
 #[tokio::test]
 async fn e2e_test_float_human_feedback() {
@@ -112,8 +112,8 @@ async fn e2e_test_float_human_feedback() {
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
     assert_eq!(id_uuid, feedback_id);
-    // Check that data was written to StaticEvaluationHumanFeedback
-    let human_feedback = select_human_static_evaluation_feedback_clickhouse(
+    // Check that data was written to StaticEvaluationHumanFeedback (database table name, retains "Static" prefix for backward compatibility)
+    let human_feedback = select_inference_evaluation_human_feedback_clickhouse(
         &clickhouse,
         "brevity_score",
         datapoint_id,
@@ -196,8 +196,8 @@ async fn e2e_test_boolean_human_feedback() {
     let metric_name = result.get("metric_name").unwrap().as_str().unwrap();
     assert_eq!(metric_name, "task_success");
 
-    // Check that data was written to StaticEvaluationHumanFeedback
-    let human_feedback = select_human_static_evaluation_feedback_clickhouse(
+    // Check that data was written to StaticEvaluationHumanFeedback (database table name, retains "Static" prefix for backward compatibility)
+    let human_feedback = select_inference_evaluation_human_feedback_clickhouse(
         &clickhouse,
         "task_success",
         datapoint_id,

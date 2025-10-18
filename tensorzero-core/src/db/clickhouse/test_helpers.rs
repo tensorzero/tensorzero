@@ -626,7 +626,7 @@ pub async fn select_feedback_tags_clickhouse_with_feedback_id(
 }
 
 #[cfg(feature = "e2e_tests")]
-pub async fn select_human_static_evaluation_feedback_clickhouse(
+pub async fn select_inference_evaluation_human_feedback_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     metric_name: &str,
     datapoint_id: Uuid,

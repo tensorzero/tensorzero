@@ -15,7 +15,7 @@ Imagine we have the following LLM-powered workflow in response to a natural-lang
 4. Custom Logic: Score the answer using a custom scoring function (`my_blackbox_scoring_function`)
 5. Feedback: Send feedback using the `task_success` metric.
 
-Evaluating `generate_database_query` and `generate_final_answer` in a vacuum (i.e. using static evaluations) can also be helpful, but ultimately we want to evaluate the entire workflow end-to-end.
+Evaluating `generate_database_query` and `generate_final_answer` in a vacuum (i.e. using inference evaluations) can also be helpful, but ultimately we want to evaluate the entire workflow end-to-end.
 This is where dynamic evaluations come in.
 
 Complex LLM applications might need to make multiple LLM calls and execute arbitrary code before giving an overall result.

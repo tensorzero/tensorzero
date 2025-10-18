@@ -95,7 +95,7 @@ const navigation: NavigationSection[] = [
         icon: Dataset,
       },
       {
-        title: "Static Evaluations",
+        title: "Inference Evaluations",
         url: "/evaluations",
         icon: GridCheck,
       },
