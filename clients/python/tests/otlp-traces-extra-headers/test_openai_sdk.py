@@ -21,7 +21,7 @@ from .helpers import verify_otlp_header_in_tempo
 async def test_async_openai_compatible_otlp_traces_extra_headers_tempo():
     """Test that OTLP headers are sent to Tempo via OpenAI-compatible endpoint with async client."""
     # Use HTTP gateway directly (not patched client)
-    async with AsyncOpenAI(api_key="donotuse", base_url="http://localhost:3000/openai/v1") as client:
+    async with AsyncOpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1") as client:
         # Use a unique header value to identify this specific trace
         test_value = f"openai-async-test-{uuid7()}"
 
@@ -60,7 +60,7 @@ async def test_async_openai_compatible_otlp_traces_extra_headers_tempo():
 def test_sync_openai_compatible_otlp_traces_extra_headers_tempo():
     """Test that OTLP headers are sent to Tempo via OpenAI-compatible endpoint with sync client."""
     # Use HTTP gateway directly
-    client = OpenAI(api_key="donotuse", base_url="http://localhost:3000/openai/v1")
+    client = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
 
     # Use a unique header value to identify this specific trace
     test_value = f"openai-sync-test-{uuid7()}"
