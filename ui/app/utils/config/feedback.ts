@@ -73,7 +73,7 @@ export function filterMetricsByLevel(
   return Object.fromEntries([...specialEntries, ...filteredEntries]);
 }
 
-// Removes metrics that are part of a inference evaluation
+// Removes metrics that are part of an inference evaluation
 // These will have names that start with "tensorzero::evaluation_name::"
 export function filterInferenceEvaluationMetrics(metrics: {
   [x: string]: FeedbackConfig | undefined;
