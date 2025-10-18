@@ -39,6 +39,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+      # Permission to download artifacts
+      actions: read
 
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
@@ -127,6 +129,8 @@ jobs:
   check-node-bindings:
     permissions:
       contents: read
+      # Permission to upload artifacts
+      actions: write
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -177,6 +181,8 @@ jobs:
   build-windows:
     permissions:
       contents: read
+      # Permission for rust-cache to read/write cache
+      actions: read
     runs-on: windows-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -427,6 +433,8 @@ jobs:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
     permissions:
       contents: read
+      # Permission to download artifacts and for rust-cache
+      actions: read
     needs: [build-gateway-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
@@ -613,6 +621,8 @@ jobs:
   mock-optimization-tests:
     permissions:
       contents: read
+      # Permission for rust-cache
+      actions: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     env:
