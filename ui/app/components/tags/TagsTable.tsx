@@ -39,6 +39,9 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
   );
 
   // Navigation logic from TagsTable component
+  // NOTE: tensorzero::dynamic_evaluation_run_id uses the historical tag name.
+  // It has been renamed to "workflow_evaluation_run_id" but queries still use the old name.
+  // Gateway double-writes both tags. Future migration will update queries to use new tag.
   const navigableKeys = [
     "tensorzero::evaluation_name",
     "tensorzero::dataset_name",
@@ -86,6 +89,7 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
         case "tensorzero::evaluator_inference_id":
           navigate(toInferenceUrl(value));
           break;
+        // NOTE: This uses the historical tag name. See comment above navigableKeys definition.
         case "tensorzero::dynamic_evaluation_run_id":
           navigate(toWorkflowEvaluationRunUrl(value));
           break;

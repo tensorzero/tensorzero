@@ -1,3 +1,8 @@
+// NOTE: Test fixtures use the historical "tensorzero::dynamic_evaluation_run_id" tag name.
+// The gateway now double-writes both the old tag name (for backward compatibility) and
+// the new "tensorzero::workflow_evaluation_run_id" tag. All queries and UI components
+// continue to use the old tag name. A future migration will update queries and backfill data.
+
 import { describe, test, expect } from "vitest";
 import {
   countWorkflowEvaluationProjects,

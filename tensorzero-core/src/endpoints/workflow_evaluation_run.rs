@@ -116,10 +116,25 @@ pub async fn workflow_evaluation_run_episode(
     validate_tags(&params.tags, false)?;
     let episode_id = generate_workflow_evaluation_run_episode_id();
     let run_id_str = run_id.to_string();
-    // We add the workflow evaluation run ID to the tags so that we can look it up per-inference later
+
+    // IMPORTANT: We write both the old and new tag names for backward compatibility.
+    // - tensorzero::dynamic_evaluation_run_id (OLD): Historical tag name, kept for existing queries/UI
+    // - tensorzero::workflow_evaluation_run_id (NEW): Updated tag name following feature rename
+    //
+    // The UI and all queries currently use the old tag name. In a future migration, we will:
+    // 1. Update UI and queries to use the new tag name
+    // 2. Backfill old inferences to add the new tag
+    // 3. Remove the old tag from new writes
+    //
+    // Similar to how database tables kept "DynamicEvaluation" names but code uses "workflow_evaluation",
+    // we're maintaining both tag names during the transition period.
     let mut tags = params.tags;
     tags.insert(
         "tensorzero::dynamic_evaluation_run_id".to_string(),
+        run_id_str.clone(),
+    );
+    tags.insert(
+        "tensorzero::workflow_evaluation_run_id".to_string(),
         run_id_str,
     );
     write_workflow_evaluation_run_episode(
@@ -177,8 +192,13 @@ pub struct WorkflowEvaluationRunRow {
 }
 
 /// Writes a workflow evaluation run to the database.
+///
 /// Note: The table is named `DynamicEvaluationRun` for historical reasons,
 /// but this feature is now called "Workflow Evaluations".
+///
+/// Similarly, we write both `tensorzero::dynamic_evaluation_run_id` (old) and
+/// `tensorzero::workflow_evaluation_run_id` (new) tags to episode inferences
+/// to support backward compatibility during the migration period.
 async fn write_workflow_evaluation_run(
     clickhouse: ClickHouseConnectionInfo,
     run_id: Uuid,

@@ -126,12 +126,22 @@ async fn test_workflow_evaluation() {
             tags.get("bop").unwrap().as_str().unwrap(),
             format!("bop_{i}")
         );
+        // Verify both old and new tag names are present (double-write for backward compatibility)
         assert_eq!(
             tags.get("tensorzero::dynamic_evaluation_run_id")
                 .unwrap()
                 .as_str()
                 .unwrap(),
-            run_id.to_string()
+            run_id.to_string(),
+            "Old tag name should be present for backward compatibility"
+        );
+        assert_eq!(
+            tags.get("tensorzero::workflow_evaluation_run_id")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            run_id.to_string(),
+            "New tag name should be present for future migration"
         );
         // Check for some git tags too
         tags.get("tensorzero::git_commit_hash")
@@ -158,6 +168,10 @@ async fn test_workflow_evaluation() {
             ("zoo".to_string(), format!("zoo_{i}")),
             (
                 "tensorzero::dynamic_evaluation_run_id".to_string(),
+                run_id.to_string(),
+            ),
+            (
+                "tensorzero::workflow_evaluation_run_id".to_string(),
                 run_id.to_string(),
             ),
         ]);
