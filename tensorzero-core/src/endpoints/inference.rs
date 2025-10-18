@@ -6,6 +6,7 @@ use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use futures::FutureExt;
 use metrics::counter;
+use opentelemetry::trace::Status;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,7 +23,9 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
+use crate::config::{
+    Config, ErrorContext, OtlpConfig, OtlpTracesFormat, SchemaData, UninitializedVariantInfo,
+};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
@@ -238,6 +241,19 @@ pub async fn inference(
         span.record("episode_id", episode_id.to_string());
     }
 
+    let traces_config = &config.gateway.export.otlp.traces;
+
+    if traces_config.enabled {
+        match traces_config.format {
+            OtlpTracesFormat::OpenTelemetry => {
+                span.set_attribute("gen_ai.operation.name", "chat");
+            }
+            OtlpTracesFormat::OpenInference => {
+                span.set_attribute("openinference.span.kind", "CHAIN");
+            }
+        }
+    }
+
     // Automatically add internal tag when internal=true
     if params.internal {
         params
@@ -445,7 +461,10 @@ pub async fn inference(
         .await;
 
         match result {
-            Ok(output) => return Ok(output),
+            Ok(output) => {
+                span.set_status(Status::Ok);
+                return Ok(output);
+            }
             Err(e) => {
                 tracing::warn!(
                     "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
