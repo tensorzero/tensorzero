@@ -3,6 +3,7 @@ import type { UninitializedBestOfNSamplingConfig } from "./UninitializedBestOfNS
 import type { UninitializedChainOfThoughtConfig } from "./UninitializedChainOfThoughtConfig";
 import type { UninitializedChatCompletionConfig } from "./UninitializedChatCompletionConfig";
 import type { UninitializedDiclConfig } from "./UninitializedDiclConfig";
+import type { UninitializedFirstOfNConfig } from "./UninitializedFirstOfNConfig";
 import type { UninitializedMixtureOfNConfig } from "./UninitializedMixtureOfNConfig";
 
 export type UninitializedVariantConfig =
@@ -16,4 +17,5 @@ export type UninitializedVariantConfig =
   | ({ type: "experimental_mixture_of_n" } & UninitializedMixtureOfNConfig)
   | ({
       type: "experimental_chain_of_thought";
-    } & UninitializedChainOfThoughtConfig);
+    } & UninitializedChainOfThoughtConfig)
+  | ({ type: "experimental_first_of_n" } & UninitializedFirstOfNConfig);

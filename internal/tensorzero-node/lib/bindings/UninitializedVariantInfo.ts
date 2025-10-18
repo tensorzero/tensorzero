@@ -4,6 +4,7 @@ import type { UninitializedBestOfNSamplingConfig } from "./UninitializedBestOfNS
 import type { UninitializedChainOfThoughtConfig } from "./UninitializedChainOfThoughtConfig";
 import type { UninitializedChatCompletionConfig } from "./UninitializedChatCompletionConfig";
 import type { UninitializedDiclConfig } from "./UninitializedDiclConfig";
+import type { UninitializedFirstOfNConfig } from "./UninitializedFirstOfNConfig";
 import type { UninitializedMixtureOfNConfig } from "./UninitializedMixtureOfNConfig";
 
 export type UninitializedVariantInfo = { timeouts: TimeoutsConfig | null } & (
@@ -18,4 +19,5 @@ export type UninitializedVariantInfo = { timeouts: TimeoutsConfig | null } & (
   | ({
       type: "experimental_chain_of_thought";
     } & UninitializedChainOfThoughtConfig)
+  | ({ type: "experimental_first_of_n" } & UninitializedFirstOfNConfig)
 );

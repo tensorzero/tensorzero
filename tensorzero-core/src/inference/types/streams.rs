@@ -18,6 +18,10 @@ use futures::stream::Peekable;
 use futures::Stream;
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
+
+use std::borrow::Cow;
+
+
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -555,10 +559,12 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
         variant_name,
         tool_config,
         templates,
+
         dynamic_output_schema,
         fetch_and_encode_input_files_before_inference,
         extra_body,
         extra_headers,
+
         extra_cache_key: None,
     };
     function
@@ -658,6 +664,7 @@ mod tests {
     use super::*;
     use crate::{
         config::SchemaData,
+
         experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{

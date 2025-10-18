@@ -3,6 +3,7 @@ import type { BestOfNSamplingConfig } from "./BestOfNSamplingConfig";
 import type { ChainOfThoughtConfig } from "./ChainOfThoughtConfig";
 import type { ChatCompletionConfig } from "./ChatCompletionConfig";
 import type { DiclConfig } from "./DiclConfig";
+import type { FirstOfNConfig } from "./FirstOfNConfig";
 import type { MixtureOfNConfig } from "./MixtureOfNConfig";
 
 export type VariantConfig =
@@ -10,4 +11,5 @@ export type VariantConfig =
   | ({ type: "best_of_n_sampling" } & BestOfNSamplingConfig)
   | ({ type: "dicl" } & DiclConfig)
   | ({ type: "mixture_of_n" } & MixtureOfNConfig)
-  | ({ type: "chain_of_thought" } & ChainOfThoughtConfig);
+  | ({ type: "chain_of_thought" } & ChainOfThoughtConfig)
+  | ({ type: "first_of_n" } & FirstOfNConfig);
