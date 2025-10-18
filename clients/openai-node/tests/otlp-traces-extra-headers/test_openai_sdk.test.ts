@@ -2,8 +2,8 @@
  * Tests for OTLP traces extra headers using the OpenAI Node.js SDK
  *
  * These tests verify that custom OTLP headers can be sent via the OpenAI SDK's
- * extra_headers parameter to the TensorZero OpenAI-compatible endpoint and are
- * correctly exported to Tempo.
+ * headers option (in the second parameter) to the TensorZero OpenAI-compatible
+ * endpoint and are correctly exported to Tempo.
  */
 import { describe, it, expect, beforeAll } from "vitest";
 import OpenAI from "openai";
@@ -24,28 +24,32 @@ describe("OTLP Traces Extra Headers", () => {
     // Use a unique header value to identify this specific trace
     const testValue = `openai-node-test-${uuidv7()}`;
 
-    const result = await client.chat.completions.create({
-      model: "tensorzero::function_name::basic_test",
-      messages: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "text",
-              // @ts-expect-error - custom TensorZero property
-              "tensorzero::arguments": {
-                assistant_name: "Alfred Pennyworth",
+    const result = await client.chat.completions.create(
+      {
+        model: "tensorzero::function_name::basic_test",
+        messages: [
+          {
+            role: "system",
+            content: [
+              {
+                type: "text",
+                // @ts-expect-error - custom TensorZero property
+                "tensorzero::arguments": {
+                  assistant_name: "Alfred Pennyworth",
+                },
               },
-            },
-          ],
-        },
-        { role: "user", content: "What is 4+4?" },
-      ],
-      extra_headers: {
-        "tensorzero-otlp-traces-extra-header-x-dummy-tensorzero": testValue,
+            ],
+          },
+          { role: "user", content: "What is 4+4?" },
+        ],
+        "tensorzero::variant_name": "openai",
       },
-      "tensorzero::variant_name": "openai",
-    });
+      {
+        headers: {
+          "tensorzero-otlp-traces-extra-header-x-dummy-tensorzero": testValue,
+        },
+      }
+    );
 
     const inferenceId = result.id;
 

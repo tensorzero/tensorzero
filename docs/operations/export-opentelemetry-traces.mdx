@@ -167,7 +167,7 @@ This will attach the headers `user-id: user-123` and `request-source: mobile-app
 
 <Tab title="Node (OpenAI SDK)">
 
-When using the OpenAI Node SDK with the TensorZero OpenAI-compatible endpoint, you can pass dynamic OTLP headers using the `extra_headers` parameter.
+When using the OpenAI Node SDK with the TensorZero OpenAI-compatible endpoint, you can pass dynamic OTLP headers using the `headers` option in the second parameter.
 You must prefix header names with `tensorzero-otlp-traces-extra-header-`:
 
 ```typescript
@@ -177,19 +177,23 @@ const client = new OpenAI({
   baseURL: "http://localhost:3000/openai/v1",
 });
 
-const result = await client.chat.completions.create({
-  model: "tensorzero::function_name::your_function",
-  messages: [
-    {
-      role: "user",
-      content: "Write a haiku about artificial intelligence.",
-    },
-  ],
-  extra_headers: {
-    "tensorzero-otlp-traces-extra-header-user-id": "user-123",
-    "tensorzero-otlp-traces-extra-header-request-source": "mobile-app",
+const result = await client.chat.completions.create(
+  {
+    model: "tensorzero::function_name::your_function",
+    messages: [
+      {
+        role: "user",
+        content: "Write a haiku about artificial intelligence.",
+      },
+    ],
   },
-});
+  {
+    headers: {
+      "tensorzero-otlp-traces-extra-header-user-id": "user-123",
+      "tensorzero-otlp-traces-extra-header-request-source": "mobile-app",
+    },
+  }
+);
 ```
 
 This will attach the headers `user-id: user-123` and `request-source: mobile-app` when exporting any span associated with that specific inference request.

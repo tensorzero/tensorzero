@@ -15,8 +15,8 @@ importers:
   clients/openai-node:
     dependencies:
       openai:
-        specifier: ^6.4.0
-        version: 6.4.0(ws@8.18.2)(zod@3.25.76)
+        specifier: ^6.5.0
+        version: 6.5.0(ws@8.18.2)(zod@3.25.76)
       uuid:
         specifier: ^11.1.0
         version: 11.1.0
@@ -4003,6 +4003,18 @@ packages:
 
   openai@6.4.0:
     resolution: {integrity: sha512-vSoVBRTPMgg3oSaoHIGfbYM2zwGN0D4F2aiNHMeu1lZHFOwfJMAF0X110HDdedYvcsIo578ujQ11WL5kP687Cw==}
+    hasBin: true
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
+  openai@6.5.0:
+    resolution: {integrity: sha512-bNqJ15Ijbs41KuJ2iYz/mGAruFHzQQt7zXo4EvjNLoB64aJdgn1jlMeDTsXjEg+idVYafg57QB/5Rd16oqvZ6A==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -9087,6 +9099,11 @@ snapshots:
       is-wsl: 2.2.0
 
   openai@6.4.0(ws@8.18.2)(zod@3.25.76):
+    optionalDependencies:
+      ws: 8.18.2
+      zod: 3.25.76
+
+  openai@6.5.0(ws@8.18.2)(zod@3.25.76):
     optionalDependencies:
       ws: 8.18.2
       zod: 3.25.76
