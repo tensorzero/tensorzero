@@ -21,7 +21,7 @@ user_template = "functions/write_haiku/user_template.minijinja"
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.haiku_eval]
-type = "inference"
+type = "static"
 function_name = "write_haiku"
 
 [evaluations.haiku_eval.evaluators.exact_match]
