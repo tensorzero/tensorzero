@@ -399,7 +399,7 @@ export async function searchWorkflowEvaluationRuns(
 }
 
 /**
- * Returns a list of episodes that were part of some set of workflow evluation runs,
+ * Returns a list of episodes that were part of some set of workflow evaluation runs,
  * grouped into sublists that all have the same task_name.
  * If the task_name is NULL, the episode is grouped into a sublist by itself.
  *
