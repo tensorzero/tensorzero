@@ -8,6 +8,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
+use tracing_futures::Instrument;
 use url::Url;
 use uuid::Uuid;
 
@@ -367,7 +368,7 @@ fn stream_google_ai_studio_gemini(
                 }
             }
          }
-    })
+    }.instrument(tracing::info_span!("stream_google_ai_studio_gemini")))
 }
 
 #[derive(Debug, PartialEq, Serialize)]
