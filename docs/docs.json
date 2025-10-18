@@ -114,10 +114,10 @@
             "group": "Operations",
             "pages": [
               "operations/manage-credentials",
+              "operations/enforce-custom-rate-limits",
               "operations/organize-your-configuration",
               "operations/export-opentelemetry-traces",
               "operations/export-prometheus-metrics",
-              "operations/enforce-custom-rate-limits",
               "operations/extend-tensorzero"
             ]
           }

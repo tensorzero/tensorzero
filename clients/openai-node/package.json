@@ -16,7 +16,7 @@
   "author": "TensorZero",
   "license": "Apache-2.0",
   "dependencies": {
-    "openai": "^6.4.0",
+    "openai": "^6.5.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
