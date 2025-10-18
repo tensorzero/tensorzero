@@ -634,6 +634,40 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
+    def workflow_evaluation_run(
+        self,
+        *,
+        variants: Dict[str, str],
+        tags: Optional[Dict[str, str]] = None,
+        project_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+    ) -> DynamicEvaluationRunResponse:
+        """
+        Make a POST request to the /workflow_evaluation_run endpoint.
+
+        :param variants: A dictionary of variant names to variant values.
+        :param tags: A dictionary of tags to add to the workflow evaluation run.
+        :param project_name: The name of the project to use for the workflow evaluation run.
+        :param display_name: The display name of the workflow evaluation run.
+        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
+        """
+
+    def workflow_evaluation_run_episode(
+        self,
+        *,
+        run_id: str | UUID | uuid_utils.UUID,
+        task_name: Optional[str] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> DynamicEvaluationRunEpisodeResponse:
+        """
+        Make a POST request to the /workflow_evaluation_run_episode endpoint.
+
+        :param run_id: The run ID to use for the workflow evaluation run.
+        :param task_name: The name of the task to use for the workflow evaluation run.
+        :param tags: A dictionary of tags to add to the workflow evaluation run.
+        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
+        """
+
     def create_datapoints(
         self,
         *,
@@ -1009,6 +1043,40 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param run_id: The run ID to use for the dynamic evaluation run.
         :param task_name: The name of the task to use for the dynamic evaluation run.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
+        :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
+        """
+
+    async def workflow_evaluation_run(  # type: ignore[override]
+        self,
+        *,
+        variants: Dict[str, str],
+        tags: Optional[Dict[str, str]] = None,
+        project_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+    ) -> DynamicEvaluationRunResponse:
+        """
+        Make a POST request to the /workflow_evaluation_run endpoint.
+
+        :param variants: A dictionary of variant names to variant values.
+        :param tags: A dictionary of tags to add to the workflow evaluation run.
+        :param project_name: The name of the project to use for the workflow evaluation run.
+        :param display_name: The display name of the workflow evaluation run.
+        :return: A `DynamicEvaluationRunResponse` instance ({"run_id": str}).
+        """
+
+    async def workflow_evaluation_run_episode(  # type: ignore[override]
+        self,
+        *,
+        run_id: str | UUID | uuid_utils.UUID,
+        task_name: Optional[str] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> DynamicEvaluationRunEpisodeResponse:
+        """
+        Make a POST request to the /workflow_evaluation_run_episode endpoint.
+
+        :param run_id: The run ID to use for the workflow evaluation run.
+        :param task_name: The name of the task to use for the workflow evaluation run.
+        :param tags: A dictionary of tags to add to the workflow evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 

@@ -47,6 +47,7 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
     "tensorzero::dataset_name",
     "tensorzero::evaluator_inference_id",
     "tensorzero::dynamic_evaluation_run_id",
+    "tensorzero::workflow_evaluation_run_id",
   ];
 
   // Add conditional navigation keys
@@ -91,6 +92,9 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
           break;
         // NOTE: This uses the historical tag name. See comment above navigableKeys definition.
         case "tensorzero::dynamic_evaluation_run_id":
+          navigate(toWorkflowEvaluationRunUrl(value));
+          break;
+        case "tensorzero::workflow_evaluation_run_id":
           navigate(toWorkflowEvaluationRunUrl(value));
           break;
       }
