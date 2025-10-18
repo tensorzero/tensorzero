@@ -142,24 +142,23 @@ When using the OpenAI Python SDK with the TensorZero OpenAI-compatible endpoint,
 You must prefix header names with `tensorzero-otlp-traces-extra-header-`:
 
 ```python
-from openai import AsyncOpenAI
+from openai import OpenAI
 
-async with AsyncOpenAI(
-    base_url="http://localhost:3000/openai/v1"
-) as client:
-    result = await client.chat.completions.create(
-        model="tensorzero::function_name::your_function",
-        messages=[
-            {
-                "role": "user",
-                "content": "Write a haiku about artificial intelligence.",
-            }
-        ],
-        extra_headers={
-            "tensorzero-otlp-traces-extra-header-user-id": "user-123",
-            "tensorzero-otlp-traces-extra-header-request-source": "mobile-app",
-        },
-    )
+client = OpenAI(base_url="http://localhost:3000/openai/v1")
+
+result = client.chat.completions.create(
+    model="tensorzero::function_name::your_function",
+    messages=[
+        {
+            "role": "user",
+            "content": "Write a haiku about artificial intelligence.",
+        }
+    ],
+    extra_headers={
+        "tensorzero-otlp-traces-extra-header-user-id": "user-123",
+        "tensorzero-otlp-traces-extra-header-request-source": "mobile-app",
+    },
+)
 ```
 
 This will attach the headers `user-id: user-123` and `request-source: mobile-app` when exporting any span associated with that specific inference request.
