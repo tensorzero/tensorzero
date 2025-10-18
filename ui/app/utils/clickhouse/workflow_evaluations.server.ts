@@ -420,7 +420,7 @@ export async function getWorkflowEvaluationRunEpisodesByTaskName(
           tags,
           updated_at,
           datapoint_name AS task_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
-        FROM DynamicRunEpisodeByRunId
+        FROM DynamicEvaluationRunEpisodeByRunId
         WHERE run_id_uint IN (
           SELECT arrayJoin(
             arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)})
@@ -554,7 +554,7 @@ export async function countWorkflowEvaluationRunEpisodesByTaskName(
           tags,
           updated_at,
           datapoint_name AS task_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
-        FROM DynamicRunEpisodeByRunId
+        FROM DynamicEvaluationRunEpisodeByRunId
         WHERE run_id_uint IN (
           SELECT arrayJoin(
             arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)})
