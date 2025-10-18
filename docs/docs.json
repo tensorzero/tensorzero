@@ -61,6 +61,7 @@
               "gateway/data-model",
               {
                 "group": "API Reference",
+                "expanded": true,
                 "pages": [
                   "gateway/api-reference/inference",
                   "gateway/api-reference/inference-openai-compatible",
@@ -81,6 +82,7 @@
               "evaluations/index",
               {
                 "group": "Inference Evaluations",
+                "expanded": true,
                 "pages": [
                   "evaluations/inference-evaluations/tutorial",
                   "evaluations/inference-evaluations/configuration-reference",
@@ -89,6 +91,7 @@
               },
               {
                 "group": "Workflow Evaluations",
+                "expanded": true,
                 "pages": [
                   "evaluations/workflow-evaluations/tutorial",
                   "evaluations/workflow-evaluations/api-reference"
