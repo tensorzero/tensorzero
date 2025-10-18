@@ -47,8 +47,7 @@ use super::anthropic::{
     AnthropicMessageDelta, AnthropicStopReason,
 };
 use super::gcp_vertex_gemini::{parse_shorthand_url, GCPVertexCredentials, ShorthandUrl};
-use super::helpers::peek_first_chunk;
-use super::openai::convert_stream_error;
+use super::helpers::{convert_stream_error, peek_first_chunk};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming

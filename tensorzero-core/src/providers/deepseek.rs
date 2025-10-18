@@ -32,12 +32,13 @@ use crate::model::{Credential, ModelProvider};
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::tool::ToolCallChunk;
 
+use super::helpers::convert_stream_error;
 use super::openai::{
-    convert_stream_error, get_chat_url, handle_openai_error, prepare_openai_tools,
-    prepare_system_or_developer_message, tensorzero_to_openai_messages,
-    OpenAIAssistantRequestMessage, OpenAIContentBlock, OpenAIFinishReason, OpenAIRequestMessage,
-    OpenAIResponseToolCall, OpenAISystemRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIUsage,
-    OpenAIUserRequestMessage, StreamOptions, SystemOrDeveloper,
+    get_chat_url, handle_openai_error, prepare_openai_tools, prepare_system_or_developer_message,
+    tensorzero_to_openai_messages, OpenAIAssistantRequestMessage, OpenAIContentBlock,
+    OpenAIFinishReason, OpenAIRequestMessage, OpenAIResponseToolCall, OpenAISystemRequestMessage,
+    OpenAITool, OpenAIToolChoice, OpenAIUsage, OpenAIUserRequestMessage, StreamOptions,
+    SystemOrDeveloper,
 };
 
 lazy_static! {

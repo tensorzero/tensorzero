@@ -61,8 +61,7 @@ use crate::model::{
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
-use super::openai::convert_stream_error;
+use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_gemini";

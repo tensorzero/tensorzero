@@ -31,15 +31,15 @@ use crate::{
     },
     model::{Credential, ModelProvider},
     providers::helpers::{
-        check_new_tool_call_name, inject_extra_request_data_and_send,
+        check_new_tool_call_name, convert_stream_error, inject_extra_request_data_and_send,
         inject_extra_request_data_and_send_eventsource,
     },
     tool::{ToolCall, ToolCallChunk, ToolChoice},
 };
 
 use super::openai::{
-    convert_stream_error, get_chat_url, tensorzero_to_openai_messages, OpenAIFunction,
-    OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
+    get_chat_url, tensorzero_to_openai_messages, OpenAIFunction, OpenAIRequestMessage,
+    OpenAISystemRequestMessage, OpenAITool, OpenAIToolType,
 };
 
 lazy_static! {

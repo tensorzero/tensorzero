@@ -39,8 +39,7 @@ use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
-use super::helpers::inject_extra_request_data_and_send;
-use super::openai::convert_stream_error;
+use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";

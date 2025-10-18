@@ -654,6 +654,13 @@ async fn wrap_provider_stream(
                     Err(e) => {
                         tracing::warn!("Skipping cache write for stream response due to error in stream: {e}");
                         errored = true;
+                        // If we see a `FatalStreamError`, then yield it and stop processing the stream,
+                        // to avoid holding open a stream that might never produce more chunks.
+                        // We'll still compute rate-limiting usage using all of the chunks that we've seen so far.
+                        if let ErrorDetails::FatalStreamError { .. } = e.get_details() {
+                            yield chunk;
+                            break;
+                        }
                     }
                 }
             }
@@ -666,6 +673,7 @@ async fn wrap_provider_stream(
                 .return_tickets(&postgres_connection_info, RateLimitResourceUsage {
                     model_inferences: 1,
                     tokens: total_usage.total_tokens() as u64,
+                    is_estimate: errored,
                 })
                 .await
             {
