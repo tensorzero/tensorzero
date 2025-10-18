@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -15,11 +16,18 @@ import {
   TableItemShortUuid,
 } from "~/components/ui/TableItems";
 import { toFunctionUrl, toInferenceUrl } from "~/utils/urls";
+import { InferenceHoverCard } from "~/components/inference/InferenceHoverCard";
 
 export default function EpisodeInferenceTable({
   inferences,
+  onInferenceHover,
+  getInferenceData,
+  isInferenceLoading,
 }: {
   inferences: InferenceByIdRow[];
+  onInferenceHover?: (inferenceId: string) => void;
+  getInferenceData?: (inferenceId: string) => any;
+  isInferenceLoading?: (inferenceId: string) => boolean;
 }) {
   return (
     <Table>
@@ -38,10 +46,23 @@ export default function EpisodeInferenceTable({
           inferences.map((inference) => (
             <TableRow key={inference.id} id={inference.id}>
               <TableCell className="max-w-[200px]">
-                <TableItemShortUuid
-                  id={inference.id}
-                  link={toInferenceUrl(inference.id)}
-                />
+                {onInferenceHover && getInferenceData && isInferenceLoading ? (
+                  <InferenceHoverCard
+                    inference={getInferenceData(inference.id)}
+                    isLoading={isInferenceLoading(inference.id)}
+                    onHover={() => onInferenceHover(inference.id)}
+                  >
+                    <TableItemShortUuid
+                      id={inference.id}
+                      link={toInferenceUrl(inference.id)}
+                    />
+                  </InferenceHoverCard>
+                ) : (
+                  <TableItemShortUuid
+                    id={inference.id}
+                    link={toInferenceUrl(inference.id)}
+                  />
+                )}
               </TableCell>
               <TableCell>
                 <TableItemFunction
