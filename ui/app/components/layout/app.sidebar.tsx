@@ -100,8 +100,8 @@ const navigation: NavigationSection[] = [
         icon: GridCheck,
       },
       {
-        title: "Dynamic Evaluations",
-        url: "/dynamic_evaluations",
+        title: "Workflow Evaluations",
+        url: "/workflow_evaluations",
         icon: SequenceChecks,
       },
     ],

@@ -18,7 +18,7 @@ import {
   toDatapointUrl,
   toDatasetUrl,
   toInferenceUrl,
-  toDynamicEvaluationRunUrl,
+  toWorkflowEvaluationRunUrl,
 } from "~/utils/urls";
 
 interface TagsTableProps {
@@ -87,7 +87,7 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
           navigate(toInferenceUrl(value));
           break;
         case "tensorzero::dynamic_evaluation_run_id":
-          navigate(toDynamicEvaluationRunUrl(value));
+          navigate(toWorkflowEvaluationRunUrl(value));
           break;
       }
     }

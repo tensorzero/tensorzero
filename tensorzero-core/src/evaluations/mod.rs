@@ -520,7 +520,6 @@ impl UninitializedEvaluatorConfig {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeVariantInfo {
     #[serde(flatten)]
     inner: UninitializedLLMJudgeVariantConfig,

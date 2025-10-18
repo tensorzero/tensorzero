@@ -88,10 +88,10 @@
                 ]
               },
               {
-                "group": "Dynamic Evaluations",
+                "group": "Workflow Evaluations",
                 "pages": [
-                  "evaluations/dynamic-evaluations/tutorial",
-                  "evaluations/dynamic-evaluations/api-reference"
+                  "evaluations/workflow-evaluations/tutorial",
+                  "evaluations/workflow-evaluations/api-reference"
                 ]
               }
             ]
@@ -339,8 +339,44 @@
       "destination": "/gateway/create-a-prompt-template"
     },
     {
-      "source": "/evaluations/static-evaluations/:slug*",
-      "destination": "/evaluations/inference-evaluations/:slug*"
+      "source": "/evaluations/static-evaluations/cli-reference",
+      "destination": "/evaluations/inference-evaluations/cli-reference"
+    },
+    {
+      "source": "/evaluations/static-evaluations/cli-reference/",
+      "destination": "/evaluations/inference-evaluations/cli-reference"
+    },
+    {
+      "source": "/evaluations/static-evaluations/configuration-reference",
+      "destination": "/evaluations/inference-evaluations/configuration-reference"
+    },
+    {
+      "source": "/evaluations/static-evaluations/configuration-reference/",
+      "destination": "/evaluations/inference-evaluations/configuration-reference"
+    },
+    {
+      "source": "/evaluations/static-evaluations/tutorial",
+      "destination": "/evaluations/inference-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/static-evaluations/tutorial/",
+      "destination": "/evaluations/inference-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/dynamic-evaluations/tutorial",
+      "destination": "/evaluations/workflow-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/dynamic-evaluations/tutorial/",
+      "destination": "/evaluations/workflow-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/dynamic-evaluations/api-reference",
+      "destination": "/evaluations/workflow-evaluations/api-reference"
+    },
+    {
+      "source": "/evaluations/dynamic-evaluations/api-reference/",
+      "destination": "/evaluations/workflow-evaluations/api-reference"
     }
   ]
 }

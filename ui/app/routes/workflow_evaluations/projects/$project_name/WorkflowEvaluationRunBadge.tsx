@@ -7,10 +7,10 @@ import {
 import { Badge } from "../../../../components/ui/badge";
 import { X } from "lucide-react";
 import { formatDate } from "~/utils/date";
-import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
+import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
 
-interface DynamicEvaluationRunBadgeProps {
-  runInfo: DynamicEvaluationRun;
+interface WorkflowEvaluationRunBadgeProps {
+  runInfo: WorkflowEvaluationRun;
   getColor: (runId: string) => string;
   lastUpdateDate?: Date;
   onRemove?: (e: React.MouseEvent) => void;
@@ -21,12 +21,12 @@ export function getLastUuidSegment(uuid: string): string {
   return uuid.slice(-6);
 }
 
-export default function DynamicEvaluationRunBadge({
+export default function WorkflowEvaluationRunBadge({
   runInfo,
   getColor,
   lastUpdateDate,
   onRemove,
-}: DynamicEvaluationRunBadgeProps) {
+}: WorkflowEvaluationRunBadgeProps) {
   const runId = runInfo.id;
   const variantColor = getColor(runId);
   const runIdSegment = getLastUuidSegment(runId);

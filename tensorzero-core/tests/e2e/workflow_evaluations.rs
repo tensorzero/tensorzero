@@ -6,22 +6,23 @@ use std::{
 use serde_json::json;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    DynamicEvaluationRunParams, FeedbackParams, InferenceOutput, Role,
+    FeedbackParams, InferenceOutput, Role, WorkflowEvaluationRunParams,
 };
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
-        get_clickhouse, select_chat_inference_clickhouse, select_dynamic_evaluation_run_clickhouse,
-        select_dynamic_evaluation_run_episode_clickhouse,
+        get_clickhouse, select_chat_inference_clickhouse,
+        select_workflow_evaluation_run_clickhouse,
+        select_workflow_evaluation_run_episode_clickhouse,
     },
-    endpoints::dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
+    endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
     inference::types::TextKind,
 };
 use uuid::{Timestamp, Uuid};
 
 #[tokio::test]
-async fn test_dynamic_evaluation() {
+async fn test_workflow_evaluation() {
     let client = tensorzero::test_helpers::make_http_gateway().await;
-    let params = DynamicEvaluationRunParams {
+    let params = WorkflowEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),
         tags: HashMap::from([
@@ -31,12 +32,12 @@ async fn test_dynamic_evaluation() {
         project_name: Some("test_project".to_string()),
         display_name: Some("test_display_name".to_string()),
     };
-    let dynamic_evaluation_info = client.dynamic_evaluation_run(params).await.unwrap();
-    let run_id = dynamic_evaluation_info.run_id;
+    let workflow_evaluation_info = client.workflow_evaluation_run(params).await.unwrap();
+    let run_id = workflow_evaluation_info.run_id;
     // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
+    let run_row = select_workflow_evaluation_run_clickhouse(&clickhouse, run_id)
         .await
         .unwrap();
     assert_eq!(run_row.project_name, Some("test_project".to_string()));
@@ -45,11 +46,11 @@ async fn test_dynamic_evaluation() {
         Some("test_display_name".to_string())
     );
     for i in 0..2 {
-        // Get the episode_id from the dynamic_evaluation_run_episode endpoint
+        // Get the episode_id from the workflow_evaluation_run_episode endpoint
         let episode_id = client
-            .dynamic_evaluation_run_episode(
+            .workflow_evaluation_run_episode(
                 run_id,
-                DynamicEvaluationRunEpisodeParams {
+                WorkflowEvaluationRunEpisodeParams {
                     task_name: Some(format!("test_datapoint_{i}")),
                     tags: HashMap::from([
                         ("baz".to_string(), format!("baz_{i}")),
@@ -126,7 +127,7 @@ async fn test_dynamic_evaluation() {
             format!("bop_{i}")
         );
         assert_eq!(
-            tags.get("tensorzero::dynamic_evaluation_run_id")
+            tags.get("tensorzero::workflow_evaluation_run_id")
                 .unwrap()
                 .as_str()
                 .unwrap(),
@@ -142,10 +143,10 @@ async fn test_dynamic_evaluation() {
             .as_str()
             .unwrap();
         let episode_row =
-            select_dynamic_evaluation_run_episode_clickhouse(&clickhouse, run_id, episode_id)
+            select_workflow_evaluation_run_episode_clickhouse(&clickhouse, run_id, episode_id)
                 .await
                 .unwrap();
-        println!("ClickHouse - DynamicEvaluationRunEpisode: {episode_row:#?}");
+        println!("ClickHouse - WorkflowEvaluationRunEpisode: {episode_row:#?}");
         assert_eq!(
             episode_row.variant_pins,
             HashMap::from([("basic_test".to_string(), "test2".to_string())])
@@ -156,7 +157,7 @@ async fn test_dynamic_evaluation() {
             ("baz".to_string(), format!("baz_{i}")),
             ("zoo".to_string(), format!("zoo_{i}")),
             (
-                "tensorzero::dynamic_evaluation_run_id".to_string(),
+                "tensorzero::workflow_evaluation_run_id".to_string(),
                 run_id.to_string(),
             ),
         ]);
@@ -184,16 +185,16 @@ async fn test_dynamic_evaluation() {
 }
 
 #[tokio::test]
-async fn test_dynamic_evaluation_nonexistent_function() {
+async fn test_workflow_evaluation_nonexistent_function() {
     let client = tensorzero::test_helpers::make_http_gateway().await;
-    let params = DynamicEvaluationRunParams {
+    let params = WorkflowEvaluationRunParams {
         variants: HashMap::from([("nonexistent_function".to_string(), "test2".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
         project_name: None,
         display_name: None,
         internal: false,
     };
-    let result = client.dynamic_evaluation_run(params).await.unwrap_err();
+    let result = client.workflow_evaluation_run(params).await.unwrap_err();
     println!("Result: {result:#?}");
     assert!(result
         .to_string()
@@ -203,29 +204,29 @@ async fn test_dynamic_evaluation_nonexistent_function() {
 /// Test that the variant behavior is default if we use a different function name
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
-async fn test_dynamic_evaluation_other_function() {
+async fn test_workflow_evaluation_other_function() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let params = DynamicEvaluationRunParams {
+    let params = WorkflowEvaluationRunParams {
         variants: HashMap::from([("dynamic_json".to_string(), "gcp-vertex-haiku".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
         project_name: None,
         display_name: None,
         internal: false,
     };
-    let result = client.dynamic_evaluation_run(params).await.unwrap();
+    let result = client.workflow_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
     // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
+    let run_row = select_workflow_evaluation_run_clickhouse(&clickhouse, run_id)
         .await
         .unwrap();
     assert_eq!(run_row.project_name, None);
     assert_eq!(run_row.run_display_name, None);
     let episode_id = client
-        .dynamic_evaluation_run_episode(
+        .workflow_evaluation_run_episode(
             run_id,
-            DynamicEvaluationRunEpisodeParams {
+            WorkflowEvaluationRunEpisodeParams {
                 task_name: None,
                 tags: HashMap::new(),
             },
@@ -275,29 +276,29 @@ async fn test_dynamic_evaluation_other_function() {
 /// Test that the variant does not fall back in a dynamic evaluation run
 /// This should error
 #[tokio::test(flavor = "multi_thread")]
-async fn test_dynamic_evaluation_variant_error() {
+async fn test_workflow_evaluation_variant_error() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let params = DynamicEvaluationRunParams {
+    let params = WorkflowEvaluationRunParams {
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
         project_name: None,
         display_name: None,
         internal: false,
     };
-    let result = client.dynamic_evaluation_run(params).await.unwrap();
+    let result = client.workflow_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
     // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
+    let run_row = select_workflow_evaluation_run_clickhouse(&clickhouse, run_id)
         .await
         .unwrap();
     assert_eq!(run_row.project_name, None);
     assert_eq!(run_row.run_display_name, None);
     let episode_id = client
-        .dynamic_evaluation_run_episode(
+        .workflow_evaluation_run_episode(
             run_id,
-            DynamicEvaluationRunEpisodeParams {
+            WorkflowEvaluationRunEpisodeParams {
                 task_name: None,
                 tags: HashMap::new(),
             },
@@ -330,29 +331,29 @@ async fn test_dynamic_evaluation_variant_error() {
 /// Test that the variant behavior is default if we pin a different variant name
 /// But the tags are applied
 #[tokio::test(flavor = "multi_thread")]
-async fn test_dynamic_evaluation_override_variant_tags() {
+async fn test_workflow_evaluation_override_variant_tags() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let params = DynamicEvaluationRunParams {
+    let params = WorkflowEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "error".to_string())]),
         tags: HashMap::from([("foo".to_string(), "bar".to_string())]),
         project_name: None,
         display_name: None,
     };
-    let result = client.dynamic_evaluation_run(params).await.unwrap();
+    let result = client.workflow_evaluation_run(params).await.unwrap();
     let run_id = result.run_id;
     // Sleep for 200ms to allow time for data to be inserted into ClickHouse (trailing writes from API)
     tokio::time::sleep(Duration::from_millis(200)).await;
     let clickhouse = get_clickhouse().await;
-    let run_row = select_dynamic_evaluation_run_clickhouse(&clickhouse, run_id)
+    let run_row = select_workflow_evaluation_run_clickhouse(&clickhouse, run_id)
         .await
         .unwrap();
     assert_eq!(run_row.project_name, None);
     assert_eq!(run_row.run_display_name, None);
     let episode_id = client
-        .dynamic_evaluation_run_episode(
+        .workflow_evaluation_run_episode(
             run_id,
-            DynamicEvaluationRunEpisodeParams {
+            WorkflowEvaluationRunEpisodeParams {
                 task_name: None,
                 tags: HashMap::new(),
             },
@@ -403,7 +404,7 @@ async fn test_dynamic_evaluation_override_variant_tags() {
 }
 
 #[tokio::test]
-async fn test_bad_dynamic_evaluation_run() {
+async fn test_bad_workflow_evaluation_run() {
     let client = tensorzero::test_helpers::make_http_gateway().await;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -441,17 +442,17 @@ async fn test_bad_dynamic_evaluation_run() {
 }
 
 #[tokio::test]
-async fn test_dynamic_evaluation_tag_validation() {
+async fn test_workflow_evaluation_tag_validation() {
     let client = tensorzero::test_helpers::make_http_gateway().await;
-    let params = DynamicEvaluationRunParams {
+    let params = WorkflowEvaluationRunParams {
         internal: false,
         variants: HashMap::from([("basic_test".to_string(), "test2".to_string())]),
         tags: HashMap::from([("tensorzero::foo".to_string(), "bar".to_string())]),
         project_name: Some("test_project".to_string()),
         display_name: Some("test_display_name".to_string()),
     };
-    let dynamic_evaluation_info = client.dynamic_evaluation_run(params).await.unwrap_err();
-    assert!(dynamic_evaluation_info
+    let workflow_evaluation_info = client.workflow_evaluation_run(params).await.unwrap_err();
+    assert!(workflow_evaluation_info
         .to_string()
         .contains("Tag name cannot start with 'tensorzero::'"));
 }

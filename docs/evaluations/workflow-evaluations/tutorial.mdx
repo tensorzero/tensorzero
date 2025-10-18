@@ -1,7 +1,7 @@
 ---
-title: "Tutorial: Dynamic Evaluations"
+title: "Tutorial: Workflow Evaluations"
 sidebarTitle: "Tutorial"
-description: Learn how to use the TensorZero Dynamic Evaluations to build principled LLM-powered applications.
+description: Learn how to use the TensorZero Workflow Evaluations to build principled LLM-powered applications.
 ---
 
 Dynamic evaluations enable you to evaluate complex workflows that combine multiple inference calls with arbitrary application logic.
@@ -16,7 +16,7 @@ Imagine we have the following LLM-powered workflow in response to a natural-lang
 5. Feedback: Send feedback using the `task_success` metric.
 
 Evaluating `generate_database_query` and `generate_final_answer` in a vacuum (i.e. using inference evaluations) can also be helpful, but ultimately we want to evaluate the entire workflow end-to-end.
-This is where dynamic evaluations come in.
+This is where workflow evaluations come in.
 
 Complex LLM applications might need to make multiple LLM calls and execute arbitrary code before giving an overall result.
 In agentic applications, the workflow might even be defined dynamically at runtime based on the user's input, the results of the LLM calls, or other factors.
@@ -25,7 +25,7 @@ You can think of them like integration tests for your LLM applications.
 
 <Tip>
 
-For a more complex, runnable example, see the [Dynamic Evaluations for Agentic RAG Example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/dynamic_evaluations/simple-agentic-rag).
+For a more complex, runnable example, see the [Workflow Evaluations for Agentic RAG Example on GitHub](https://github.com/tensorzero/tensorzero/tree/main/examples/dynamic_evaluations/simple-agentic-rag).
 
 </Tip>
 
@@ -243,7 +243,7 @@ See our [Quickstart](/quickstart/) to learn how to set up our LLM gateway, obser
 You can also use the OpenAI SDK for inference calls.
 See the [Quickstart](/quickstart/) for more details.
 
-(Similarly, you can also use dynamic evaluations with any framework or agent that is OpenAI-compatible by passing along the episode ID and function name in the request to TensorZero.)
+(Similarly, you can also use workflow evaluations with any framework or agent that is OpenAI-compatible by passing along the episode ID and function name in the request to TensorZero.)
 
 </Tip>
 

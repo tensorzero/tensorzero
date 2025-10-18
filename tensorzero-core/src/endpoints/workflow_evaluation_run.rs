@@ -15,19 +15,19 @@ use crate::{
     error::{Error, ErrorDetails},
     utils::gateway::{AppState, AppStateData, StructuredJson},
     utils::uuid::{
-        compare_timestamps, generate_dynamic_evaluation_run_episode_id, validate_tensorzero_uuid,
-        DYNAMIC_EVALUATION_THRESHOLD,
+        compare_timestamps, generate_workflow_evaluation_run_episode_id, validate_tensorzero_uuid,
+        WORKFLOW_EVALUATION_THRESHOLD,
     },
 };
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DynamicEvaluationRunInfo {
+pub struct WorkflowEvaluationRunInfo {
     pub variant_pins: HashMap<String, String>,
     pub tags: HashMap<String, String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DynamicEvaluationRunParams {
+pub struct WorkflowEvaluationRunParams {
     pub variants: HashMap<String, String>,
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -40,31 +40,31 @@ pub struct DynamicEvaluationRunParams {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct DynamicEvaluationRunResponse {
+pub struct WorkflowEvaluationRunResponse {
     pub run_id: Uuid,
 }
 
 #[debug_handler(state = AppStateData)]
-pub async fn dynamic_evaluation_run_handler(
+pub async fn workflow_evaluation_run_handler(
     State(app_state): AppState,
-    StructuredJson(params): StructuredJson<DynamicEvaluationRunParams>,
-) -> Result<Json<DynamicEvaluationRunResponse>, Error> {
-    dynamic_evaluation_run(app_state, params).await.map(Json)
+    StructuredJson(params): StructuredJson<WorkflowEvaluationRunParams>,
+) -> Result<Json<WorkflowEvaluationRunResponse>, Error> {
+    workflow_evaluation_run(app_state, params).await.map(Json)
 }
 
-/// Creates a new dynamic evaluation run.
-pub async fn dynamic_evaluation_run(
+/// Creates a new workflow evaluation run.
+pub async fn workflow_evaluation_run(
     AppStateData {
         config,
         clickhouse_connection_info,
         ..
     }: AppStateData,
-    params: DynamicEvaluationRunParams,
-) -> Result<DynamicEvaluationRunResponse, Error> {
+    params: WorkflowEvaluationRunParams,
+) -> Result<WorkflowEvaluationRunResponse, Error> {
     validate_tags(&params.tags, params.internal)?;
     validate_variant_pins(&params.variants, &config)?;
     let run_id = Uuid::now_v7();
-    write_dynamic_evaluation_run(
+    write_workflow_evaluation_run(
         clickhouse_connection_info,
         run_id,
         params.variants,
@@ -73,16 +73,16 @@ pub async fn dynamic_evaluation_run(
         params.display_name,
     )
     .await?;
-    Ok(DynamicEvaluationRunResponse { run_id })
+    Ok(WorkflowEvaluationRunResponse { run_id })
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DynamicEvaluationRunEpisodePathParams {
+pub struct WorkflowEvaluationRunEpisodePathParams {
     pub run_id: Uuid,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
-pub struct DynamicEvaluationRunEpisodeParams {
+pub struct WorkflowEvaluationRunEpisodeParams {
     #[serde(default)]
     pub task_name: Option<String>,
     #[serde(default)]
@@ -90,39 +90,39 @@ pub struct DynamicEvaluationRunEpisodeParams {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DynamicEvaluationRunEpisodeResponse {
+pub struct WorkflowEvaluationRunEpisodeResponse {
     pub episode_id: Uuid,
 }
 
 #[debug_handler(state = AppStateData)]
-pub async fn dynamic_evaluation_run_episode_handler(
+pub async fn workflow_evaluation_run_episode_handler(
     State(app_state): AppState,
-    Path(path_params): Path<DynamicEvaluationRunEpisodePathParams>,
-    StructuredJson(params): StructuredJson<DynamicEvaluationRunEpisodeParams>,
-) -> Result<Json<DynamicEvaluationRunEpisodeResponse>, Error> {
-    dynamic_evaluation_run_episode(app_state, path_params.run_id, params)
+    Path(path_params): Path<WorkflowEvaluationRunEpisodePathParams>,
+    StructuredJson(params): StructuredJson<WorkflowEvaluationRunEpisodeParams>,
+) -> Result<Json<WorkflowEvaluationRunEpisodeResponse>, Error> {
+    workflow_evaluation_run_episode(app_state, path_params.run_id, params)
         .await
         .map(Json)
 }
 
-pub async fn dynamic_evaluation_run_episode(
+pub async fn workflow_evaluation_run_episode(
     AppStateData {
         clickhouse_connection_info,
         ..
     }: AppStateData,
     run_id: Uuid,
-    params: DynamicEvaluationRunEpisodeParams,
-) -> Result<DynamicEvaluationRunEpisodeResponse, Error> {
+    params: WorkflowEvaluationRunEpisodeParams,
+) -> Result<WorkflowEvaluationRunEpisodeResponse, Error> {
     validate_tags(&params.tags, false)?;
-    let episode_id = generate_dynamic_evaluation_run_episode_id();
+    let episode_id = generate_workflow_evaluation_run_episode_id();
     let run_id_str = run_id.to_string();
-    // We add the dynamic evaluation run ID to the tags so that we can look it up per-inference later
+    // We add the workflow evaluation run ID to the tags so that we can look it up per-inference later
     let mut tags = params.tags;
     tags.insert(
-        "tensorzero::dynamic_evaluation_run_id".to_string(),
+        "tensorzero::workflow_evaluation_run_id".to_string(),
         run_id_str,
     );
-    write_dynamic_evaluation_run_episode(
+    write_workflow_evaluation_run_episode(
         &clickhouse_connection_info,
         params.task_name.as_deref(),
         tags,
@@ -130,7 +130,7 @@ pub async fn dynamic_evaluation_run_episode(
         episode_id,
     )
     .await?;
-    Ok(DynamicEvaluationRunEpisodeResponse { episode_id })
+    Ok(WorkflowEvaluationRunEpisodeResponse { episode_id })
 }
 
 pub fn validate_variant_pins(
@@ -168,7 +168,7 @@ fn to_map_literal(map: &HashMap<String, String>) -> String {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DynamicEvaluationRunRow {
+pub struct WorkflowEvaluationRunRow {
     pub run_id: Uuid,
     pub variant_pins: HashMap<String, String>,
     pub tags: HashMap<String, String>,
@@ -176,7 +176,10 @@ pub struct DynamicEvaluationRunRow {
     pub run_display_name: Option<String>,
 }
 
-async fn write_dynamic_evaluation_run(
+/// Writes a workflow evaluation run to the database.
+/// Note: The table is named `DynamicEvaluationRun` for historical reasons,
+/// but this feature is now called "Workflow Evaluations".
+async fn write_workflow_evaluation_run(
     clickhouse: ClickHouseConnectionInfo,
     run_id: Uuid,
     variant_pins: HashMap<String, String>,
@@ -219,7 +222,7 @@ async fn write_dynamic_evaluation_run(
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct DynamicEvaluationRunEpisodeRow {
+pub struct WorkflowEvaluationRunEpisodeRow {
     pub run_id: Uuid,
     pub episode_id: Uuid,
     pub variant_pins: HashMap<String, String>,
@@ -227,7 +230,10 @@ pub struct DynamicEvaluationRunEpisodeRow {
     pub tags: HashMap<String, String>,
 }
 
-async fn write_dynamic_evaluation_run_episode(
+/// Writes a workflow evaluation run episode to the database.
+/// Note: The table is named `DynamicEvaluationRunEpisode` for historical reasons,
+/// but this feature is now called "Workflow Evaluations".
+async fn write_workflow_evaluation_run_episode(
     clickhouse: &ClickHouseConnectionInfo,
     task_name: Option<&str>,
     tags: HashMap<String, String>,
@@ -248,7 +254,7 @@ async fn write_dynamic_evaluation_run_episode(
         toUInt128({episode_id:UUID}) AS episode_id_uint,
         variant_pins,
         {datapoint_name:Nullable(String)} AS datapoint_name, -- for legacy reasons, `task_name` is stored as `datapoint_name` in the database
-        mapUpdate(tags, {tags:Map(String, String)}) AS tags -- merge the tags in the params on top of tags in the dynamic evaluation run
+        mapUpdate(tags, {tags:Map(String, String)}) AS tags -- merge the tags in the params on top of tags in the workflow evaluation run
     FROM DynamicEvaluationRun
     WHERE run_id_uint = toUInt128({run_id:UUID})
     ";
@@ -266,11 +272,11 @@ async fn write_dynamic_evaluation_run_episode(
     Ok(())
 }
 
-/// For dynamic evaluation runs, we generate episode IDs that are DYNAMIC_EVALUATION_OFFSET in the future.
-/// If we come across an episode ID that is at least DYNAMIC_EVALUATION_THRESHOLD, we need to look up the
-/// appropriate DynamicEvaluationRun and then apply the `variant_name` if unset and the tags if unset.
+/// For workflow evaluation runs, we generate episode IDs that are WORKFLOW_EVALUATION_OFFSET in the future.
+/// If we come across an episode ID that is at least WORKFLOW_EVALUATION_THRESHOLD, we need to look up the
+/// appropriate workflow evaluation run and then apply the `variant_name` if unset and the tags if unset.
 /// We'll warn if the variant name is set in two places and then take the inference-level one.
-pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
+pub async fn validate_inference_episode_id_and_apply_workflow_evaluation_run(
     episode_id: Uuid,
     function_name: Option<&String>,
     variant_name: &mut Option<String>,
@@ -282,38 +288,38 @@ pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
             raw_uuid: episode_id.to_string(),
         })
     })?;
-    // If the episode ID timestamp is before the dynamic evaluation threshold,
+    // If the episode ID timestamp is before the workflow evaluation threshold,
     // it's a regular episode ID and we validate it normally.
-    // Otherwise, it's a dynamic evaluation run ID that needs special handling.
-    if compare_timestamps(episode_id_timestamp, DYNAMIC_EVALUATION_THRESHOLD) {
+    // Otherwise, it's a workflow evaluation run ID that needs special handling.
+    if compare_timestamps(episode_id_timestamp, WORKFLOW_EVALUATION_THRESHOLD) {
         return validate_tensorzero_uuid(episode_id, "Episode");
     }
-    let dynamic_evaluation_run = lookup_dynamic_evaluation_run(clickhouse, episode_id).await?;
-    let Some(dynamic_evaluation_run) = dynamic_evaluation_run else {
-        return Err(Error::new(ErrorDetails::InvalidDynamicEvaluationRun {
+    let workflow_evaluation_run = lookup_workflow_evaluation_run(clickhouse, episode_id).await?;
+    let Some(workflow_evaluation_run) = workflow_evaluation_run else {
+        return Err(Error::new(ErrorDetails::InvalidWorkflowEvaluationRun {
             episode_id,
         }));
     };
     if let Some(function_name) = function_name {
-        let dynamic_run_variant_name = dynamic_evaluation_run.variant_pins.get(function_name);
+        let workflow_run_variant_name = workflow_evaluation_run.variant_pins.get(function_name);
 
-        match (variant_name.as_ref(), dynamic_run_variant_name) {
+        match (variant_name.as_ref(), workflow_run_variant_name) {
             (Some(_), Some(_)) => {
-                tracing::warn!("Variant name set in both inference and dynamic evaluation run");
+                tracing::warn!("Variant name set in both inference and workflow evaluation run");
             }
-            // If the inference pinned the `variant_name` and the dynamic run did not, leave as is
+            // If the inference pinned the `variant_name` and the workflow run did not, leave as is
             (Some(_), None) => {}
-            // If the dynamic run pinned the `variant_name` and the inference did not, use the dynamic run `variant_name`
-            (None, Some(dynamic_run_variant_name)) => {
-                *variant_name = Some(dynamic_run_variant_name.clone());
+            // If the workflow run pinned the `variant_name` and the inference did not, use the workflow run `variant_name`
+            (None, Some(workflow_run_variant_name)) => {
+                *variant_name = Some(workflow_run_variant_name.clone());
             }
             // If both are unset, leave as is
             (None, None) => {}
         }
     }
 
-    // Apply experiment tags from the dynamic evaluation run if they don't already exist in the inference tags
-    for (key, value) in dynamic_evaluation_run.tags {
+    // Apply experiment tags from the workflow evaluation run if they don't already exist in the inference tags
+    for (key, value) in workflow_evaluation_run.tags {
         // Only insert if the key doesn't already exist in the tags
         // This ensures inference-level tags have higher priority
         tags.entry(key).or_insert(value);
@@ -322,10 +328,13 @@ pub async fn validate_inference_episode_id_and_apply_dynamic_evaluation_run(
     Ok(())
 }
 
-async fn lookup_dynamic_evaluation_run(
+/// Looks up a workflow evaluation run from the database.
+/// Note: The table is named `DynamicEvaluationRunEpisode` for historical reasons,
+/// but this feature is now called "Workflow Evaluations".
+async fn lookup_workflow_evaluation_run(
     clickhouse: &ClickHouseConnectionInfo,
     episode_id: Uuid,
-) -> Result<Option<DynamicEvaluationRunInfo>, Error> {
+) -> Result<Option<WorkflowEvaluationRunInfo>, Error> {
     let query = r"
     SELECT variant_pins, tags FROM DynamicEvaluationRunEpisode WHERE episode_id_uint = toUInt128({episode_id:UUID}) FORMAT JSONEachRow
     ";
@@ -337,11 +346,46 @@ async fn lookup_dynamic_evaluation_run(
     if result.response.is_empty() {
         return Ok(None);
     }
-    let dynamic_evaluation_run: DynamicEvaluationRunInfo = serde_json::from_str(&result.response)
+    let workflow_evaluation_run: WorkflowEvaluationRunInfo = serde_json::from_str(&result.response)
         .map_err(|_| {
-        Error::new(ErrorDetails::Serialization {
-            message: "Failed to deserialize dynamic evaluation run".to_string(),
-        })
-    })?;
-    Ok(Some(dynamic_evaluation_run))
+            Error::new(ErrorDetails::Serialization {
+                message: "Failed to deserialize workflow evaluation run".to_string(),
+            })
+        })?;
+    Ok(Some(workflow_evaluation_run))
+}
+
+// ============================================================================
+// DEPRECATED HANDLERS - For backward compatibility
+// ============================================================================
+
+/// DEPRECATED: Use the POST `/workflow_evaluation_run` endpoint instead.
+#[debug_handler(state = AppStateData)]
+pub async fn dynamic_evaluation_run_handler(
+    State(app_state): AppState,
+    StructuredJson(params): StructuredJson<WorkflowEvaluationRunParams>,
+) -> Result<Json<WorkflowEvaluationRunResponse>, Error> {
+    tracing::warn!(
+        "DEPRECATED: The `/dynamic_evaluation_run` endpoint is deprecated. Please use `/workflow_evaluation_run` instead. Support for `/dynamic_evaluation_run` will be removed in a future version."
+    );
+    workflow_evaluation_run_handler(State(app_state), StructuredJson(params)).await
+}
+
+/// DEPRECATED: Use the POST `/workflow_evaluation_run/{run_id}/episode` endpoint instead.
+#[debug_handler(state = AppStateData)]
+pub async fn dynamic_evaluation_run_episode_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<WorkflowEvaluationRunEpisodePathParams>,
+    StructuredJson(params): StructuredJson<WorkflowEvaluationRunEpisodeParams>,
+) -> Result<Json<WorkflowEvaluationRunEpisodeResponse>, Error> {
+    tracing::warn!(
+        run_id = %path_params.run_id,
+        "DEPRECATED: The `/dynamic_evaluation_run/{{run_id}}/episode` endpoint is deprecated. Please use `/workflow_evaluation_run/{{run_id}}/episode` instead. Support for `/dynamic_evaluation_run/{{run_id}}/episode` will be removed in a future version."
+    );
+    workflow_evaluation_run_episode_handler(
+        State(app_state),
+        Path(path_params),
+        StructuredJson(params),
+    )
+    .await
 }

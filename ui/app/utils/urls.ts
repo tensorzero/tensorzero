@@ -77,15 +77,15 @@ export function toEvaluationDatapointUrl(
 }
 
 // ============================================================================
-// Dynamic Evaluations
+// Workflow Evaluations
 // ============================================================================
 
-export function toDynamicEvaluationRunUrl(runId: string): string {
-  return `/dynamic_evaluations/runs/${encodeURIComponent(runId)}`;
+export function toWorkflowEvaluationRunUrl(runId: string): string {
+  return `/workflow_evaluations/runs/${encodeURIComponent(runId)}`;
 }
 
-export function toDynamicEvaluationProjectUrl(projectName: string): string {
-  return `/dynamic_evaluations/projects/${encodeURIComponent(projectName)}`;
+export function toWorkflowEvaluationProjectUrl(projectName: string): string {
+  return `/workflow_evaluations/projects/${encodeURIComponent(projectName)}`;
 }
 
 // ============================================================================

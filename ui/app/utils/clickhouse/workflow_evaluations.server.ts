@@ -1,28 +1,28 @@
 import { getClickhouseClient } from "./client.server";
 import { CountSchema } from "./common";
 import {
-  dynamicEvaluationProjectSchema,
-  dynamicEvaluationRunEpisodeWithFeedbackSchema,
-  dynamicEvaluationRunSchema,
-  dynamicEvaluationRunStatisticsByMetricNameSchema,
-  groupedDynamicEvaluationRunEpisodeWithFeedbackSchema,
-  type DynamicEvaluationProject,
-  type DynamicEvaluationRun,
-  type DynamicEvaluationRunEpisodeWithFeedback,
-  type DynamicEvaluationRunStatisticsByMetricName,
-  type GroupedDynamicEvaluationRunEpisodeWithFeedback,
-  type DynamicEvaluationRunWithEpisodeCount,
-  dynamicEvaluationRunWithEpisodeCountSchema,
-} from "./dynamic_evaluations";
+  workflowEvaluationProjectSchema,
+  workflowEvaluationRunEpisodeWithFeedbackSchema,
+  workflowEvaluationRunSchema,
+  workflowEvaluationRunStatisticsByMetricNameSchema,
+  groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema,
+  type WorkflowEvaluationProject,
+  type WorkflowEvaluationRun,
+  type WorkflowEvaluationRunEpisodeWithFeedback,
+  type WorkflowEvaluationRunStatisticsByMetricName,
+  type GroupedWorkflowEvaluationRunEpisodeWithFeedback,
+  type WorkflowEvaluationRunWithEpisodeCount,
+  workflowEvaluationRunWithEpisodeCountSchema,
+} from "./workflow_evaluations";
 
-export async function getDynamicEvaluationRuns(
+export async function getWorkflowEvaluationRuns(
   page_size: number,
   offset: number,
   run_id?: string,
   project_name?: string,
-): Promise<DynamicEvaluationRunWithEpisodeCount[]> {
+): Promise<WorkflowEvaluationRunWithEpisodeCount[]> {
   const query = `
-    WITH FilteredDynamicEvaluationRuns AS (
+    WITH FilteredWorkflowEvaluationRuns AS (
       SELECT
           run_display_name as name,
           uint_to_uuid(run_id_uint) as id,
@@ -31,19 +31,19 @@ export async function getDynamicEvaluationRuns(
           tags,
           project_name,
           formatDateTime(UUIDv7ToDateTime(uint_to_uuid(run_id_uint)), '%Y-%m-%dT%H:%i:%SZ') as timestamp
-      FROM DynamicEvaluationRun
+      FROM WorkflowEvaluationRun
       ${run_id ? `WHERE toUInt128(toUUID({run_id:String})) = run_id_uint` : ""}
       ${project_name ? `WHERE project_name = {project_name:String}` : ""}
       ORDER BY run_id_uint DESC
       LIMIT {page_size:UInt64}
       OFFSET {offset:UInt64}
     ),
-    DynamicEvaluationRunsEpisodeCounts AS (
+    WorkflowEvaluationRunsEpisodeCounts AS (
       SELECT
         run_id_uint,
         toUInt32(count()) as num_episodes
-      FROM DynamicEvaluationRunEpisodeByRunId
-      WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredDynamicEvaluationRuns)
+      FROM DynamicRunEpisodeByRunId
+      WHERE run_id_uint IN (SELECT run_id_uint FROM FilteredWorkflowEvaluationRuns)
       GROUP BY run_id_uint
     )
     SELECT
@@ -54,8 +54,8 @@ export async function getDynamicEvaluationRuns(
       project_name,
       COALESCE(num_episodes, 0) AS num_episodes,
       timestamp
-    FROM FilteredDynamicEvaluationRuns
-    LEFT JOIN DynamicEvaluationRunsEpisodeCounts USING run_id_uint
+    FROM FilteredWorkflowEvaluationRuns
+    LEFT JOIN WorkflowEvaluationRunsEpisodeCounts USING run_id_uint
     ORDER BY run_id_uint DESC
   `;
   const result = await getClickhouseClient().query({
@@ -68,16 +68,16 @@ export async function getDynamicEvaluationRuns(
       project_name,
     },
   });
-  const rows = await result.json<DynamicEvaluationRunWithEpisodeCount[]>();
+  const rows = await result.json<WorkflowEvaluationRunWithEpisodeCount[]>();
   return rows.map((row) =>
-    dynamicEvaluationRunWithEpisodeCountSchema.parse(row),
+    workflowEvaluationRunWithEpisodeCountSchema.parse(row),
   );
 }
 
-export async function getDynamicEvaluationRunsByIds(
+export async function getWorkflowEvaluationRunsByIds(
   run_ids: string[], // one or more UUIDv7 strings
   project_name?: string, // optional extra filter
-): Promise<DynamicEvaluationRun[]> {
+): Promise<WorkflowEvaluationRun[]> {
   if (run_ids.length === 0) return []; // nothing to fetch
 
   const query = `
@@ -91,7 +91,7 @@ export async function getDynamicEvaluationRunsByIds(
         UUIDv7ToDateTime(uint_to_uuid(run_id_uint)),
         '%Y-%m-%dT%H:%i:%SZ'
       ) AS timestamp
-    FROM DynamicEvaluationRun
+    FROM WorkflowEvaluationRun
     WHERE run_id_uint IN (
       /* turn the parameter array of UUID strings into a real table
          expression of UInt128 values so the IN predicate is valid */
@@ -109,13 +109,13 @@ export async function getDynamicEvaluationRunsByIds(
     query_params: { run_ids, project_name },
   });
 
-  const rows = await result.json<DynamicEvaluationRun[]>();
-  return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
+  const rows = await result.json<WorkflowEvaluationRun[]>();
+  return rows.map((row) => workflowEvaluationRunSchema.parse(row));
 }
 
-export async function countDynamicEvaluationRuns(): Promise<number> {
+export async function countWorkflowEvaluationRuns(): Promise<number> {
   const query = `
-    SELECT toUInt32(count()) as count FROM DynamicEvaluationRun
+    SELECT toUInt32(count()) as count FROM WorkflowEvaluationRun
   `;
   const result = await getClickhouseClient().query({
     query,
@@ -133,11 +133,11 @@ export async function countDynamicEvaluationRuns(): Promise<number> {
  * The feedback is given as arrays feedback_metric_names and feedback_values.
  * The arrays are sorted by the metric name.
  */
-export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
+export async function getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
   page_size: number,
   offset: number,
   run_id: string,
-): Promise<DynamicEvaluationRunEpisodeWithFeedback[]> {
+): Promise<WorkflowEvaluationRunEpisodeWithFeedback[]> {
   const query = `
     WITH
       episodes AS (
@@ -148,7 +148,7 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
           updated_at,
           datapoint_name AS task_name, -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
           ifNull(datapoint_name, concat('NULL_EPISODE_', toString(episode_id_uint))) as group_key
-        FROM DynamicEvaluationRunEpisodeByRunId
+        FROM DynamicRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
         LIMIT {page_size:UInt64}
@@ -229,16 +229,16 @@ export async function getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
     format: "JSONEachRow",
     query_params: { page_size, offset, run_id },
   });
-  const rows = await result.json<DynamicEvaluationRunEpisodeWithFeedback[]>();
+  const rows = await result.json<WorkflowEvaluationRunEpisodeWithFeedback[]>();
   return rows.map((row) =>
-    dynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row),
+    workflowEvaluationRunEpisodeWithFeedbackSchema.parse(row),
   );
 }
 
-export async function getDynamicEvaluationRunStatisticsByMetricName(
+export async function getWorkflowEvaluationRunStatisticsByMetricName(
   run_id: string,
   metric_name?: string,
-): Promise<DynamicEvaluationRunStatisticsByMetricName[]> {
+): Promise<WorkflowEvaluationRunStatisticsByMetricName[]> {
   const query = `
     WITH
        episodes AS (
@@ -247,7 +247,7 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
           run_id_uint,
           tags,
           datapoint_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
-        FROM DynamicEvaluationRunEpisodeByRunId
+        FROM DynamicRunEpisodeByRunId
         WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
         ORDER BY episode_id_uint DESC
       ),
@@ -287,17 +287,17 @@ export async function getDynamicEvaluationRunStatisticsByMetricName(
     query_params: { run_id, metric_name },
   });
   const rows =
-    await result.json<DynamicEvaluationRunStatisticsByMetricName[]>();
+    await result.json<WorkflowEvaluationRunStatisticsByMetricName[]>();
   return rows.map((row) =>
-    dynamicEvaluationRunStatisticsByMetricNameSchema.parse(row),
+    workflowEvaluationRunStatisticsByMetricNameSchema.parse(row),
   );
 }
 
-export async function countDynamicEvaluationRunEpisodes(
+export async function countWorkflowEvaluationRunEpisodes(
   run_id: string,
 ): Promise<number> {
   const query = `
-    SELECT toUInt32(count()) as count FROM DynamicEvaluationRunEpisodeByRunId
+    SELECT toUInt32(count()) as count FROM DynamicRunEpisodeByRunId
     WHERE toUInt128(toUUID({run_id:String})) = run_id_uint
   `;
   const result = await getClickhouseClient().query({
@@ -309,10 +309,10 @@ export async function countDynamicEvaluationRunEpisodes(
   return rows[0].count;
 }
 
-export async function getDynamicEvaluationProjects(
+export async function getWorkflowEvaluationProjects(
   page_size: number,
   offset: number,
-): Promise<DynamicEvaluationProject[]> {
+): Promise<WorkflowEvaluationProject[]> {
   const query = `
     SELECT
       project_name as name,
@@ -329,11 +329,11 @@ export async function getDynamicEvaluationProjects(
     format: "JSONEachRow",
     query_params: { page_size, offset },
   });
-  const rows = await result.json<DynamicEvaluationProject[]>();
-  return rows.map((row) => dynamicEvaluationProjectSchema.parse(row));
+  const rows = await result.json<WorkflowEvaluationProject[]>();
+  return rows.map((row) => workflowEvaluationProjectSchema.parse(row));
 }
 
-export async function countDynamicEvaluationProjects(): Promise<number> {
+export async function countWorkflowEvaluationProjects(): Promise<number> {
   const query = `
   SELECT toUInt32(countDistinct(project_name)) AS count
   FROM DynamicEvaluationRunByProjectName
@@ -348,12 +348,12 @@ export async function countDynamicEvaluationProjects(): Promise<number> {
   return parsedRows[0].count;
 }
 
-export async function searchDynamicEvaluationRuns(
+export async function searchWorkflowEvaluationRuns(
   page_size: number,
   offset: number,
   project_name?: string,
   search_query?: string,
-): Promise<DynamicEvaluationRun[]> {
+): Promise<WorkflowEvaluationRun[]> {
   // 1) Build an array of individual predicates
   const predicates: string[] = [];
 
@@ -382,7 +382,7 @@ export async function searchDynamicEvaluationRuns(
       tags,
       project_name,
       formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') as timestamp
-    FROM DynamicEvaluationRun
+    FROM WorkflowEvaluationRun
     ${whereClause}
     ORDER BY updated_at DESC
     LIMIT {page_size:UInt64}
@@ -394,8 +394,8 @@ export async function searchDynamicEvaluationRuns(
     format: "JSONEachRow",
     query_params: { project_name, search_query, page_size, offset },
   });
-  const rows = await result.json<DynamicEvaluationRun[]>();
-  return rows.map((row) => dynamicEvaluationRunSchema.parse(row));
+  const rows = await result.json<WorkflowEvaluationRun[]>();
+  return rows.map((row) => workflowEvaluationRunSchema.parse(row));
 }
 
 /**
@@ -405,11 +405,11 @@ export async function searchDynamicEvaluationRuns(
  *
  * The returned list is sorted by the timestamp of the episode.
  */
-export async function getDynamicEvaluationRunEpisodesByTaskName(
+export async function getWorkflowEvaluationRunEpisodesByTaskName(
   runIds: string[],
   page_size: number,
   offset: number,
-): Promise<GroupedDynamicEvaluationRunEpisodeWithFeedback[][]> {
+): Promise<GroupedWorkflowEvaluationRunEpisodeWithFeedback[][]> {
   const query = `
     WITH
       -- 1) pull all episodes for these runIds
@@ -420,7 +420,7 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
           tags,
           updated_at,
           datapoint_name AS task_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
-        FROM DynamicEvaluationRunEpisodeByRunId
+        FROM DynamicRunEpisodeByRunId
         WHERE run_id_uint IN (
           SELECT arrayJoin(
             arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)})
@@ -521,15 +521,16 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
     query_params: { runIds, page_size, offset },
   });
   const raw =
-    await result.json<GroupedDynamicEvaluationRunEpisodeWithFeedback>();
+    await result.json<GroupedWorkflowEvaluationRunEpisodeWithFeedback>();
 
   // bucket by group_key, parse each row with your Zod schema
   const buckets: Record<
     string,
-    GroupedDynamicEvaluationRunEpisodeWithFeedback[]
+    GroupedWorkflowEvaluationRunEpisodeWithFeedback[]
   > = {};
   for (const row of raw) {
-    const eps = groupedDynamicEvaluationRunEpisodeWithFeedbackSchema.parse(row);
+    const eps =
+      groupedWorkflowEvaluationRunEpisodeWithFeedbackSchema.parse(row);
     buckets[eps.group_key] ??= [];
     buckets[eps.group_key].push(eps);
   }
@@ -539,9 +540,9 @@ export async function getDynamicEvaluationRunEpisodesByTaskName(
 }
 
 /**
- * Counts the number of groups that would be returned by getDynamicEvaluationRunEpisodesByTaskName with no pagination.
+ * Counts the number of groups that would be returned by getWorkflowEvaluationRunEpisodesByTaskName with no pagination.
  */
-export async function countDynamicEvaluationRunEpisodesByTaskName(
+export async function countWorkflowEvaluationRunEpisodesByTaskName(
   runIds: string[],
 ): Promise<number> {
   const query = `
@@ -553,7 +554,7 @@ export async function countDynamicEvaluationRunEpisodesByTaskName(
           tags,
           updated_at,
           datapoint_name AS task_name -- for legacy reasons, \`task_name\` is stored as \`datapoint_name\` in the database
-        FROM DynamicEvaluationRunEpisodeByRunId
+        FROM DynamicRunEpisodeByRunId
         WHERE run_id_uint IN (
           SELECT arrayJoin(
             arrayMap(x -> toUInt128(toUUID(x)), {runIds:Array(String)})

@@ -9,16 +9,16 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
-import type { DynamicEvaluationRunWithEpisodeCount } from "~/utils/clickhouse/dynamic_evaluations";
+import type { WorkflowEvaluationRunWithEpisodeCount } from "~/utils/clickhouse/workflow_evaluations";
 import {
-  toDynamicEvaluationRunUrl,
-  toDynamicEvaluationProjectUrl,
+  toWorkflowEvaluationRunUrl,
+  toWorkflowEvaluationProjectUrl,
 } from "~/utils/urls";
 
-export default function DynamicEvaluationRunsTable({
-  dynamicEvaluationRuns,
+export default function WorkflowEvaluationRunsTable({
+  workflowEvaluationRuns,
 }: {
-  dynamicEvaluationRuns: DynamicEvaluationRunWithEpisodeCount[];
+  workflowEvaluationRuns: WorkflowEvaluationRunWithEpisodeCount[];
 }) {
   return (
     <div>
@@ -33,14 +33,14 @@ export default function DynamicEvaluationRunsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {dynamicEvaluationRuns.length === 0 ? (
+          {workflowEvaluationRuns.length === 0 ? (
             <TableEmptyState message="No evaluation runs found" />
           ) : (
-            dynamicEvaluationRuns.map((run) => (
+            workflowEvaluationRuns.map((run) => (
               <TableRow key={run.id}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={toDynamicEvaluationRunUrl(run.id)}
+                    to={toWorkflowEvaluationRunUrl(run.id)}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -50,7 +50,7 @@ export default function DynamicEvaluationRunsTable({
                 </TableCell>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={toDynamicEvaluationRunUrl(run.id)}
+                    to={toWorkflowEvaluationRunUrl(run.id)}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -61,7 +61,7 @@ export default function DynamicEvaluationRunsTable({
                 <TableCell>
                   {run.project_name ? (
                     <Link
-                      to={`${toDynamicEvaluationProjectUrl(run.project_name)}?run_ids=${run.id}`}
+                      to={`${toWorkflowEvaluationProjectUrl(run.project_name)}?run_ids=${run.id}`}
                       className="block no-underline"
                     >
                       <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">

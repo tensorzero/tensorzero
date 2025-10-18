@@ -4,7 +4,6 @@ use crate::error::{Error, ErrorDetails};
 
 pub mod batch_inference;
 pub mod datasets;
-pub mod dynamic_evaluation_run;
 pub mod embeddings;
 pub mod fallback;
 pub mod feedback;
@@ -14,6 +13,7 @@ pub mod openai_compatible;
 pub mod optimization;
 pub mod status;
 pub mod stored_inference;
+pub mod workflow_evaluation_run;
 
 pub fn validate_tags(tags: &HashMap<String, String>, internal: bool) -> Result<(), Error> {
     if internal {

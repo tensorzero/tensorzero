@@ -8,13 +8,13 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import {
-  getDynamicEvaluationRuns,
-  countDynamicEvaluationRuns,
-  getDynamicEvaluationProjects,
-  countDynamicEvaluationProjects,
-} from "~/utils/clickhouse/dynamic_evaluations.server";
-import DynamicEvaluationRunsTable from "./DynamicEvaluationRunsTable";
-import DynamicEvaluationProjectsTable from "./DynamicEvaluationProjectsTable";
+  getWorkflowEvaluationRuns,
+  countWorkflowEvaluationRuns,
+  getWorkflowEvaluationProjects,
+  countWorkflowEvaluationProjects,
+} from "~/utils/clickhouse/workflow_evaluations.server";
+import WorkflowEvaluationRunsTable from "./WorkflowEvaluationRunsTable";
+import WorkflowEvaluationProjectsTable from "./WorkflowEvaluationProjectsTable";
 import { logger } from "~/utils/logger";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -25,21 +25,21 @@ export async function loader({ request }: Route.LoaderArgs) {
   const projectOffset = parseInt(searchParams.get("projectOffset") || "0");
   const projectPageSize = parseInt(searchParams.get("projectPageSize") || "15");
   const [
-    dynamicEvaluationRuns,
+    workflowEvaluationRuns,
     count,
-    dynamicEvaluationProjects,
+    workflowEvaluationProjects,
     projectCount,
   ] = await Promise.all([
-    getDynamicEvaluationRuns(runPageSize, runOffset),
-    countDynamicEvaluationRuns(),
-    getDynamicEvaluationProjects(projectPageSize, projectOffset),
-    countDynamicEvaluationProjects(),
+    getWorkflowEvaluationRuns(runPageSize, runOffset),
+    countWorkflowEvaluationRuns(),
+    getWorkflowEvaluationProjects(projectPageSize, projectOffset),
+    countWorkflowEvaluationProjects(),
   ]);
 
   return {
-    dynamicEvaluationRuns,
+    workflowEvaluationRuns,
     count,
-    dynamicEvaluationProjects,
+    workflowEvaluationProjects,
     projectCount,
     runOffset,
     runPageSize,
@@ -53,9 +53,9 @@ export default function EvaluationSummaryPage({
 }: Route.ComponentProps) {
   const navigate = useNavigate();
   const {
-    dynamicEvaluationRuns,
+    workflowEvaluationRuns,
     count,
-    dynamicEvaluationProjects,
+    workflowEvaluationProjects,
     projectCount,
     runOffset,
     runPageSize,
@@ -87,11 +87,11 @@ export default function EvaluationSummaryPage({
 
   return (
     <PageLayout>
-      <PageHeader heading="Dynamic Evaluations" />
+      <PageHeader heading="Workflow Evaluations" />
       <SectionLayout>
         <SectionHeader heading="Projects" count={projectCount} />
-        <DynamicEvaluationProjectsTable
-          dynamicEvaluationProjects={dynamicEvaluationProjects}
+        <WorkflowEvaluationProjectsTable
+          workflowEvaluationProjects={workflowEvaluationProjects}
         />
         <PageButtons
           onPreviousPage={handlePreviousProjectPage}
@@ -102,8 +102,8 @@ export default function EvaluationSummaryPage({
       </SectionLayout>
       <SectionLayout>
         <SectionHeader heading="Evaluation Runs" count={count} />
-        <DynamicEvaluationRunsTable
-          dynamicEvaluationRuns={dynamicEvaluationRuns}
+        <WorkflowEvaluationRunsTable
+          workflowEvaluationRuns={workflowEvaluationRuns}
         />
         <PageButtons
           onPreviousPage={handlePreviousRunPage}

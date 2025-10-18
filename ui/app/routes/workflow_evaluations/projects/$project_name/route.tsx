@@ -1,16 +1,16 @@
 import { PageHeader, SectionLayout } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
 import type { Route } from "./+types/route";
-import { DynamicEvalRunSelector } from "~/routes/dynamic_evaluations/projects/$project_name/DynamicEvalRunSelector";
+import { WorkflowEvalRunSelector } from "~/routes/workflow_evaluations/projects/$project_name/WorkflowEvalRunSelector";
 import {
-  countDynamicEvaluationRunEpisodesByTaskName,
-  getDynamicEvaluationRunEpisodesByTaskName,
-  getDynamicEvaluationRunsByIds,
-  getDynamicEvaluationRunStatisticsByMetricName,
-} from "~/utils/clickhouse/dynamic_evaluations.server";
-import type { DynamicEvaluationRunStatisticsByMetricName } from "~/utils/clickhouse/dynamic_evaluations";
+  countWorkflowEvaluationRunEpisodesByTaskName,
+  getWorkflowEvaluationRunEpisodesByTaskName,
+  getWorkflowEvaluationRunsByIds,
+  getWorkflowEvaluationRunStatisticsByMetricName,
+} from "~/utils/clickhouse/workflow_evaluations.server";
+import type { WorkflowEvaluationRunStatisticsByMetricName } from "~/utils/clickhouse/workflow_evaluations";
 import { ColorAssignerProvider } from "~/hooks/evaluations/ColorAssigner";
-import { DynamicEvaluationProjectResultsTable } from "./DynamicEvaluationProjectResultsTable";
+import { WorkflowEvaluationProjectResultsTable } from "./WorkflowEvaluationProjectResultsTable";
 import { useNavigate, type RouteHandle } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 
@@ -29,24 +29,26 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const runIds = searchParams.get("run_ids")?.split(",") || [];
 
-  const runStats: Record<string, DynamicEvaluationRunStatisticsByMetricName[]> =
-    {};
+  const runStats: Record<
+    string,
+    WorkflowEvaluationRunStatisticsByMetricName[]
+  > = {};
 
   if (runIds.length > 0) {
     // Create promises for fetching statistics for each runId
     const statsPromises = runIds.map((runId) =>
-      getDynamicEvaluationRunStatisticsByMetricName(runId),
+      getWorkflowEvaluationRunStatisticsByMetricName(runId),
     );
 
     // Create promise for fetching run info
-    const runInfosPromise = getDynamicEvaluationRunsByIds(runIds, projectName);
+    const runInfosPromise = getWorkflowEvaluationRunsByIds(runIds, projectName);
 
-    const episodeInfoPromise = getDynamicEvaluationRunEpisodesByTaskName(
+    const episodeInfoPromise = getWorkflowEvaluationRunEpisodesByTaskName(
       runIds,
       pageSize,
       offset,
     );
-    const countPromise = countDynamicEvaluationRunEpisodesByTaskName(runIds);
+    const countPromise = countWorkflowEvaluationRunEpisodesByTaskName(runIds);
     // Run all promises concurrently
     const [statsResults, runInfos, episodeInfo, count] = await Promise.all([
       Promise.all(statsPromises),
@@ -110,13 +112,13 @@ export default function DynamicEvaluationProjectPage({
   return (
     <ColorAssignerProvider selectedRunIds={selectedRunIds}>
       <PageLayout>
-        <PageHeader heading="Dynamic Evaluation Project" name={projectName} />
+        <PageHeader heading="Workflow Evaluation Project" name={projectName} />
         <SectionLayout>
-          <DynamicEvalRunSelector
+          <WorkflowEvalRunSelector
             projectName={projectName}
             selectedRunInfos={runInfos}
           />
-          <DynamicEvaluationProjectResultsTable
+          <WorkflowEvaluationProjectResultsTable
             selected_run_infos={runInfos}
             evaluation_results={episodeInfo}
             evaluation_statistics={runStats}

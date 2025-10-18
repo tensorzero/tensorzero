@@ -25,9 +25,9 @@ import { getDatasetMetadata } from "~/utils/clickhouse/datasets.server";
 import { countTotalEvaluationRuns } from "~/utils/clickhouse/evaluations.server";
 import type { Route } from "./+types/index";
 import {
-  countDynamicEvaluationProjects,
-  countDynamicEvaluationRuns,
-} from "~/utils/clickhouse/dynamic_evaluations.server";
+  countWorkflowEvaluationProjects,
+  countWorkflowEvaluationRuns,
+} from "~/utils/clickhouse/workflow_evaluations.server";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 
 export const handle: RouteHandle = {
@@ -111,9 +111,9 @@ export async function loader() {
   const episodesPromise = nativeDatabaseClient.queryEpisodeTableBounds();
   const datasetMetadata = getDatasetMetadata({});
   const numEvaluationRunsPromise = countTotalEvaluationRuns();
-  const numDynamicEvaluationRunsPromise = countDynamicEvaluationRuns();
-  const numDynamicEvaluationRunProjectsPromise =
-    countDynamicEvaluationProjects();
+  const numWorkflowEvaluationRunsPromise = countWorkflowEvaluationRuns();
+  const numWorkflowEvaluationRunProjectsPromise =
+    countWorkflowEvaluationProjects();
   const configPromise = getConfig();
   const functionConfigsPromise = getAllFunctionConfigs();
   const numModelsUsedPromise = nativeDatabaseClient.countDistinctModelsUsed();
@@ -163,8 +163,8 @@ export async function loader() {
   });
 
   const dynamicEvaluationsDesc = Promise.all([
-    numDynamicEvaluationRunProjectsPromise,
-    numDynamicEvaluationRunsPromise,
+    numWorkflowEvaluationRunProjectsPromise,
+    numWorkflowEvaluationRunsPromise,
   ]).then(([projects, runs]) => `${projects} projects, ${runs} runs`);
 
   const numModelsUsedDesc = numModelsUsedPromise.then(

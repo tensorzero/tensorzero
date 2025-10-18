@@ -3797,7 +3797,6 @@ json_mode = "on"
 
 [evaluations.json_evaluation]
 type = "inference"
-dataset_name = "test_dataset"
 function_name = "json_success"
 
 [evaluations.json_evaluation.evaluators.happy_bool]

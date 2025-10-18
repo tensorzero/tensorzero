@@ -339,7 +339,7 @@ _More coming soon..._
 
 > **Compare prompts, models, and inference strategies using evaluations powered by heuristics and LLM judges.**
 
-- [x] **[Evaluate individual inferences](https://www.tensorzero.com/docs/evaluations/inference-evaluations/tutorial)** with _inference evaluations_ powered by heuristics or LLM judges (&approx; unit tests for LLMs)
+- [x] **[Evaluate individual inferences](https://www.tensorzero.com/docs/evaluations/static-evaluations/tutorial)** with _static evaluations_ powered by heuristics or LLM judges (&approx; unit tests for LLMs)
 - [x] **[Evaluate end-to-end workflows](https://www.tensorzero.com/docs/evaluations/dynamic-evaluations/tutorial)** with _dynamic evaluations_ with complete flexibility (&approx; integration tests for LLMs)
 - [x] Optimize LLM judges just like any other TensorZero function to align them to human preferences
 - [ ] Soon: more built-in evaluators; headless evaluations

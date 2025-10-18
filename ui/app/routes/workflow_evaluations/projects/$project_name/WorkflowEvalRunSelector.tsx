@@ -18,18 +18,18 @@ import {
 import { useSearchParams, useNavigate, useFetcher } from "react-router";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import { getLastUuidSegment } from "~/components/evaluations/EvaluationRunBadge";
-import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
-import DynamicEvaluationRunBadge from "./DynamicEvaluationRunBadge";
+import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
+import WorkflowEvaluationRunBadge from "./WorkflowEvaluationRunBadge";
 
-interface DynamicEvalRunSelectorProps {
+interface WorkflowEvalRunSelectorProps {
   projectName: string;
-  selectedRunInfos: DynamicEvaluationRun[];
+  selectedRunInfos: WorkflowEvaluationRun[];
 }
 
-export function DynamicEvalRunSelector({
+export function WorkflowEvalRunSelector({
   projectName,
   selectedRunInfos,
-}: DynamicEvalRunSelectorProps) {
+}: WorkflowEvalRunSelectorProps) {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -47,7 +47,7 @@ export function DynamicEvalRunSelector({
     data,
     state,
     load: loadRunsFetcher,
-  } = useFetcher<DynamicEvaluationRun[]>();
+  } = useFetcher<WorkflowEvaluationRun[]>();
   const isLoading = state === "loading";
   const availableRunInfos = data ?? [];
 
@@ -232,7 +232,7 @@ export function DynamicEvalRunSelector({
       {/* Display selected variants as badges */}
       <div className="mt-3 flex flex-wrap gap-2">
         {selectedRunInfos.map((info) => (
-          <DynamicEvaluationRunBadge
+          <WorkflowEvaluationRunBadge
             key={info.id}
             runInfo={info}
             getColor={getColor}

@@ -17,30 +17,30 @@ import {
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
+import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
 
 import { useConfig } from "~/context/config";
 import { formatMetricSummaryValue } from "~/utils/config/feedback";
 import { useColorAssigner } from "~/hooks/evaluations/ColorAssigner";
 import MetricValue from "~/components/metric/MetricValue";
 import type {
-  GroupedDynamicEvaluationRunEpisodeWithFeedback,
-  DynamicEvaluationRunStatisticsByMetricName,
-} from "~/utils/clickhouse/dynamic_evaluations";
+  GroupedWorkflowEvaluationRunEpisodeWithFeedback,
+  WorkflowEvaluationRunStatisticsByMetricName,
+} from "~/utils/clickhouse/workflow_evaluations";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import { formatDate } from "~/utils/date";
 import type { MetricConfig } from "tensorzero-node";
 
 interface DynamicEvaluationProjectResultsTableProps {
-  selected_run_infos: DynamicEvaluationRun[];
-  evaluation_results: GroupedDynamicEvaluationRunEpisodeWithFeedback[][];
+  selected_run_infos: WorkflowEvaluationRun[];
+  evaluation_results: GroupedWorkflowEvaluationRunEpisodeWithFeedback[][];
   evaluation_statistics: Record<
     string,
-    DynamicEvaluationRunStatisticsByMetricName[]
+    WorkflowEvaluationRunStatisticsByMetricName[]
   >;
 }
 
-export function DynamicEvaluationProjectResultsTable({
+export function WorkflowEvaluationProjectResultsTable({
   selected_run_infos,
   evaluation_results,
   evaluation_statistics,
@@ -348,7 +348,7 @@ const EvaluationRunCircle = ({ runId }: { runId: string }) => {
 function convertStatsByRunIdToStatsByMetricName(
   evaluation_statistics: Record<
     string,
-    DynamicEvaluationRunStatisticsByMetricName[]
+    WorkflowEvaluationRunStatisticsByMetricName[]
   >,
   uniqueMetricNames: string[],
   selectedRunIds: string[],

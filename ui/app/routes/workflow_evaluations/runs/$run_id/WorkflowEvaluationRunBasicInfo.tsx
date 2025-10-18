@@ -7,13 +7,13 @@ import {
 import Chip from "~/components/ui/Chip";
 import { Calendar } from "~/components/icons/Icons";
 import { formatDateWithSeconds, getTimestampTooltipData } from "~/utils/date";
-import type { DynamicEvaluationRun } from "~/utils/clickhouse/dynamic_evaluations";
+import type { WorkflowEvaluationRun } from "~/utils/clickhouse/workflow_evaluations";
 import KVChip from "~/components/ui/KVChip";
 import { CommitHash } from "~/components/ui/CommitHash";
 import {
   toFunctionUrl,
   toVariantUrl,
-  toDynamicEvaluationProjectUrl,
+  toWorkflowEvaluationProjectUrl,
 } from "~/utils/urls";
 
 // Create timestamp tooltip component
@@ -31,33 +31,33 @@ const createTimestampTooltip = (timestamp: string | number | Date) => {
 };
 
 interface BasicInfoProps {
-  dynamicEvaluationRun: DynamicEvaluationRun;
+  workflowEvaluationRun: WorkflowEvaluationRun;
   count: number;
 }
 
 export default function BasicInfo({
-  dynamicEvaluationRun,
+  workflowEvaluationRun,
   count,
 }: BasicInfoProps) {
   // Create timestamp tooltip
   const timestampTooltip = createTimestampTooltip(
-    dynamicEvaluationRun.timestamp,
+    workflowEvaluationRun.timestamp,
   );
 
-  const filteredTags = Object.entries(dynamicEvaluationRun.tags).filter(
+  const filteredTags = Object.entries(workflowEvaluationRun.tags).filter(
     ([k]) => !k.startsWith("tensorzero::"),
   );
 
-  const commitHash = dynamicEvaluationRun.tags["tensorzero::git_commit_hash"];
+  const commitHash = workflowEvaluationRun.tags["tensorzero::git_commit_hash"];
 
   return (
     <BasicInfoLayout>
       <BasicInfoItem>
-        {dynamicEvaluationRun.name ? (
+        {workflowEvaluationRun.name ? (
           <>
             <BasicInfoItemTitle>Name</BasicInfoItemTitle>
             <BasicInfoItemContent>
-              <Chip label={dynamicEvaluationRun.name} font="mono" />
+              <Chip label={workflowEvaluationRun.name} font="mono" />
             </BasicInfoItemContent>
           </>
         ) : null}
@@ -66,19 +66,19 @@ export default function BasicInfo({
       <BasicInfoItem>
         <BasicInfoItemTitle>ID</BasicInfoItemTitle>
         <BasicInfoItemContent>
-          <Chip label={dynamicEvaluationRun.id} font="mono" />
+          <Chip label={workflowEvaluationRun.id} font="mono" />
         </BasicInfoItemContent>
       </BasicInfoItem>
 
-      {dynamicEvaluationRun.project_name ? (
+      {workflowEvaluationRun.project_name ? (
         <BasicInfoItem>
           <BasicInfoItemTitle>Project</BasicInfoItemTitle>
           <BasicInfoItemContent>
             <Chip
-              label={dynamicEvaluationRun.project_name}
+              label={workflowEvaluationRun.project_name}
               font="mono"
-              link={toDynamicEvaluationProjectUrl(
-                dynamicEvaluationRun.project_name,
+              link={toWorkflowEvaluationProjectUrl(
+                workflowEvaluationRun.project_name,
               )}
             />
           </BasicInfoItemContent>
@@ -89,15 +89,17 @@ export default function BasicInfo({
         <BasicInfoItemTitle>Variant Pins</BasicInfoItemTitle>
         <BasicInfoItemContent>
           <div className="flex flex-wrap gap-1">
-            {Object.entries(dynamicEvaluationRun.variant_pins).map(([k, v]) => (
-              <KVChip
-                key={k}
-                k={k}
-                v={v}
-                k_href={toFunctionUrl(k)}
-                v_href={toVariantUrl(k, v)}
-              />
-            ))}
+            {Object.entries(workflowEvaluationRun.variant_pins).map(
+              ([k, v]) => (
+                <KVChip
+                  key={k}
+                  k={k}
+                  v={v}
+                  k_href={toFunctionUrl(k)}
+                  v_href={toVariantUrl(k, v)}
+                />
+              ),
+            )}
           </div>
         </BasicInfoItemContent>
       </BasicInfoItem>
@@ -106,7 +108,7 @@ export default function BasicInfo({
         <BasicInfoItem>
           <BasicInfoItemTitle>Git Commit</BasicInfoItemTitle>
           <BasicInfoItemContent>
-            <CommitHash tags={dynamicEvaluationRun.tags} />
+            <CommitHash tags={workflowEvaluationRun.tags} />
           </BasicInfoItemContent>
         </BasicInfoItem>
       )}
@@ -137,7 +139,7 @@ export default function BasicInfo({
           <Chip
             icon={<Calendar className="text-fg-tertiary" />}
             label={formatDateWithSeconds(
-              new Date(dynamicEvaluationRun.timestamp),
+              new Date(workflowEvaluationRun.timestamp),
             )}
             tooltip={timestampTooltip}
           />

@@ -1,5 +1,5 @@
-import { searchDynamicEvaluationRuns } from "~/utils/clickhouse/dynamic_evaluations.server";
-import { dynamicEvaluationRunSchema } from "~/utils/clickhouse/dynamic_evaluations";
+import { searchWorkflowEvaluationRuns } from "~/utils/clickhouse/workflow_evaluations.server";
+import { workflowEvaluationRunSchema } from "~/utils/clickhouse/workflow_evaluations";
 import type { Route } from "./+types/route";
 import { abortableTimeout } from "~/utils/common";
 
@@ -11,8 +11,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   const query = url.searchParams.get("q") || "";
 
-  const runs = await searchDynamicEvaluationRuns(100, 0, projectName, query);
-  const parsedRuns = runs.map((run) => dynamicEvaluationRunSchema.parse(run));
+  const runs = await searchWorkflowEvaluationRuns(100, 0, projectName, query);
+  const parsedRuns = runs.map((run) => workflowEvaluationRunSchema.parse(run));
   return new Response(JSON.stringify(parsedRuns), {
     headers: {
       "Content-Type": "application/json",

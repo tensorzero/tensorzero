@@ -11,13 +11,13 @@ import {
   SectionLayout,
 } from "~/components/layout/PageLayout";
 import {
-  getDynamicEvaluationRuns,
-  getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
-  getDynamicEvaluationRunStatisticsByMetricName,
-  countDynamicEvaluationRunEpisodes,
-} from "~/utils/clickhouse/dynamic_evaluations.server";
-import BasicInfo from "./DynamicEvaluationRunBasicInfo";
-import DynamicEvaluationRunEpisodesTable from "./DynamicEvaluationRunEpisodesTable";
+  getWorkflowEvaluationRuns,
+  getWorkflowEvaluationRunEpisodesByRunIdWithFeedback,
+  getWorkflowEvaluationRunStatisticsByMetricName,
+  countWorkflowEvaluationRunEpisodes,
+} from "~/utils/clickhouse/workflow_evaluations.server";
+import BasicInfo from "./WorkflowEvaluationRunBasicInfo";
+import WorkflowEvaluationRunEpisodesTable from "./WorkflowEvaluationRunEpisodesTable";
 import { logger } from "~/utils/logger";
 
 export const handle: RouteHandle = {
@@ -34,29 +34,29 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "15");
   const [
-    dynamicEvaluationRuns,
-    dynamicEvaluationRunEpisodes,
+    workflowEvaluationRuns,
+    workflowEvaluationRunEpisodes,
     count,
     statistics,
   ] = await Promise.all([
-    getDynamicEvaluationRuns(5, 0, run_id),
-    getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
+    getWorkflowEvaluationRuns(5, 0, run_id),
+    getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
       pageSize,
       offset,
       run_id,
     ),
-    countDynamicEvaluationRunEpisodes(run_id),
-    getDynamicEvaluationRunStatisticsByMetricName(run_id),
+    countWorkflowEvaluationRunEpisodes(run_id),
+    getWorkflowEvaluationRunStatisticsByMetricName(run_id),
   ]);
-  if (dynamicEvaluationRuns.length != 1) {
+  if (workflowEvaluationRuns.length != 1) {
     throw new Error(
-      `Expected exactly one dynamic evaluation run, got ${dynamicEvaluationRuns.length}`,
+      `Expected exactly one dynamic evaluation run, got ${workflowEvaluationRuns.length}`,
     );
   }
-  const dynamicEvaluationRun = dynamicEvaluationRuns[0];
+  const workflowEvaluationRun = workflowEvaluationRuns[0];
   return {
-    dynamicEvaluationRun,
-    dynamicEvaluationRunEpisodes,
+    workflowEvaluationRun,
+    workflowEvaluationRunEpisodes,
     statistics,
     count,
     offset,
@@ -64,13 +64,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-export default function DynamicEvaluationRunSummaryPage({
+export default function WorkflowEvaluationRunSummaryPage({
   loaderData,
 }: Route.ComponentProps) {
   const navigate = useNavigate();
   const {
-    dynamicEvaluationRun,
-    dynamicEvaluationRunEpisodes,
+    workflowEvaluationRun,
+    workflowEvaluationRunEpisodes,
     statistics,
     count,
     offset,
@@ -91,10 +91,10 @@ export default function DynamicEvaluationRunSummaryPage({
   return (
     <PageLayout>
       <PageHeader heading={`Dynamic Evaluation Run `} />
-      <BasicInfo dynamicEvaluationRun={dynamicEvaluationRun} count={count} />
+      <BasicInfo workflowEvaluationRun={workflowEvaluationRun} count={count} />
       <SectionLayout>
-        <DynamicEvaluationRunEpisodesTable
-          episodes={dynamicEvaluationRunEpisodes}
+        <WorkflowEvaluationRunEpisodesTable
+          episodes={workflowEvaluationRunEpisodes}
           statistics={statistics}
         />
         <PageButtons

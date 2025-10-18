@@ -1,20 +1,20 @@
 import { describe, test, expect } from "vitest";
 import {
-  countDynamicEvaluationProjects,
-  countDynamicEvaluationRunEpisodes,
-  countDynamicEvaluationRuns as countDynamicEvaluationRuns,
-  getDynamicEvaluationProjects,
-  getDynamicEvaluationRunEpisodesByTaskName,
-  getDynamicEvaluationRunEpisodesByRunIdWithFeedback,
-  getDynamicEvaluationRuns,
-  getDynamicEvaluationRunsByIds,
-  getDynamicEvaluationRunStatisticsByMetricName,
-  searchDynamicEvaluationRuns,
-} from "./dynamic_evaluations.server";
+  countWorkflowEvaluationProjects,
+  countWorkflowEvaluationRunEpisodes,
+  countWorkflowEvaluationRuns as countWorkflowEvaluationRuns,
+  getWorkflowEvaluationProjects,
+  getWorkflowEvaluationRunEpisodesByTaskName,
+  getWorkflowEvaluationRunEpisodesByRunIdWithFeedback,
+  getWorkflowEvaluationRuns,
+  getWorkflowEvaluationRunsByIds,
+  getWorkflowEvaluationRunStatisticsByMetricName,
+  searchWorkflowEvaluationRuns,
+} from "./workflow_evaluations.server";
 
-describe("getDynamicEvaluationRuns", () => {
+describe("getWorkflowEvaluationRuns", () => {
   test("should return correct run infos for", async () => {
-    const runInfos = await getDynamicEvaluationRuns(10, 0);
+    const runInfos = await getWorkflowEvaluationRuns(10, 0);
     expect(runInfos).toMatchObject([
       {
         id: "0196a0e5-9600-7c83-ab3b-dac7598fddbd",
@@ -140,7 +140,7 @@ describe("getDynamicEvaluationRuns", () => {
   });
 
   test("should return correct run infos for a given run id", async () => {
-    const runInfos = await getDynamicEvaluationRuns(
+    const runInfos = await getWorkflowEvaluationRuns(
       10,
       0,
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
@@ -160,7 +160,7 @@ describe("getDynamicEvaluationRuns", () => {
   });
 
   test("should return correct run infos for a given project name", async () => {
-    const runInfos = await getDynamicEvaluationRuns(
+    const runInfos = await getWorkflowEvaluationRuns(
       10,
       0,
       undefined,
@@ -204,9 +204,9 @@ describe("getDynamicEvaluationRuns", () => {
   });
 });
 
-describe("getDynamicEvaluationRunsByIds", () => {
+describe("getWorkflowEvaluationRunsByIds", () => {
   test("should return correct run infos for a given run id", async () => {
-    const runInfos = await getDynamicEvaluationRunsByIds([
+    const runInfos = await getWorkflowEvaluationRunsByIds([
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
       "01968d05-d734-7751-ab33-75dd8b3fb4a3",
     ]);
@@ -237,16 +237,16 @@ describe("getDynamicEvaluationRunsByIds", () => {
   });
 });
 
-describe("countDynamicEvaluationRuns", () => {
+describe("countWorkflowEvaluationRuns", () => {
   test("should return correct total number of runs", async () => {
-    const totalRuns = await countDynamicEvaluationRuns();
+    const totalRuns = await countWorkflowEvaluationRuns();
     expect(totalRuns).toBe(11);
   });
 });
 
-describe("getDynamicEvaluationRunEpisodesByRunId", () => {
+describe("getWorkflowEvaluationRunEpisodesByRunId", () => {
   test("should return correct episodes for a given run id", async () => {
-    const episodes = await getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
+    const episodes = await getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
       3,
       0,
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
@@ -293,7 +293,7 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
     // also test examples with no feedback and make sure the arrays are empty
   });
   test("should return correct episodes for a given run id", async () => {
-    const episodes = await getDynamicEvaluationRunEpisodesByRunIdWithFeedback(
+    const episodes = await getWorkflowEvaluationRunEpisodesByRunIdWithFeedback(
       3,
       5,
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
@@ -339,9 +339,9 @@ describe("getDynamicEvaluationRunEpisodesByRunId", () => {
   });
 });
 
-describe("getDynamicEvaluationRunStatisticsByMetricName", () => {
+describe("getWorkflowEvaluationRunStatisticsByMetricName", () => {
   test("should return correct statistics for a given run id", async () => {
-    const statistics = await getDynamicEvaluationRunStatisticsByMetricName(
+    const statistics = await getWorkflowEvaluationRunStatisticsByMetricName(
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     // The sort order of strings seems to be unstable on CI vs locally, so we made this test
@@ -380,18 +380,18 @@ describe("getDynamicEvaluationRunStatisticsByMetricName", () => {
   });
 });
 
-describe("countDynamicEvaluationRunEpisodes", () => {
+describe("countWorkflowEvaluationRunEpisodes", () => {
   test("should return correct number of episodes for a given run id", async () => {
-    const count = await countDynamicEvaluationRunEpisodes(
+    const count = await countWorkflowEvaluationRunEpisodes(
       "01968d04-142c-7e53-8ea7-3a3255b518dc",
     );
     expect(count).toBe(50);
   });
 });
 
-describe("getDynamicEvaluationProjects", () => {
+describe("getWorkflowEvaluationProjects", () => {
   test("should return correct projects", async () => {
-    const projects = await getDynamicEvaluationProjects(10, 0);
+    const projects = await getWorkflowEvaluationProjects(10, 0);
     expect(projects).toMatchObject([
       {
         count: 7,
@@ -407,16 +407,16 @@ describe("getDynamicEvaluationProjects", () => {
   });
 });
 
-describe("countDynamicEvaluationProjects", () => {
+describe("countWorkflowEvaluationProjects", () => {
   test("should return correct number of projects", async () => {
-    const count = await countDynamicEvaluationProjects();
+    const count = await countWorkflowEvaluationProjects();
     expect(count).toBe(2);
   });
 });
 
-describe("searchDynamicEvaluationRuns", () => {
+describe("searchWorkflowEvaluationRuns", () => {
   test("should return correct runs by display name with project name set", async () => {
-    const runs = await searchDynamicEvaluationRuns(
+    const runs = await searchWorkflowEvaluationRuns(
       10,
       0,
       "21_questions",
@@ -449,7 +449,7 @@ describe("searchDynamicEvaluationRuns", () => {
   });
 
   test("should return correct runs by run id without project name set", async () => {
-    const runs = await searchDynamicEvaluationRuns(
+    const runs = await searchWorkflowEvaluationRuns(
       10,
       0,
       undefined,
@@ -464,9 +464,9 @@ describe("searchDynamicEvaluationRuns", () => {
   });
 });
 
-describe("getDynamicEvaluationRunByTaskName", () => {
+describe("getWorkflowEvaluationRunByTaskName", () => {
   test("should return correct run by datapoint name", async () => {
-    const runs = await getDynamicEvaluationRunEpisodesByTaskName(
+    const runs = await getWorkflowEvaluationRunEpisodesByTaskName(
       ["01968d04-142c-7e53-8ea7-3a3255b518dc"],
       2,
       0,

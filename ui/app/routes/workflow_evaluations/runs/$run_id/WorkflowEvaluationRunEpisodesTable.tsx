@@ -10,9 +10,9 @@ import {
 import { formatDate } from "~/utils/date";
 import { toEpisodeUrl } from "~/utils/urls";
 import type {
-  DynamicEvaluationRunEpisodeWithFeedback,
-  DynamicEvaluationRunStatisticsByMetricName,
-} from "~/utils/clickhouse/dynamic_evaluations";
+  WorkflowEvaluationRunEpisodeWithFeedback,
+  WorkflowEvaluationRunStatisticsByMetricName,
+} from "~/utils/clickhouse/workflow_evaluations";
 import { TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
 import { TooltipProvider } from "~/components/ui/tooltip";
@@ -22,12 +22,12 @@ import { TableItemShortUuid } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
 import MetricValue from "~/components/metric/MetricValue";
 
-export default function DynamicEvaluationRunEpisodesTable({
+export default function WorkflowEvaluationRunEpisodesTable({
   episodes,
   statistics,
 }: {
-  episodes: DynamicEvaluationRunEpisodeWithFeedback[];
-  statistics: DynamicEvaluationRunStatisticsByMetricName[];
+  episodes: WorkflowEvaluationRunEpisodeWithFeedback[];
+  statistics: WorkflowEvaluationRunStatisticsByMetricName[];
 }) {
   // Extract all unique metric names from all episodes
   const allMetricNames = new Set<string>();
@@ -134,7 +134,7 @@ function MetricHeader({
   statistics,
 }: {
   metricName: string;
-  statistics: DynamicEvaluationRunStatisticsByMetricName[];
+  statistics: WorkflowEvaluationRunStatisticsByMetricName[];
 }) {
   const metricStats = statistics.find(
     (stat) => stat.metric_name === metricName,

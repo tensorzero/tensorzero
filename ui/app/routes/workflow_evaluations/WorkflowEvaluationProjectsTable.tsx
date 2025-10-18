@@ -9,13 +9,13 @@ import {
   TableEmptyState,
 } from "~/components/ui/table";
 import { formatDate } from "~/utils/date";
-import type { DynamicEvaluationProject } from "~/utils/clickhouse/dynamic_evaluations";
-import { toDynamicEvaluationProjectUrl } from "~/utils/urls";
+import type { WorkflowEvaluationProject } from "~/utils/clickhouse/workflow_evaluations";
+import { toWorkflowEvaluationProjectUrl } from "~/utils/urls";
 
-export default function DynamicEvaluationProjectsTable({
-  dynamicEvaluationProjects,
+export default function WorkflowEvaluationProjectsTable({
+  workflowEvaluationProjects,
 }: {
-  dynamicEvaluationProjects: DynamicEvaluationProject[];
+  workflowEvaluationProjects: WorkflowEvaluationProject[];
 }) {
   return (
     <div>
@@ -28,14 +28,14 @@ export default function DynamicEvaluationProjectsTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {dynamicEvaluationProjects.length === 0 ? (
+          {workflowEvaluationProjects.length === 0 ? (
             <TableEmptyState message="No projects found" />
           ) : (
-            dynamicEvaluationProjects.map((project) => (
+            workflowEvaluationProjects.map((project) => (
               <TableRow key={project.name}>
                 <TableCell className="max-w-[200px]">
                   <Link
-                    to={toDynamicEvaluationProjectUrl(project.name)}
+                    to={toWorkflowEvaluationProjectUrl(project.name)}
                     className="block no-underline"
                   >
                     <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
