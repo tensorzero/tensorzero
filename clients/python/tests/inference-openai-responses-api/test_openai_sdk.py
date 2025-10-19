@@ -12,7 +12,7 @@ async def test_openai_responses_basic_inference(async_openai_client):
     response = await async_openai_client.chat.completions.create(
         extra_body={"tensorzero::episode_id": str(uuid7())},
         messages=[{"role": "user", "content": "What is 2+2?"}],
-        model="tensorzero::model_name::responses-gpt-5-mini",
+        model="tensorzero::model_name::gpt-5-mini-responses",
     )
 
     # The response should contain content
@@ -35,7 +35,7 @@ async def test_openai_responses_basic_inference_streaming(async_openai_client):
     stream = await async_openai_client.chat.completions.create(
         extra_body={"tensorzero::episode_id": str(uuid7())},
         messages=[{"role": "user", "content": "What is 2+2?"}],
-        model="tensorzero::model_name::responses-gpt-5-mini",
+        model="tensorzero::model_name::gpt-5-mini-responses",
         stream=True,
         stream_options={"include_usage": True},
     )
@@ -82,10 +82,10 @@ async def test_openai_responses_web_search(async_openai_client):
         messages=[
             {
                 "role": "user",
-                "content": "What is the current population of Tokyo?",
+                "content": "What is the current population of Japan?",
             }
         ],
-        model="tensorzero::model_name::responses-gpt-5-mini-web-search",
+        model="tensorzero::model_name::gpt-5-mini-responses-web-search",
     )
 
     # The response should contain content
@@ -113,10 +113,10 @@ async def test_openai_responses_web_search_streaming(async_openai_client):
         messages=[
             {
                 "role": "user",
-                "content": "What is the current population of Tokyo?",
+                "content": "What is the current population of Japan?",
             }
         ],
-        model="tensorzero::model_name::responses-gpt-5-mini-web-search",
+        model="tensorzero::model_name::gpt-5-mini-responses-web-search",
         stream=True,
         stream_options={"include_usage": True},
     )
@@ -168,7 +168,7 @@ async def test_openai_responses_tool_call(async_openai_client):
                 "content": "What's the temperature in Tokyo in Celsius?",
             }
         ],
-        model="tensorzero::model_name::responses-gpt-5-mini",
+        model="tensorzero::model_name::gpt-5-mini-responses",
         tools=[
             {
                 "type": "function",
@@ -224,7 +224,7 @@ async def test_openai_responses_tool_call_streaming(async_openai_client):
                 "content": "What's the temperature in Tokyo in Celsius?",
             }
         ],
-        model="tensorzero::model_name::responses-gpt-5-mini",
+        model="tensorzero::model_name::gpt-5-mini-responses",
         tools=[
             {
                 "type": "function",

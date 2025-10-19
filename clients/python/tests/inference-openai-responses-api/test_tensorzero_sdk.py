@@ -26,7 +26,7 @@ from tensorzero.types import (
 @pytest.mark.asyncio
 async def test_openai_responses_basic_inference(async_client: AsyncTensorZeroGateway):
     response = await async_client.inference(
-        model_name="responses-gpt-5-mini",
+        model_name="gpt-5-mini-responses",
         input={
             "messages": [{"role": "user", "content": "What is 2+2?"}],
         },
@@ -53,7 +53,7 @@ async def test_openai_responses_basic_inference_streaming(
     async_client: AsyncTensorZeroGateway,
 ):
     stream = await async_client.inference(
-        model_name="responses-gpt-5-mini",
+        model_name="gpt-5-mini-responses",
         input={
             "messages": [{"role": "user", "content": "What is 2+2?"}],
         },
@@ -102,12 +102,12 @@ async def test_openai_responses_basic_inference_streaming(
 async def test_openai_responses_web_search(async_client: AsyncTensorZeroGateway):
     """Test OpenAI Responses API with built-in web search tool"""
     response = await async_client.inference(
-        model_name="responses-gpt-5-mini-web-search",
+        model_name="gpt-5-mini-responses-web-search",
         input={
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the current population of Tokyo?",
+                    "content": "What is the current population of Japan?",
                 }
             ],
         },
@@ -136,12 +136,12 @@ async def test_openai_responses_web_search_streaming(
 ):
     """Test OpenAI Responses API with built-in web search tool (streaming)"""
     stream = await async_client.inference(
-        model_name="responses-gpt-5-mini-web-search",
+        model_name="gpt-5-mini-responses-web-search",
         input={
             "messages": [
                 {
                     "role": "user",
-                    "content": "What is the current population of Tokyo?",
+                    "content": "What is the current population of Japan?",
                 }
             ],
         },
@@ -192,7 +192,7 @@ async def test_openai_responses_web_search_streaming(
 async def test_openai_responses_tool_call(async_client: AsyncTensorZeroGateway):
     """Test OpenAI Responses API with tool calls passed at inference time"""
     response = await async_client.inference(
-        model_name="responses-gpt-5-mini",
+        model_name="gpt-5-mini-responses",
         input={
             "messages": [
                 {
@@ -250,7 +250,7 @@ async def test_openai_responses_tool_call_streaming(
 ):
     """Test OpenAI Responses API with tool calls (streaming)"""
     stream = await async_client.inference(
-        model_name="responses-gpt-5-mini",
+        model_name="gpt-5-mini-responses",
         input={
             "messages": [
                 {
@@ -324,13 +324,13 @@ async def test_openai_responses_tool_call_streaming(
 async def test_openai_responses_reasoning(async_client: AsyncTensorZeroGateway):
     """Test OpenAI Responses API with encrypted reasoning (thought blocks)"""
     response = await async_client.inference(
-        model_name="responses-gpt-5-mini",
+        model_name="gpt-5-mini-responses",
         input={
             "messages": [{"role": "user", "content": "How many letters are in the word potato?"}],
         },
         extra_body=[
             {
-                "variant_name": "responses-gpt-5-mini",
+                "variant_name": "gpt-5-mini-responses",
                 "pointer": "/reasoning",
                 "value": {"effort": "low", "summary": "auto"},
             }
@@ -365,13 +365,13 @@ async def test_openai_responses_reasoning_streaming(
 ):
     """Test OpenAI Responses API with encrypted reasoning (streaming)"""
     stream = await async_client.inference(
-        model_name="responses-gpt-5-mini",
+        model_name="gpt-5-mini-responses",
         input={
             "messages": [{"role": "user", "content": "How many letters are in the word potato?"}],
         },
         extra_body=[
             {
-                "variant_name": "responses-gpt-5-mini",
+                "variant_name": "gpt-5-mini-responses",
                 "pointer": "/reasoning",
                 "value": {"effort": "low", "summary": "auto"},
             }

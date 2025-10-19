@@ -33,7 +33,7 @@ describe("OpenAI Responses API", () => {
       const episodeId = uuidv7();
       const result = await client.chat.completions.create({
         messages,
-        model: "tensorzero::model_name::responses-gpt-5-mini",
+        model: "tensorzero::model_name::gpt-5-mini-responses",
         // @ts-expect-error - custom TensorZero property
         "tensorzero::episode_id": episodeId,
       });
@@ -68,7 +68,7 @@ describe("OpenAI Responses API", () => {
       // @ts-expect-error - custom TensorZero property
       const stream = await client.chat.completions.create({
         messages,
-        model: "tensorzero::model_name::responses-gpt-5-mini",
+        model: "tensorzero::model_name::gpt-5-mini-responses",
         stream: true,
         stream_options: { include_usage: true },
         "tensorzero::episode_id": episodeId,
@@ -126,14 +126,14 @@ describe("OpenAI Responses API", () => {
       const messages: ChatCompletionMessageParam[] = [
         {
           role: "user",
-          content: "What is the current population of Tokyo?",
+          content: "What is the current population of Japan?",
         },
       ];
 
       const episodeId = uuidv7();
       const result = await client.chat.completions.create({
         messages,
-        model: "tensorzero::model_name::responses-gpt-5-mini-web-search",
+        model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
         // @ts-expect-error - custom TensorZero property
         "tensorzero::episode_id": episodeId,
       });
@@ -161,7 +161,7 @@ describe("OpenAI Responses API", () => {
       const messages: ChatCompletionMessageParam[] = [
         {
           role: "user",
-          content: "What is the current population of Tokyo?",
+          content: "What is the current population of Japan?",
         },
       ];
 
@@ -169,7 +169,7 @@ describe("OpenAI Responses API", () => {
       // @ts-expect-error - custom TensorZero property
       const stream = await client.chat.completions.create({
         messages,
-        model: "tensorzero::model_name::responses-gpt-5-mini-web-search",
+        model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
         stream: true,
         stream_options: { include_usage: true },
         "tensorzero::episode_id": episodeId,
@@ -232,7 +232,7 @@ describe("OpenAI Responses API", () => {
     const episodeId = uuidv7();
     const result = await client.chat.completions.create({
       messages,
-      model: "tensorzero::model_name::responses-gpt-5-mini",
+      model: "tensorzero::model_name::gpt-5-mini-responses",
       tools: [
         {
           type: "function",
@@ -291,7 +291,7 @@ describe("OpenAI Responses API", () => {
     // @ts-expect-error - custom TensorZero property
     const stream = await client.chat.completions.create({
       messages,
-      model: "tensorzero::model_name::responses-gpt-5-mini",
+      model: "tensorzero::model_name::gpt-5-mini-responses",
       tools: [
         {
           type: "function",
