@@ -44,7 +44,7 @@ async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<(
         let _ = recv.await;
     };
 
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    // test code
     #[expect(clippy::disallowed_methods)]
     tokio::spawn(
         axum::serve(listener, app)
