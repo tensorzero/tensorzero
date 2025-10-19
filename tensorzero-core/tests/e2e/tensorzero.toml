@@ -744,6 +744,25 @@ model_name = "gpt-5"
 api_type = "responses"
 include_encrypted_reasoning = true
 
+[models.responses-gpt-5-mini]
+routing = ["openai"]
+
+[models.responses-gpt-5-mini.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+
+[models.responses-gpt-5-mini-web-search]
+routing = ["openai"]
+
+[models.responses-gpt-5-mini-web-search.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+
 [models.reasoner.providers.dummy]
 type = "dummy"
 model_name = "reasoner"
