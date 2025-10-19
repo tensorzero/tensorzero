@@ -1,0 +1,428 @@
+---
+title: How to call the OpenAI Responses API
+sidebarTitle: Call the OpenAI Responses API
+description: Learn how to use OpenAI's Responses API with built-in tools like web search.
+---
+
+This page shows how to:
+
+- **Use a unified API.** TensorZero provides the same chat completion format for the Responses API.
+- **Access built-in tools.** Enable built-in tools from OpenAI like `web_search`.
+- **Enable reasoning models.** Support models with extended thinking capabilities.
+
+<Tip>
+
+We provide [complete code examples](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/gateway/call-the-openai-responses-api) on GitHub.
+
+</Tip>
+
+## Call the OpenAI Responses API
+
+<Tabs>
+
+<Tab title="Python (TensorZero SDK)">
+
+The TensorZero Python SDK provides a unified API for calling OpenAI's Responses API.
+
+<Steps>
+
+<Step title="Set up your OpenAI API key">
+
+You can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+</Step>
+
+<Step title="Install the TensorZero Python SDK">
+
+You can install the TensorZero SDK with a Python package manager like `pip`.
+
+```bash
+pip install tensorzero
+```
+
+</Step>
+
+<Step title="Configure a model for the OpenAI Responses API">
+
+Create a configuration file with a model using `api_type = "responses"` and provider tools:
+
+```toml title="tensorzero.toml"
+[models.gpt-5-mini-responses-web-search]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses-web-search.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+```
+
+</Step>
+
+<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway with the configuration above.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -v $(pwd)/tensorzero.toml:/app/config/tensorzero.toml:ro \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --config-file /app/config/tensorzero.toml
+```
+
+<Tip>
+
+See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Initialize the TensorZero Gateway client">
+
+Let's initialize the TensorZero Gateway client and point it to the gateway we just launched.
+
+```python
+from tensorzero import TensorZeroGateway
+
+t0 = TensorZeroGateway.build_http(gateway_url="http://localhost:3000")
+```
+
+<Tip>
+
+The TensorZero Python SDK includes a synchronous `TensorZeroGateway` client and an asynchronous `AsyncTensorZeroGateway` client.
+Both options support running the gateway embedded in your application with `build_embedded` or connecting to a standalone gateway with `build_http`.
+See [Clients](/gateway/clients/) for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Call the LLM">
+
+<Note>OpenAI web search can take up to a minute to complete.</Note>
+
+```python
+response = t0.inference(
+    model_name="gpt-5-mini-responses-web-search",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": "What is the current population of Japan?",
+            }
+        ]
+    },
+)
+```
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="Python (OpenAI SDK)">
+
+The TensorZero Python SDK integrates with the OpenAI Python SDK to provide access to the Responses API.
+
+<Steps>
+
+<Step title="Set up your OpenAI API key">
+
+You can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+</Step>
+
+<Step title="Install the OpenAI and TensorZero Python SDKs">
+
+You can install the OpenAI and TensorZero SDKs with a Python package manager like `pip`.
+
+```bash
+pip install openai tensorzero
+```
+
+</Step>
+
+<Step title="Configure a model for the OpenAI Responses API">
+
+Create a configuration file with a model using `api_type = "responses"` and provider tools:
+
+```toml title="tensorzero.toml"
+[models.gpt-5-mini-responses-web-search]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses-web-search.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+```
+
+</Step>
+
+<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway with the configuration above.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -v $(pwd)/tensorzero.toml:/app/config/tensorzero.toml:ro \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --config-file /app/config/tensorzero.toml
+```
+
+<Tip>
+
+See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Initialize the OpenAI client">
+
+Let's initialize the OpenAI SDK and point it to the gateway we just launched.
+
+```python
+from openai import OpenAI
+
+oai = OpenAI(api_key="not-used", base_url="http://localhost:3000/openai/v1")
+```
+
+<Tip>
+
+The TensorZero Python SDK supports both the synchronous `OpenAI` client and the asynchronous `AsyncOpenAI` client.
+Both options support running the gateway embedded in your application with `patch_openai_client` or connecting to a standalone gateway with `base_url`.
+See [Clients](/gateway/clients/) for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Call the LLM">
+
+<Note>OpenAI web search can take up to a minute to complete.</Note>
+
+```python
+response = oai.chat.completions.create(
+    model="tensorzero::model_name::gpt-5-mini-responses-web-search",
+    messages=[
+        {
+            "role": "user",
+            "content": "What is the current population of Japan?",
+        }
+    ],
+)
+```
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="Node (OpenAI SDK)">
+
+You can point the OpenAI Node SDK to a TensorZero Gateway to access the Responses API.
+
+<Steps>
+
+<Step title="Set up your OpenAI API key">
+
+You can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+</Step>
+
+<Step title="Install the OpenAI Node SDK">
+
+You can install the OpenAI SDK with a package manager like `npm`.
+
+```bash
+npm i openai
+```
+
+</Step>
+
+<Step title="Configure a model for the OpenAI Responses API">
+
+Create a configuration file with a model using `api_type = "responses"` and provider tools:
+
+```toml title="tensorzero.toml"
+[models.gpt-5-mini-responses-web-search]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses-web-search.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+```
+
+</Step>
+
+<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway with the configuration above.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -v $(pwd)/tensorzero.toml:/app/config/tensorzero.toml:ro \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --config-file /app/config/tensorzero.toml
+```
+
+<Tip>
+
+See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Initialize the OpenAI client">
+
+Let's initialize the OpenAI SDK and point it to the gateway we just launched.
+
+```ts
+import OpenAI from "openai";
+
+const oai = new OpenAI({
+  apiKey: "not-used",
+  baseURL: "http://localhost:3000/openai/v1",
+});
+```
+
+</Step>
+
+<Step title="Call the LLM">
+
+<Note>OpenAI web search can take up to a minute to complete.</Note>
+
+```ts
+const response = await oai.chat.completions.create({
+  model: "tensorzero::model_name::gpt-5-mini-responses-web-search",
+  messages: [
+    {
+      role: "user",
+      content: "What is the current population of Japan?",
+    },
+  ],
+});
+```
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+<Tab title="HTTP">
+
+You can call the TensorZero Gateway directly over HTTP to access the OpenAI Responses API.
+
+<Steps>
+
+<Step title="Set up your OpenAI API key">
+
+You can set the `OPENAI_API_KEY` environment variable with your API key.
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+</Step>
+
+<Step title="Configure a model for the OpenAI Responses API">
+
+Create a configuration file with a model using `api_type = "responses"` and provider tools:
+
+```toml title="tensorzero.toml"
+[models.gpt-5-mini-responses-web-search]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses-web-search.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+```
+
+</Step>
+
+<Step title="Deploy a standalone (HTTP) TensorZero Gateway">
+
+Let's deploy a standalone TensorZero Gateway using Docker.
+For simplicity, we'll use the gateway with the configuration above.
+
+```bash
+docker run \
+  -e OPENAI_API_KEY \
+  -v $(pwd)/tensorzero.toml:/app/config/tensorzero.toml:ro \
+  -p 3000:3000 \
+  tensorzero/gateway \
+  --config-file /app/config/tensorzero.toml
+```
+
+<Tip>
+
+See the [TensorZero Gateway Deployment](/deployment/tensorzero-gateway) page for more details.
+
+</Tip>
+
+</Step>
+
+<Step title="Call the LLM">
+
+You can call the LLM by sending a `POST` request to the `/inference` endpoint of the TensorZero Gateway.
+
+<Note>OpenAI web search can take up to a minute to complete.</Note>
+
+```bash
+curl -X POST "http://localhost:3000/inference" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_name": "gpt-5-mini-responses-web-search",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "What is the current population of Japan?"
+        }
+      ]
+    }
+  }'
+```
+
+</Step>
+
+</Steps>
+
+</Tab>
+
+</Tabs>
