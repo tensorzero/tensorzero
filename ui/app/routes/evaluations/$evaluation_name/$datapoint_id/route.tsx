@@ -63,6 +63,7 @@ import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
+import { protectAction } from "~/utils/read-only.server";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -160,6 +161,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  protectAction();
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {

@@ -8,6 +8,7 @@ import {
 } from "react-router";
 
 import { ConfigProvider } from "./context/config";
+import { ReadOnlyProvider } from "./context/read-only";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
 import { getConfig } from "./utils/config/index.server";
@@ -16,6 +17,7 @@ import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { ReactQueryProvider } from "./providers/react-query";
+import { isReadOnlyMode } from "./utils/read-only.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -38,7 +40,9 @@ export const links: Route.LinksFunction = () => [
 export async function loader() {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
-  return await getConfig();
+  const config = await getConfig();
+  const isReadOnly = isReadOnlyMode();
+  return { config, isReadOnly };
 }
 
 // Global Layout
@@ -60,19 +64,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App({ loaderData: config }: Route.ComponentProps) {
+export default function App({ loaderData }: Route.ComponentProps) {
+  const { config, isReadOnly } = loaderData;
   return (
     <ReactQueryProvider>
-      <ConfigProvider value={config}>
-        <SidebarProvider>
-          <div className="fixed inset-0 flex">
-            <AppSidebar />
-            <ContentLayout>
-              <Outlet />
-            </ContentLayout>
-          </div>
-        </SidebarProvider>
-      </ConfigProvider>
+      <ReadOnlyProvider value={isReadOnly}>
+        <ConfigProvider value={config}>
+          <SidebarProvider>
+            <div className="fixed inset-0 flex">
+              <AppSidebar />
+              <ContentLayout>
+                <Outlet />
+              </ContentLayout>
+            </div>
+          </SidebarProvider>
+        </ConfigProvider>
+      </ReadOnlyProvider>
     </ReactQueryProvider>
   );
 }

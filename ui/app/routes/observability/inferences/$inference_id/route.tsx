@@ -48,6 +48,7 @@ import {
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithButton } from "~/components/inference/TryWithButton";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
+import { protectAction } from "~/utils/read-only.server";
 import { HumanFeedbackButton } from "~/components/feedback/HumanFeedbackButton";
 import { HumanFeedbackModal } from "~/components/feedback/HumanFeedbackModal";
 import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
@@ -150,6 +151,7 @@ type ActionData =
   | { error: string; redirectTo?: never };
 
 export async function action({ request }: Route.ActionArgs) {
+  protectAction();
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {

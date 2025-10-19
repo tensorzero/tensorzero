@@ -15,6 +15,7 @@ import {
 import { DatasetsActions } from "./DatasetsActions";
 import { logger } from "~/utils/logger";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
+import { protectAction } from "~/utils/read-only.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
@@ -32,6 +33,7 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  protectAction();
   const formData = await request.formData();
   const action = formData.get("action");
   if (action === "delete") {

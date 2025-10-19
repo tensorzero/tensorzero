@@ -56,6 +56,7 @@ import {
   parseDatapointFormData,
   serializeDatapointToFormData,
 } from "./formDataUtils";
+import { protectAction } from "~/utils/read-only.server";
 
 export function validateJsonOutput(
   output: ContentBlockChatOutput[] | JsonInferenceOutput | null,
@@ -114,6 +115,7 @@ export function hasDatapointChanged(params: {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  protectAction();
   const formData = await request.formData();
 
   // TODO(shuyangli): Limit the try-catch to a smaller scope so it's clear what we're catching.

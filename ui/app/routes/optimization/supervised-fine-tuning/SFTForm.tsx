@@ -16,6 +16,7 @@ import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { logger } from "~/utils/logger";
 import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
+import { useReadOnly } from "~/context/read-only";
 
 export function SFTForm({
   config,
@@ -28,6 +29,7 @@ export function SFTForm({
     phase: "idle" | "submitting" | "pending" | "complete",
   ) => void;
 }) {
+  const { isReadOnly } = useReadOnly();
   const form = useForm<SFTFormValues>({
     defaultValues: {
       function: "",
@@ -218,7 +220,11 @@ export function SFTForm({
 
           <Button
             type="submit"
-            disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}
+            disabled={
+              submissionPhase !== "idle" ||
+              isCuratedInferenceCountLow ||
+              isReadOnly
+            }
           >
             {getButtonText()}
           </Button>
