@@ -8,7 +8,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { InferenceByIdRow } from "~/utils/clickhouse/inference";
+import type { InferenceByIdRow, ParsedInferenceRow } from "~/utils/clickhouse/inference";
 import { VariantLink } from "~/components/function/variant/VariantLink";
 import {
   TableItemTime,
@@ -26,7 +26,7 @@ export default function EpisodeInferenceTable({
 }: {
   inferences: InferenceByIdRow[];
   onInferenceHover?: (inferenceId: string) => void;
-  getInferenceData?: (inferenceId: string) => any;
+  getInferenceData?: (inferenceId: string) => ParsedInferenceRow | null;
   isInferenceLoading?: (inferenceId: string) => boolean;
 }) {
   return (

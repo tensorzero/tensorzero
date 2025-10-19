@@ -26,11 +26,10 @@ function truncateText(text: string, maxLength: number): string {
 }
 
 function getInputPreview(inference: ParsedInferenceRow): string {
-  // Get the first text message content
-  const firstMessage = inference.input.messages?.[0];
-  const firstContent = firstMessage?.content?.[0];
-  if (firstContent?.type === "text") {
-    return firstContent.text;
+  const message = inference.input.messages?.[0];
+  const content = message?.content?.[0];
+  if (content?.type === "text") {
+    return content.text;
   }
 
   if (typeof inference.input.system === "string") {
@@ -43,7 +42,9 @@ function getInputPreview(inference: ParsedInferenceRow): string {
 function getOutputPreview(inference: ParsedInferenceRow): string {
   if (inference.function_type === "chat") {
     const output = inference.output as ChatOutputBlock[];
-    if (!output || output.length === 0) return "Empty output";
+    if (!output || output.length === 0) {
+      return "Empty output";
+    }
 
     for (const block of output) {
       if (block?.type === "text" && block.text) {
@@ -58,13 +59,13 @@ function getOutputPreview(inference: ParsedInferenceRow): string {
       }
     }
 
-    const firstBlock = output[0];
-    if (firstBlock?.type === "tool_call") {
-      const toolName = firstBlock.name || firstBlock.raw_name || "unknown";
+    const block = output[0];
+    if (block?.type === "tool_call") {
+      const toolName = block.name || block.raw_name || "unknown";
       return `Tool call: ${toolName}`;
     }
-    if (firstBlock?.type) {
-      return `Content type: ${firstBlock.type}`;
+    if (block?.type) {
+      return `Content type: ${block.type}`;
     }
 
     return "No readable content";
