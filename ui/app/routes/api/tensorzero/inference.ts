@@ -7,10 +7,8 @@ import type { Route } from "./+types/inference";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
 import type { ClientInferenceParams } from "tensorzero-node";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
-import { protectAction } from "~/utils/read-only.server";
 
 export async function action({ request }: Route.ActionArgs): Promise<Response> {
-  protectAction();
   const formData = await request.formData();
   try {
     const data = formData.get("data");

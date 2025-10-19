@@ -17,7 +17,7 @@ import { SidebarProvider } from "./components/ui/sidebar";
 import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { ReactQueryProvider } from "./providers/react-query";
-import { isReadOnlyMode } from "./utils/read-only.server";
+import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -36,6 +36,8 @@ export const links: Route.LinksFunction = () => [
     href: "/favicon.svg",
   },
 ];
+
+export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
 
 export async function loader() {
   // Initialize evaluation cleanup when the app loads

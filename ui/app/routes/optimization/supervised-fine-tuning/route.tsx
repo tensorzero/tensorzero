@@ -24,7 +24,6 @@ import type {
   OptimizationJobInfo,
 } from "tensorzero-node";
 import { toSupervisedFineTuningJobUrl } from "~/utils/urls";
-import { protectAction } from "~/utils/read-only.server";
 
 export const handle: RouteHandle = {
   crumb: () => ["Supervised Fine-Tuning"],
@@ -73,7 +72,6 @@ export async function loader({ params }: Route.LoaderArgs): Promise<{
 
 // The action actually launches the fine-tuning job.
 export async function action({ request }: Route.ActionArgs) {
-  protectAction();
   const formData = await request.formData();
   const serializedFormData = formData.get("data");
   if (!serializedFormData || typeof serializedFormData !== "string") {

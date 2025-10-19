@@ -22,7 +22,6 @@ import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
-import { protectAction } from "~/utils/read-only.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -53,7 +52,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
-  protectAction();
   const { dataset_name } = params;
   const formData = await request.formData();
   const action = formData.get("action");

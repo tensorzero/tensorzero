@@ -36,7 +36,6 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
-import { protectAction } from "~/utils/read-only.server";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
@@ -121,7 +120,6 @@ type ActionData =
   | { error: string; redirectTo?: never };
 
 export async function action({ request }: Route.ActionArgs) {
-  protectAction();
   const formData = await request.formData();
 
   try {

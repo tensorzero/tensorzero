@@ -36,7 +36,6 @@ import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { useFetcher } from "react-router";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
-import { protectAction } from "~/utils/read-only.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -200,7 +199,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  protectAction();
   const formData = await request.formData();
   const _action = formData.get("_action");
   switch (_action) {

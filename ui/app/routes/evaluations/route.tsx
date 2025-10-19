@@ -20,7 +20,6 @@ import {
 } from "~/utils/evaluations.server";
 import { logger } from "~/utils/logger";
 import { toEvaluationUrl } from "~/utils/urls";
-import { protectAction } from "~/utils/read-only.server";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const totalEvaluationRuns = await countTotalEvaluationRuns();
@@ -39,7 +38,6 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  protectAction();
   const formData = await request.formData();
   const evaluationFormData = parseEvaluationFormData({
     evaluation_name: formData.get("evaluation_name"),

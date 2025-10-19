@@ -13,14 +13,12 @@ import {
 } from "~/components/layout/PageLayout";
 import { logger } from "~/utils/logger";
 import { toDatasetUrl } from "~/utils/urls";
-import { protectAction } from "~/utils/read-only.server";
 
 export const handle: RouteHandle = {
   crumb: () => ["Builder"],
 };
 
 export async function action({ request }: ActionFunctionArgs) {
-  protectAction();
   const formData = await request.formData();
   const jsonData = formData.get("data");
 
