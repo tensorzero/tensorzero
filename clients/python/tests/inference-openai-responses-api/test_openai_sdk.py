@@ -197,7 +197,6 @@ async def test_openai_responses_tool_call(async_openai_client):
     )
 
     # The response should contain content (tool calls)
-    assert len(response.choices[0].message.model_dump().get("content") or []) >= 0
 
     # Find the tool call
     assert response.choices[0].message.tool_calls is not None
