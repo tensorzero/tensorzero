@@ -744,19 +744,19 @@ model_name = "gpt-5"
 api_type = "responses"
 include_encrypted_reasoning = true
 
-[models.responses-gpt-5-mini]
+[models.gpt-5-mini-responses]
 routing = ["openai"]
 
-[models.responses-gpt-5-mini.providers.openai]
+[models.gpt-5-mini-responses.providers.openai]
 type = "openai"
 model_name = "gpt-5-mini"
 api_type = "responses"
 include_encrypted_reasoning = true
 
-[models.responses-gpt-5-mini-web-search]
+[models.gpt-5-mini-responses-web-search]
 routing = ["openai"]
 
-[models.responses-gpt-5-mini-web-search.providers.openai]
+[models.gpt-5-mini-responses-web-search.providers.openai]
 type = "openai"
 model_name = "gpt-5-mini"
 api_type = "responses"
