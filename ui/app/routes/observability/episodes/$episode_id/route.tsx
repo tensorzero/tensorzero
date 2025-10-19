@@ -191,7 +191,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Use the hover hook for inference previews
   const { handleInferenceHover, getInferenceData, isLoading } = useInferenceHover(
     `/observability/episodes/${episode_id}`
   );

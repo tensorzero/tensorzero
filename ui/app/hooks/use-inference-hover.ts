@@ -45,7 +45,7 @@ export function useInferenceHover(episodeRoute: string) {
         method: "POST",
         action: episodeRoute
       });
-    }, 300);
+    }, 100);
   };
 
   useEffect(() => {

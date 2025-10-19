@@ -9,6 +9,18 @@ interface InferenceHoverCardProps {
   onHover?: () => void;
 }
 
+type ChatOutputBlock =
+  | { type: "text"; text: string }
+  | { type: "thought"; text: string }
+  | { type: "tool_call"; name?: string; raw_name?: string }
+  | { type: string; [key: string]: any }; // fallback for unknown types
+
+type JsonOutput = {
+  parsed?: any;
+  raw?: string;
+  [key: string]: any;
+};
+
 function truncateText(text: string, maxLength: number): string {
   return text.length <= maxLength ? text : text.slice(0, maxLength) + "...";
 }
@@ -30,7 +42,7 @@ function getInputPreview(inference: ParsedInferenceRow): string {
 
 function getOutputPreview(inference: ParsedInferenceRow): string {
   if (inference.function_type === "chat") {
-    const output = inference.output as any[];
+    const output = inference.output as ChatOutputBlock[];
     if (!output || output.length === 0) return "Empty output";
 
     for (const block of output) {
@@ -59,7 +71,7 @@ function getOutputPreview(inference: ParsedInferenceRow): string {
   }
 
   if (inference.function_type === "json") {
-    const output = inference.output as any;
+    const output = inference.output as JsonOutput;
     if (!output || typeof output !== "object") return "No output available";
 
     // Prefer parsed JSON
@@ -85,7 +97,6 @@ function getOutputPreview(inference: ParsedInferenceRow): string {
   return "No output available";
 }
 
-
 export function InferenceHoverCard({ 
   children, 
   inference, 
@@ -93,7 +104,6 @@ export function InferenceHoverCard({
   onHover 
 }: InferenceHoverCardProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [hasTriggeredLoad, setHasTriggeredLoad] = useState(false);
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -101,12 +111,13 @@ export function InferenceHoverCard({
         <div
           onMouseEnter={() => {
             setIsOpen(true);
-            if (onHover && !inference && !isLoading && !hasTriggeredLoad) {
+            if (onHover && !inference && !isLoading) {
               onHover();
-              setHasTriggeredLoad(true);
             }
           }}
-          onMouseLeave={() => setIsOpen(false)}
+          onMouseLeave={() => {
+            setIsOpen(false);
+          }}
           className="inline-block"
         >
           {children}
