@@ -22,6 +22,7 @@ mod health;
 mod howdy;
 mod human_feedback;
 mod human_static_evaluation_feedback;
+mod image_url;
 mod inference;
 mod list_inferences;
 mod mixture_of_n;

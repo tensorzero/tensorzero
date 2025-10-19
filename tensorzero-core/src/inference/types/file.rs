@@ -129,36 +129,9 @@ impl File {
                     })
                 })?;
 
-                let mime_type = if let Some(mime_type) = mime_type {
-                    mime_type
-                } else if let Some(content_type) =
-                    response.headers().get(http::header::CONTENT_TYPE)
-                {
-                    content_type
-                        .to_str()
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::BadImageFetch {
-                                url: url.clone(),
-                                message: format!("Content-Type header is not a valid string: {e}"),
-                            })
-                        })?
-                        .parse::<MediaType>()
-                        .map_err(|e| {
-                            Error::new(ErrorDetails::BadImageFetch {
-                                url: url.clone(),
-                                message: format!(
-                                    "Content-Type header is not a valid mime type: {e}"
-                                ),
-                            })
-                        })?
-                } else {
-                    return Err(Error::new(ErrorDetails::BadImageFetch {
-                        url: url.clone(),
-                        message:
-                            "`mime_type` not provided, and no Content-Type response header found"
-                                .to_string(),
-                    }));
-                };
+                // Extract headers before consuming response
+                let content_type_header =
+                    response.headers().get(http::header::CONTENT_TYPE).cloned();
 
                 let bytes = response.bytes().await.map_err(|e| {
                     Error::new(ErrorDetails::BadImageFetch {
@@ -166,6 +139,72 @@ impl File {
                         message: format!("Error reading image bytes: {e}"),
                     })
                 })?;
+
+                let mime_type = if let Some(mime_type) = mime_type {
+                    // Priority 1: Explicitly provided mime_type
+                    mime_type
+                } else {
+                    // Priority 2: Infer from file content
+                    let inferred = infer::get(&bytes[..std::cmp::min(8192, bytes.len())]);
+
+                    if let Some(inferred_type) = inferred {
+                        let inferred_mime = inferred_type
+                            .mime_type()
+                            .parse::<MediaType>()
+                            .map_err(|e| {
+                                Error::new(ErrorDetails::BadImageFetch {
+                                    url: url.clone(),
+                                    message: format!("Inferred mime type is not valid: {e}"),
+                                })
+                            })?;
+
+                        // Check if Content-Type header differs and log warning
+                        if let Some(content_type) = &content_type_header {
+                            if let Ok(content_type_str) = content_type.to_str() {
+                                if let Ok(header_mime) = content_type_str.parse::<MediaType>() {
+                                    if header_mime != inferred_mime {
+                                        tracing::warn!(
+                                            "Inferred MIME type '{}' differs from Content-Type header '{}' for URL {}",
+                                            inferred_mime,
+                                            header_mime,
+                                            url
+                                        );
+                                    }
+                                }
+                            }
+                        }
+
+                        inferred_mime
+                    } else if let Some(content_type) = &content_type_header {
+                        // Priority 3: Content-Type header
+                        content_type
+                            .to_str()
+                            .map_err(|e| {
+                                Error::new(ErrorDetails::BadImageFetch {
+                                    url: url.clone(),
+                                    message: format!(
+                                        "Content-Type header is not a valid string: {e}"
+                                    ),
+                                })
+                            })?
+                            .parse::<MediaType>()
+                            .map_err(|e| {
+                                Error::new(ErrorDetails::BadImageFetch {
+                                    url: url.clone(),
+                                    message: format!(
+                                        "Content-Type header is not a valid mime type: {e}"
+                                    ),
+                                })
+                            })?
+                    } else {
+                        return Err(Error::new(ErrorDetails::BadImageFetch {
+                            url: url.clone(),
+                            message:
+                                "`mime_type` not provided, and unable to infer from file content or Content-Type header"
+                                    .to_string(),
+                        }));
+                    }
+                };
 
                 let data = base64::encode(bytes);
                 Ok(Base64File {
@@ -410,5 +449,42 @@ mod tests {
             mime::TEXT_PLAIN
         );
         assert!(logs_contain("Guessed"));
+    }
+
+    #[test]
+    fn test_infer_mime_type_from_bytes() {
+        // Test JPEG detection (magic bytes: FF D8 FF)
+        let jpeg_bytes = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10];
+        let inferred = infer::get(&jpeg_bytes).expect("Should detect JPEG");
+        assert_eq!(inferred.mime_type(), "image/jpeg");
+        assert_eq!(inferred.extension(), "jpg");
+
+        // Test PNG detection (magic bytes: 89 50 4E 47 0D 0A 1A 0A)
+        let png_bytes = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        let inferred = infer::get(&png_bytes).expect("Should detect PNG");
+        assert_eq!(inferred.mime_type(), "image/png");
+        assert_eq!(inferred.extension(), "png");
+
+        // Test GIF detection (magic bytes: 47 49 46 38 39 61)
+        let gif_bytes = [0x47, 0x49, 0x46, 0x38, 0x39, 0x61];
+        let inferred = infer::get(&gif_bytes).expect("Should detect GIF");
+        assert_eq!(inferred.mime_type(), "image/gif");
+        assert_eq!(inferred.extension(), "gif");
+
+        // Test PDF detection (magic bytes: %PDF)
+        let pdf_bytes = b"%PDF-1.4\n";
+        let inferred = infer::get(pdf_bytes).expect("Should detect PDF");
+        assert_eq!(inferred.mime_type(), "application/pdf");
+        assert_eq!(inferred.extension(), "pdf");
+
+        // Test WebP detection (magic bytes: RIFF....WEBP)
+        let webp_bytes = b"RIFF\x00\x00\x00\x00WEBPVP8 ";
+        let inferred = infer::get(webp_bytes).expect("Should detect WebP");
+        assert_eq!(inferred.mime_type(), "image/webp");
+        assert_eq!(inferred.extension(), "webp");
+
+        // Test that unknown bytes return None
+        let unknown_bytes = [0x00, 0x01, 0x02, 0x03];
+        assert!(infer::get(&unknown_bytes).is_none());
     }
 }
