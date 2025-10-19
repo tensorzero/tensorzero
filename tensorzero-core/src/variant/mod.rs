@@ -15,7 +15,7 @@ use tracing::instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use crate::config::{PathWithContents, OtlpTracesFormat, TimeoutsConfig};
+use crate::config::{OtlpTracesFormat, PathWithContents, TimeoutsConfig};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
