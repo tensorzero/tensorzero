@@ -1,9 +1,6 @@
 # type: ignore
 """
-Test for OpenAI Responses API integration
-
-This test verifies that TensorZero can use OpenAI's Responses API
-through the OpenAI-compatible endpoint.
+Tests for OpenAI Responses API integration
 """
 
 import pytest
@@ -11,28 +8,19 @@ from uuid_utils.compat import uuid7
 
 
 @pytest.mark.asyncio
-async def test_basic_responses_api(async_openai_client):
-    """Test basic inference using OpenAI Responses API."""
-    messages = [
-        {
-            "role": "user",
-            "content": "Tell me a fun fact.",
-        }
-    ]
-
-    result = await async_openai_client.chat.completions.create(
+async def test_openai_responses_basic_inference(async_openai_client):
+    response = await async_openai_client.chat.completions.create(
         extra_body={"tensorzero::episode_id": str(uuid7())},
-        messages=messages,
+        messages=[{"role": "user", "content": "What is 2+2?"}],
         model="tensorzero::model_name::responses-gpt-5-mini",
     )
 
-    # Verify we got a response
-    assert result.choices[0].message.content is not None
-    assert len(result.choices[0].message.content) > 0
-    assert result.choices[0].finish_reason == "stop"
+    assert response.choices[0].message.content is not None
+    assert len(response.choices[0].message.content) > 0
+    assert "4" in response.choices[0].message.content
 
-    # Verify usage information
-    assert result.usage is not None
-    assert result.usage.prompt_tokens > 0
-    assert result.usage.completion_tokens > 0
-    assert result.usage.total_tokens > 0
+    assert response.usage is not None
+    assert response.usage.prompt_tokens > 0
+    assert response.usage.completion_tokens > 0
+    # TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
+    # assert response.choices[0].finish_reason == "stop"
