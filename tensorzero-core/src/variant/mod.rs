@@ -12,10 +12,10 @@ use std::sync::Arc;
 use tokio::time::error::Elapsed;
 use tokio::time::Duration;
 use tracing::instrument;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use crate::config::PathWithContents;
-use crate::config::TimeoutsConfig;
+use crate::config::{PathWithContents, OtlpTracesFormat, TimeoutsConfig};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -283,6 +283,20 @@ impl Variant for VariantInfo {
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let variant_name = inference_config.variant_name.clone();
+
+        let span = tracing::Span::current();
+        let traces_config = &clients.otlp_config.traces;
+        if traces_config.enabled {
+            match traces_config.format {
+                OtlpTracesFormat::OpenTelemetry => {
+                    span.set_attribute("gen_ai.operation.name", "chat");
+                }
+                OtlpTracesFormat::OpenInference => {
+                    span.set_attribute("openinference.span.kind", "CHAIN");
+                }
+            }
+        }
+
         let fut = async {
             match &self.inner {
                 VariantConfig::ChatCompletion(params) => {

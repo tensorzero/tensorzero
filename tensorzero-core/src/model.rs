@@ -398,6 +398,20 @@ impl ModelConfig {
         clients: &InferenceClients,
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
+        let span = tracing::Span::current();
+
+        let traces_config = &clients.otlp_config.traces;
+        if traces_config.enabled {
+            match traces_config.format {
+                OtlpTracesFormat::OpenTelemetry => {
+                    span.set_attribute("gen_ai.operation.name", "chat");
+                }
+                OtlpTracesFormat::OpenInference => {
+                    span.set_attribute("openinference.span.kind", "CHAIN");
+                }
+            }
+        }
+
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
