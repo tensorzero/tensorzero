@@ -1,0 +1,70 @@
+name: Trigger Merge Queue from slash command
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [merge-queue-command]
+
+permissions:
+  pull-requests: write
+  contents: read
+  actions: write
+
+jobs:
+  trigger-merge-queue:
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ${{ github.event.client_payload.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.client_payload.pull_request.head.ref }}
+
+      - name: Add initial reaction
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
+          reactions: eyes
+
+      - name: Trigger merge queue workflow
+        id: trigger
+        run: |
+          gh workflow run merge-queue.yml --ref ${{ github.event.client_payload.pull_request.head.ref }}
+
+          # Wait a moment for the workflow to be created
+          sleep 3
+
+          # Get the most recent workflow run for this branch
+          RUN_ID=$(gh run list --workflow=merge-queue.yml --branch=${{ github.event.client_payload.pull_request.head.ref }} --limit=1 --json databaseId --jq '.[0].databaseId')
+
+          if [ -n "$RUN_ID" ]; then
+            echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+            echo "run_url=https://github.com/${{ github.repository }}/actions/runs/$RUN_ID" >> $GITHUB_OUTPUT
+          else
+            echo "Failed to get run ID"
+            echo "run_url=https://github.com/${{ github.repository }}/actions" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment with workflow link
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          issue-number: ${{ github.event.client_payload.pull_request.number }}
+          body: |
+            🚀 Merge queue workflow triggered!
+
+            View the run: ${{ steps.trigger.outputs.run_url }}
+
+      - name: Add success reaction
+        if: success()
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
+          reactions: hooray
