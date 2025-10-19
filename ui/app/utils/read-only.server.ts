@@ -9,13 +9,14 @@
 
 import { data } from "react-router";
 import type { Route } from "../+types/root";
+import { getEnv } from "./env.server";
 
 /**
  * Checks if the application is in read-only mode
  * @returns true if TENSORZERO_UI_READ_ONLY is set to "1"
  */
 export function isReadOnlyMode(): boolean {
-  return process.env.TENSORZERO_UI_READ_ONLY === "1";
+  return getEnv().TENSORZERO_UI_READ_ONLY;
 }
 
 /**
