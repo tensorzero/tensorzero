@@ -1,3 +1,8 @@
+use rand::{
+    SeedableRng,
+    distr::{Alphanumeric, SampleString},
+    rngs::StdRng,
+};
 use secrecy::SecretString;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -5,16 +10,26 @@ use thiserror::Error;
 /// A parsed TensorZero API key, with the long key hashed.
 /// This does not contain the original long key
 #[derive(Debug)]
-#[expect(dead_code)]
 pub struct TensorZeroApiKey {
-    short_id: String,
-    hashed_long_key: SecretString,
+    pub(crate) short_id: String,
+    pub(crate) hashed_long_key: SecretString,
 }
 
 const SK_PREFIX: &str = "sk";
 const T0_PREFIX: &str = "t0";
 const SHORT_ID_LENGTH: usize = 12;
 const LONG_KEY_LENGTH: usize = 48;
+
+/// Securely generates a fresh API key
+/// The `crate::postgres::create_key` function will use this to generate a fresh API key and insert it into the database.
+pub(crate) fn secure_fresh_api_key() -> SecretString {
+    // Use a cryptographically secure RNG, seeded from the OS
+    let mut rng = StdRng::from_os_rng();
+    let short_key = Alphanumeric.sample_string(&mut rng, SHORT_ID_LENGTH);
+    let long_key = Alphanumeric.sample_string(&mut rng, LONG_KEY_LENGTH);
+    let key = format!("{SK_PREFIX}-{T0_PREFIX}-{short_key}-{long_key}");
+    SecretString::from(key)
+}
 
 impl TensorZeroApiKey {
     /// Hashes the long key using SHA-256, producing a hex string that we'll use for a database lookup
@@ -73,6 +88,8 @@ impl TensorZeroApiKey {
 pub enum TensorZeroAuthError {
     #[error("Invalid format for TensorZero API key: {0}")]
     InvalidKeyFormat(&'static str),
+    #[error("Database error: {0}")]
+    Sqlx(#[from] sqlx::Error),
 }
 
 #[cfg(test)]
