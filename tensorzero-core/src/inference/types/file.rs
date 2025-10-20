@@ -171,6 +171,7 @@ impl File {
                                             inferred_mime,
                                         );
                                     }
+                                } else {
                                     tracing::warn!("Content-Type header is not a valid mime type: `{content_type_str}`");
                                 }
                             }
