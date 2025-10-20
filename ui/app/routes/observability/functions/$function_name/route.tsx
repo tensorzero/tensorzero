@@ -301,6 +301,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     optimal_probabilities,
     feedback_timeseries,
   } = loaderData;
+
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const function_config = useFunctionConfig(function_name);
@@ -363,30 +364,22 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
-  const [throughput_time_granularity, setThroughputTimeGranularity] =
-    useState<TimeWindow>(() => {
-      const param = searchParams.get(
-        "throughput_time_granularity",
-      ) as TimeWindow;
-      return param || "week";
-    });
+  const throughput_time_granularity = (searchParams.get(
+    "throughput_time_granularity",
+  ) || "week") as TimeWindow;
   const handleThroughputTimeGranularityChange = (granularity: TimeWindow) => {
-    setThroughputTimeGranularity(granularity);
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("throughput_time_granularity", granularity);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(window.location.search);
+    newSearchParams.set("throughput_time_granularity", granularity);
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
-  const [feedback_time_granularity, setFeedbackTimeGranularity] =
-    useState<TimeWindow>(() => {
-      const param = searchParams.get("feedback_time_granularity") as TimeWindow;
-      return param || "week";
-    });
+  const feedback_time_granularity = (searchParams.get(
+    "feedback_time_granularity",
+  ) || "week") as TimeWindow;
   const handleFeedbackTimeGranularityChange = (granularity: TimeWindow) => {
-    setFeedbackTimeGranularity(granularity);
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("feedback_time_granularity", granularity);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(window.location.search);
+    newSearchParams.set("feedback_time_granularity", granularity);
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   return (
@@ -417,15 +410,13 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               functionName={function_name}
               optimalProbabilities={optimal_probabilities}
             />
-            {function_config.experimentation.type === "track_and_stop" &&
-            feedback_timeseries &&
-            feedback_timeseries.length > 0 ? (
+            {feedback_timeseries && feedback_timeseries.length > 0 && (
               <FeedbackSamplesTimeseries
                 feedbackTimeseries={feedback_timeseries}
                 time_granularity={feedback_time_granularity}
                 onTimeGranularityChange={handleFeedbackTimeGranularityChange}
               />
-            ) : null}
+            )}
           </SectionLayout>
         )}
 
