@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         select_feedback_clickhouse, select_feedback_tags_clickhouse,
-        select_human_static_evaluation_feedback_clickhouse,
+        select_inference_evaluation_human_feedback_clickhouse,
     },
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
@@ -90,7 +90,8 @@ async fn e2e_test_comment_human_feedback() {
     )
     .await
     .unwrap();
-    // Sleep for 200ms to ensure that the StaticEvaluationHumanFeedback is written
+    // Sleep for 200ms to ensure that the StaticEvaluationHumanFeedback table is written
+    // Note: table name retains "Static" prefix for backward compatibility (now called "Inference Evaluations")
     sleep(Duration::from_millis(200)).await;
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -98,6 +99,7 @@ async fn e2e_test_comment_human_feedback() {
 
     // Running without datapoint_id.
     // We generate a new datapoint_id so these don't trample. We'll only use it to check that there is no StaticEvaluationHumanFeedback
+    // Note: table name retains "Static" prefix for backward compatibility (now called "Inference Evaluations")
     let new_datapoint_id = Uuid::now_v7();
     let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "bad job!", "internal": true, "tags": {"tensorzero::human_feedback": "true"}});
     let response = client
@@ -126,8 +128,8 @@ async fn e2e_test_comment_human_feedback() {
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     assert_eq!(retrieved_value, "bad job!");
 
-    // Check that there is no StaticEvaluationHumanFeedback
-    let result = select_human_static_evaluation_feedback_clickhouse(
+    // Check that there is no StaticEvaluationHumanFeedback (database table name, retains "Static" prefix for backward compatibility)
+    let result = select_inference_evaluation_human_feedback_clickhouse(
         &clickhouse,
         "comment",
         new_datapoint_id,
