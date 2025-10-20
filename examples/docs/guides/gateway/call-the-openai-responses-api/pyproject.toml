@@ -1,0 +1,10 @@
+[project]
+name = "tensorzero-examples-docs-gateway-call-the-openai-responses-api"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=1.101.0",
+    "tensorzero>=2025.8.3",
+    "uuid-utils>=0.10.0",
+]

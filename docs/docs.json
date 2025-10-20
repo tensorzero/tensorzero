@@ -43,6 +43,7 @@
             "pages": [
               "gateway/index",
               "gateway/call-any-llm",
+              "gateway/call-the-openai-responses-api",
               "gateway/create-a-prompt-template",
               "gateway/generate-embeddings",
               "gateway/tutorial",
