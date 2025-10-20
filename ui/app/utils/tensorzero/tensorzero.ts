@@ -508,8 +508,6 @@ export class TensorZeroClient {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { id, ...rest } = datapoint;
 
-    console.log("Update", rest);
-
     const response = await this.fetch(endpoint, {
       method: "PUT",
       body: JSON.stringify(rest),
