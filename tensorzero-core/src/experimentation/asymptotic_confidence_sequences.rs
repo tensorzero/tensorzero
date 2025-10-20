@@ -98,7 +98,7 @@ pub fn asymp_cs(
             .sqrt();
             CumulativeFeedbackTimeSeriesPoint {
                 period_end: f.period_end,
-                variant_name: f.variant_name.clone(),
+                variant_name: f.variant_name,
                 mean: f.mean,
                 variance: f.variance,
                 count: f.count,
