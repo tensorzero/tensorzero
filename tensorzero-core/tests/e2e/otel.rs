@@ -336,7 +336,7 @@ pub async fn test_capture_simple_inference_spans(
     // Since we're using the embedded gateway, the root span will be `function_inference`
     // (we won't have a top-level HTTP span)
     assert_eq!(root_span.name, "function_inference");
-    assert_eq!(root_span.status, Status::Unset);
+    assert_eq!(root_span.status, Status::Ok);
     let root_attr_map = attrs_to_map(&root_span.attributes);
     assert_eq!(root_attr_map["model_name"], "dummy::good".into());
     assert_eq!(
@@ -367,7 +367,7 @@ pub async fn test_capture_simple_inference_spans(
     };
 
     assert_eq!(variant_span.name, "variant_inference");
-    assert_eq!(variant_span.status, Status::Unset);
+    assert_eq!(variant_span.status, Status::Ok);
     let variant_attr_map = attrs_to_map(&variant_span.attributes);
     assert_eq!(
         variant_attr_map["function_name"],
@@ -382,7 +382,7 @@ pub async fn test_capture_simple_inference_spans(
     };
 
     assert_eq!(model_span.name, "model_inference");
-    assert_eq!(model_span.status, Status::Unset);
+    assert_eq!(model_span.status, Status::Ok);
     let model_attr_map = attrs_to_map(&model_span.attributes);
     assert_eq!(model_attr_map["model_name"], "dummy::good".into());
     assert_eq!(model_attr_map["stream"], streaming.into());
@@ -392,7 +392,7 @@ pub async fn test_capture_simple_inference_spans(
         panic!("Expected one child span: {model_children:#?}");
     };
     assert_eq!(model_provider_span.name, "model_provider_inference");
-    assert_eq!(model_provider_span.status, Status::Unset);
+    assert_eq!(model_provider_span.status, Status::Ok);
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
 
@@ -569,7 +569,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     };
 
     assert_eq!(variant_span.name, "variant_inference");
-    assert_eq!(variant_span.status, Status::Unset);
+    assert_eq!(variant_span.status, Status::Ok);
     let variant_attr_map = attrs_to_map(&variant_span.attributes);
     assert_eq!(
         variant_attr_map["function_name"],
