@@ -41,7 +41,7 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import { estimateOptimalProbabilities } from "tensorzero-node";
+import { estimateTrackAndStopOptimalProbabilities } from "tensorzero-node";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -126,11 +126,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       const trackAndStopConfig = function_config.experimentation;
       const metric_config = config.metrics[trackAndStopConfig.metric];
 
-      logger.info("Track-and-stop experimentation:", {
-        candidate_variants: trackAndStopConfig.candidate_variants,
-        metric: trackAndStopConfig.metric,
-      });
-
       if (metric_config) {
         const feedback = await dbClient.getFeedbackByVariant({
           metric_name: trackAndStopConfig.metric,
@@ -138,20 +133,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           variant_names: trackAndStopConfig.candidate_variants,
         });
 
-        logger.info("Feedback results:", {
-          feedback_length: feedback.length,
-          feedback_data: feedback,
-        });
-
         if (feedback.length > 0) {
-          optimal_probabilities = estimateOptimalProbabilities({
+          optimal_probabilities = estimateTrackAndStopOptimalProbabilities({
             feedback,
             epsilon: trackAndStopConfig.epsilon,
             metric_optimize: metric_config.optimize,
           });
-          logger.info("Optimal probabilities:", optimal_probabilities);
-        } else {
-          logger.warn("No feedback data returned");
         }
       }
     } catch (error) {
