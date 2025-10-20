@@ -138,7 +138,10 @@ export function SnippetMessage({
   action,
 }: SnippetMessageProps) {
   return (
-    <div className="flex w-full flex-col gap-1">
+    <div
+      className="flex w-full flex-col gap-1"
+      data-testid={role ? `message-${role}` : undefined}
+    >
       <div className="relative flex items-center gap-1">
         <div className={snippetMessageLabel({ role })}>{role}</div>
         {action && <div>{action}</div>}

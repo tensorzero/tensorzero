@@ -373,8 +373,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
     await fetcher.submit(formData, { method: "post", action: "." });
   };
 
-  console.log(datapoint);
-
   return (
     <PageLayout>
       <PageHeader

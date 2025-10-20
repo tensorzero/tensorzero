@@ -5,6 +5,7 @@ import type {
   ToolCallContent,
   ToolResultContent,
   TemplateInput,
+  ThoughtContent,
 } from "~/utils/clickhouse/common";
 import {
   SnippetLayout,
@@ -18,13 +19,7 @@ import {
 } from "~/components/layout/SnippetContent";
 import { renderContentBlock } from "~/components/layout/ContentBlockRenderer";
 import type { JsonObject } from "type-fest";
-import { Button } from "~/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
+import { AddButton, DeleteButton } from "~/components/ui/EditButtons";
 
 interface InputProps {
   messages: DisplayInputMessage[];
@@ -140,6 +135,15 @@ export default function Input({
     onAppendContentBlock(messageIndex, contentBlock);
   };
 
+  const onAppendThoughtContentBlock = (messageIndex: number) => {
+    const contentBlock: ThoughtContent = {
+      type: "thought",
+      text: "",
+    };
+
+    onAppendContentBlock(messageIndex, contentBlock);
+  };
+
   return (
     <SnippetLayout>
       {/* Empty input */}
@@ -213,6 +217,10 @@ export default function Input({
                     label="Tool Result"
                     onAdd={() => onAppendToolResultContentBlock?.(messageIndex)}
                   />
+                  <AddButton
+                    label="Thought"
+                    onAdd={() => onAppendThoughtContentBlock?.(messageIndex)}
+                  />
                   {/* TODO: we need to support adding other kinds of content blocks */}
                   <span className="text-fg-muted text-xs">
                     Please use the API or SDK for other content block types.
@@ -237,49 +245,6 @@ export default function Input({
         </SnippetContent>
       )}
     </SnippetLayout>
-  );
-}
-
-interface DeleteButtonProps {
-  label?: string;
-  onDelete?: () => void;
-}
-
-function DeleteButton({ label, onDelete }: DeleteButtonProps) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="iconSm"
-          onClick={onDelete}
-          aria-label={label}
-          className="text-muted-foreground hover:text-destructive h-6 w-6"
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      </TooltipTrigger>
-      {label && <TooltipContent>{label}</TooltipContent>}
-    </Tooltip>
-  );
-}
-
-interface AddButtonProps {
-  label?: string;
-  onAdd?: () => void;
-}
-
-function AddButton({ label, onAdd }: AddButtonProps) {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={onAdd}
-      className="flex items-center gap-2"
-    >
-      <Plus className="h-4 w-4" />
-      {label}
-    </Button>
   );
 }
 

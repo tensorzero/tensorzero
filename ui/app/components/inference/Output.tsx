@@ -14,6 +14,7 @@ import {
 import { EmptyMessage } from "~/components/layout/SnippetContent";
 import { CodeEditor } from "../ui/code-editor";
 import { renderContentBlock } from "~/components/layout/ContentBlockRenderer";
+import { AddButton, DeleteButton } from "~/components/ui/EditButtons";
 
 /*
 NOTE: This is the new output component but it is not editable yet so we are rolling
@@ -209,9 +210,44 @@ function ChatInferenceOutputComponent({
     }
   };
 
+  const onDeleteContentBlock = (index: number) => {
+    if (onOutputChange) {
+      const updatedBlocks = [...output];
+      updatedBlocks.splice(index, 1);
+      onOutputChange(updatedBlocks);
+    }
+  };
+
+  const onAppendContentBlock = (contentBlock: ContentBlockChatOutput) => {
+    if (onOutputChange) {
+      const updatedBlocks = [...output, contentBlock];
+      onOutputChange(updatedBlocks);
+    }
+  };
+
+  const onAppendTextContentBlock = () => {
+    const contentBlock: ContentBlockChatOutput = {
+      type: "text",
+      text: "",
+    };
+    onAppendContentBlock(contentBlock);
+  };
+
+  const onAppendToolCallContentBlock = () => {
+    const contentBlock: ContentBlockChatOutput = {
+      type: "tool_call",
+      id: "",
+      name: "",
+      raw_name: "",
+      arguments: null,
+      raw_arguments: "{}",
+    };
+    onAppendContentBlock(contentBlock);
+  };
+
   return (
     <SnippetContent maxHeight={maxHeight}>
-      {output.length === 0 ? (
+      {output.length === 0 && !isEditing ? (
         <EmptyMessage message="The output was empty" />
       ) : (
         <SnippetMessage>
@@ -225,6 +261,12 @@ function ChatInferenceOutputComponent({
                   index,
                   updatedBlock as ContentBlockChatOutput,
                 ),
+              action: isEditing && (
+                <DeleteButton
+                  onDelete={() => onDeleteContentBlock(index)}
+                  label="Delete content block"
+                />
+              ),
               thoughtFooter: (thoughtBlock) =>
                 thoughtBlock.signature ? (
                   <>
@@ -235,6 +277,15 @@ function ChatInferenceOutputComponent({
                   </>
                 ) : null,
             }),
+          )}
+          {isEditing && (
+            <div className="flex items-center gap-2 py-2">
+              <AddButton label="Text" onAdd={onAppendTextContentBlock} />
+              <AddButton
+                label="Tool Call"
+                onAdd={onAppendToolCallContentBlock}
+              />
+            </div>
           )}
         </SnippetMessage>
       )}

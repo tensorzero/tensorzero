@@ -1,52 +1,17 @@
 import { test, expect } from "@playwright/test";
 import { v7 } from "uuid";
+import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 
 test("should show stale badge and disable edit/delete buttons on stale datapoint", async ({
   page,
 }) => {
-  // Step 1: Create a new datapoint from an inference
-  await page.goto(
-    "/observability/inferences/0196374b-0d7a-7a22-b2d2-598a14f2eacc",
-  );
-  await page.waitForLoadState("networkidle");
   const datasetName =
     "test_stale_dataset_" + Math.random().toString(36).substring(2, 15);
 
-  // Click on the Add to dataset button
-  await page.getByText("Add to dataset").click();
-
-  // Wait for the CommandInput by its placeholder text to be visible
-  const commandInput = page.getByPlaceholder("Create or find a dataset...");
-  await commandInput.waitFor({ state: "visible" });
-  await commandInput.fill(datasetName);
-
-  // Wait for the "Create" option to appear in the dropdown
-  const createOption = page
-    .locator("[cmdk-item]")
-    .filter({ hasText: datasetName });
-  await createOption.waitFor({ state: "visible" });
-  await createOption.click();
-
-  // Click on the "Inference Output" button
-  await page.getByText("Inference Output").click();
-
-  // Wait for the toast to appear with success message
-  await expect(
-    page
-      .getByRole("region", { name: /notifications/i })
-      .getByText("New Datapoint"),
-  ).toBeVisible();
-
-  // Wait for and click on the "View" button in the toast
-  const viewButton = page
-    .getByRole("region", { name: /notifications/i })
-    .getByText("View");
-  await viewButton.waitFor({ state: "visible" });
-  await viewButton.click();
-
-  // Wait for navigation to the new page
-  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
-    timeout: 10000,
+  // Step 1: Create a new datapoint from an inference
+  await createDatapointFromInference(page, {
+    inferenceId: "0196374b-0d7a-7a22-b2d2-598a14f2eacc",
+    datasetName,
   });
 
   // Step 2: Capture the original datapoint ID from URL

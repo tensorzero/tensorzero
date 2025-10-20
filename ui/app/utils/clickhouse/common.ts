@@ -86,6 +86,7 @@ export const thoughtContentSchema = z.object({
   signature: z.string().optional(),
   _internal_provider_type: z.string().optional(),
 });
+export type ThoughtContent = z.infer<typeof thoughtContentSchema>;
 
 export const unknownSchema = z.object({
   type: z.literal("unknown"),

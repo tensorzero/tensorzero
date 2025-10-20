@@ -185,6 +185,7 @@ function ToolDetails({
         <Input
           type="text"
           value={name}
+          data-testid="tool-name-input"
           onChange={(e) => {
             onChange?.(id, e.target.value, payload);
           }}
@@ -198,6 +199,7 @@ function ToolDetails({
         <Input
           type="text"
           value={id}
+          data-testid="tool-id-input"
           onChange={(e) => {
             onChange?.(e.target.value, name, payload);
           }}
