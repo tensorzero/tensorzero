@@ -576,6 +576,8 @@ struct FunctionInfo {
 struct DemonstrationToolCall {
     name: String,
     arguments: Value,
+    /// Demonstration tool calls require an ID to match up with tool call responses. See #4058.
+    id: String,
 }
 
 impl TryFrom<DemonstrationToolCall> for ToolCall {
@@ -588,7 +590,7 @@ impl TryFrom<DemonstrationToolCall> for ToolCall {
                     message: format!("Failed to serialize demonstration tool call arguments: {e}"),
                 })
             })?,
-            id: String::new(),
+            id: value.id,
         })
     }
 }
@@ -1346,7 +1348,7 @@ mod tests {
         assert_eq!(expected_parsed_value, parsed_value);
 
         // Case 2: a tool call to get_temperature, which exists
-        let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
+        let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
@@ -1365,7 +1367,7 @@ mod tests {
         .unwrap();
         let expected_parsed_value =
             serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-                id: String::new(),
+                id: "get_temperature_123".to_string(),
                 name: Some("get_temperature".to_string()),
                 raw_name: "get_temperature".to_string(),
                 arguments: Some(json!({"location": "London", "unit": "celsius"})),
@@ -1378,7 +1380,7 @@ mod tests {
         assert_eq!(expected_parsed_value, parsed_value);
 
         // Case 3: a tool call to get_humidity, which does not exist
-        let value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
+        let value = json!([{"type": "tool_call", "id": "get_humidity_123", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
@@ -1401,7 +1403,7 @@ mod tests {
         );
 
         // Case 4: a tool call to get_temperature, which exists but has bad arguments (place instead of location)
-        let value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
+        let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
