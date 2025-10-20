@@ -22,7 +22,7 @@ use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind,
+    ContentBlockChatOutput, FinishReason, Latency, ModelInferenceRequestJsonMode, TextKind,
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
@@ -2210,6 +2210,14 @@ async fn test_responses_api_reasoning() {
     let response_json = response.json::<Value>().await.unwrap();
     println!("API response: {response_json}");
 
+    // Check finish_reason
+    let finish_reason = response_json
+        .get("finish_reason")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(finish_reason, "stop");
+
     let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     let has_thought = content_blocks
         .iter()
@@ -2294,6 +2302,14 @@ async fn test_responses_api_reasoning() {
     let response_json = response.json::<Value>().await.unwrap();
     println!("New API response: {response_json}");
     assert_eq!(status, StatusCode::OK);
+
+    // Check finish_reason
+    let finish_reason = response_json
+        .get("finish_reason")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(finish_reason, "stop");
 }
 
 #[tokio::test]
@@ -2464,6 +2480,13 @@ model = "test-model"
     assert!(
         text_content.contains("]("),
         "Expected text content to contain citations in markdown format [text](url), but found none. Text: {text_content}",
+    );
+
+    // Check finish_reason
+    assert_eq!(
+        chat_response.finish_reason,
+        Some(FinishReason::Stop),
+        "Expected finish_reason to be Stop"
     );
 
     // Round-trip test: Convert output content blocks back to input and make another inference
@@ -2737,8 +2760,17 @@ async fn test_responses_api_shorthand() {
     // Check Response is OK, then fields in order
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
-    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     println!("response: {response_json:#}");
+
+    // Check finish_reason
+    let finish_reason = response_json
+        .get("finish_reason")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(finish_reason, "stop");
+
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
     assert!(!content_blocks.is_empty());
 
     // Find the text block (there should be exactly one)

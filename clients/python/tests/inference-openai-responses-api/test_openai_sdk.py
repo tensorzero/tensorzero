@@ -26,8 +26,7 @@ async def test_openai_responses_basic_inference(async_openai_client):
     assert response.usage is not None
     assert response.usage.prompt_tokens > 0
     assert response.usage.completion_tokens > 0
-    # TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
-    # assert response.choices[0].finish_reason == "stop"
+    assert response.choices[0].finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -71,7 +70,11 @@ async def test_openai_responses_basic_inference_streaming(async_openai_client):
     assert chunks[-1].usage is not None
     assert chunks[-1].usage.prompt_tokens > 0
     assert chunks[-1].usage.completion_tokens > 0
-    # TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
+
+    # Check finish_reason in streaming response
+    finish_reason_chunks = [chunk for chunk in chunks if chunk.choices and chunk.choices[0].finish_reason]
+    assert len(finish_reason_chunks) > 0
+    assert finish_reason_chunks[-1].choices[0].finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -103,6 +106,7 @@ async def test_openai_responses_web_search(async_openai_client):
     assert response.usage is not None
     assert response.usage.prompt_tokens > 0
     assert response.usage.completion_tokens > 0
+    assert response.choices[0].finish_reason == "stop"
 
 
 @pytest.mark.asyncio
@@ -153,6 +157,11 @@ async def test_openai_responses_web_search_streaming(async_openai_client):
     assert "](" in full_text, (
         f"Expected concatenated text to contain citations in markdown format [text](url), but found none. Text length: {len(full_text)}"
     )
+
+    # Check finish_reason in streaming response
+    finish_reason_chunks = [chunk for chunk in chunks if chunk.choices and chunk.choices[0].finish_reason]
+    assert len(finish_reason_chunks) > 0
+    assert finish_reason_chunks[-1].choices[0].finish_reason == "stop"
 
     # TODO (#4044): check for unknown web search events when we start returning them
 
@@ -210,6 +219,7 @@ async def test_openai_responses_tool_call(async_openai_client):
     assert response.usage is not None
     assert response.usage.prompt_tokens > 0
     assert response.usage.completion_tokens > 0
+    assert response.choices[0].finish_reason == "tool_calls"
 
 
 @pytest.mark.asyncio
@@ -285,6 +295,11 @@ async def test_openai_responses_tool_call_streaming(async_openai_client):
     # Should have received a tool call for get_temperature
     assert tool_call_name == "get_temperature"
 
+    # Check finish_reason in streaming response
+    finish_reason_chunks = [chunk for chunk in chunks if chunk.choices and chunk.choices[0].finish_reason]
+    assert len(finish_reason_chunks) > 0
+    assert finish_reason_chunks[-1].choices[0].finish_reason == "tool_calls"
+
 
 # Note:
 # The OpenAI SDK doesn't expose reasoning through chat completions, so there's no way to test that.
@@ -310,3 +325,4 @@ async def test_openai_responses_shorthand(async_openai_client):
     assert response.usage is not None
     assert response.usage.prompt_tokens > 0
     assert response.usage.completion_tokens > 0
+    assert response.choices[0].finish_reason == "stop"

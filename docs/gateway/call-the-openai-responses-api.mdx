@@ -307,7 +307,7 @@ ChatInferenceResponse(
         )
     ],
     usage=Usage(input_tokens=29904, output_tokens=1921),
-    finish_reason=None,
+    finish_reason=FinishReason.STOP,
     original_response=None
 )
 ```
@@ -857,7 +857,8 @@ curl -X POST "http://localhost:3000/inference" \
   "usage": {
     "input_tokens": 21229,
     "output_tokens": 1889
-  }
+  },
+  "finish_reason": "stop"
 }
 ```
 

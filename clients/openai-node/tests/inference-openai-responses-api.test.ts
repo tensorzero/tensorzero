@@ -49,8 +49,7 @@ describe("OpenAI Responses API", () => {
       expect(result.usage).not.toBeNull();
       expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
       expect(result.usage?.completion_tokens).toBeGreaterThan(0);
-      // TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
-      // expect(result.choices[0].finish_reason).toBe("stop");
+      expect(result.choices[0].finish_reason).toBe("stop");
     }
   );
 
@@ -116,7 +115,17 @@ describe("OpenAI Responses API", () => {
         chunks[chunks.length - 1].usage?.completion_tokens
       ).toBeGreaterThan(0);
 
-      // TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
+      // Check finish_reason in streaming response
+      const finishReasonChunks = chunks.filter(
+        (chunk) =>
+          chunk.choices?.[0]?.finish_reason !== null &&
+          chunk.choices?.[0]?.finish_reason !== undefined
+      );
+      expect(finishReasonChunks.length).toBeGreaterThan(0);
+      expect(
+        finishReasonChunks[finishReasonChunks.length - 1].choices[0]
+          .finish_reason
+      ).toBe("stop");
     }
   );
 
@@ -151,6 +160,7 @@ describe("OpenAI Responses API", () => {
       expect(result.usage).not.toBeNull();
       expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
       expect(result.usage?.completion_tokens).toBeGreaterThan(0);
+      expect(result.choices[0].finish_reason).toBe("stop");
     },
     90000
   );
@@ -216,6 +226,18 @@ describe("OpenAI Responses API", () => {
       const fullText = textChunks.join("");
       expect(fullText).toContain("](");
 
+      // Check finish_reason in streaming response
+      const finishReasonChunks = chunks.filter(
+        (chunk) =>
+          chunk.choices?.[0]?.finish_reason !== null &&
+          chunk.choices?.[0]?.finish_reason !== undefined
+      );
+      expect(finishReasonChunks.length).toBeGreaterThan(0);
+      expect(
+        finishReasonChunks[finishReasonChunks.length - 1].choices[0]
+          .finish_reason
+      ).toBe("stop");
+
       // TODO (#4044): check for unknown web search events when we start returning them
     },
     90000
@@ -277,6 +299,7 @@ describe("OpenAI Responses API", () => {
     expect(result.usage).not.toBeNull();
     expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
     expect(result.usage?.completion_tokens).toBeGreaterThan(0);
+    expect(result.choices[0].finish_reason).toBe("tool_calls");
   });
 
   it.concurrent("should handle tool calls (streaming)", async () => {
@@ -367,6 +390,17 @@ describe("OpenAI Responses API", () => {
 
     // Should have received a tool call for get_temperature
     expect(toolCallName).toBe("get_temperature");
+
+    // Check finish_reason in streaming response
+    const finishReasonChunks = chunks.filter(
+      (chunk) =>
+        chunk.choices?.[0]?.finish_reason !== null &&
+        chunk.choices?.[0]?.finish_reason !== undefined
+    );
+    expect(finishReasonChunks.length).toBeGreaterThan(0);
+    expect(
+      finishReasonChunks[finishReasonChunks.length - 1].choices[0].finish_reason
+    ).toBe("tool_calls");
   });
 
   it.concurrent("should handle shorthand model name", async () => {
@@ -395,5 +429,6 @@ describe("OpenAI Responses API", () => {
     expect(result.usage).not.toBeNull();
     expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
     expect(result.usage?.completion_tokens).toBeGreaterThan(0);
+    expect(result.choices[0].finish_reason).toBe("stop");
   });
 });
