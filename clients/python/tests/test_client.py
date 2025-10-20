@@ -3137,7 +3137,8 @@ def test_text_arguments_deprecation_1170_warning(
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
                         "content": [
-                            Text(type="text", text={"country": "Japan"}),  # type: ignore
+                            # type: ignore
+                            Text(type="text", text={"country": "Japan"}),
                         ],
                     }
                 ],
