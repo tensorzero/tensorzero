@@ -300,7 +300,6 @@ pub async fn inference(
     }
 
     let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
-    println!("Original tool config: {:?}", tool_config);
     let mut templates = Arc::clone(&config.templates);
 
     let needs_sampling = prepare_candidate_variants(
