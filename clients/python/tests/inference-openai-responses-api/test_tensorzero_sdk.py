@@ -38,6 +38,7 @@ async def test_openai_responses_basic_inference(async_client: AsyncTensorZeroGat
 
     # Extract the text content block because the response might include reasoning and more
     text_content_block = [cb for cb in response.content if cb.type == "text"]
+    assert len(text_content_block) > 0
     assert text_content_block[0].type == "text"
     assert isinstance(text_content_block[0], Text)
     assert "4" in text_content_block[0].text

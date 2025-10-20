@@ -342,4 +342,6 @@ uuid-utils==0.11.1 \
     --hash=sha256:f8b21fed11b23134502153d652c77c3a37fa841a9aa15a4e6186d440a22f1a0e \
     --hash=sha256:fb4899b1598f12ddf25861e85c760e739116d9255b766346c0c564f44826da1e \
     --hash=sha256:fd65c41b81b762278997de0d027161f27f9cc4058fa57bbc0a1aaa63a63d6d1a
-    # via tensorzero
+    # via
+    #   tensorzero
+    #   tensorzero-examples-docs-gateway-call-the-openai-responses-api

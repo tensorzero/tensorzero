@@ -1095,7 +1095,7 @@ api_base = "https://api.openai.com/v1/"
 - **Type:** string
 - **Required:** no (default: `env::OPENAI_API_KEY` unless otherwise set in `provider_types.openai.defaults.api_key_location`)
 
-Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials)) for more details).
+Defines the location of the API key for the OpenAI provider. The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) for more details).
 
 ```toml title="tensorzero.toml"
 [models.gpt-4o-mini.providers.openai]
