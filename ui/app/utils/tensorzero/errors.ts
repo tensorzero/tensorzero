@@ -240,7 +240,7 @@ export class TensorZeroServerError extends Error {
       super(message, { status: HttpStatusCode.BAD_REQUEST });
     }
   };
-  static InvalidDynamicEvaluationRun = class InvalidDynamicEvaluationRun extends TensorZeroServerError {
+  static InvalidWorkflowEvaluationRun = class InvalidWorkflowEvaluationRun extends TensorZeroServerError {
     constructor(message: string) {
       super(message, { status: HttpStatusCode.BAD_REQUEST });
     }

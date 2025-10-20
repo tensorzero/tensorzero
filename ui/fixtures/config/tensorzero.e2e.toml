@@ -394,9 +394,8 @@ optimize = "min"
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.entity_extraction]
-type = "static"
+type = "inference"
 function_name = "extract_entities"
-dataset_name = "foo"
 
 [evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
@@ -419,9 +418,8 @@ temperature = 0.1
 retries = { num_retries = 4, max_delay_s = 10 }
 
 [evaluations.haiku]
-type = "static"
+type = "inference"
 function_name = "write_haiku"
-dataset_name = "foo"
 
 [evaluations.haiku.evaluators.exact_match]
 type = "exact_match"
@@ -443,7 +441,7 @@ temperature = 0
 retries = { num_retries = 4, max_delay_s = 10 }
 
 [evaluations.images]
-type = "static"
+type = "inference"
 function_name = "image_judger"
 
 [evaluations.images.evaluators.exact_match]

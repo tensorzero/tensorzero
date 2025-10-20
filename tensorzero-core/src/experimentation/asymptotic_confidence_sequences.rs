@@ -88,7 +88,7 @@ pub fn asymp_cs(
     let alpha2 = alpha * alpha;
 
     Ok(feedback
-        .iter()
+        .into_iter()
         .map(|f| {
             let count_f32 = f.count as f32;
             let cv_rho2 = count_f32 * f.variance * rho2;
