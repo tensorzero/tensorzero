@@ -1357,4 +1357,68 @@ mod tests {
             .into()
         );
     }
+
+    #[test]
+    fn test_get_scoped_provider_tools() {
+        // Set up provider tools with different scopes
+        let provider_tools = vec![
+            ProviderTool {
+                scope: ProviderToolScope::Unscoped,
+                tool: json!({"type": "unscoped_tool"}),
+            },
+            ProviderTool {
+                scope: ProviderToolScope::ModelProvider {
+                    model_name: "gpt-4".to_string(),
+                    model_provider_name: "openai".to_string(),
+                },
+                tool: json!({"type": "gpt4_tool"}),
+            },
+            ProviderTool {
+                scope: ProviderToolScope::ModelProvider {
+                    model_name: "claude-3".to_string(),
+                    model_provider_name: "anthropic".to_string(),
+                },
+                tool: json!({"type": "claude_tool"}),
+            },
+        ];
+
+        let config = ToolCallConfig {
+            tools_available: vec![],
+            provider_tools: Some(provider_tools),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+        };
+
+        // Test matching gpt-4/openai: should return unscoped + gpt4_tool
+        let result = config.get_scoped_provider_tools("gpt-4", "openai");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
+        assert_eq!(result[1].tool, json!({"type": "gpt4_tool"}));
+
+        // Test matching claude-3/anthropic: should return unscoped + claude_tool
+        let result = config.get_scoped_provider_tools("claude-3", "anthropic");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
+        assert_eq!(result[1].tool, json!({"type": "claude_tool"}));
+
+        // Test non-matching model: should return only unscoped
+        let result = config.get_scoped_provider_tools("llama-2", "meta");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
+
+        // Test partial match (correct model, wrong provider): should return only unscoped
+        let result = config.get_scoped_provider_tools("gpt-4", "azure");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
+
+        // Test with None provider_tools
+        let config_no_tools = ToolCallConfig {
+            tools_available: vec![],
+            provider_tools: None,
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+        };
+        let result = config_no_tools.get_scoped_provider_tools("gpt-4", "openai");
+        assert_eq!(result.len(), 0);
+    }
 }
