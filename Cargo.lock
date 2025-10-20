@@ -1108,9 +1108,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.49"
+version = "4.5.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4512b90fa68d3a9932cea5184017c5d200f5921df706d45e853537dea51508f"
+checksum = "0c2cfd7bf8a6017ddaa4e32ffe7403d547790db06bd171c1c53926faab501623"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1118,9 +1118,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.49"
+version = "4.5.50"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0025e98baa12e766c67ba13ff4695a887a1eba19569aad00a472546795bd6730"
+checksum = "0a4c05b9e80c5ccd3a7ef080ad7b6ba7d6fc00a985b8b157197075677c82c7a0"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1787,7 +1787,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.10.5"
+version = "2025.10.6"
 dependencies = [
  "anyhow",
  "clap",
@@ -1889,7 +1889,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.10.5"
+version = "2025.10.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2132,7 +2132,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.10.5"
+version = "2025.10.6"
 dependencies = [
  "axum",
  "clap",
@@ -4484,7 +4484,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.10.5"
+version = "2025.10.6"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5821,7 +5821,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.10.5"
+version = "2025.10.6"
 dependencies = [
  "hex",
  "secrecy",
@@ -5832,7 +5832,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.10.5"
+version = "2025.10.6"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -5944,7 +5944,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.10.5"
+version = "2025.10.6"
 dependencies = [
  "evaluations",
  "napi",
@@ -5961,7 +5961,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.10.5"
+version = "2025.10.6"
 dependencies = [
  "evaluations",
  "futures",
