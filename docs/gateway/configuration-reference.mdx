@@ -1657,20 +1657,6 @@ api_key_location = "dynamic::anthropic_api_key"
 # ...
 ```
 
-##### `defaults.api_base`
-
-- **Type:** string
-- **Required:** no (default: `https://api.anthropic.com/v1/messages`)
-
-Sets a global override for the Anthropic Messages API base URL that will be applied to shorthand (`anthropic::model`) references. The URL should include the full endpoint path, such as `https://example.com/v1/messages`.
-
-```toml title="tensorzero.toml"
-[provider_types.anthropic.defaults]
-# ...
-api_base = "https://example.com/v1/messages"
-# ...
-```
-
 </Accordion>
 
 <Accordion title="[provider_types.azure]">

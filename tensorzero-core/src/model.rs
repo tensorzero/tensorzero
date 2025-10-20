@@ -1087,20 +1087,16 @@ impl UninitializedProviderConfig {
                 model_name,
                 api_base,
                 api_key_location,
-            } => {
-                let api_base =
-                    api_base.or_else(|| provider_types.anthropic.defaults.api_base.clone());
-                ProviderConfig::Anthropic(AnthropicProvider::new(
-                    model_name,
-                    api_base,
-                    AnthropicKind
-                        .get_defaulted_credential(
-                            api_key_location.as_ref(),
-                            provider_type_default_credentials,
-                        )
-                        .await?,
-                ))
-            }
+            } => ProviderConfig::Anthropic(AnthropicProvider::new(
+                model_name,
+                api_base,
+                AnthropicKind
+                    .get_defaulted_credential(
+                        api_key_location.as_ref(),
+                        provider_type_default_credentials,
+                    )
+                    .await?,
+            )),
             UninitializedProviderConfig::AWSBedrock {
                 model_id,
                 region,
@@ -2216,7 +2212,7 @@ impl ShorthandModelConfig for ModelConfig {
         let provider_config = match provider_type {
             "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
-                default_credentials.anthropic_api_base(),
+                None,
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,

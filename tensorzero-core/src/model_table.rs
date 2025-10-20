@@ -7,11 +7,6 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use secrecy::SecretString;
-use serde::Serialize;
-use tokio::sync::OnceCell;
-use url::Url;
-
 use crate::{
     config::{provider_types::ProviderTypesConfig, skip_credential_validation},
     error::{Error, ErrorDetails},
@@ -39,7 +34,10 @@ use crate::{
     },
 };
 use lazy_static::lazy_static;
+use secrecy::SecretString;
+use serde::Serialize;
 use strum::VariantNames;
+use tokio::sync::OnceCell;
 
 // Reserve prefixes for all supported providers, regardless of whether or not a particular `BaseModelTable`
 // currently supports them.
@@ -337,7 +335,6 @@ impl<T: Clone> LazyAsyncCredential<T> {
 
 pub struct ProviderTypeDefaultCredentials {
     anthropic: LazyCredential<AnthropicCredentials>,
-    anthropic_api_base: Option<Url>,
     // Note: we currently do not support shorthand for either AWS Bedrock or AWS Sagemaker
     // aws_bedrock:
     // aws_sagemaker:
@@ -366,7 +363,6 @@ impl ProviderTypeDefaultCredentials {
             .defaults
             .api_key_location
             .clone();
-        let anthropic_api_base = provider_types_config.anthropic.defaults.api_base.clone();
         let azure_location = provider_types_config
             .azure
             .defaults
@@ -437,7 +433,6 @@ impl ProviderTypeDefaultCredentials {
                 load_credential_with_fallback(&anthropic_location, ProviderType::Anthropic)?
                     .try_into()
             }),
-            anthropic_api_base,
             azure: LazyCredential::new(move || {
                 load_credential_with_fallback(&azure_location, ProviderType::Azure)?.try_into()
             }),
@@ -505,10 +500,6 @@ impl ProviderTypeDefaultCredentials {
                 load_credential_with_fallback(&xai_location, ProviderType::XAI)?.try_into()
             }),
         }
-    }
-
-    pub fn anthropic_api_base(&self) -> Option<Url> {
-        self.anthropic_api_base.clone()
     }
 }
 
