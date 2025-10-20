@@ -12,7 +12,8 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
-    GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter, StaleDatapointParams,
+    GetDatapointsParams, GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
+    StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::file::Base64FileMetadata;
@@ -1589,7 +1590,15 @@ async fn test_get_datapoints_with_empty_ids() {
     let clickhouse = get_clickhouse().await;
 
     let result = clickhouse
-        .get_datapoints("test_dataset", &[], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some("test_dataset".to_string()),
+            function_name: None,
+            ids: None,
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1634,7 +1643,15 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
 
     // Retrieve using get_datapoints
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1688,7 +1705,15 @@ async fn test_get_datapoints_with_single_json_datapoint() {
 
     // Retrieve using get_datapoints
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1800,7 +1825,15 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
 
     // Retrieve all three datapoints
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[chat_id1, json_id, chat_id2], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![chat_id1, json_id, chat_id2]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1870,11 +1903,15 @@ async fn test_get_datapoints_with_non_existent_ids() {
     let non_existent_id = Uuid::now_v7();
     let another_non_existent_id = Uuid::now_v7();
     let result = clickhouse
-        .get_datapoints(
-            &dataset_name,
-            &[datapoint_id, non_existent_id, another_non_existent_id],
-            false,
-        )
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id, non_existent_id, another_non_existent_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1924,7 +1961,15 @@ async fn test_get_datapoints_respects_allow_stale_false() {
 
     // Verify we can retrieve it before staling
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
     assert_eq!(result.len(), 1, "Should retrieve datapoint before staling");
@@ -1944,7 +1989,15 @@ async fn test_get_datapoints_respects_allow_stale_false() {
 
     // Try to retrieve with allow_stale=false
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -2006,7 +2059,15 @@ async fn test_get_datapoints_respects_allow_stale_true() {
 
     // Try to retrieve with allow_stale=true
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], true)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: true,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -2065,7 +2126,15 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
     // Try to retrieve with different dataset name
     let wrong_dataset = format!("wrong_{dataset_name}");
     let result = clickhouse
-        .get_datapoints(&wrong_dataset, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(wrong_dataset),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
