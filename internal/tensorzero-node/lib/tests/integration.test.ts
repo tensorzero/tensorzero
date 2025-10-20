@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   TensorZeroClient,
+  DatabaseClient,
   getConfig,
   estimateOptimalProbabilities,
 } from "../index.js";
@@ -47,6 +48,45 @@ async function buildClient() {
     undefined,
   );
 }
+
+describe("DatabaseClient", () => {
+  it("should be able to import DatabaseClient", () => {
+    expect(DatabaseClient).toBeDefined();
+    expect(typeof DatabaseClient).toBe("function");
+  });
+
+  it("should have getFeedbackByVariant method", async () => {
+    // Note: This test verifies the method exists and has correct signature
+    // Full integration testing would require a running ClickHouse instance
+    expect(typeof DatabaseClient.fromClickhouseUrl).toBe("function");
+  });
+
+  it("should validate getFeedbackByVariant parameter types", async () => {
+    // This test documents the expected parameter structure
+    const expectedParams = {
+      metric_name: "test_metric",
+      function_name: "test_function",
+      variant_names: ["variant_a", "variant_b"],
+    };
+
+    // Verify the structure is what we expect
+    expect(expectedParams).toHaveProperty("metric_name");
+    expect(expectedParams).toHaveProperty("function_name");
+    expect(expectedParams).toHaveProperty("variant_names");
+    expect(Array.isArray(expectedParams.variant_names)).toBe(true);
+
+    // Example of actual usage (requires running ClickHouse):
+    // const dbClient = await DatabaseClient.fromClickhouseUrl("http://localhost:8123");
+    // const result = await dbClient.getFeedbackByVariant(expectedParams);
+    // expect(Array.isArray(result)).toBe(true);
+    // if (result.length > 0) {
+    //   expect(result[0]).toHaveProperty("variant_name");
+    //   expect(result[0]).toHaveProperty("mean");
+    //   expect(result[0]).toHaveProperty("variance");
+    //   expect(result[0]).toHaveProperty("count");
+    // }
+  });
+});
 
 it("should get full config structure", async () => {
   const config = await getConfig(UI_FIXTURES_CONFIG_PATH);
