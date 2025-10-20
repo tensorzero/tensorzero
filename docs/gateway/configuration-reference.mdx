@@ -811,12 +811,10 @@ See [the API reference](/gateway/api-reference/inference/#credentials) and [Cred
 # ...
 type = "gcp_vertex_anthropic"
 credential_location = "dynamic::gcp_credentials_path"
-# credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
-# credential_location = "path_from_env::GCP_CREDENTIALS_PATH"
+# credential_location = "path_from_env::GCP_VERTEX_CREDENTIALS_PATH"
 # credential_location = "path::/etc/secrets/gcp-key.json"
 # credential_location = "sdk"
 # credential_location = { default = "sdk", fallback = "path::/etc/secrets/gcp-key.json" }
-# credential_location = { default = "dynamic::gcp_credentials_path", fallback = "env::GCP_CREDENTIALS_PATH" }
 # ...
 ```
 
@@ -900,12 +898,10 @@ See [the API reference](/gateway/api-reference/inference/#credentials) and [Cred
 # ...
 type = "gcp_vertex_gemini"
 credential_location = "dynamic::gcp_credentials_path"
-# credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
-# credential_location = "path_from_env::GCP_CREDENTIALS_PATH"
+# credential_location = "path_from_env::GCP_VERTEX_CREDENTIALS_PATH"
 # credential_location = "path::/etc/secrets/gcp-key.json"
 # credential_location = "sdk"
 # credential_location = { default = "sdk", fallback = "path::/etc/secrets/gcp-key.json" }
-# credential_location = { default = "dynamic::gcp_credentials_path", fallback = "env::GCP_CREDENTIALS_PATH" }
 # ...
 ```
 
@@ -1784,9 +1780,8 @@ The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIA
 [provider_types.gcp_vertex_anthropic.defaults]
 # ...
 credential_location = "dynamic::gcp_credentials_path"
-# credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
 # credential_location = "path::/etc/secrets/gcp-key.json"
-# credential_location = { default = "dynamic::gcp_credentials_path", fallback = "env::GCP_CREDENTIALS_PATH" }
+# credential_location = { default = "sdk", fallback = "path::/etc/secrets/gcp-key.json" }
 # ...
 ```
 
@@ -1848,9 +1843,8 @@ The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIA
 [provider_types.gcp_vertex_gemini.defaults]
 # ...
 credential_location = "dynamic::gcp_credentials_path"
-# credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
 # credential_location = "path::/etc/secrets/gcp-key.json"
-# credential_location = { default = "dynamic::gcp_credentials_path", fallback = "env::GCP_CREDENTIALS_PATH" }
+# credential_location = { default = "sdk", fallback = "path::/etc/secrets/gcp-key.json" }
 # ...
 ```
 
