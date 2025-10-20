@@ -74,9 +74,10 @@ pub async fn check_key(
 /// Marks an API key as disabled in the database
 pub async fn disable_key(key: &TensorZeroApiKey, pool: &PgPool) -> Result<(), TensorZeroAuthError> {
     sqlx::query!(
-        "UPDATE tensorzero_auth_api_key SET disabled_at = $1, updated_at = $1 WHERE short_id = $2",
+        "UPDATE tensorzero_auth_api_key SET disabled_at = $1, updated_at = $1 WHERE short_id = $2 AND hash = $3",
         Utc::now(),
-        key.short_id
+        key.short_id,
+        key.hashed_long_key.expose_secret()
     )
     .execute(pool)
     .await?;
