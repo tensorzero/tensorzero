@@ -7,7 +7,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{
-    db::{postgres::PostgresConnectionInfo, SelectQueries},
+    db::{feedback::FeedbackQueries, postgres::PostgresConnectionInfo},
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     experimentation::get_uniform_value,
     variant::VariantInfo,
@@ -125,7 +125,7 @@ impl StaticWeightsConfig {
 impl VariantSampler for StaticWeightsConfig {
     async fn setup(
         &self,
-        _db: Arc<dyn SelectQueries + Send + Sync>,
+        _db: Arc<dyn FeedbackQueries + Send + Sync>,
         _function_name: &str,
         _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
@@ -365,7 +365,7 @@ mod tests {
         experiment
             .setup(
                 Arc::new(ClickHouseConnectionInfo::new_disabled())
-                    as Arc<dyn SelectQueries + Send + Sync>,
+                    as Arc<dyn FeedbackQueries + Send + Sync>,
                 "test",
                 &postgres,
                 CancellationToken::new(),

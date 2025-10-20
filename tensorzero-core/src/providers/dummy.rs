@@ -109,6 +109,8 @@ impl DummyProvider {
             ContentBlockChunk::Thought(ThoughtChunk {
                 text: Some(chunk.to_string()),
                 signature: None,
+                summary_id: None,
+                summary_text: None,
                 id: "0".to_string(),
                 provider_type: None,
             })
@@ -369,6 +371,7 @@ impl InferenceProvider for DummyProvider {
                 ContentBlockOutput::Thought(Thought {
                     text: Some("hmmm".to_string()),
                     signature: None,
+                    summary: None,
                     provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {
@@ -379,6 +382,7 @@ impl InferenceProvider for DummyProvider {
                 ContentBlockOutput::Thought(Thought {
                     text: Some("hmmm".to_string()),
                     signature: Some("my_signature".to_string()),
+                    summary: None,
                     provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {
@@ -389,6 +393,7 @@ impl InferenceProvider for DummyProvider {
                 ContentBlockOutput::Thought(Thought {
                     text: Some("hmmm".to_string()),
                     signature: None,
+                    summary: None,
                     provider_type: None,
                 }),
                 ContentBlockOutput::Text(Text {

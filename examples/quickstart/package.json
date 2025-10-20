@@ -6,7 +6,7 @@
     "start": "tsx after_openai.ts"
   },
   "dependencies": {
-    "openai": "^4.104.0"
+    "openai": "^6.4.0"
   },
   "devDependencies": {
     "tsx": "^4.20.3"

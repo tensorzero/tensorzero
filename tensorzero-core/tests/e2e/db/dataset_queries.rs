@@ -7,12 +7,12 @@ use tensorzero::{
     GetDatasetMetadataParams, Role,
 };
 use tensorzero_core::config::{MetricConfigLevel, MetricConfigType};
-use tensorzero_core::db::clickhouse::dataset_queries::{
+use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
+use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
     GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter, StaleDatapointParams,
 };
-use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
@@ -484,7 +484,7 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets() {
     // Because other tests insert into the table, there could be additional datasets
     assert!(metadata.contains(&DatasetMetadata {
         dataset_name: "foo".to_string(),
-        count: 119,
+        count: 118,
         last_updated: "2025-04-15T02:33:58Z".to_string(),
     }));
     assert!(metadata.contains(&DatasetMetadata {
@@ -628,6 +628,9 @@ async fn test_count_datasets() {
         .await
         .unwrap();
 
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     // Count should increase by 2
     let new_count = clickhouse.count_datasets().await.unwrap();
     assert_eq!(new_count, initial_count + 2);
@@ -682,6 +685,9 @@ async fn test_count_datapoints_for_dataset_function_chat() {
             .await
             .unwrap();
     }
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     let new_count = clickhouse
         .count_datapoints_for_dataset_function(&CountDatapointsForDatasetFunctionParams {
@@ -749,6 +755,9 @@ async fn test_count_datapoints_for_dataset_function_json() {
             .unwrap();
     }
 
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     let new_count = clickhouse
         .count_datapoints_for_dataset_function(&CountDatapointsForDatasetFunctionParams {
             dataset_name: dataset_name.clone(),
@@ -798,6 +807,9 @@ async fn test_insert_datapoint_chat() {
         .insert_datapoint(&datapoint_insert)
         .await
         .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Verify it was inserted by selecting
     let inserted_datapoint = clickhouse
@@ -850,6 +862,9 @@ async fn test_insert_datapoint_json() {
         .insert_datapoint(&datapoint_insert)
         .await
         .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Verify it was inserted by selecting
     let inserted_datapoint = clickhouse
@@ -928,151 +943,6 @@ async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix() {
         .insert_datapoint(&DatapointInsert::Chat(datapoint))
         .await;
     assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_stale_datapoint_chat() {
-    let clickhouse = get_clickhouse().await;
-
-    let mut tags = HashMap::new();
-    tags.insert("test".to_string(), "e2e_stale".to_string());
-
-    let datapoint_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
-        dataset_name: "test_stale_chat".to_string(),
-        function_name: "write_haiku".to_string(),
-        name: Some("test_stale_datapoint".to_string()),
-        id: datapoint_id,
-        episode_id: None,
-        input: StoredInput {
-            system: None,
-            messages: vec![],
-        },
-        output: Some(vec![ContentBlockChatOutput::Text(Text {
-            text: "response".to_string(),
-        })]),
-        tool_params: None,
-        tags: Some(tags),
-        auxiliary: String::new(),
-        staled_at: None,
-        source_inference_id: None,
-        is_custom: true,
-    });
-
-    // Insert the datapoint
-    clickhouse
-        .insert_datapoint(&datapoint_insert)
-        .await
-        .unwrap();
-
-    // Verify it exists
-    let inserted_datapoint = clickhouse
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: "test_stale_chat".to_string(),
-            datapoint_id,
-            allow_stale: None,
-        })
-        .await;
-    assert!(
-        inserted_datapoint.is_ok(),
-        "Test datapoint should be inserted, but encountered error: {}",
-        inserted_datapoint.unwrap_err()
-    );
-
-    // Stale the datapoint
-    clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_stale_chat".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
-        .await
-        .unwrap();
-
-    // Make sure the datapoint is staled
-    let staled_datapoint = clickhouse
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: "test_stale_chat".to_string(),
-            datapoint_id,
-            allow_stale: Some(true),
-        })
-        .await
-        .unwrap();
-
-    if let Datapoint::Chat(datapoint) = staled_datapoint {
-        assert!(
-            datapoint.staled_at.is_some(),
-            "Chat datapoint should be staled"
-        );
-    } else {
-        panic!("Expected chat datapoint");
-    }
-}
-
-#[tokio::test]
-async fn test_stale_datapoint_json() {
-    let clickhouse = get_clickhouse().await;
-
-    let mut tags = HashMap::new();
-    tags.insert("test".to_string(), "e2e_stale".to_string());
-
-    let datapoint_id = Uuid::now_v7();
-    let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
-        dataset_name: "test_stale_json".to_string(),
-        function_name: "extract_entities".to_string(),
-        name: Some("test_stale_json_datapoint".to_string()),
-        id: datapoint_id,
-        episode_id: None,
-        input: StoredInput {
-            system: None,
-            messages: vec![],
-        },
-        output: Some(JsonInferenceOutput {
-            parsed: Some(json!({"data":"extracted"})),
-            raw: Some("{\"data\":\"extracted\"}".to_string()),
-        }),
-        output_schema: json!({"type":"object"}),
-        tags: Some(tags),
-        auxiliary: String::new(),
-        staled_at: None,
-        source_inference_id: None,
-        is_custom: true,
-    });
-
-    // Insert the datapoint
-    clickhouse
-        .insert_datapoint(&datapoint_insert)
-        .await
-        .unwrap();
-
-    // Stale the datapoint
-    clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_stale_json".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Json,
-        })
-        .await
-        .unwrap();
-
-    // Make sure the datapoint is staled
-    let staled_datapoint = clickhouse
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: "test_stale_json".to_string(),
-            datapoint_id,
-            allow_stale: Some(true),
-        })
-        .await
-        .unwrap();
-
-    if let Datapoint::Json(datapoint) = staled_datapoint {
-        assert!(
-            datapoint.staled_at.is_some(),
-            "Json datapoint should be staled"
-        );
-    } else {
-        panic!("Expected json datapoint");
-    }
 }
 
 #[tokio::test]
@@ -1235,6 +1105,9 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
     // Test insertion
     clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
 
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     // Test retrieval
     let retrieved_datapoint = clickhouse
         .get_datapoint(&GetDatapointParams {
@@ -1264,6 +1137,9 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
         })
         .await
         .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Try to get the datapoint (should return error since it's staled)
     let staled_result = clickhouse
@@ -1332,6 +1208,9 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
     // Test insertion
     clickhouse.insert_datapoint(&json_datapoint).await.unwrap();
 
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     // Test retrieval
     let retrieved_datapoint = clickhouse
         .get_datapoint(&GetDatapointParams {
@@ -1361,6 +1240,9 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
         })
         .await
         .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     // Try to get the datapoint (should return error since it's staled)
     let staled_result = clickhouse
@@ -1451,26 +1333,6 @@ async fn test_handles_duplicate_insertions_gracefully() {
 
     // Second insertion with same ID should not throw
     clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
-
-    // Cleanup
-    clickhouse
-        .stale_datapoint(&StaleDatapointParams {
-            dataset_name: "test_chat_dataset".to_string(),
-            datapoint_id,
-            function_type: DatapointKind::Chat,
-        })
-        .await
-        .unwrap();
-
-    let result = clickhouse
-        .get_datapoint(&GetDatapointParams {
-            dataset_name: "test_chat_dataset".to_string(),
-            datapoint_id,
-            allow_stale: None,
-        })
-        .await;
-
-    assert!(result.is_err(), "Should return error after staling");
 }
 
 #[tokio::test]
@@ -1659,6 +1521,9 @@ async fn test_get_adjacent_datapoint_ids() {
             .unwrap();
     }
 
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
     // Test middle datapoint
     let adjacent = clickhouse
         .get_adjacent_datapoint_ids(&GetAdjacentDatapointIdsParams {
@@ -1712,5 +1577,497 @@ async fn test_get_adjacent_datapoint_ids() {
     assert_eq!(
         adjacent.next_id, None,
         "Should return None as next id for the last datapoint"
+    );
+}
+
+#[tokio::test]
+async fn test_get_datapoints_with_empty_ids() {
+    let clickhouse = get_clickhouse().await;
+
+    let result = clickhouse
+        .get_datapoints("test_dataset", &[], false)
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 0, "Should return empty vector for empty IDs");
+}
+
+#[tokio::test]
+async fn test_get_datapoints_with_single_chat_datapoint() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a chat datapoint
+    let datapoint = ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_chat".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test response".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Retrieve using get_datapoints
+    let result = clickhouse
+        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 1, "Should return exactly one datapoint");
+
+    if let Datapoint::Chat(dp) = &result[0] {
+        assert_eq!(dp.id, datapoint_id);
+        assert_eq!(dp.function_name, "test_function");
+        assert_eq!(dp.name, Some("test_chat".to_string()));
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+
+#[tokio::test]
+async fn test_get_datapoints_with_single_json_datapoint() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a json datapoint
+    let datapoint = JsonInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_json".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(json!({"key": "value"})),
+            raw: Some("{\"key\":\"value\"}".to_string()),
+        }),
+        output_schema: json!({"type": "object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Json(datapoint))
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Retrieve using get_datapoints
+    let result = clickhouse
+        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .await
+        .unwrap();
+
+    assert_eq!(result.len(), 1, "Should return exactly one datapoint");
+
+    if let Datapoint::Json(dp) = &result[0] {
+        assert_eq!(dp.id, datapoint_id);
+        assert_eq!(dp.function_name, "test_function");
+        assert_eq!(dp.name, Some("test_json".to_string()));
+    } else {
+        panic!("Expected json datapoint");
+    }
+}
+
+#[tokio::test]
+async fn test_get_datapoints_with_multiple_mixed_datapoints() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+
+    // Create IDs
+    let chat_id1 = Uuid::now_v7();
+    let json_id = Uuid::now_v7();
+    let chat_id2 = Uuid::now_v7();
+
+    // Insert chat datapoint 1
+    let chat_dp1 = ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_chat_function".to_string(),
+        id: chat_id1,
+        name: Some("chat1".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "chat response 1".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Chat(chat_dp1))
+        .await
+        .unwrap();
+
+    // Insert json datapoint
+    let json_dp = JsonInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_json_function".to_string(),
+        id: json_id,
+        name: Some("json1".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(json!({"data": "test"})),
+            raw: Some("{\"data\":\"test\"}".to_string()),
+        }),
+        output_schema: json!({"type": "object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Json(json_dp))
+        .await
+        .unwrap();
+
+    // Insert chat datapoint 2
+    let chat_dp2 = ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_chat_function".to_string(),
+        id: chat_id2,
+        name: Some("chat2".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "chat response 2".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Chat(chat_dp2))
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Retrieve all three datapoints
+    let result = clickhouse
+        .get_datapoints(&dataset_name, &[chat_id1, json_id, chat_id2], false)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        3,
+        "Should return all three datapoints (2 chat, 1 json)"
+    );
+
+    // Verify we got all the expected IDs
+    let returned_ids: Vec<Uuid> = result.iter().map(Datapoint::id).collect();
+    assert!(returned_ids.contains(&chat_id1));
+    assert!(returned_ids.contains(&json_id));
+    assert!(returned_ids.contains(&chat_id2));
+
+    // Count types
+    let chat_count = result
+        .iter()
+        .filter(|dp| matches!(dp, Datapoint::Chat(_)))
+        .count();
+    let json_count = result
+        .iter()
+        .filter(|dp| matches!(dp, Datapoint::Json(_)))
+        .count();
+
+    assert_eq!(chat_count, 2, "Should have 2 chat datapoints");
+    assert_eq!(json_count, 1, "Should have 1 json datapoint");
+}
+
+#[tokio::test]
+async fn test_get_datapoints_with_non_existent_ids() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert one datapoint
+    let datapoint = ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Query with both existing and non-existent IDs
+    let non_existent_id = Uuid::now_v7();
+    let another_non_existent_id = Uuid::now_v7();
+    let result = clickhouse
+        .get_datapoints(
+            &dataset_name,
+            &[datapoint_id, non_existent_id, another_non_existent_id],
+            false,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        1,
+        "Should only return the one existing datapoint"
+    );
+    assert_eq!(result[0].id(), datapoint_id);
+}
+
+#[tokio::test]
+async fn test_get_datapoints_respects_allow_stale_false() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a datapoint
+    let datapoint = ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify we can retrieve it before staling
+    let result = clickhouse
+        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .await
+        .unwrap();
+    assert_eq!(result.len(), 1, "Should retrieve datapoint before staling");
+
+    // Stale the datapoint
+    clickhouse
+        .stale_datapoint(&StaleDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            function_type: DatapointKind::Chat,
+        })
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Try to retrieve with allow_stale=false
+    let result = clickhouse
+        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        0,
+        "Should not return staled datapoint when allow_stale=false"
+    );
+}
+
+#[tokio::test]
+async fn test_get_datapoints_respects_allow_stale_true() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a datapoint
+    let datapoint = ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Stale the datapoint
+    clickhouse
+        .stale_datapoint(&StaleDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            function_type: DatapointKind::Chat,
+        })
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Try to retrieve with allow_stale=true
+    let result = clickhouse
+        .get_datapoints(&dataset_name, &[datapoint_id], true)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        1,
+        "Should return staled datapoint when allow_stale=true"
+    );
+
+    if let Datapoint::Chat(dp) = &result[0] {
+        assert!(
+            dp.staled_at.is_some(),
+            "Datapoint should have staled_at timestamp"
+        );
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+
+#[tokio::test]
+async fn test_get_datapoints_with_wrong_dataset_name() {
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test_get_datapoints_{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Insert a datapoint in one dataset
+    let datapoint = ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: None,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "test".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .await
+        .unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Try to retrieve with different dataset name
+    let wrong_dataset = format!("wrong_{dataset_name}");
+    let result = clickhouse
+        .get_datapoints(&wrong_dataset, &[datapoint_id], false)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result.len(),
+        0,
+        "Should not return datapoint when querying wrong dataset"
     );
 }

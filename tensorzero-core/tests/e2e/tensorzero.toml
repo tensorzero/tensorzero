@@ -403,7 +403,7 @@ routing = ["sglang"]
 [models."Qwen/Qwen2.5-1.5B-Instruct".providers.sglang]
 type = "sglang"
 model_name = "Qwen/Qwen2.5-1.5B-Instruct"
-api_base = "https://tensorzero--sglang-inference-sglang-inference.modal.run/v1/"
+api_base = "https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/v1/"
 
 [models."qwen2.5-0.5b-instruct-vllm"]
 routing = ["vllm"]
@@ -743,6 +743,25 @@ type = "openai"
 model_name = "gpt-5"
 api_type = "responses"
 include_encrypted_reasoning = true
+
+[models.gpt-5-mini-responses]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+
+[models.gpt-5-mini-responses-web-search]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses-web-search.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
 
 [models.reasoner.providers.dummy]
 type = "dummy"
@@ -3744,7 +3763,7 @@ strict = true
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.test_evaluation]
-type = "static"
+type = "inference"
 function_name = "basic_test"
 
 [evaluations.test_evaluation.evaluators.happy_bool]
@@ -3796,8 +3815,7 @@ system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_jud
 json_mode = "on"
 
 [evaluations.json_evaluation]
-type = "static"
-dataset_name = "test_dataset"
+type = "inference"
 function_name = "json_success"
 
 [evaluations.json_evaluation.evaluators.happy_bool]
@@ -3850,7 +3868,7 @@ json_mode = "on"
 
 
 [evaluations.entity_extraction]
-type = "static"
+type = "inference"
 function_name = "extract_entities"
 
 [evaluations.entity_extraction.evaluators.exact_match]
@@ -3886,14 +3904,14 @@ system_instructions = "../../fixtures/config/evaluations/test_evaluation/llm_jud
 json_mode = "on"
 
 [evaluations.haiku_with_outputs]
-type = "static"
+type = "inference"
 function_name = "write_haiku"
 
 [evaluations.haiku_with_outputs.evaluators.exact_match]
 type = "exact_match"
 
 [evaluations.haiku_without_outputs]
-type = "static"
+type = "inference"
 function_name = "write_haiku"
 
 [evaluations.haiku_without_outputs.evaluators.exact_match]
@@ -3915,7 +3933,7 @@ json_mode = "strict"
 temperature = 0
 
 [evaluations.images]
-type = "static"
+type = "inference"
 function_name = "image_judger"
 
 [evaluations.images.evaluators.exact_match]
@@ -3953,7 +3971,7 @@ json_mode = "strict"
 
 # This eval should fail on images because it uses the `serialized` input format.
 [evaluations.bad_images]
-type = "static"
+type = "inference"
 function_name = "image_judger"
 
 [evaluations.bad_images.evaluators.honest_answer]
@@ -3972,7 +3990,7 @@ temperature = 0
 json_mode = "strict"
 
 [evaluations.best_of_3]
-type = "static"
+type = "inference"
 function_name = "extract_entities"
 
 [evaluations.best_of_3.evaluators.llm_judge_bool]
@@ -4010,7 +4028,7 @@ json_mode = "strict"
 temperature = 0.3
 
 [evaluations.mixture_of_3]
-type = "static"
+type = "inference"
 function_name = "extract_entities"
 
 [evaluations.mixture_of_3.evaluators.llm_judge_bool]
@@ -4048,7 +4066,7 @@ json_mode = "strict"
 temperature = 0.3
 
 [evaluations.dicl]
-type = "static"
+type = "inference"
 function_name = "extract_entities"
 
 [evaluations.dicl.evaluators.llm_judge_bool]
@@ -4063,7 +4081,7 @@ k = 3
 model = "openai::gpt-4o-mini"
 
 [evaluations.dicl_custom_system]
-type = "static"
+type = "inference"
 function_name = "extract_entities"
 
 [evaluations.dicl_custom_system.evaluators.llm_judge_bool]

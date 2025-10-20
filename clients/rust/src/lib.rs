@@ -9,7 +9,7 @@ use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
 use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
-pub use tensorzero_core::db::clickhouse::dataset_queries::{
+pub use tensorzero_core::db::datasets::{
     AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetDetailRow, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
     GetDatapointParams, GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams,
@@ -32,10 +32,10 @@ use tensorzero_core::{
     config::Config,
     endpoints::{
         datasets::InsertDatapointParams,
-        dynamic_evaluation_run::{
-            DynamicEvaluationRunEpisodeParams, DynamicEvaluationRunEpisodeResponse,
-        },
         validate_tags,
+        workflow_evaluation_run::{
+            WorkflowEvaluationRunEpisodeParams, WorkflowEvaluationRunEpisodeResponse,
+        },
     },
     error::{Error, ErrorDetails},
     utils::gateway::{setup_clickhouse, GatewayHandle},
@@ -67,15 +67,15 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
 };
-pub use tensorzero_core::endpoints::dynamic_evaluation_run::{
-    DynamicEvaluationRunParams, DynamicEvaluationRunResponse,
-};
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
 pub use tensorzero_core::endpoints::inference::{
     InferenceOutput, InferenceParams, InferenceResponse, InferenceResponseChunk, InferenceStream,
 };
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
+pub use tensorzero_core::endpoints::workflow_evaluation_run::{
+    WorkflowEvaluationRunParams, WorkflowEvaluationRunResponse,
+};
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::File;
 pub use tensorzero_core::inference::types::{
@@ -710,14 +710,14 @@ impl Client {
         }
     }
 
-    pub async fn dynamic_evaluation_run(
+    pub async fn workflow_evaluation_run(
         &self,
-        mut params: DynamicEvaluationRunParams,
-    ) -> Result<DynamicEvaluationRunResponse, TensorZeroError> {
+        mut params: WorkflowEvaluationRunParams,
+    ) -> Result<WorkflowEvaluationRunResponse, TensorZeroError> {
         // We validate the tags here since we're going to add git information to the tags afterwards and set internal to true
         validate_tags(&params.tags, false)
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
-        // Apply the git information to the tags so it gets stored for our dynamic evaluation run
+        // Apply the git information to the tags so it gets stored for our workflow evaluation run
         if let Ok(git_info) = GitInfo::new() {
             params.tags.extend(git_info.into_tags());
         }
@@ -729,9 +729,9 @@ impl Client {
             .insert("tensorzero::internal".to_string(), "true".to_string());
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join("dynamic_evaluation_run").map_err(|e| TensorZeroError::Other {
+                let url = client.base_url.join("workflow_evaluation_run").map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /dynamic_evaluation_run endpoint: {e}"),
+                        message: format!("Failed to join base URL with /workflow_evaluation_run endpoint: {e}"),
                     })
                     .into(),
                 })?;
@@ -740,7 +740,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::dynamic_evaluation_run::dynamic_evaluation_run(
+                    tensorzero_core::endpoints::workflow_evaluation_run::workflow_evaluation_run(
                         gateway.handle.app_state.clone(),
                         params,
                     )
@@ -752,16 +752,16 @@ impl Client {
         }
     }
 
-    pub async fn dynamic_evaluation_run_episode(
+    pub async fn workflow_evaluation_run_episode(
         &self,
         run_id: Uuid,
-        params: DynamicEvaluationRunEpisodeParams,
-    ) -> Result<DynamicEvaluationRunEpisodeResponse, TensorZeroError> {
+        params: WorkflowEvaluationRunEpisodeParams,
+    ) -> Result<WorkflowEvaluationRunEpisodeResponse, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("dynamic_evaluation_run/{run_id}/episode")).map_err(|e| TensorZeroError::Other {
+                let url = client.base_url.join(&format!("workflow_evaluation_run/{run_id}/episode")).map_err(|e| TensorZeroError::Other {
                     source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /dynamic_evaluation_run/{run_id}/episode endpoint: {e}"),
+                        message: format!("Failed to join base URL with /workflow_evaluation_run/{run_id}/episode endpoint: {e}"),
                     })
                     .into(),
                 })?;
@@ -770,7 +770,7 @@ impl Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode(
+                    tensorzero_core::endpoints::workflow_evaluation_run::workflow_evaluation_run_episode(
                         gateway.handle.app_state.clone(),
                         run_id,
                         params,

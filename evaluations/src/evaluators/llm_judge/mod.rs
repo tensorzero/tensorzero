@@ -16,7 +16,7 @@ use tensorzero_core::inference::types::{ContentBlockChatOutput, JsonInferenceOut
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use crate::helpers::{check_static_eval_human_feedback, get_cache_options};
+use crate::helpers::{check_inference_evaluation_human_feedback, get_cache_options};
 use crate::Clients;
 
 #[derive(Debug)]
@@ -67,7 +67,7 @@ pub async fn run_llm_judge_evaluator(
         inference_cache,
     } = params;
     debug!("Checking for existing human feedback");
-    if let Some(human_feedback) = check_static_eval_human_feedback(
+    if let Some(human_feedback) = check_inference_evaluation_human_feedback(
         &clients.clickhouse_client,
         &get_evaluator_metric_name(evaluation_name, evaluator_name),
         datapoint.id(),
@@ -841,6 +841,7 @@ mod tests {
             ClientInputMessageContent::Thought(Thought {
                 text: Some("thought".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             }),
         ];

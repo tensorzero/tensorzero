@@ -195,8 +195,39 @@ jobs:
       - name: Build Rust
         run: cargo build --workspace
 
+  lint-rust:
+    runs-on: namespace-profile-tensorzero-8x16
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # We install the latest rust when running lints, since we don't care if older rust versions lint successfully.
+      # This avoids the need to deal with linter bugs in older rust versions.
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable --component clippy,rustfmt && rustup default stable; then
+              break
+            fi
+          done
+        shell: bash
+
+      - name: Configure Namespace cache for Rust
+        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
+        with:
+          cache: |
+            rust
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-hack
+
+      - name: Lint (Rust)
+        run: |
+          cargo fmt --all --check
+          cargo hack clippy --all-targets --each-feature -- -D warnings
+
   validate:
-    runs-on: namespace-profile-tensorzero-32x64
+    runs-on: namespace-profile-tensorzero-8x16
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
@@ -208,7 +239,7 @@ jobs:
       - name: Install Rust 1.86.0
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.86.0 --component clippy,rustfmt && rustup default 1.86.0; then
+            if rustup install 1.86.0 && rustup default 1.86.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -326,11 +357,6 @@ jobs:
 
       - name: Build (Rust)
         run: cargo build --workspace --verbose
-
-      - name: Lint (Rust)
-        run: |
-          cargo fmt -- --check
-          cargo hack clippy --all-targets --each-feature -- -D warnings
 
       - name: Run cargo-deny
         run: cargo deny check
@@ -493,6 +519,11 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
+      - name: Set Postgres database URL for tests
+        run: |
+          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
@@ -553,6 +584,9 @@ jobs:
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Test (Rust)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
+          TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
         run: cargo test-e2e-no-creds
 
       - name: Print docker compose logs (replicated)
@@ -711,6 +745,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         validate,
+        lint-rust,
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,

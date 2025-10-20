@@ -95,13 +95,13 @@ const navigation: NavigationSection[] = [
         icon: Dataset,
       },
       {
-        title: "Static Evaluations",
+        title: "Inference Evaluations",
         url: "/evaluations",
         icon: GridCheck,
       },
       {
-        title: "Dynamic Evaluations",
-        url: "/dynamic_evaluations",
+        title: "Workflow Evaluations",
+        url: "/workflow_evaluations",
         icon: SequenceChecks,
       },
     ],

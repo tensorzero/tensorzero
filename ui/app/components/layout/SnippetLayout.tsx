@@ -95,7 +95,7 @@ export function SnippetContent({
             variant="outline"
             size="sm"
             onClick={() => setExpanded(false)}
-            className="flex items-center gap-1"
+            className="mt-4 flex items-center gap-1"
           >
             Show less
             <ChevronUp className="h-4 w-4" />
