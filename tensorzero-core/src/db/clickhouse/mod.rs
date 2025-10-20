@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::sync::Arc;
 use url::Url;
 
@@ -298,6 +298,18 @@ impl ClickHouseConnectionInfo {
 
     pub fn client_type(&self) -> ClickHouseClientType {
         self.inner.client_type()
+    }
+}
+
+impl Display for ClickHouseConnectionInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.client_type() {
+            ClickHouseClientType::Production => {
+                write!(f, "enabled (database = {})", self.database())
+            }
+            ClickHouseClientType::Mock => write!(f, "mocked"),
+            ClickHouseClientType::Disabled => write!(f, "disabled"),
+        }
     }
 }
 

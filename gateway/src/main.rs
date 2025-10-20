@@ -368,18 +368,10 @@ async fn main() {
     print_configuration_info(glob.as_ref());
 
     // Print whether observability is enabled
-    let observability_description = format!(
-        "client_type: {}, database: {}",
-        gateway_handle
-            .app_state
-            .clickhouse_connection_info
-            .client_type(),
-        gateway_handle
-            .app_state
-            .clickhouse_connection_info
-            .database()
+    tracing::info!(
+        "├ Observability (ClickHouse): {}",
+        gateway_handle.app_state.clickhouse_connection_info
     );
-    tracing::info!("├ Observability: {observability_description}");
     if config.gateway.observability.batch_writes.enabled {
         tracing::info!(
             "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",
