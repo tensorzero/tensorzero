@@ -368,4 +368,32 @@ describe("OpenAI Responses API", () => {
     // Should have received a tool call for get_temperature
     expect(toolCallName).toBe("get_temperature");
   });
+
+  it.concurrent("should handle shorthand model name", async () => {
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: "user",
+        content: "What is the capital of France?",
+      },
+    ];
+
+    const episodeId = uuidv7();
+    const result = await client.chat.completions.create({
+      messages,
+      model: "tensorzero::model_name::openai::responses::gpt-5-codex",
+      // @ts-expect-error - custom TensorZero property
+      "tensorzero::episode_id": episodeId,
+    });
+
+    // The response should contain content
+    expect(result.choices[0].message.content).not.toBeNull();
+    expect(result.choices[0].message.content!.length).toBeGreaterThan(0);
+
+    // Check that the response mentions Paris
+    expect(result.choices[0].message.content).toContain("Paris");
+
+    expect(result.usage).not.toBeNull();
+    expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
+    expect(result.usage?.completion_tokens).toBeGreaterThan(0);
+  });
 });
