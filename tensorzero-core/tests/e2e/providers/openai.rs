@@ -2754,10 +2754,20 @@ model = "test-model"
                 additional_tools: None,
                 tool_choice: None,
                 parallel_tool_calls: None,
-                provider_tools: Some(vec![ProviderTool {
-                    scope: ProviderToolScope::Unscoped,
-                    tool: json!({"type": "web_search"}),
-                }]),
+                provider_tools: Some(vec![
+                    ProviderTool {
+                        scope: ProviderToolScope::Unscoped,
+                        tool: json!({"type": "web_search"}),
+                    },
+                    // This should get filtered out
+                    ProviderTool {
+                        scope: ProviderToolScope::ModelProvider {
+                            model_name: "garbage".to_string(),
+                            model_provider_name: "model".to_string(),
+                        },
+                        tool: json!({"type": "garbage"}),
+                    },
+                ]),
             },
             ..Default::default()
         })
