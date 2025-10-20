@@ -151,6 +151,7 @@ class UnknownContentBlock(ContentBlock):
 
 class FinishReason(str, Enum):
     STOP = "stop"
+    STOP_SEQUENCE = "stop_sequence"
     LENGTH = "length"
     TOOL_CALL = "tool_call"
     CONTENT_FILTER = "content_filter"
@@ -418,25 +419,47 @@ class TensorZeroError(BaseTensorZeroError):
 
 
 @dataclass
-class DynamicEvaluationRunResponse:
+class WorkflowEvaluationRunResponse:
     run_id: UUID
 
 
-def parse_dynamic_evaluation_run_response(
+def parse_workflow_evaluation_run_response(
     data: Dict[str, Any],
-) -> DynamicEvaluationRunResponse:
-    return DynamicEvaluationRunResponse(run_id=UUID(data["run_id"]))
+) -> WorkflowEvaluationRunResponse:
+    return WorkflowEvaluationRunResponse(run_id=UUID(data["run_id"]))
 
 
 @dataclass
-class DynamicEvaluationRunEpisodeResponse:
+class WorkflowEvaluationRunEpisodeResponse:
     episode_id: UUID
 
 
+def parse_workflow_evaluation_run_episode_response(
+    data: Dict[str, Any],
+) -> WorkflowEvaluationRunEpisodeResponse:
+    return WorkflowEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
+
+
+# DEPRECATED: Use WorkflowEvaluationRunResponse instead
+DynamicEvaluationRunResponse = WorkflowEvaluationRunResponse
+
+
+# DEPRECATED: Use parse_workflow_evaluation_run_response instead
+def parse_dynamic_evaluation_run_response(
+    data: Dict[str, Any],
+) -> WorkflowEvaluationRunResponse:
+    return parse_workflow_evaluation_run_response(data)
+
+
+# DEPRECATED: Use WorkflowEvaluationRunEpisodeResponse instead
+DynamicEvaluationRunEpisodeResponse = WorkflowEvaluationRunEpisodeResponse
+
+
+# DEPRECATED: Use parse_workflow_evaluation_run_episode_response instead
 def parse_dynamic_evaluation_run_episode_response(
     data: Dict[str, Any],
-) -> DynamicEvaluationRunEpisodeResponse:
-    return DynamicEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
+) -> WorkflowEvaluationRunEpisodeResponse:
+    return parse_workflow_evaluation_run_episode_response(data)
 
 
 @dataclass

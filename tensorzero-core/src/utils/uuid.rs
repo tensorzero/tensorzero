@@ -66,9 +66,9 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
     let mut uuid_system_time =
         UNIX_EPOCH + Duration::from_secs(seconds) + Duration::from_nanos(subsec_nanos as u64);
 
-    // If the UUID crosses the dynamic evaluation threshold, we have to remove that offset
-    if compare_timestamps(DYNAMIC_EVALUATION_THRESHOLD, uuid_timestamp) {
-        uuid_system_time -= DYNAMIC_EVALUATION_OFFSET;
+    // If the UUID crosses the workflow evaluation threshold, we have to remove that offset
+    if compare_timestamps(WORKFLOW_EVALUATION_THRESHOLD, uuid_timestamp) {
+        uuid_system_time -= WORKFLOW_EVALUATION_OFFSET;
     }
 
     let elapsed = match SystemTime::now().duration_since(uuid_system_time) {
@@ -87,32 +87,32 @@ pub fn uuid_elapsed(uuid: &Uuid) -> Result<Duration, Error> {
     Ok(elapsed)
 }
 
-/// The offset for generation of dynamic evaluation run IDs.
-const DYNAMIC_EVALUATION_OFFSET_S: u64 = 10_000_000_000;
+/// The offset for generation of workflow evaluation run IDs.
+const WORKFLOW_EVALUATION_OFFSET_S: u64 = 10_000_000_000;
 /// It is ten billion seconds (~317 years)
-pub const DYNAMIC_EVALUATION_OFFSET: Duration = Duration::from_secs(DYNAMIC_EVALUATION_OFFSET_S);
+pub const WORKFLOW_EVALUATION_OFFSET: Duration = Duration::from_secs(WORKFLOW_EVALUATION_OFFSET_S);
 
-/// The threshold for generation of dynamic evaluation run IDs.
+/// The threshold for generation of workflow evaluation run IDs.
 /// This will seed the UUIDv7 with current time + 10 billion seconds.
 /// We ignore nanoseconds, sequence number, and usable bits.
-pub const DYNAMIC_EVALUATION_THRESHOLD: Timestamp = Timestamp::from_unix_time(
-    DYNAMIC_EVALUATION_OFFSET_S,
+pub const WORKFLOW_EVALUATION_THRESHOLD: Timestamp = Timestamp::from_unix_time(
+    WORKFLOW_EVALUATION_OFFSET_S,
     0, // ns
     0, // seq
     0, // bits
 );
 
-pub fn get_dynamic_evaluation_cutoff_uuid() -> Uuid {
-    Uuid::new_v7(DYNAMIC_EVALUATION_THRESHOLD)
+pub fn get_workflow_evaluation_cutoff_uuid() -> Uuid {
+    Uuid::new_v7(WORKFLOW_EVALUATION_THRESHOLD)
 }
 
 #[expect(clippy::missing_panics_doc)]
-pub fn generate_dynamic_evaluation_run_episode_id() -> Uuid {
+pub fn generate_workflow_evaluation_run_episode_id() -> Uuid {
     #[expect(clippy::expect_used)]
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("Time went backwards");
-    let now_plus_offset = now + DYNAMIC_EVALUATION_OFFSET;
+    let now_plus_offset = now + WORKFLOW_EVALUATION_OFFSET;
     let timestamp = Timestamp::from_unix_time(
         now_plus_offset.as_secs(),
         now_plus_offset.subsec_nanos(),
@@ -210,37 +210,37 @@ mod tests {
             }
         );
 
-        // Test dynamic evaluation threshold
-        let now_for_dynamic = SystemTime::now()
+        // Test workflow evaluation threshold
+        let now_for_workflow = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards");
-        let five_seconds_ago_dynamic_offset = now_for_dynamic
+        let five_seconds_ago_workflow_offset = now_for_workflow
             .checked_sub(std::time::Duration::from_secs(5))
             .expect("Timestamp arithmetic overflow");
 
         let timestamp_with_offset = Timestamp::from_unix_time(
-            five_seconds_ago_dynamic_offset.as_secs() + DYNAMIC_EVALUATION_OFFSET_S,
-            five_seconds_ago_dynamic_offset.subsec_nanos(),
+            five_seconds_ago_workflow_offset.as_secs() + WORKFLOW_EVALUATION_OFFSET_S,
+            five_seconds_ago_workflow_offset.subsec_nanos(),
             0,
             0,
         );
-        let dynamic_uuid = Uuid::new_v7(timestamp_with_offset);
-        let elapsed_dynamic = uuid_elapsed(&dynamic_uuid).unwrap();
+        let workflow_uuid = Uuid::new_v7(timestamp_with_offset);
+        let elapsed_workflow = uuid_elapsed(&workflow_uuid).unwrap();
         assert!(
-            elapsed_dynamic > Duration::from_secs(0) && elapsed_dynamic < Duration::from_secs(15),
-            "Elapsed time for dynamic UUID should be around 5s, got {elapsed_dynamic:?}"
+            elapsed_workflow > Duration::from_secs(0) && elapsed_workflow < Duration::from_secs(15),
+            "Elapsed time for workflow UUID should be around 5s, got {elapsed_workflow:?}"
         );
     }
 
     #[test]
-    fn test_generate_dynamic_evaluation_run_episode_id() {
-        let dynamic_id = generate_dynamic_evaluation_run_episode_id();
+    fn test_generate_workflow_evaluation_run_episode_id() {
+        let workflow_id = generate_workflow_evaluation_run_episode_id();
 
         // Verify it's a v7 UUID
-        assert_eq!(dynamic_id.get_version_num(), 7);
+        assert_eq!(workflow_id.get_version_num(), 7);
 
         // Extract the timestamp and verify it's in the expected range
-        let timestamp_info = dynamic_id.get_timestamp().expect("Should have timestamp");
+        let timestamp_info = workflow_id.get_timestamp().expect("Should have timestamp");
         let (seconds, _) = timestamp_info.to_unix();
 
         // Current timestamp plus the offset
@@ -248,7 +248,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_secs();
-        let expected_approx_time = now + DYNAMIC_EVALUATION_OFFSET_S;
+        let expected_approx_time = now + WORKFLOW_EVALUATION_OFFSET_S;
 
         // Allow small difference due to execution time
         let margin = 5; // 5 seconds margin
@@ -258,8 +258,8 @@ mod tests {
         );
 
         // Generate two UUIDs and ensure they're different
-        let id1 = generate_dynamic_evaluation_run_episode_id();
-        let id2 = generate_dynamic_evaluation_run_episode_id();
+        let id1 = generate_workflow_evaluation_run_episode_id();
+        let id2 = generate_workflow_evaluation_run_episode_id();
         assert_ne!(id1, id2, "Generated UUIDs should be unique");
     }
 

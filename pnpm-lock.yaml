@@ -54,6 +54,15 @@ importers:
         specifier: ^6.4.0
         version: 6.4.0(ws@8.18.2)(zod@3.25.76)
 
+  examples/docs/guides/gateway/call-the-openai-responses-api:
+    dependencies:
+      openai:
+        specifier: ^6.4.0
+        version: 6.4.0(ws@8.18.2)(zod@3.25.76)
+      uuid:
+        specifier: ^11.0.5
+        version: 11.1.0
+
   examples/guides/tool-use:
     dependencies:
       openai:

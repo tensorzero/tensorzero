@@ -51,8 +51,8 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
-use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
 use super::validate_tags;
+use super::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Deserialize)]
@@ -260,7 +260,7 @@ pub async fn inference(
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
 
-    validate_inference_episode_id_and_apply_dynamic_evaluation_run(
+    validate_inference_episode_id_and_apply_workflow_evaluation_run(
         episode_id,
         params.function_name.as_ref(),
         &mut params.variant_name,
