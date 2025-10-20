@@ -160,7 +160,7 @@ export default function Input({
         maxHeight={maxHeight}
       />
       {/* Messages */}
-      {messages.length > 0 && (
+      {(messages.length > 0 || isEditing) && (
         <SnippetContent maxHeight={maxHeight}>
           {messages.map((message, messageIndex) => (
             <SnippetMessage

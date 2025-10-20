@@ -47,9 +47,9 @@ async fn test_clickhouse_query_model_usage() {
         "Should have gpt-4o-mini data for May 2025"
     );
     let may_gpt4o_mini = may_gpt4o_mini.unwrap();
-    assert_eq!(may_gpt4o_mini.input_tokens, Some(983420));
-    assert_eq!(may_gpt4o_mini.output_tokens, Some(149656));
-    assert_eq!(may_gpt4o_mini.count, Some(2933));
+    assert_eq!(may_gpt4o_mini.input_tokens, Some(983430));
+    assert_eq!(may_gpt4o_mini.output_tokens, Some(149666));
+    assert_eq!(may_gpt4o_mini.count, Some(2934));
 
     // Test data from April 2025
     let april_claude = model_usage.iter().find(|u| {
