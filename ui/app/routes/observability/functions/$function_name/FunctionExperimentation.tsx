@@ -8,10 +8,12 @@ import { DEFAULT_FUNCTION } from "~/utils/constants";
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
   functionName: string;
+  optimalProbabilities?: Record<string, number>;
 }
 
 function extractVariantWeights(
   functionConfig: FunctionConfig,
+  optimalProbabilities?: Record<string, number>,
 ): VariantWeight[] {
   const experimentationConfig = functionConfig.experimentation;
 
@@ -32,6 +34,18 @@ function extractVariantWeights(
       variant_name,
       weight: equalWeight,
     }));
+  } else if (experimentationConfig.type === "track_and_stop") {
+    // For track_and_stop, use optimal probabilities if available
+    if (optimalProbabilities) {
+      return Object.entries(optimalProbabilities).map(
+        ([variant_name, weight]) => ({
+          variant_name,
+          weight,
+        }),
+      );
+    }
+    // If no optimal probabilities yet, return empty (no chart to show)
+    return [];
   }
 
   // Default case (shouldn't happen, but TypeScript requires it)
@@ -41,13 +55,17 @@ function extractVariantWeights(
 export default function FunctionExperimentation({
   functionConfig,
   functionName,
+  optimalProbabilities,
 }: FunctionExperimentationProps) {
   // Don't render experimentation section for the default function
   if (functionName === DEFAULT_FUNCTION) {
     return null;
   }
 
-  const variantWeights = extractVariantWeights(functionConfig);
+  const variantWeights = extractVariantWeights(
+    functionConfig,
+    optimalProbabilities,
+  );
 
   // Don't render if there are no variant weights
   if (variantWeights.length === 0) {

@@ -40,6 +40,8 @@ import {
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
+import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
+import { estimateOptimalProbabilities } from "tensorzero-node";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -115,6 +117,49 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantCountsPromise,
     variantThroughputPromise,
   ]);
+
+  // Compute optimal probabilities for track_and_stop experimentation
+  let optimal_probabilities: Record<string, number> | undefined;
+  if (function_config.experimentation.type === "track_and_stop") {
+    try {
+      const dbClient = await getNativeDatabaseClient();
+      const trackAndStopConfig = function_config.experimentation;
+      const metric_config = config.metrics[trackAndStopConfig.metric];
+
+      logger.info("Track-and-stop experimentation:", {
+        candidate_variants: trackAndStopConfig.candidate_variants,
+        metric: trackAndStopConfig.metric,
+      });
+
+      if (metric_config) {
+        const feedback = await dbClient.getFeedbackByVariant({
+          metric_name: trackAndStopConfig.metric,
+          function_name,
+          variant_names: trackAndStopConfig.candidate_variants,
+        });
+
+        logger.info("Feedback results:", {
+          feedback_length: feedback.length,
+          feedback_data: feedback,
+        });
+
+        if (feedback.length > 0) {
+          optimal_probabilities = estimateOptimalProbabilities({
+            feedback,
+            epsilon: trackAndStopConfig.epsilon,
+            metric_optimize: metric_config.optimize,
+          });
+          logger.info("Optimal probabilities:", optimal_probabilities);
+        } else {
+          logger.warn("No feedback data returned");
+        }
+      }
+    } catch (error) {
+      logger.error("Failed to compute optimal probabilities:", error);
+      optimal_probabilities = undefined;
+    }
+  }
+
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
     let variant_config = function_config.variants[
       variant_count.variant_name
@@ -157,6 +202,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       weight: variant_config.inner.weight,
     };
   });
+
   return {
     function_name,
     inferences,
@@ -166,6 +212,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_performances,
     variant_throughput,
     variant_counts: variant_counts_with_metadata,
+    optimal_probabilities,
   };
 }
 
@@ -179,6 +226,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_performances,
     variant_throughput,
     variant_counts,
+    optimal_probabilities,
   } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -285,6 +333,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             <FunctionExperimentation
               functionConfig={function_config}
               functionName={function_name}
+              optimalProbabilities={optimal_probabilities}
             />
           </SectionLayout>
         )}
