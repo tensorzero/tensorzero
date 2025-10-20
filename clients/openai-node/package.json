@@ -16,17 +16,17 @@
   "author": "TensorZero",
   "license": "Apache-2.0",
   "dependencies": {
-    "openai": "^4.104.0",
+    "openai": "^6.4.0",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
     "@types/node": "^22.16.0",
     "@types/uuid": "^10.0.0",
-    "eslint": "^9.30.1",
+    "eslint": "^9.37.0",
     "prettier": "^3.6.2",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.36.0",
+    "typescript-eslint": "^8.46.1",
     "vitest": "^3.2.4"
   }
 }

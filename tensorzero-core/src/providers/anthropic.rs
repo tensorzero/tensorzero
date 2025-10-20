@@ -942,12 +942,14 @@ fn convert_to_output(
         }) => Ok(ContentBlockOutput::Thought(Thought {
             text: Some(thinking),
             signature: Some(signature),
+            summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
         })),
         FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
                 text: None,
                 signature: Some(data),
+                summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
@@ -1204,6 +1206,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: Some(thinking),
                         signature: None,
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
@@ -1218,6 +1222,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: None,
                         signature: Some(signature),
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
@@ -1269,6 +1275,8 @@ fn anthropic_to_tensorzero_stream_message(
                     text: Some(thinking),
                     signature: Some(signature),
                     id: index.to_string(),
+                    summary_id: None,
+                    summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })],
                 None,
@@ -1282,6 +1290,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: None,
                         signature: Some(data),
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,

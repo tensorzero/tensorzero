@@ -483,6 +483,8 @@ fn bedrock_to_tensorzero_stream_message(
                                     vec![ContentBlockChunk::Thought(ThoughtChunk {
                                         id: message.content_block_index.to_string(),
                                         text: reasoning_content.as_text().ok().cloned(),
+                                        summary_id: None,
+                                        summary_text: None,
                                         signature: reasoning_content.as_signature().ok().cloned(),
                                         provider_type: Some(PROVIDER_TYPE.to_string()),
                                     })],
@@ -801,6 +803,7 @@ fn bedrock_content_block_to_output(
             ReasoningContentBlock::ReasoningText(reasoning_text) => {
                 Ok(Some(ContentBlockOutput::Thought(Thought {
                     text: Some(reasoning_text.text.clone()),
+                    summary: None,
                     signature: reasoning_text.signature().map(ToString::to_string),
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })))

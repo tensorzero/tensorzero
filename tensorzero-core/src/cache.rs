@@ -307,6 +307,8 @@ fn spawn_maybe_cache_write<T: Serialize + CacheOutput + Send + Sync + 'static>(
     clickhouse_client: ClickHouseConnectionInfo,
     cache_validation_info: CacheValidationInfo,
 ) {
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         if row
             .data
