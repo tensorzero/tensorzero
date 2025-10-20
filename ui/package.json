@@ -84,7 +84,7 @@
     "buildkite-test-collector": "^1.9.1",
     "eslint": "^9.37.0",
     "eslint-plugin-storybook": "^9.0.16",
-    "playwright": "^1.53.2",
+    "playwright": "^1.55.1",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.13",
     "storybook": "^9.1.2",
