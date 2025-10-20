@@ -612,7 +612,7 @@ impl From<FinishReason> for OpenAICompatibleFinishReason {
             FinishReason::ContentFilter => OpenAICompatibleFinishReason::ContentFilter,
             FinishReason::ToolCall => OpenAICompatibleFinishReason::ToolCalls,
             FinishReason::Unknown(data) => match data {
-                Some(data) => OpenAICompatibleFinishReason::Other(data),
+                Some(data) => OpenAICompatibleFinishReason::Other(format!("Unknown: {data}")),
                 None => OpenAICompatibleFinishReason::Unknown,
             },
         }
