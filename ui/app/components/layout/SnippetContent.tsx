@@ -273,7 +273,7 @@ export function ToolCallMessage(
         id={toolCall.toolCallId}
         payload={toolArguments}
         payloadLabel={payloadLabel}
-        isEditing={"isEditing" in toolCall ? toolCall?.isEditing : undefined}
+        isEditing={"isEditing" in toolCall ? toolCall.isEditing : undefined}
         onChange={"onChange" in toolCall ? toolCall.onChange : undefined}
         enforceJson={true}
       />
