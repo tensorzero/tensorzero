@@ -187,6 +187,8 @@ export * from "./OtlpTracesFormat";
 export * from "./PathWithContents";
 export * from "./PostgresConfig";
 export * from "./ProviderConfig";
+export * from "./ProviderTool";
+export * from "./ProviderToolScope";
 export * from "./ProviderTypesConfig";
 export * from "./QueryDemonstrationFeedbackByInferenceIdParams";
 export * from "./QueryEpisodeTableParams";

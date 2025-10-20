@@ -366,6 +366,7 @@ export function prepareInferenceActionRequest(
     additional_tools: null,
     tool_choice: null,
     parallel_tool_calls: null,
+    provider_tools: null,
   };
 
   // Prepare request based on source and function type

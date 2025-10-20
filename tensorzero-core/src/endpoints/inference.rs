@@ -98,6 +98,9 @@ pub struct Params {
     // parallel_tool_calls: Option<bool>,
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
+    // provider_tools: Vec<ProviderTool> (defaults to [])
+    // If set, will attempt to pass this vector of tools to providers which run server-side tools
+    // that satisfy the scopes required.
     pub output_schema: Option<Value>,
     #[serde(default)]
     pub cache_options: CacheParamsOptions,

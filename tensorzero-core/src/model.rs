@@ -2427,6 +2427,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
@@ -3072,6 +3073,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
@@ -3198,6 +3200,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
