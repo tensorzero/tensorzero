@@ -375,10 +375,10 @@ export default function InputSnippet({
                     label="Tool Result"
                     onAdd={() => onAppendToolResultContentBlock?.(messageIndex)}
                   />
-                  <span className="text-fg-muted text-xs">
-                    Please use the API or SDK for other types of content blocks.
-                  </span>
                   {/* TODO: we need to support adding other kinds of content blocks */}
+                  <span className="text-fg-muted text-xs">
+                    Please use the API or SDK for other content block types.
+                  </span>
                 </div>
               )}
             </SnippetMessage>

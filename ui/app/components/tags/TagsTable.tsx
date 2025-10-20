@@ -11,7 +11,6 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { Code } from "~/components/ui/code";
 import { useNavigate } from "react-router";
 import {
   toEvaluationUrl,
@@ -153,10 +152,10 @@ export function TagsTable({ tags, onTagsChange, isEditing }: TagsTableProps) {
                   }
                 >
                   <TableCell>
-                    <Code>{key}</Code>
+                    <span className="font-mono text-sm">{key}</span>
                   </TableCell>
                   <TableCell>
-                    <Code>{value}</Code>
+                    <span className="font-mono text-sm">{value}</span>
                   </TableCell>
                   {isEditing && (
                     <TableCell>
