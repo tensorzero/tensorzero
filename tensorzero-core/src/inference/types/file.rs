@@ -123,7 +123,7 @@ impl File {
         match self {
             File::Url { url, mime_type } => {
                 let response = client.get(url.clone()).send().await.map_err(|e| {
-                    Error::new(ErrorDetails::BadImageFetch {
+                    Error::new(ErrorDetails::BadFileFetch {
                         url: url.clone(),
                         message: format!("Error fetching image: {e:?}"),
                     })
@@ -134,7 +134,7 @@ impl File {
                     response.headers().get(http::header::CONTENT_TYPE).cloned();
 
                 let bytes = response.bytes().await.map_err(|e| {
-                    Error::new(ErrorDetails::BadImageFetch {
+                    Error::new(ErrorDetails::BadFileFetch {
                         url: url.clone(),
                         message: format!("Error reading image bytes: {e}"),
                     })
@@ -145,14 +145,14 @@ impl File {
                     mime_type
                 } else {
                     // Priority 2: Infer from file content
-                    let inferred = infer::get(&bytes[..std::cmp::min(8192, bytes.len())]);
+                    let inferred = infer::get(&bytes);
 
                     if let Some(inferred_type) = inferred {
                         let inferred_mime = inferred_type
                             .mime_type()
                             .parse::<MediaType>()
                             .map_err(|e| {
-                                Error::new(ErrorDetails::BadImageFetch {
+                                Error::new(ErrorDetails::BadFileFetch {
                                     url: url.clone(),
                                     message: format!("Inferred mime type is not valid: {e}"),
                                 })
@@ -164,12 +164,14 @@ impl File {
                                 if let Ok(header_mime) = content_type_str.parse::<MediaType>() {
                                     if header_mime != inferred_mime {
                                         tracing::warn!(
-                                            "Inferred MIME type '{}' differs from Content-Type header '{}' for URL {}",
+                                            "Inferred MIME type `{}` differs from Content-Type header `{}` for URL {}. The gateway will send `{}` to the model provider",
                                             inferred_mime,
                                             header_mime,
-                                            url
+                                            url,
+                                            inferred_mime,
                                         );
                                     }
+                                    tracing::warn!("Content-Type header is not a valid mime type: `{content_type_str}`");
                                 }
                             }
                         }
@@ -180,7 +182,7 @@ impl File {
                         content_type
                             .to_str()
                             .map_err(|e| {
-                                Error::new(ErrorDetails::BadImageFetch {
+                                Error::new(ErrorDetails::BadFileFetch {
                                     url: url.clone(),
                                     message: format!(
                                         "Content-Type header is not a valid string: {e}"
@@ -189,7 +191,7 @@ impl File {
                             })?
                             .parse::<MediaType>()
                             .map_err(|e| {
-                                Error::new(ErrorDetails::BadImageFetch {
+                                Error::new(ErrorDetails::BadFileFetch {
                                     url: url.clone(),
                                     message: format!(
                                         "Content-Type header is not a valid mime type: {e}"
@@ -197,7 +199,7 @@ impl File {
                                 })
                             })?
                     } else {
-                        return Err(Error::new(ErrorDetails::BadImageFetch {
+                        return Err(Error::new(ErrorDetails::BadFileFetch {
                             url: url.clone(),
                             message:
                                 "`mime_type` not provided, and unable to infer from file content or Content-Type header"

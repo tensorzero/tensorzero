@@ -202,7 +202,7 @@ pub enum ErrorDetails {
     BatchNotFound {
         id: Uuid,
     },
-    BadImageFetch {
+    BadFileFetch {
         url: Url,
         message: String,
     },
@@ -573,7 +573,7 @@ impl ErrorDetails {
             ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
-            ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
+            ErrorDetails::BadFileFetch { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
@@ -714,7 +714,7 @@ impl ErrorDetails {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
             ErrorDetails::Base64 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::BadImageFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BadFileFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -896,7 +896,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidInferenceTarget { message } => {
                 write!(f, "Invalid inference target: {message}")
             }
-            ErrorDetails::BadImageFetch { url, message } => {
+            ErrorDetails::BadFileFetch { url, message } => {
                 write!(f, "Error fetching image from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
