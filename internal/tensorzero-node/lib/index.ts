@@ -10,7 +10,7 @@ import type {
   DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
-  EstimateOptimalProbabilitiesParams,
+  EstimateTrackAndStopOptimalProbabilitiesParams,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
@@ -58,7 +58,8 @@ const {
   DatabaseClient: NativeDatabaseClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
-  estimateOptimalProbabilities: nativeEstimateOptimalProbabilities,
+  estimateTrackAndStopOptimalProbabilities:
+    nativeEstimateTrackAndStopOptimalProbabilities,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -223,11 +224,12 @@ export async function runEvaluationStreaming(
  * @param params - Parameters including feedback data and optimization settings
  * @returns A mapping from variant names to optimal sampling probabilities
  */
-export function estimateOptimalProbabilities(
-  params: EstimateOptimalProbabilitiesParams,
+export function estimateTrackAndStopOptimalProbabilities(
+  params: EstimateTrackAndStopOptimalProbabilitiesParams,
 ): Record<string, number> {
   const paramsString = safeStringify(params);
-  const resultString = nativeEstimateOptimalProbabilities(paramsString);
+  const resultString =
+    nativeEstimateTrackAndStopOptimalProbabilities(paramsString);
   return JSON.parse(resultString) as Record<string, number>;
 }
 

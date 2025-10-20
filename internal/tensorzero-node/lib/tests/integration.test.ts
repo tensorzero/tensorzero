@@ -3,7 +3,7 @@ import {
   TensorZeroClient,
   DatabaseClient,
   getConfig,
-  estimateOptimalProbabilities,
+  estimateTrackAndStopOptimalProbabilities,
 } from "../index.js";
 
 const UI_FIXTURES_CONFIG_PATH = "../../ui/fixtures/config/tensorzero.toml";
@@ -203,9 +203,9 @@ it("should get config with evaluations", async () => {
   expect(config.evaluations.images!.function_name).toBe("image_judger");
 });
 
-describe("estimateOptimalProbabilities", () => {
+describe("estimateTrackAndStopOptimalProbabilities", () => {
   it("should compute optimal probabilities from feedback data", () => {
-    const result = estimateOptimalProbabilities({
+    const result = estimateTrackAndStopOptimalProbabilities({
       feedback: [
         { variant_name: "variant_a", mean: 0.7, variance: 0.05, count: 100n },
         { variant_name: "variant_b", mean: 0.85, variance: 0.03, count: 100n },
@@ -230,7 +230,7 @@ describe("estimateOptimalProbabilities", () => {
   });
 
   it("should handle minimize optimization", () => {
-    const result = estimateOptimalProbabilities({
+    const result = estimateTrackAndStopOptimalProbabilities({
       feedback: [
         { variant_name: "variant_a", mean: 100, variance: 50, count: 100n },
         { variant_name: "variant_b", mean: 50, variance: 20, count: 100n },
@@ -250,7 +250,7 @@ describe("estimateOptimalProbabilities", () => {
   });
 
   it("should handle optional parameters", () => {
-    const result = estimateOptimalProbabilities({
+    const result = estimateTrackAndStopOptimalProbabilities({
       feedback: [
         { variant_name: "v1", mean: 0.5, variance: 0.1, count: 50n },
         { variant_name: "v2", mean: 0.6, variance: 0.1, count: 50n },

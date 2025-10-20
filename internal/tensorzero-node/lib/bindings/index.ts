@@ -60,7 +60,7 @@ export * from "./EmbeddingProviderConfig";
 export * from "./EmbeddingProviderInfo";
 export * from "./EndpointLocation";
 export * from "./EpisodeByIdRow";
-export * from "./EstimateOptimalProbabilitiesParams";
+export * from "./EstimateTrackAndStopOptimalProbabilitiesParams";
 export * from "./EvaluationConfig";
 export * from "./EvaluationRunCompleteEvent";
 export * from "./EvaluationRunErrorEvent";
