@@ -25,8 +25,8 @@ export default [
     ]),
 
     route(
-      "dynamic_evaluations/search_runs",
-      "routes/api/dynamic_evaluations/search_runs/route.ts",
+      "workflow_evaluations/search_runs",
+      "routes/api/workflow_evaluations/search_runs/route.ts",
     ),
 
     route(
@@ -74,13 +74,13 @@ export default [
     ),
   ]),
 
-  // Dynamic Evaluations
-  route("dynamic_evaluations", "routes/dynamic_evaluations/layout.tsx", [
-    index("routes/dynamic_evaluations/route.tsx"),
-    route("runs/:run_id", "routes/dynamic_evaluations/runs/$run_id/route.tsx"),
+  // Workflow Evaluations (formerly Dynamic Evaluations)
+  route("workflow_evaluations", "routes/workflow_evaluations/layout.tsx", [
+    index("routes/workflow_evaluations/route.tsx"),
+    route("runs/:run_id", "routes/workflow_evaluations/runs/$run_id/route.tsx"),
     route(
       "projects/:project_name",
-      "routes/dynamic_evaluations/projects/$project_name/route.tsx",
+      "routes/workflow_evaluations/projects/$project_name/route.tsx",
     ),
   ]),
 

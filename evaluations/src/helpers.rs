@@ -87,13 +87,16 @@ pub struct HumanFeedbackResult {
     pub evaluator_inference_id: Uuid,
 }
 
-pub async fn check_static_eval_human_feedback(
+pub async fn check_inference_evaluation_human_feedback(
     clickhouse: &ClickHouseConnectionInfo,
     metric_name: &str,
     datapoint_id: Uuid,
     inference_output: &InferenceResponse,
 ) -> Result<Option<HumanFeedbackResult>> {
     let serialized_output = inference_output.get_serialized_output()?;
+    // Note: StaticEvaluationHumanFeedback is the actual database table name,
+    // retained for backward compatibility even though this feature is now
+    // called "Inference Evaluations" in the product and user-facing documentation.
     let query = r"
         SELECT value, evaluator_inference_id FROM StaticEvaluationHumanFeedback
         WHERE

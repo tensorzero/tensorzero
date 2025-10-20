@@ -1683,7 +1683,6 @@ async fn test_remove_non_winner_variant_after_stopping() {
     );
 
     // Phase 2: Remove variant_b (a non-winner) and verify winner (variant_a) still selected
-
     drop(client);
     drop(bandit);
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
