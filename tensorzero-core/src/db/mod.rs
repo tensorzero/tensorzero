@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use feedback::FeedbackQueries;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::types::PgInterval;
 use uuid::Uuid;
@@ -11,11 +12,12 @@ use crate::serde_util::{deserialize_option_u64, deserialize_u64};
 
 pub mod clickhouse;
 pub mod datasets;
+pub mod feedback;
 pub mod postgres;
 
 #[async_trait]
 pub trait ClickHouseConnection:
-    SelectQueries + DatasetQueries + HealthCheckable + Send + Sync
+    SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync
 {
 }
 
@@ -50,29 +52,6 @@ pub trait SelectQueries {
     ) -> Result<Vec<EpisodeByIdRow>, Error>;
 
     async fn query_episode_table_bounds(&self) -> Result<TableBoundsWithCount, Error>;
-
-    /// Retrieves cumulative feedback statistics for a given metric and function, optionally filtered by variant names.
-    async fn get_feedback_by_variant(
-        &self,
-        metric_name: &str,
-        function_name: &str,
-        variant_names: Option<&Vec<String>>,
-    ) -> Result<Vec<FeedbackByVariant>, Error>;
-
-    /// Retrieves a time series of feedback statistics for a given metric and function,
-    /// optionally filtered by variant names. Returns cumulative statistics
-    /// (mean, variance, count) for each variant at each time point - each time point
-    /// includes all data from the beginning up to that point. This will return max_periods
-    /// complete time periods worth of data if present as well as the current time period's data.
-    /// So there are at most max_periods + 1 time periods worth of data returned.
-    async fn get_cumulative_feedback_timeseries(
-        &self,
-        function_name: String,
-        metric_name: String,
-        variant_names: Option<Vec<String>>,
-        time_window: TimeWindow,
-        max_periods: u32,
-    ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error>;
 }
 
 #[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
@@ -131,7 +110,10 @@ pub struct TableBoundsWithCount {
     pub count: u64,
 }
 
-impl<T: SelectQueries + DatasetQueries + HealthCheckable + Send + Sync> ClickHouseConnection for T {}
+impl<T: SelectQueries + DatasetQueries + FeedbackQueries + HealthCheckable + Send + Sync>
+    ClickHouseConnection for T
+{
+}
 
 pub trait RateLimitQueries {
     /// This function will fail if any of the requests individually fail.
@@ -185,48 +167,13 @@ pub struct ReturnTicketsReceipt {
     pub balance: u64,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct FeedbackByVariant {
-    pub variant_name: String,
-    pub mean: f32,
-    pub variance: f32,
-    #[serde(deserialize_with = "deserialize_u64")]
-    pub count: u64,
-}
-
-// make non-public, add larger struct with confidence sequence values
-#[derive(Clone, Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
-pub struct InternalCumulativeFeedbackTimeSeriesPoint {
-    // Time point up to which cumulative statistics are computed
-    pub period_end: DateTime<Utc>,
-    pub variant_name: String,
-    // Mean of feedback values up to time point `period_end`
-    pub mean: f32,
-    // Variance of feedback values up to time point `period_end`
-    pub variance: f32,
-    #[serde(deserialize_with = "deserialize_u64")]
-    // Number of feedback values up to time point `period_end`
-    pub count: u64,
-}
-
-#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
-pub struct CumulativeFeedbackTimeSeriesPoint {
-    // Time point up to which cumulative statistics are computed
-    pub period_end: DateTime<Utc>,
-    pub variant_name: String,
-    // Mean of feedback values up to time point `period_end`
-    pub mean: f32,
-    // Variance of feedback values up to time point `period_end`
-    pub variance: f32,
-    #[serde(deserialize_with = "deserialize_u64")]
-    // Number of feedback values up to time point `period_end`
-    pub count: u64,
-    // 1 - confidence level for the asymptotic confidence sequence
-    pub alpha: f32,
-    // Confidence sequence lower and upper bounds
-    pub cs_lower: f32,
-    pub cs_upper: f32,
+pub struct TableBounds {
+    #[ts(optional)]
+    pub first_id: Option<Uuid>,
+    #[ts(optional)]
+    pub last_id: Option<Uuid>,
 }
 
 impl<T: RateLimitQueries + ExperimentationQueries + HealthCheckable + Send + Sync>

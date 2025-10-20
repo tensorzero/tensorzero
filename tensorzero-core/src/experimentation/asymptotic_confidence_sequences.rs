@@ -1,5 +1,5 @@
 use crate::{
-    db::{CumulativeFeedbackTimeSeriesPoint, InternalCumulativeFeedbackTimeSeriesPoint},
+    db::feedback::{CumulativeFeedbackTimeSeriesPoint, InternalCumulativeFeedbackTimeSeriesPoint},
     error::{Error, ErrorDetails},
 };
 
