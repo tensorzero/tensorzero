@@ -415,3 +415,38 @@ async def test_openai_responses_reasoning_streaming(
     assert has_thought, "Expected thought content blocks when reasoning is enabled"
 
     # TODO (#4043): Check summary field when we expose it in the Python SDK
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_web_search_dynamic_provider_tools(
+    async_client: AsyncTensorZeroGateway,
+):
+    """Test OpenAI Responses API with dynamically configured provider tools (web search)"""
+    response = await async_client.inference(
+        model_name="gpt-5-mini-responses",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the current population of Japan?",
+                }
+            ],
+        },
+        provider_tools=[{"tool": {"type": "web_search"}}],
+    )
+
+    assert isinstance(response, ChatInferenceResponse)
+
+    # The response should contain content
+    assert len(response.content) > 0
+
+    # Check that web search actually happened by looking for web_search_call content blocks
+    web_search_blocks = [
+        cb
+        for cb in response.content
+        if cb.type == "unknown" and isinstance(cb, UnknownContentBlock) and cb.data.get("type") == "web_search_call"
+    ]
+    assert len(web_search_blocks) > 0, "Expected web_search_call content blocks"
+
+    assert response.usage.input_tokens > 0
+    assert response.usage.output_tokens > 0
