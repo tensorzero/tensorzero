@@ -139,9 +139,9 @@ export function SnippetMessage({
 }: SnippetMessageProps) {
   return (
     <div className="flex w-full flex-col gap-1">
-      <div className="relative flex items-center gap-4">
+      <div className="relative flex items-center gap-1">
         <div className={snippetMessageLabel({ role })}>{role}</div>
-        {action && <div className="absolute left-16">{action}</div>}
+        {action && <div>{action}</div>}
       </div>
       <div className={snippetMessage({ role })}>{children}</div>
     </div>

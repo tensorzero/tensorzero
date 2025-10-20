@@ -488,8 +488,11 @@ retries = { num_retries = 4, max_delay_s = 10 }
 
 [object_storage]
 type = "s3_compatible"
-bucket_name = "tensorzero-e2e-test-images"
-region = "us-east-1"
+endpoint = "http://minio:9000"
+bucket_name = "tensorzero-fixtures"
+# region = "us-east-1"  # optional: not needed for MinIO
+# IMPORTANT: for production environments, remove the following setting and use a secure method of authentication
+allow_http = true
 
 [gateway.observability.batch_writes]
 enabled = true

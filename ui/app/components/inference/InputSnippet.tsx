@@ -26,6 +26,11 @@ import type { JsonObject } from "type-fest";
 import { Button } from "~/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import { type ReactNode } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 interface InputSnippetProps {
   messages: DisplayInputMessage[];
@@ -370,25 +375,28 @@ export default function InputSnippet({
                     label="Tool Result"
                     onAdd={() => onAppendToolResultContentBlock?.(messageIndex)}
                   />
+                  <span className="text-fg-muted text-xs">
+                    Please use the API or SDK for other types of content blocks.
+                  </span>
                   {/* TODO: we need to support adding other kinds of content blocks */}
                 </div>
               )}
             </SnippetMessage>
           ))}
-        </SnippetContent>
-      )}
-      {isEditing && (
-        <div className="flex items-center gap-2 py-2">
-          <AddButton
-            label="User Message"
-            onAdd={() => onAppendMessage?.("user")}
-          />
+          {isEditing && (
+            <div className="flex items-center gap-2 py-2">
+              <AddButton
+                label="User Message"
+                onAdd={() => onAppendMessage?.("user")}
+              />
 
-          <AddButton
-            label="Assistant Message"
-            onAdd={() => onAppendMessage?.("assistant")}
-          />
-        </div>
+              <AddButton
+                label="Assistant Message"
+                onAdd={() => onAppendMessage?.("assistant")}
+              />
+            </div>
+          )}
+        </SnippetContent>
       )}
     </SnippetLayout>
   );
@@ -401,15 +409,20 @@ interface DeleteButtonProps {
 
 function DeleteButton({ label, onDelete }: DeleteButtonProps) {
   return (
-    <Button
-      variant="outline"
-      size="iconSm"
-      onClick={onDelete}
-      aria-label={label}
-      className="h-6 w-6"
-    >
-      <Trash2 className="h-3 w-3" />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="iconSm"
+          onClick={onDelete}
+          aria-label={label}
+          className="text-muted-foreground hover:text-destructive h-6 w-6"
+        >
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      </TooltipTrigger>
+      {label && <TooltipContent>{label}</TooltipContent>}
+    </Tooltip>
   );
 }
 
