@@ -55,8 +55,9 @@ pub async fn check_key(
 ) -> Result<AuthResult, TensorZeroAuthError> {
     let key = sqlx::query_as!(
         KeyInfo,
-        "SELECT id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE short_id = $1",
-        key.short_id
+        "SELECT id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE short_id = $1 AND hash = $2",
+        key.short_id,
+        key.hashed_long_key.expose_secret()
     ).fetch_optional(pool).await?;
     match key {
         Some(key) => {

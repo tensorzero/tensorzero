@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE short_id = $1",
+  "query": "SELECT id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE short_id = $1 AND hash = $2",
   "describe": {
     "columns": [
       {
@@ -61,7 +61,8 @@
     ],
     "parameters": {
       "Left": [
-        "Bpchar"
+        "Bpchar",
+        "Text"
       ]
     },
     "nullable": [
@@ -72,5 +73,5 @@
       true
     ]
   },
-  "hash": "cd0787a0bf866f953dc09491787d1515d687b47fb62dbe4141429039b649463d"
+  "hash": "6d5d509fab9c81857df753f0ae30909ab85bddc79af8617feea60f857a463e5e"
 }

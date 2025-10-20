@@ -232,3 +232,44 @@ async fn test_list_keys(pool: PgPool) {
         vec![]
     );
 }
+
+#[sqlx::test]
+async fn test_check_bad_key(pool: PgPool) {
+    let first_key = create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let second_key = create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let first_parsed_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
+    let second_parsed_key = TensorZeroApiKey::parse(second_key.expose_secret()).unwrap();
+
+    // Construct a key with a short id and long key hash from two different (valid) keys,
+    // and verify that this is rejected by 'check_key'
+    let bad_key_1 = TensorZeroApiKey::new_for_testing(
+        first_parsed_key.get_short_id(),
+        second_parsed_key
+            .get_hashed_long_key()
+            .expose_secret()
+            .to_string(),
+    );
+    let bad_key_2 = TensorZeroApiKey::new_for_testing(
+        second_parsed_key.get_short_id(),
+        first_parsed_key
+            .get_hashed_long_key()
+            .expose_secret()
+            .to_string(),
+    );
+
+    let result = check_key(&bad_key_1, &pool).await.unwrap();
+    let AuthResult::MissingKey = result else {
+        panic!("First bad key should be missing: {result:?}");
+    };
+
+    let result = check_key(&bad_key_2, &pool).await.unwrap();
+    let AuthResult::MissingKey = result else {
+        panic!("Second bad key should be missing: {result:?}");
+    };
+}

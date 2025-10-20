@@ -37,6 +37,24 @@ impl TensorZeroApiKey {
         hex::encode(Sha256::digest(long_key.as_bytes()))
     }
 
+    #[cfg(feature = "e2e_tests")]
+    pub fn new_for_testing(short_id: String, hashed_long_key: String) -> Self {
+        Self {
+            short_id,
+            hashed_long_key: SecretString::from(hashed_long_key),
+        }
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    pub fn get_short_id(&self) -> String {
+        self.short_id.clone()
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    pub fn get_hashed_long_key(&self) -> SecretString {
+        self.hashed_long_key.clone()
+    }
+
     /// Validates that the provided key is of the format `sk-t0-<short_id>-<long_key>`,
     /// where <short_id> is 12 alphanumeric characters and <long_key> is 48 alphanumeric characters.
     /// Returns a `TensorZeroApiKey` containing the extracted short ID and long key.
