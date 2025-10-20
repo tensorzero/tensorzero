@@ -1,0 +1,9 @@
+[models.gpt-5-mini-responses-web-search]
+routing = ["openai"]
+
+[models.gpt-5-mini-responses-web-search.providers.openai]
+type = "openai"
+model_name = "gpt-5-mini"
+api_type = "responses"
+include_encrypted_reasoning = true
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
