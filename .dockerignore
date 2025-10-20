@@ -9,6 +9,8 @@ target-rust-analyzer
 **/.env*
 **/.vscode
 **/.claude
+ui/fixtures/*.jsonl
+ui/fixtures/s3-fixtures
 /recipes
 /examples
 gcp_jwt_key.json

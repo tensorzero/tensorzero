@@ -57,7 +57,6 @@ use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-    warn_cannot_forward_url_if_missing_mime_type,
 };
 
 use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
@@ -1571,14 +1570,11 @@ pub(super) async fn prepare_file_message(
         //
         // OpenAI doesn't support passing in urls for 'file' content blocks, so we can only forward image urls.
         LazyFile::Url {
-            file_url:
-                FileUrl {
-                    mime_type: Some(mime_type),
-                    url,
-                },
+            file_url: FileUrl { mime_type, url },
             future: _,
         } if !messages_config.fetch_and_encode_input_files_before_inference
-            && mime_type.type_() == mime::IMAGE =>
+        // If the mime type was provided by the caller we know we should only forward image URLs and fetch the rest
+        && matches!(mime_type.as_ref().map(mime::MediaType::type_), Some(mime::IMAGE) | None) =>
         {
             Ok(OpenAIContentBlock::ImageUrl {
                 image_url: OpenAIImageUrl {
@@ -1587,12 +1583,6 @@ pub(super) async fn prepare_file_message(
             })
         }
         _ => {
-            warn_cannot_forward_url_if_missing_mime_type(
-                file,
-                messages_config.fetch_and_encode_input_files_before_inference,
-                messages_config.provider_type,
-            );
-
             let resolved_file = file.resolve().await?;
             let FileWithPath {
                 file,
@@ -4182,20 +4172,15 @@ mod tests {
         .await
         .unwrap();
 
-        // We didn't provide an input mime_mime, so we should end up encoding the file anyway
+        // We didn't provide an input mime_type, so we'll go ahead and forward it
         assert_eq!(
             res,
             OpenAIContentBlock::ImageUrl {
                 image_url: OpenAIImageUrl {
-                    url: format!(
-                        "data:image/jpeg;base64,{}",
-                        BASE64_STANDARD.encode(FERRIS_PNG)
-                    ),
+                    url: url.to_string(),
                 },
             }
         );
-
-        assert!(logs_contain("mime_type"));
     }
 
     #[tokio::test]

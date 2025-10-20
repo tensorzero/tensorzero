@@ -159,9 +159,9 @@ it("should get config with evaluations", async () => {
   expect(config.evaluations.haiku).toBeDefined();
   expect(config.evaluations.images).toBeDefined();
 
-  expect(config.evaluations.entity_extraction!.type).toBe("static");
-  expect(config.evaluations.haiku!.type).toBe("static");
-  expect(config.evaluations.images!.type).toBe("static");
+  expect(config.evaluations.entity_extraction!.type).toBe("inference");
+  expect(config.evaluations.haiku!.type).toBe("inference");
+  expect(config.evaluations.images!.type).toBe("inference");
 
   expect(config.evaluations.entity_extraction!.function_name).toBe(
     "extract_entities",

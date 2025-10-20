@@ -1151,23 +1151,6 @@ api_base = "https://api.openai.com/v1/"
 # ...
 ```
 
-##### `model_name`
-
-- **Type:** string
-- **Required:** yes
-
-Defines the model name to use with the OpenAI API.
-
-See <a href="https://platform.openai.com/docs/models" target="_blank">OpenAI's documentation</a> for the list of available model names.
-
-```toml title="tensorzero.toml"
-[models.gpt-4o-mini.providers.openai]
-# ...
-type = "openai"
-model_name = "gpt-4o-mini-2024-07-18"
-# ...
-```
-
 ##### `api_key_location`
 
 - **Type:** string or object
@@ -1187,6 +1170,79 @@ api_key_location = "dynamic::openai_api_key"
 # api_key_location = "env::ALTERNATE_OPENAI_API_KEY"
 # api_key_location = "none"
 # api_key_location = { default = "dynamic::openai_api_key", fallback = "env::OPENAI_API_KEY" }
+# ...
+```
+
+##### `api_type`
+
+- **Type:** string
+- **Required:** no (default: `chat_completions`)
+
+Determines which OpenAI API endpoint to use.
+The default value is `chat_completions` for the standard Chat Completions API.
+Set to `responses` to use the Responses API, which provides access to built-in tools like web search and reasoning capabilities.
+
+```toml title="tensorzero.toml"
+[models.gpt-5-mini-responses.providers.openai]
+# ...
+type = "openai"
+api_type = "responses"
+# ...
+```
+
+##### `include_encrypted_reasoning`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enables encrypted reasoning (thought blocks) when using the Responses API.
+This parameter allows the model to show its internal reasoning process before generating the final response.
+
+**Only available when `api_type = "responses"`.**
+
+```toml title="tensorzero.toml"
+[models.gpt-5-mini-responses.providers.openai]
+# ...
+type = "openai"
+api_type = "responses"
+include_encrypted_reasoning = true
+# ...
+```
+
+##### `model_name`
+
+- **Type:** string
+- **Required:** yes
+
+Defines the model name to use with the OpenAI API.
+
+See [OpenAI's documentation](https://platform.openai.com/docs/models) for the list of available model names.
+
+```toml title="tensorzero.toml"
+[models.gpt-4o-mini.providers.openai]
+# ...
+type = "openai"
+model_name = "gpt-4o-mini-2024-07-18"
+# ...
+```
+
+##### `provider_tools`
+
+- **Type:** string or object
+- **Required:** no (default: `env::OPENAI_API_KEY` unless otherwise set in `provider_types.openai.defaults.api_key_location`)
+
+Defines the location of the API key for the OpenAI provider.
+
+Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
+
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#configure-credential-fallbacks) for more details).
+
+```toml title="tensorzero.toml"
+[models.gpt-5-mini-responses-web-search.providers.openai]
+# ...
+type = "openai"
+api_type = "responses"
+provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
 # ...
 ```
 

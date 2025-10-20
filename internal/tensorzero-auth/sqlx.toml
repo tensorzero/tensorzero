@@ -1,0 +1,7 @@
+[migrate]
+migrations-dir = "src/postgres/migrations"
+table-name = "tensorzero_auth__sqlx_migrations"
+
+[macros.preferred-crates]
+# Keeps `time` from taking precedence even though it's enabled by a dependency.
+date-time = "chrono"
