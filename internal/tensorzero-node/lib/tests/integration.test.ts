@@ -74,17 +74,6 @@ describe("DatabaseClient", () => {
     expect(expectedParams).toHaveProperty("function_name");
     expect(expectedParams).toHaveProperty("variant_names");
     expect(Array.isArray(expectedParams.variant_names)).toBe(true);
-
-    // Example of actual usage (requires running ClickHouse):
-    // const dbClient = await DatabaseClient.fromClickhouseUrl("http://localhost:8123");
-    // const result = await dbClient.getFeedbackByVariant(expectedParams);
-    // expect(Array.isArray(result)).toBe(true);
-    // if (result.length > 0) {
-    //   expect(result[0]).toHaveProperty("variant_name");
-    //   expect(result[0]).toHaveProperty("mean");
-    //   expect(result[0]).toHaveProperty("variance");
-    //   expect(result[0]).toHaveProperty("count");
-    // }
   });
 });
 
