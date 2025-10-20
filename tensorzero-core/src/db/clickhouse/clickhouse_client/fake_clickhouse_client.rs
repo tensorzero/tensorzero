@@ -188,7 +188,7 @@ impl ClickHouseClient for FakeClickHouseClient {
     }
 
     fn client_type(&self) -> ClickHouseClientType {
-        ClickHouseClientType::Mock
+        ClickHouseClientType::Fake
     }
 }
 

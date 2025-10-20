@@ -307,7 +307,7 @@ impl Display for ClickHouseConnectionInfo {
             ClickHouseClientType::Production => {
                 write!(f, "enabled (database = {})", self.database())
             }
-            ClickHouseClientType::Mock => write!(f, "mocked"),
+            ClickHouseClientType::Fake => write!(f, "fake"),
             ClickHouseClientType::Disabled => write!(f, "disabled"),
         }
     }

@@ -29,7 +29,7 @@ mod production_clickhouse_client;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClickHouseClientType {
     Production,
-    Mock,
+    Fake,
     Disabled,
 }
 
