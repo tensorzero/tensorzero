@@ -178,8 +178,8 @@ describe("estimateOptimalProbabilities", () => {
   it("should compute optimal probabilities from feedback data", () => {
     const result = estimateOptimalProbabilities({
       feedback: [
-        { variant_name: "variant_a", mean: 0.7, variance: 0.05, count: 100 },
-        { variant_name: "variant_b", mean: 0.85, variance: 0.03, count: 100 },
+        { variant_name: "variant_a", mean: 0.7, variance: 0.05, count: 100n },
+        { variant_name: "variant_b", mean: 0.85, variance: 0.03, count: 100n },
       ],
       metric_optimize: "max",
     });
@@ -203,8 +203,8 @@ describe("estimateOptimalProbabilities", () => {
   it("should handle minimize optimization", () => {
     const result = estimateOptimalProbabilities({
       feedback: [
-        { variant_name: "variant_a", mean: 100, variance: 50, count: 100 },
-        { variant_name: "variant_b", mean: 50, variance: 20, count: 100 },
+        { variant_name: "variant_a", mean: 100, variance: 50, count: 100n },
+        { variant_name: "variant_b", mean: 50, variance: 20, count: 100n },
       ],
       metric_optimize: "min",
     });
@@ -223,9 +223,9 @@ describe("estimateOptimalProbabilities", () => {
   it("should handle optional parameters", () => {
     const result = estimateOptimalProbabilities({
       feedback: [
-        { variant_name: "v1", mean: 0.5, variance: 0.1, count: 50 },
-        { variant_name: "v2", mean: 0.6, variance: 0.1, count: 50 },
-        { variant_name: "v3", mean: 0.55, variance: 0.1, count: 50 },
+        { variant_name: "v1", mean: 0.5, variance: 0.1, count: 50n },
+        { variant_name: "v2", mean: 0.6, variance: 0.1, count: 50n },
+        { variant_name: "v3", mean: 0.55, variance: 0.1, count: 50n },
       ],
       metric_optimize: "max",
       epsilon: 0.05,
