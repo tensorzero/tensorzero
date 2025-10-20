@@ -10,7 +10,7 @@ use opentelemetry_sdk::{
 /// Wraps a `SpanExporter`, and changes `Status::Unset` to `Status::Ok` on all spans.
 /// From https://opentelemetry.io/docs/concepts/signals/traces/#span-status :
 /// "What Ok does is represent an unambiguous “final call” on the status of a span that has been explicitly set by a user."
-/// We set the status just before it gets exported, so we know that know more errors can occur within the (already finished) span.
+/// We set the status just before it gets exported, so we know that no more errors can occur within the (already finished) span.
 ///
 /// This produces nicer traces on platforms like Arize
 #[derive(Debug)]
