@@ -12,27 +12,21 @@ import {
   SnippetMessage,
 } from "~/components/layout/SnippetLayout";
 import {
-  ToolCallMessage,
-  ToolResultMessage,
-  ImageMessage,
-  FileErrorMessage,
-  FileMessage,
-  AudioMessage,
   TextMessage,
   EmptyMessage,
   TemplateMessage,
 } from "~/components/layout/SnippetContent";
+import { renderContentBlock } from "~/components/layout/ContentBlockRenderer";
 import type { JsonObject } from "type-fest";
 import { Button } from "~/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
-import { type ReactNode } from "react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
-interface InputSnippetProps {
+interface InputProps {
   messages: DisplayInputMessage[];
   system?: string | JsonObject | null;
   isEditing?: boolean;
@@ -41,170 +35,14 @@ interface InputSnippetProps {
   maxHeight?: number | "Content";
 }
 
-function renderContentBlock(
-  block: DisplayInputMessageContent,
-  key: string,
-  isEditing?: boolean,
-  onChange?: (updatedContentBlock: DisplayInputMessageContent) => void,
-  action?: ReactNode,
-) {
-  switch (block.type) {
-    // Unstructured text is a function/variant with no schema
-    case "text":
-      return (
-        <TextMessage
-          key={key}
-          label="Text"
-          content={block.text}
-          isEditing={isEditing}
-          onChange={(updatedText) => {
-            onChange?.({ ...block, text: updatedText });
-          }}
-          action={action}
-        />
-      );
-
-    // "Raw text" is when the user submits an inference on the function/variant and overrides template interpolation
-    case "raw_text":
-      return (
-        <TextMessage
-          key={key}
-          label="Raw Text"
-          content={block.value}
-          isEditing={isEditing}
-          onChange={(updatedValue) => {
-            onChange?.({ ...block, value: updatedValue });
-          }}
-        />
-      );
-
-    case "missing_function_text":
-      return (
-        <TextMessage
-          key={key}
-          label="Text (Missing Function Config)"
-          content={block.value}
-          isEditing={isEditing}
-          onChange={(updatedValue) => {
-            onChange?.({ ...block, value: updatedValue });
-          }}
-        />
-      );
-
-    case "tool_call":
-      // NOTE: since tool calls are stored as a string in ResolvedInput and therefore the database
-      // and we are not guaranteed that they are valid JSON, we try to parse them as JSON
-      // and if they are not valid JSON, we display the raw string
-      return (
-        <ToolCallMessage
-          key={key}
-          toolName={block.name}
-          toolRawName={block.name} // tool calls in the input aren't parsed, so there's no "raw"
-          toolArguments={block.arguments}
-          toolRawArguments={block.arguments} // tool calls in the input aren't parsed, so there's no "raw"
-          toolCallId={block.id}
-          isEditing={isEditing}
-          onChange={(toolCallId, toolName, toolArguments) => {
-            onChange?.({
-              ...block,
-              id: toolCallId,
-              name: toolName,
-              arguments: toolArguments,
-            });
-          }}
-        />
-      );
-
-    case "tool_result":
-      return (
-        <ToolResultMessage
-          key={key}
-          toolName={block.name}
-          toolResult={block.result}
-          toolResultId={block.id}
-          isEditing={isEditing}
-          onChange={(id, name, result) => {
-            onChange?.({ ...block, id, name, result });
-          }}
-        />
-      );
-
-    case "file":
-      return block.file.mime_type.startsWith("image/") ? (
-        <ImageMessage
-          key={key}
-          url={block.file.dataUrl}
-          downloadName={`tensorzero_${block.storage_path.path}`}
-        />
-      ) : block.file.mime_type.startsWith("audio/") ? (
-        <AudioMessage
-          key={key}
-          fileData={block.file.dataUrl}
-          mimeType={block.file.mime_type}
-          filePath={block.storage_path.path}
-        />
-      ) : (
-        <FileMessage
-          key={key}
-          fileData={block.file.dataUrl}
-          mimeType={block.file.mime_type}
-          filePath={block.storage_path.path}
-        />
-      );
-
-    case "file_error":
-      return <FileErrorMessage key={key} error="Failed to retrieve file" />;
-
-    case "unknown":
-      // TODO: code editor should format as JSON by default
-      return (
-        <TextMessage
-          key={key}
-          label="Unknown Content"
-          content={JSON.stringify(block.data)}
-        />
-      );
-
-    case "thought":
-      return (
-        <TextMessage
-          key={key}
-          label="Thought"
-          content={block.text || ""}
-          isEditing={isEditing}
-          onChange={(updatedText) => {
-            onChange?.({ ...block, text: updatedText });
-          }}
-        />
-      );
-
-    case "template":
-      return (
-        <TemplateMessage
-          key={key}
-          templateName={block.name}
-          templateArguments={block.arguments}
-          isEditing={isEditing}
-          onChange={(updatedName, updatedArguments) => {
-            onChange?.({
-              ...block,
-              name: updatedName,
-              arguments: updatedArguments,
-            });
-          }}
-        />
-      );
-  }
-}
-
-export default function InputSnippet({
+export default function Input({
   system,
   messages,
   isEditing,
   onSystemChange,
   onMessagesChange,
   maxHeight,
-}: InputSnippetProps) {
+}: InputProps) {
   const onContentBlockChange = (
     messageIndex: number,
     contentBlockIndex: number,
@@ -337,17 +175,17 @@ export default function InputSnippet({
                 <EmptyMessage message="Empty message" />
               )}
               {message.content.map((block, contentBlockIndex) =>
-                renderContentBlock(
+                renderContentBlock({
                   block,
-                  `${messageIndex}-${contentBlockIndex}`,
+                  key: `${messageIndex}-${contentBlockIndex}`,
                   isEditing,
-                  (updatedContentBlock) =>
+                  onChange: (updatedContentBlock) =>
                     onContentBlockChange(
                       messageIndex,
                       contentBlockIndex,
-                      updatedContentBlock,
+                      updatedContentBlock as DisplayInputMessageContent,
                     ),
-                  isEditing && (
+                  action: isEditing && (
                     <DeleteButton
                       onDelete={() =>
                         onDeleteContentBlock?.(messageIndex, contentBlockIndex)
@@ -355,7 +193,7 @@ export default function InputSnippet({
                       label="Delete content block"
                     />
                   ),
-                ),
+                }),
               )}
               {isEditing && (
                 <div className="flex items-center gap-2 py-2">

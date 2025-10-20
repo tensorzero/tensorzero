@@ -91,19 +91,24 @@ export function TemplateMessage({
   templateArguments,
   isEditing,
   onChange,
+  action,
 }: {
   templateName: string;
   templateArguments: unknown;
   isEditing?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onChange?: (templateName: string, value: any) => void;
+  action?: ReactNode;
 }) {
   const formattedJson = useFormattedJson(templateArguments ?? {});
   const [jsonError, setJsonError] = useState<string | null>(null);
 
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label icon={<FileCode className="text-fg-muted h-3 w-3" />}>
+      <Label
+        icon={<FileCode className="text-fg-muted h-3 w-3" />}
+        action={action}
+      >
         <div className="inline-flex items-center gap-1">
           {!isEditing || templateName === "system" ? (
             <>
@@ -214,9 +219,9 @@ function ToolDetails({
 }
 
 interface ToolCallMessageProps {
-  toolName?: string;
+  toolName: string | null;
   toolRawName: string;
-  toolArguments?: string;
+  toolArguments: string | null;
   toolRawArguments: string;
   toolCallId: string;
   isEditing?: boolean;
@@ -225,6 +230,7 @@ interface ToolCallMessageProps {
     toolName: string,
     toolArguments: string,
   ) => void;
+  action?: ReactNode;
 }
 
 interface ModelInferenceToolCallMessageProps {
@@ -255,7 +261,10 @@ export function ToolCallMessage(
 
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label icon={<Terminal className="text-fg-muted h-3 w-3" />}>
+      <Label
+        icon={<Terminal className="text-fg-muted h-3 w-3" />}
+        action={"action" in toolCall ? toolCall.action : undefined}
+      >
         Tool Call
       </Label>
       <ToolDetails
@@ -282,6 +291,7 @@ interface ToolResultMessageProps {
     toolName: string,
     toolResult: string,
   ) => void;
+  action?: ReactNode;
 }
 
 export function ToolResultMessage({
@@ -290,10 +300,14 @@ export function ToolResultMessage({
   toolResultId,
   isEditing,
   onChange,
+  action,
 }: ToolResultMessageProps) {
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
-      <Label icon={<ArrowRight className="text-fg-muted h-3 w-3" />}>
+      <Label
+        icon={<ArrowRight className="text-fg-muted h-3 w-3" />}
+        action={action}
+      >
         Tool Result
       </Label>
       <ToolDetails

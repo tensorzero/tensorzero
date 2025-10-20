@@ -46,7 +46,7 @@ import {
 import MetricValue, { isCutoffFailed } from "~/components/metric/MetricValue";
 import EvaluationFeedbackEditor from "~/components/evaluations/EvaluationFeedbackEditor";
 import { InferenceButton } from "~/components/utils/InferenceButton";
-import InputSnippet from "~/components/inference/InputSnippet";
+import Input from "~/components/inference/Input";
 import { logger } from "~/utils/logger";
 import { TableItemText } from "~/components/ui/TableItems";
 
@@ -88,7 +88,7 @@ const TruncatedContent = ({
           <pre className="w-full text-xs whitespace-pre-wrap">{content}</pre>
         </div>
       ) : type === "input" ? (
-        <InputSnippet {...content} />
+        <Input {...content} />
       ) : (
         <Output output={content} />
       )}

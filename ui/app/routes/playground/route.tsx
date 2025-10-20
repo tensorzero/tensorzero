@@ -26,7 +26,7 @@ import { useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
 import { countDatapointsForDatasetFunction } from "~/utils/clickhouse/datasets.server";
-import InputSnippet from "~/components/inference/InputSnippet";
+import Input from "~/components/inference/Input";
 import { Output } from "~/components/inference/Output";
 import { Label } from "~/components/ui/label";
 import DatapointPlaygroundOutput from "./DatapointPlaygroundOutput";
@@ -446,7 +446,7 @@ export default function PlaygroundPage({ loaderData }: Route.ComponentProps) {
                             <h3 className="mb-2 text-sm font-medium text-gray-500">
                               Input
                             </h3>
-                            <InputSnippet
+                            <Input
                               messages={inputs[index].messages}
                               system={inputs[index].system}
                               maxHeight={150}

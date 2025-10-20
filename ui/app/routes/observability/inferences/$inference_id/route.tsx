@@ -20,7 +20,7 @@ import {
 } from "react-router";
 import PageButtons from "~/components/utils/PageButtons";
 import BasicInfo from "./InferenceBasicInfo";
-import InputSnippet from "~/components/inference/InputSnippet";
+import Input from "~/components/inference/Input";
 import { Output } from "~/components/inference/Output";
 import FeedbackTable from "~/components/feedback/FeedbackTable";
 import { addHumanFeedback } from "~/utils/tensorzero.server";
@@ -427,7 +427,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       <SectionsGroup>
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <InputSnippet
+          <Input
             system={inference.input.system}
             messages={inference.input.messages}
           />

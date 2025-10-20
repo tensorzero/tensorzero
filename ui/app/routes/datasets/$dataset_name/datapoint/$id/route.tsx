@@ -11,7 +11,7 @@ import {
   useParams,
 } from "react-router";
 import { toDatapointUrl, toDatasetUrl } from "~/utils/urls";
-import InputSnippet from "~/components/inference/InputSnippet";
+import Input from "~/components/inference/Input";
 import { Output } from "~/components/inference/Output";
 import { VariantResponseModal } from "~/components/inference/VariantResponseModal";
 import {
@@ -408,7 +408,7 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
 
         <SectionLayout>
           <SectionHeader heading="Input" />
-          <InputSnippet
+          <Input
             system={input.system}
             messages={input.messages}
             isEditing={isEditing}
