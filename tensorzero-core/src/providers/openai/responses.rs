@@ -197,19 +197,9 @@ impl OpenAIResponsesResponse<'_> {
             }
         }
 
-        let finish_reason = match self.incomplete_details {
-            Some(incomplete_details) => {
-                // The contents of the 'reason' field is undocumented,
-                // but OpenAI appears to set it to 'max_output_tokens' when the 'max_output_tokens'
-                // field is provided and the response is incomplete.
-                if incomplete_details.reason == "max_output_tokens" {
-                    Some(FinishReason::Length)
-                } else {
-                    None
-                }
-            }
-            None => None,
-        };
+        let finish_reason = Some(incomplete_details_option_to_finish_reason(
+            self.incomplete_details.as_ref(),
+        ));
 
         Ok(ProviderInferenceResponse::new(
             ProviderInferenceResponseArgs {
@@ -1133,11 +1123,13 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             });
 
             // The incomplete_details field indicates if response was cut short
-            let finish_reason = if response.get("incomplete_details").is_some() {
-                Some(FinishReason::Length)
-            } else {
-                Some(FinishReason::Stop)
-            };
+            let finish_reason = response.get("incomplete_details").and_then(|details| {
+                serde_json::from_value::<OpenAIResponsesIncompleteDetails>(details.clone())
+                    .ok()
+                    .map(|incomplete_details| {
+                        incomplete_details_option_to_finish_reason(Some(&incomplete_details))
+                    })
+            });
 
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![],
@@ -1221,6 +1213,21 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             );
             Ok(None)
         }
+    }
+}
+
+fn incomplete_details_option_to_finish_reason(
+    incomplete_details: Option<&OpenAIResponsesIncompleteDetails>,
+) -> FinishReason {
+    match incomplete_details {
+        Some(details) => {
+            if details.reason == "max_output_tokens" {
+                FinishReason::Length
+            } else {
+                FinishReason::Unknown(Some(details.reason.clone()))
+            }
+        }
+        None => FinishReason::Stop,
     }
 }
 

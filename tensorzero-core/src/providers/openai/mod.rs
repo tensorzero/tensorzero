@@ -2190,7 +2190,7 @@ impl From<OpenAIFinishReason> for FinishReason {
             OpenAIFinishReason::ContentFilter => FinishReason::ContentFilter,
             OpenAIFinishReason::ToolCalls => FinishReason::ToolCall,
             OpenAIFinishReason::FunctionCall => FinishReason::ToolCall,
-            OpenAIFinishReason::Unknown => FinishReason::Unknown,
+            OpenAIFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

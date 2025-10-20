@@ -503,7 +503,7 @@ impl From<TogetherFinishReason> for FinishReason {
             TogetherFinishReason::Length => FinishReason::Length,
             TogetherFinishReason::ToolCalls => FinishReason::ToolCall,
             TogetherFinishReason::FunctionCall => FinishReason::ToolCall,
-            TogetherFinishReason::Unknown => FinishReason::Unknown,
+            TogetherFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

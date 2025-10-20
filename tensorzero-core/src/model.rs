@@ -171,7 +171,7 @@ impl StreamResponse {
                         // For all chunks but the last one, the finish reason is None
                         // For the last chunk, the finish reason is the same as the cache lookup
                         finish_reason: if index == chunks_len - 1 {
-                            cache_lookup.finish_reason
+                            cache_lookup.finish_reason.clone()
                         } else {
                             None
                         },
@@ -449,7 +449,7 @@ impl ModelConfig {
                                     raw_response: response.raw_response.clone(),
                                     input_tokens: response.usage.input_tokens,
                                     output_tokens: response.usage.output_tokens,
-                                    finish_reason: response.finish_reason,
+                                    finish_reason: response.finish_reason.clone(),
                                 },
                                 CacheValidationInfo {
                                     tool_config: request

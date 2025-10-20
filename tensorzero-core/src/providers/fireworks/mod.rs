@@ -524,7 +524,7 @@ impl From<FireworksFinishReason> for FinishReason {
             FireworksFinishReason::Length => FinishReason::Length,
             FireworksFinishReason::ToolCalls => FinishReason::ToolCall,
             FireworksFinishReason::ContentFilter => FinishReason::ContentFilter,
-            FireworksFinishReason::Unknown => FinishReason::Unknown,
+            FireworksFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

@@ -1098,13 +1098,13 @@ impl From<GeminiFinishReason> for FinishReason {
             GeminiFinishReason::MaxTokens => FinishReason::Length,
             GeminiFinishReason::Safety => FinishReason::ContentFilter,
             GeminiFinishReason::Recitation => FinishReason::ToolCall,
-            GeminiFinishReason::Other => FinishReason::Unknown,
+            GeminiFinishReason::Other => FinishReason::Unknown(None),
             GeminiFinishReason::Blocklist => FinishReason::ContentFilter,
             GeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
             GeminiFinishReason::Spii => FinishReason::ContentFilter,
             GeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
-            GeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
-            GeminiFinishReason::Unknown => FinishReason::Unknown,
+            GeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown(None),
+            GeminiFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }
@@ -2608,7 +2608,7 @@ mod tests {
             (GeminiFinishReason::MaxTokens, FinishReason::Length),
             (GeminiFinishReason::Safety, FinishReason::ContentFilter),
             (GeminiFinishReason::Recitation, FinishReason::ToolCall),
-            (GeminiFinishReason::Other, FinishReason::Unknown),
+            (GeminiFinishReason::Other, FinishReason::Unknown(None)),
             (GeminiFinishReason::Blocklist, FinishReason::ContentFilter),
             (
                 GeminiFinishReason::ProhibitedContent,
@@ -2621,9 +2621,9 @@ mod tests {
             ),
             (
                 GeminiFinishReason::FinishReasonUnspecified,
-                FinishReason::Unknown,
+                FinishReason::Unknown(None),
             ),
-            (GeminiFinishReason::Unknown, FinishReason::Unknown),
+            (GeminiFinishReason::Unknown, FinishReason::Unknown(None)),
         ];
 
         for (gemini_reason, expected_reason) in finish_reasons {

@@ -2374,13 +2374,13 @@ impl From<GCPVertexGeminiFinishReason> for FinishReason {
             GCPVertexGeminiFinishReason::MaxTokens => FinishReason::Length,
             GCPVertexGeminiFinishReason::Safety => FinishReason::ContentFilter,
             GCPVertexGeminiFinishReason::Recitation => FinishReason::ToolCall,
-            GCPVertexGeminiFinishReason::Other => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::Other => FinishReason::Unknown(None),
             GCPVertexGeminiFinishReason::Blocklist => FinishReason::ContentFilter,
             GCPVertexGeminiFinishReason::ProhibitedContent => FinishReason::ContentFilter,
             GCPVertexGeminiFinishReason::Spii => FinishReason::ContentFilter,
             GCPVertexGeminiFinishReason::MalformedFunctionCall => FinishReason::ToolCall,
-            GCPVertexGeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown,
-            GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown,
+            GCPVertexGeminiFinishReason::FinishReasonUnspecified => FinishReason::Unknown(None),
+            GCPVertexGeminiFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }
