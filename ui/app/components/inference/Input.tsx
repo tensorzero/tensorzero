@@ -332,7 +332,7 @@ function SystemSnippet({
               templateArguments={system}
               templateName="system"
               isEditing={isEditing}
-              onChange={onSystemChange}
+              onChange={(_templateName, value) => onSystemChange?.(value)}
             />
           ) : (
             <TextMessage

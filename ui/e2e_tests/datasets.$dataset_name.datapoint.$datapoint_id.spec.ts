@@ -448,6 +448,7 @@ test("should be able to add, edit, and delete tags", async ({ page }) => {
   await page.getByRole("button", { name: "Save" }).click();
 
   // Wait for the save to complete and potential redirect (new datapoint ID)
+  await page.waitForTimeout(100);
   await page.waitForLoadState("networkidle");
 
   // Assert that "error" is not in the page
@@ -527,14 +528,16 @@ test("should be able to add a system message when none exists", async ({
   // Enter edit mode
   await page.getByRole("button", { name: "Edit" }).click();
 
-  // Verify that "Add System" button is visible
-  const addSystemMessageButton = page.getByRole("button", {
-    name: "Add System",
-  });
-  await expect(addSystemMessageButton).toBeVisible();
+  // Locate the system snippet by finding the section with "system" label
+  const systemSection = page
+    .locator("div")
+    .filter({ hasText: /^system$/ })
+    .locator("..");
+  const addTextButton = systemSection.getByRole("button", { name: "Text" });
+  await expect(addTextButton).toBeVisible();
 
-  // Click the "Add System" button
-  await addSystemMessageButton.click();
+  // Click the "+ Text" button in the system snippet
+  await addTextButton.click();
 
   // Wait for the system message editor to appear
   // The system message should appear as the first contenteditable div
@@ -619,11 +622,13 @@ test("should be able to delete an existing system message", async ({
   // First, add a system message (deterministic test - always start fresh)
   await page.getByRole("button", { name: "Edit" }).click();
 
-  // Click Add System to add a new system message
-  const addSystemMessageButton = page.getByRole("button", {
-    name: "Add System",
-  });
-  await addSystemMessageButton.click();
+  // Click "+ Text" in the system snippet to add a new system message
+  const systemSection = page
+    .locator("div")
+    .filter({ hasText: /^system$/ })
+    .locator("..");
+  const addTextButton = systemSection.getByRole("button", { name: "Text" });
+  await addTextButton.click();
 
   // Fill in the system message
   const systemMessageEditor = page
@@ -656,13 +661,19 @@ test("should be able to delete an existing system message", async ({
   // At this point we're in edit mode with a system message present
   // Now delete the system message
   const deleteSystemMessageButton = page.getByRole("button", {
-    name: "Delete system message",
+    name: "Delete system",
   });
   await expect(deleteSystemMessageButton).toBeVisible();
   await deleteSystemMessageButton.click();
 
-  // Verify the "Add System" button is now visible (system message removed from UI)
-  await expect(page.getByRole("button", { name: "Add System" })).toBeVisible();
+  // Verify the "+ Text" button is now visible in the system section (system message removed from UI)
+  const systemSectionAfterDelete = page
+    .locator("div")
+    .filter({ hasText: /^system$/ })
+    .locator("..");
+  await expect(
+    systemSectionAfterDelete.getByRole("button", { name: "Text" }),
+  ).toBeVisible();
 
   // Save the datapoint
   await page.getByRole("button", { name: "Save" }).click();
