@@ -101,6 +101,7 @@ cargo run-e2e > e2e_logs.txt 2>&1 &
 
 export CLICKHOUSE_USER="$CLICKHOUSE_USERNAME"
 export CLICKHOUSE_PASSWORD="$CLICKHOUSE_PASSWORD"
+export SQLX_OFFLINE=1
 cd ui/fixtures
 ./load_fixtures.sh $DATABASE_NAME
 cd ../..
