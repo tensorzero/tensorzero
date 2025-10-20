@@ -29,6 +29,7 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
+import { FeedbackSamplesTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
 import FunctionVariantTable from "./FunctionVariantTable";
 import {
   PageHeader,
@@ -41,7 +42,10 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import { estimateTrackAndStopOptimalProbabilities } from "tensorzero-node";
+import {
+  estimateTrackAndStopOptimalProbabilities,
+  type TimeWindow,
+} from "tensorzero-node";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -51,9 +55,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const afterInference = url.searchParams.get("afterInference");
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
   const metric_name = url.searchParams.get("metric_name") || undefined;
-  const time_granularity = url.searchParams.get("time_granularity") || "week";
-  const throughput_time_granularity =
-    url.searchParams.get("throughput_time_granularity") || "week";
+  const time_granularity = (url.searchParams.get("time_granularity") ||
+    "week") as TimeWindowUnit;
+  const throughput_time_granularity = (url.searchParams.get(
+    "throughput_time_granularity",
+  ) || "week") as TimeWindowUnit;
+  const feedback_time_granularity = (url.searchParams.get(
+    "feedback_time_granularity",
+  ) || "week") as TimeWindow;
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
   }
@@ -91,14 +100,42 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           function_config,
           metric_name,
           metric_config: config.metrics[metric_name],
-          time_window_unit: time_granularity as TimeWindowUnit,
+          time_window_unit: time_granularity,
         })
       : undefined;
   const variantThroughputPromise = getFunctionThroughputByVariant(
     function_name,
-    throughput_time_granularity as TimeWindowUnit,
+    throughput_time_granularity,
     10,
   );
+
+  // Get feedback timeseries
+  // For now, we only fetch this for track_and_stop experimentation
+  // but the underlying query is general and could be used for other experimentation types
+  let feedbackTimeseriesPromise: Promise<
+    | Awaited<
+        ReturnType<
+          Awaited<
+            ReturnType<typeof getNativeDatabaseClient>
+          >["getCumulativeFeedbackTimeseries"]
+        >
+      >
+    | undefined
+  > = Promise.resolve(undefined);
+
+  if (function_config.experimentation.type === "track_and_stop") {
+    const experimentationConfig = function_config.experimentation;
+    feedbackTimeseriesPromise = (async () => {
+      const dbClient = await getNativeDatabaseClient();
+      return dbClient.getCumulativeFeedbackTimeseries({
+        function_name,
+        metric_name: experimentationConfig.metric,
+        variant_names: experimentationConfig.candidate_variants,
+        time_window: feedback_time_granularity as TimeWindow,
+        max_periods: 10,
+      });
+    })();
+  }
 
   const [
     inferences,
@@ -108,6 +145,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_performances,
     variant_counts,
     variant_throughput,
+    feedback_timeseries,
   ] = await Promise.all([
     inferencePromise,
     tableBoundsPromise,
@@ -116,6 +154,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantPerformancesPromise,
     variantCountsPromise,
     variantThroughputPromise,
+    feedbackTimeseriesPromise,
   ]);
 
   // Compute optimal probabilities for track_and_stop experimentation
@@ -123,14 +162,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (function_config.experimentation.type === "track_and_stop") {
     try {
       const dbClient = await getNativeDatabaseClient();
-      const trackAndStopConfig = function_config.experimentation;
-      const metric_config = config.metrics[trackAndStopConfig.metric];
+      const experimentationConfig = function_config.experimentation;
+      if (experimentationConfig.type !== "track_and_stop") {
+        throw new Error("Expected track_and_stop experimentation type");
+      }
+      const metric_config = config.metrics[experimentationConfig.metric];
 
       if (metric_config) {
         const feedback = await dbClient.getFeedbackByVariant({
-          metric_name: trackAndStopConfig.metric,
+          metric_name: experimentationConfig.metric,
           function_name,
-          variant_names: trackAndStopConfig.candidate_variants,
+          variant_names: experimentationConfig.candidate_variants,
         });
 
         // Build feedback count map
@@ -139,16 +181,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         );
 
         // Separate nursery and bandit variants
-        const K = trackAndStopConfig.candidate_variants.length;
-        const nurseryVariants = trackAndStopConfig.candidate_variants.filter(
+        const K = experimentationConfig.candidate_variants.length;
+        const nurseryVariants = experimentationConfig.candidate_variants.filter(
           (v) =>
             (feedbackCounts.get(v) || 0) <
-            trackAndStopConfig.min_samples_per_variant,
+            Number(experimentationConfig.min_samples_per_variant),
         );
-        const banditVariants = trackAndStopConfig.candidate_variants.filter(
+        const banditVariants = experimentationConfig.candidate_variants.filter(
           (v) =>
             (feedbackCounts.get(v) || 0) >=
-            trackAndStopConfig.min_samples_per_variant,
+            Number(experimentationConfig.min_samples_per_variant),
         );
 
         const B = banditVariants.length;
@@ -171,7 +213,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             const banditOptimalProbs = estimateTrackAndStopOptimalProbabilities(
               {
                 feedback: banditFeedback,
-                epsilon: trackAndStopConfig.epsilon,
+                epsilon: experimentationConfig.epsilon,
                 metric_optimize: metric_config.optimize,
               },
             );
@@ -243,6 +285,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_throughput,
     variant_counts: variant_counts_with_metadata,
     optimal_probabilities,
+    feedback_timeseries,
   };
 }
 
@@ -257,6 +300,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_throughput,
     variant_counts,
     optimal_probabilities,
+    feedback_timeseries,
   } = loaderData;
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -337,6 +381,20 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
   };
 
+  const [feedback_time_granularity, setFeedbackTimeGranularity] =
+    useState<TimeWindowUnit>(() => {
+      const param = searchParams.get(
+        "feedback_time_granularity",
+      ) as TimeWindowUnit;
+      return param || "week";
+    });
+  const handleFeedbackTimeGranularityChange = (granularity: TimeWindowUnit) => {
+    setFeedbackTimeGranularity(granularity);
+    const searchParams = new URLSearchParams(window.location.search);
+    searchParams.set("feedback_time_granularity", granularity);
+    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+  };
+
   return (
     <PageLayout>
       <PageHeader
@@ -365,6 +423,15 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               functionName={function_name}
               optimalProbabilities={optimal_probabilities}
             />
+            {function_config.experimentation.type === "track_and_stop" &&
+            feedback_timeseries &&
+            feedback_timeseries.length > 0 ? (
+              <FeedbackSamplesTimeseries
+                feedbackTimeseries={feedback_timeseries}
+                time_granularity={feedback_time_granularity}
+                onTimeGranularityChange={handleFeedbackTimeGranularityChange}
+              />
+            ) : null}
           </SectionLayout>
         )}
 
