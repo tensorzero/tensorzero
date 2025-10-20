@@ -439,7 +439,6 @@ async def test_openai_responses_web_search_dynamic_provider_tools(
 
     # The response should contain content
     assert len(response.content) > 0
-
     # Check that web search actually happened by looking for web_search_call content blocks
     web_search_blocks = [
         cb
@@ -447,6 +446,30 @@ async def test_openai_responses_web_search_dynamic_provider_tools(
         if cb.type == "unknown" and isinstance(cb, UnknownContentBlock) and cb.data.get("type") == "web_search_call"
     ]
     assert len(web_search_blocks) > 0, "Expected web_search_call content blocks"
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_shorthand(async_client: AsyncTensorZeroGateway):
+    """Test OpenAI Responses API using shorthand model name format"""
+    response = await async_client.inference(
+        model_name="openai::responses::gpt-5-codex",
+        input={
+            "messages": [{"role": "user", "content": "What is the capital of France?"}],
+        },
+    )
+
+    assert isinstance(response, ChatInferenceResponse)
+
+    # The response should contain content
+    assert len(response.content) > 0
+
+    # Extract the text content block
+    text_content_blocks = [cb for cb in response.content if cb.type == "text"]
+    assert len(text_content_blocks) > 0
+    assert isinstance(text_content_blocks[0], Text)
+
+    # Check that the response mentions Paris
+    assert "Paris" in text_content_blocks[0].text, "Content should mention Paris"
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0

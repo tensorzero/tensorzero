@@ -34,11 +34,10 @@ use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-    warn_cannot_forward_url_if_missing_mime_type,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::peek_first_chunk;
+use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_type};
 use super::openai::convert_stream_error;
 
 lazy_static! {
@@ -578,14 +577,12 @@ impl<'a> AnthropicMessageContent<'a> {
                     }
                 }
                 _ => {
-                    // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
-
                     warn_cannot_forward_url_if_missing_mime_type(
                         file,
                         messages_config.fetch_and_encode_input_files_before_inference,
                         PROVIDER_TYPE,
                     );
-
+                    // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
                     let file = file.resolve().await?;
                     let FileWithPath {
                         file,

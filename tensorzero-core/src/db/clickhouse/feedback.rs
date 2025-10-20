@@ -13,6 +13,7 @@ use crate::{
         FeedbackQueries, TableBounds, TimeWindow,
     },
     error::{Error, ErrorDetails},
+    experimentation::asymptotic_confidence_sequences::asymp_cs,
 };
 
 use super::{
@@ -600,7 +601,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
         let response = self.run_query_synchronous(query, &params).await?;
 
         // Deserialize the results into CumulativeFeedbackTimeSeriesPoint
-        response
+        let feedback = response
             .response
             .trim()
             .lines()
@@ -613,7 +614,10 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                     })
                 })
             })
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Add confidence sequence
+        asymp_cs(feedback, 0.05, None)
     }
 
     async fn query_feedback_by_target_id(
