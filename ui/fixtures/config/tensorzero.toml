@@ -106,6 +106,20 @@ system_template = "functions/extract_entities/baseline/system_template.minijinja
 json_mode = "strict"
 temperature = 0
 
+[functions.extract_entities.experimentation]
+type = "track_and_stop"
+metric = "jaccard_similarity"
+candidate_variants = [
+    "gpt4o_mini_initial_prompt",
+    "gpt4o_initial_prompt",
+    "llama_8b_initial_prompt",
+]
+fallback_variants = []
+min_samples_per_variant = 10
+delta = 0.05
+epsilon = 0.1
+update_period_s = 60
+
 [functions.write_haiku]
 type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"

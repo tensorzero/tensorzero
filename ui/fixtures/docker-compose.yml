@@ -18,6 +18,41 @@ services:
       start_interval: 1s
       timeout: 1s
 
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: tensorzero_ui_fixtures
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero_ui_fixtures"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  gateway-postgres-migrations:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+      ]
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_period: 5s
+
   gateway:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
@@ -28,6 +63,7 @@ services:
       - ./config:/app/config:ro
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
     env_file:
       - .env
       - .env-gateway
@@ -38,6 +74,8 @@ services:
       - "howdy.tensorzero.com:127.0.0.1"
     depends_on:
       clickhouse:
+        condition: service_healthy
+      gateway-postgres-migrations:
         condition: service_healthy
     command: ["--config-file", "/app/config/tensorzero.toml"]
     healthcheck:
@@ -85,6 +123,10 @@ services:
       CLICKHOUSE_USER: chuser
     depends_on:
       gateway:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
         condition: service_healthy
     command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     healthcheck:
