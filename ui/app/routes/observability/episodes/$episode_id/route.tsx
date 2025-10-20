@@ -36,6 +36,7 @@ import { HumanFeedbackForm } from "~/components/feedback/HumanFeedbackForm";
 import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { logger } from "~/utils/logger";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
+import { useReadOnly } from "~/context/read-only";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.episode_id!, isIdentifier: true }],
@@ -156,6 +157,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
+  const { isReadOnly } = useReadOnly();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const topInference = inferences[0];
@@ -250,6 +252,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               setIsModalOpen(isOpen);
             }}
             trigger={<HumanFeedbackButton />}
+            disabled={isReadOnly}
           >
             <humanFeedbackFetcher.Form method="post">
               <HumanFeedbackForm

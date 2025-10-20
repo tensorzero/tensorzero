@@ -57,6 +57,7 @@ import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { isTensorZeroServerError } from "~/utils/tensorzero";
 import { getUsedVariants } from "~/utils/clickhouse/function";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
+import { useReadOnly } from "~/context/read-only";
 
 export const handle: RouteHandle = {
   crumb: (match) => [{ label: match.params.inference_id!, isIdentifier: true }],
@@ -203,6 +204,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
     latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
+  const { isReadOnly } = useReadOnly();
   const [openModal, setOpenModal] = useState<ModalType | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
 
@@ -387,6 +389,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             onOptionSelect={onSelect}
             isLoading={variantInferenceIsLoading}
             isDefaultFunction={isDefault}
+            disabled={isReadOnly}
           />
           <AddToDatasetButton
             inferenceId={inference.id}
@@ -394,6 +397,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             variantName={inference.variant_name}
             episodeId={inference.episode_id}
             hasDemonstration={hasDemonstration}
+            disabled={isReadOnly}
           />
           <HumanFeedbackModal
             onOpenChange={(isOpen) => {
@@ -408,6 +412,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
             }}
             isOpen={openModal === "human-feedback"}
             trigger={<HumanFeedbackButton />}
+            disabled={isReadOnly}
           >
             <humanFeedbackFetcher.Form method="post">
               <input type="hidden" name="_action" value="addFeedback" />
