@@ -48,7 +48,7 @@ pub struct KeyInfo {
     pub disabled_at: Option<DateTime<Utc>>,
 }
 
-/// Looks up an API key in the database, and checks that it was not disabled.`
+/// Looks up an API key in the database, and checks that it was not disabled.
 pub async fn check_key(
     key: &TensorZeroApiKey,
     pool: &PgPool,
