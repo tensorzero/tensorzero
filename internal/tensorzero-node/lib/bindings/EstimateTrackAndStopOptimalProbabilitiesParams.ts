@@ -2,7 +2,7 @@
 import type { FeedbackByVariant } from "./FeedbackByVariant";
 import type { MetricConfigOptimize } from "./MetricConfigOptimize";
 
-export type EstimateOptimalProbabilitiesParams = {
+export type EstimateTrackAndStopOptimalProbabilitiesParams = {
   feedback: Array<FeedbackByVariant>;
   epsilon?: number;
   variance_floor?: number;

@@ -2257,16 +2257,31 @@ impl ShorthandModelConfig for ModelConfig {
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
             )),
-            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(
-                model_name,
-                None,
-                OpenAIKind
-                    .get_defaulted_credential(None, default_credentials)
-                    .await?,
-                OpenAIAPIType::ChatCompletions,
-                false,
-                Vec::new(),
-            )?),
+            "openai" => {
+                if let Some(stripped_model_name) = model_name.strip_prefix("responses::") {
+                    ProviderConfig::OpenAI(OpenAIProvider::new(
+                        stripped_model_name.to_string(),
+                        None,
+                        OpenAIKind
+                            .get_defaulted_credential(None, default_credentials)
+                            .await?,
+                        OpenAIAPIType::Responses,
+                        false,
+                        Vec::new(),
+                    )?)
+                } else {
+                    ProviderConfig::OpenAI(OpenAIProvider::new(
+                        model_name,
+                        None,
+                        OpenAIKind
+                            .get_defaulted_credential(None, default_credentials)
+                            .await?,
+                        OpenAIAPIType::ChatCompletions,
+                        false,
+                        Vec::new(),
+                    )?)
+                }
+            }
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
                 OpenRouterKind

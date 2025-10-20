@@ -16,7 +16,7 @@ use tensorzero_core::{
     config::{Config, ConfigFileGlob, MetricConfigOptimize},
     db::{clickhouse::ClickHouseConnectionInfo, feedback::FeedbackByVariant},
     experimentation::track_and_stop::estimate_optimal_probabilities::{
-        estimate_optimal_probabilities as estimate_optimal_probabilities_core,
+        estimate_optimal_probabilities as estimate_track_and_stop_optimal_probabilities_core,
         EstimateOptimalProbabilitiesArgs,
     },
 };
@@ -390,7 +390,7 @@ pub fn get_quantiles() -> Vec<f64> {
 
 #[derive(serde::Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-pub struct EstimateOptimalProbabilitiesParams {
+pub struct EstimateTrackAndStopOptimalProbabilitiesParams {
     pub feedback: Vec<FeedbackByVariant>,
     pub epsilon: Option<f64>,
     pub variance_floor: Option<f64>,
@@ -400,8 +400,10 @@ pub struct EstimateOptimalProbabilitiesParams {
 }
 
 #[napi]
-pub fn estimate_optimal_probabilities(params: String) -> Result<String, napi::Error> {
-    let params: EstimateOptimalProbabilitiesParams =
+pub fn estimate_track_and_stop_optimal_probabilities(
+    params: String,
+) -> Result<String, napi::Error> {
+    let params: EstimateTrackAndStopOptimalProbabilitiesParams =
         serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
     let args = EstimateOptimalProbabilitiesArgs {
@@ -413,7 +415,7 @@ pub fn estimate_optimal_probabilities(params: String) -> Result<String, napi::Er
         metric_optimize: params.metric_optimize,
     };
 
-    let result = estimate_optimal_probabilities_core(args)
+    let result = estimate_track_and_stop_optimal_probabilities_core(args)
         .map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
     serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
