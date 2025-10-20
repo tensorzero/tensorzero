@@ -133,12 +133,55 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           variant_names: trackAndStopConfig.candidate_variants,
         });
 
-        if (feedback.length > 0) {
-          optimal_probabilities = estimateTrackAndStopOptimalProbabilities({
-            feedback,
-            epsilon: trackAndStopConfig.epsilon,
-            metric_optimize: metric_config.optimize,
-          });
+        // Build feedback count map
+        const feedbackCounts = new Map(
+          feedback.map((f) => [f.variant_name, f.count]),
+        );
+
+        // Separate nursery and bandit variants
+        const K = trackAndStopConfig.candidate_variants.length;
+        const nurseryVariants = trackAndStopConfig.candidate_variants.filter(
+          (v) =>
+            (feedbackCounts.get(v) || 0) <
+            trackAndStopConfig.min_samples_per_variant,
+        );
+        const banditVariants = trackAndStopConfig.candidate_variants.filter(
+          (v) =>
+            (feedbackCounts.get(v) || 0) >=
+            trackAndStopConfig.min_samples_per_variant,
+        );
+
+        const B = banditVariants.length;
+
+        // Initialize probabilities
+        optimal_probabilities = {};
+
+        // Assign 1/K to each nursery variant
+        for (const variant of nurseryVariants) {
+          optimal_probabilities[variant] = 1 / K;
+        }
+
+        // Compute and scale optimal probabilities for bandit variants
+        if (B > 0) {
+          const banditFeedback = feedback.filter((f) =>
+            banditVariants.includes(f.variant_name),
+          );
+
+          if (banditFeedback.length > 0) {
+            const banditOptimalProbs = estimateTrackAndStopOptimalProbabilities(
+              {
+                feedback: banditFeedback,
+                epsilon: trackAndStopConfig.epsilon,
+                metric_optimize: metric_config.optimize,
+              },
+            );
+
+            // Scale bandit probabilities by B/K
+            const scale = B / K;
+            for (const [variant, prob] of Object.entries(banditOptimalProbs)) {
+              optimal_probabilities[variant] = prob * scale;
+            }
+          }
         }
       }
     } catch (error) {
