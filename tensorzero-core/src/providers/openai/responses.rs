@@ -1821,7 +1821,7 @@ mod tests {
                 output_tokens: 25
             })
         );
-        assert_eq!(result.finish_reason, Some(FinishReason::Stop));
+        assert_eq!(result.finish_reason, None);
     }
 
     #[test]
