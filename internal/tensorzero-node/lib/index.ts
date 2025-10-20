@@ -10,11 +10,14 @@ import type {
   DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
+  EstimateTrackAndStopOptimalProbabilitiesParams,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
+  FeedbackByVariant,
   GetAdjacentDatapointIdsParams,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
+  GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
   ModelLatencyDatapoint,
@@ -55,6 +58,8 @@ const {
   DatabaseClient: NativeDatabaseClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
+  estimateTrackAndStopOptimalProbabilities:
+    nativeEstimateTrackAndStopOptimalProbabilities,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -203,6 +208,29 @@ export async function runEvaluationStreaming(
       }
     },
   );
+}
+
+/**
+ * Estimates optimal sampling probabilities for bandit experiments.
+ *
+ * Given feedback statistics (mean, variance, count) for each variant,
+ * this function computes the optimal probability of sampling each variant
+ * to efficiently identify the best arm while respecting an ε-tolerance
+ * for sub-optimality.
+ *
+ * The algorithm uses Second-Order Cone Programming (SOCP) to solve
+ * an optimization problem that balances exploration and exploitation.
+ *
+ * @param params - Parameters including feedback data and optimization settings
+ * @returns A mapping from variant names to optimal sampling probabilities
+ */
+export function estimateTrackAndStopOptimalProbabilities(
+  params: EstimateTrackAndStopOptimalProbabilitiesParams,
+): Record<string, number> {
+  const paramsString = safeStringify(params);
+  const resultString =
+    nativeEstimateTrackAndStopOptimalProbabilities(paramsString);
+  return JSON.parse(resultString) as Record<string, number>;
 }
 
 function safeStringify(obj: unknown) {
@@ -399,5 +427,14 @@ export class DatabaseClient {
     const result =
       await this.nativeDatabaseClient.getAdjacentDatapointIds(paramsString);
     return JSON.parse(result) as AdjacentDatapointIds;
+  }
+
+  async getFeedbackByVariant(
+    params: GetFeedbackByVariantParams,
+  ): Promise<FeedbackByVariant[]> {
+    const paramsString = safeStringify(params);
+    const result =
+      await this.nativeDatabaseClient.getFeedbackByVariant(paramsString);
+    return JSON.parse(result) as FeedbackByVariant[];
   }
 }

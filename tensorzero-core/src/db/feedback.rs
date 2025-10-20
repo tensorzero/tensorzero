@@ -61,7 +61,8 @@ pub trait FeedbackQueries {
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
     pub mean: f32,
