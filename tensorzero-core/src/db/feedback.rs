@@ -70,6 +70,20 @@ pub struct FeedbackByVariant {
     pub count: u64,
 }
 
+#[derive(Clone, Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+pub struct InternalCumulativeFeedbackTimeSeriesPoint {
+    // Time point up to which cumulative statistics are computed
+    pub period_end: DateTime<Utc>,
+    pub variant_name: String,
+    // Mean of feedback values up to time point `period_end`
+    pub mean: f32,
+    // Variance of feedback values up to time point `period_end`
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    // Number of feedback values up to time point `period_end`
+    pub count: u64,
+}
+
 #[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
 #[ts(export)]
 pub struct CumulativeFeedbackTimeSeriesPoint {
