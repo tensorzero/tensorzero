@@ -54,7 +54,7 @@ use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
-use crate::rate_limiting::{RateLimitResourceUsage, ScopeInfo, TicketBorrows};
+use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -296,11 +296,8 @@ impl ModelConfig {
                 return Ok(cache_lookup);
             }
         }
-        let scope_info = ScopeInfo {
-            tags: &clients.tags,
-        };
         let response = provider
-            .infer(model_provider_request, clients, &scope_info)
+            .infer(model_provider_request, clients)
             .instrument(span!(
                 Level::INFO,
                 "infer",
@@ -345,16 +342,13 @@ impl ModelConfig {
                 });
             }
         }
-        let scope_info = ScopeInfo {
-            tags: &clients.tags,
-        };
 
         let StreamAndRawRequest {
             stream,
             raw_request,
             ticket_borrow,
         } = provider
-            .infer_stream(model_provider_request, clients, &scope_info)
+            .infer_stream(model_provider_request, clients)
             .await?;
 
         // Note - we cache the chunks here so that we store the raw model provider input and response chunks
@@ -1474,7 +1468,6 @@ impl ModelProvider {
         &self,
         request: ModelProviderRequest<'_>,
         clients: &InferenceClients,
-        scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
@@ -1482,7 +1475,7 @@ impl ModelProvider {
             .rate_limiting_config
             .consume_tickets(
                 &clients.postgres_connection_info,
-                scope_info,
+                &clients.scope_info,
                 request.request,
             )
             .await?;
@@ -1611,14 +1604,13 @@ impl ModelProvider {
         &self,
         request: ModelProviderRequest<'_>,
         clients: &InferenceClients,
-        scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
                 &clients.postgres_connection_info,
-                scope_info,
+                &clients.scope_info,
                 request.request,
             )
             .await?;
@@ -2383,6 +2375,7 @@ mod tests {
 
     use crate::cache::CacheEnabledMode;
     use crate::config::SKIP_CREDENTIAL_VALIDATION;
+    use crate::rate_limiting::ScopeInfo;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
@@ -2451,6 +2444,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
 
         // Try inferring the good model only
@@ -2554,7 +2550,6 @@ mod tests {
         let postgres_mock = PostgresConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let tags = HashMap::new();
-        let scope_info = ScopeInfo { tags: &tags };
 
         // With token rate limiting enabled and no max_tokens
         let toml_str = r"
@@ -2579,6 +2574,9 @@ mod tests {
             rate_limiting_config: Arc::new(rate_limit_config.clone()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(tags.clone()),
+            },
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2599,9 +2597,7 @@ mod tests {
         };
 
         // Should fail with RateLimitMissingMaxTokens
-        let result = provider
-            .infer(provider_request, &clients, &scope_info)
-            .await;
+        let result = provider.infer(provider_request, &clients).await;
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
@@ -2628,7 +2624,7 @@ mod tests {
         };
 
         let result = provider
-            .infer(provider_request, &clients, &scope_info)
+            .infer(provider_request, &clients)
             .await
             .unwrap_err();
         assert_ne!(result, Error::new(ErrorDetails::RateLimitMissingMaxTokens));
@@ -2663,6 +2659,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2814,6 +2813,9 @@ mod tests {
                     rate_limiting_config: Arc::new(Default::default()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
+                    scope_info: ScopeInfo {
+                        tags: Arc::new(HashMap::new()),
+                    },
                 },
                 "my_model",
             )
@@ -2883,6 +2885,9 @@ mod tests {
                     rate_limiting_config: Arc::new(Default::default()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
+                    scope_info: ScopeInfo {
+                        tags: Arc::new(HashMap::new()),
+                    },
                 },
                 "my_model",
             )
@@ -2999,6 +3004,9 @@ mod tests {
                     rate_limiting_config: Arc::new(Default::default()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
+                    scope_info: ScopeInfo {
+                        tags: Arc::new(HashMap::new()),
+                    },
                 },
                 "my_model",
             )
@@ -3081,6 +3089,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
 
         let request = ModelInferenceRequest {
@@ -3138,6 +3149,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3201,6 +3215,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
 
         let request = ModelInferenceRequest {
@@ -3257,6 +3274,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let response = model_config
             .infer(&request, &clients, model_name)

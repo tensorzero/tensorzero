@@ -1234,6 +1234,9 @@ async fn test_embedding_request() {
                 rate_limiting_config: Arc::new(Default::default()),
                 otlp_config: Default::default(),
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
+                scope_info: ScopeInfo {
+                    tags: Arc::new(HashMap::new()),
+                },
             },
         )
         .await
@@ -1319,6 +1322,9 @@ async fn test_embedding_request() {
                 rate_limiting_config: Arc::new(Default::default()),
                 otlp_config: Default::default(),
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
+                scope_info: ScopeInfo {
+                    tags: Arc::new(HashMap::new()),
+                },
             },
         )
         .await
@@ -1389,16 +1395,16 @@ async fn test_embedding_sanity_check() {
         rate_limiting_config: Arc::new(Default::default()),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
-    };
-    let scope_info = ScopeInfo {
-        tags: &HashMap::new(),
+        scope_info: ScopeInfo {
+            tags: Arc::new(HashMap::new()),
+        },
     };
 
     // Compute all 3 embeddings concurrently
     let (response_a, response_b, response_c) = tokio::join!(
-        provider_config.embed(&embedding_request_a, &clients, &scope_info, &request_info),
-        provider_config.embed(&embedding_request_b, &clients, &scope_info, &request_info),
-        provider_config.embed(&embedding_request_c, &clients, &scope_info, &request_info)
+        provider_config.embed(&embedding_request_a, &clients, &request_info),
+        provider_config.embed(&embedding_request_b, &clients, &request_info),
+        provider_config.embed(&embedding_request_c, &clients, &request_info)
     );
 
     // Unwrap the results

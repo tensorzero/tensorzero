@@ -44,7 +44,7 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::rate_limiting::RateLimitingConfig;
+use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
@@ -334,16 +334,19 @@ pub async fn inference(
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
 
+    let tags = Arc::new(params.tags.clone());
+
     let inference_clients = InferenceClients {
         http_client: http_client.clone(),
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
-        tags: Arc::new(params.tags.clone()),
+        tags: tags.clone(),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
+        scope_info: ScopeInfo { tags: tags.clone() },
     };
 
     let inference_models = InferenceModels {
@@ -1281,6 +1284,7 @@ pub struct InferenceClients {
     pub rate_limiting_config: Arc<RateLimitingConfig>,
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,
+    pub scope_info: ScopeInfo,
 }
 
 // Carryall struct for models used in inference

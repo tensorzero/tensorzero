@@ -875,6 +875,7 @@ mod tests {
         DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
         DUMMY_STREAMING_RESPONSE,
     };
+    use crate::rate_limiting::ScopeInfo;
     use crate::tool::{ToolCallConfig, ToolChoice};
 
     use serde_json::json;
@@ -1133,6 +1134,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let templates = Arc::new(get_test_template_config());
         let inference_params = InferenceParams::default();
@@ -1439,6 +1443,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let templates = Arc::new(get_test_template_config());
         let inference_params = InferenceParams::default();
@@ -1605,6 +1612,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1756,6 +1766,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let inference_params = InferenceParams::default();
 
