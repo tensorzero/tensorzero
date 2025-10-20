@@ -263,12 +263,10 @@ test("should be able to rename a datapoint", async ({ page }) => {
     "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
   );
   await page.waitForLoadState("networkidle");
-  await expect(
-    page.getByRole("button", { name: "Rename datapoint" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
 
   // Click on the Add to dataset button
-  await page.getByRole("button", { name: "Rename datapoint" }).click();
+  await page.getByRole("button", { name: "Rename" }).click();
 
   // Wait for the datapoint name input by its label to be visible
   const datapointNameInput = page.getByLabel("Datapoint name");
@@ -289,12 +287,10 @@ test("should be able to cancel renaming a datapoint", async ({ page }) => {
     "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
   );
   await page.waitForLoadState("networkidle");
-  await expect(
-    page.getByRole("button", { name: "Rename datapoint" }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Rename" })).toBeVisible();
 
   // Click on the Add to dataset button
-  await page.getByRole("button", { name: "Rename datapoint" }).click();
+  await page.getByRole("button", { name: "Rename" }).click();
 
   // Wait for the datapoint name input by its label to be visible
   const datapointNameInput = page.getByLabel("Datapoint name");
