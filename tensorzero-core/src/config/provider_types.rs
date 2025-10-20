@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
 
@@ -58,6 +59,9 @@ pub struct AnthropicProviderTypeConfig {
 pub struct AnthropicDefaults {
     #[ts(type = "string")]
     pub api_key_location: CredentialLocationWithFallback,
+    #[serde(default)]
+    #[ts(type = "string | null")]
+    pub api_base: Option<Url>,
 }
 
 impl Default for AnthropicDefaults {
@@ -66,6 +70,7 @@ impl Default for AnthropicDefaults {
             api_key_location: CredentialLocationWithFallback::Single(CredentialLocation::Env(
                 "ANTHROPIC_API_KEY".to_string(),
             )),
+            api_base: None,
         }
     }
 }

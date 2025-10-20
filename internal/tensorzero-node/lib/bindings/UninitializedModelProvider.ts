@@ -16,7 +16,12 @@ export type UninitializedModelProvider = {
    */
   discard_unknown_chunks: boolean;
 } & (
-  | { type: "anthropic"; model_name: string; api_key_location: string | null }
+  | {
+      type: "anthropic";
+      model_name: string;
+      api_base: string | null;
+      api_key_location: string | null;
+    }
   | {
       type: "aws_bedrock";
       model_id: string;

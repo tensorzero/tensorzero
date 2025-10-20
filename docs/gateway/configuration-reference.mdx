@@ -508,6 +508,21 @@ api_key_location = "dynamic::anthropic_api_key"
 # ...
 ```
 
+##### `api_base`
+
+- **Type:** string
+- **Required:** no (default: `https://api.anthropic.com/v1/messages`)
+
+Overrides the base URL used for Anthropic Messages API requests. The value should include the full endpoint path (for example `https://example.com/v1/messages`).
+
+```toml title="tensorzero.toml"
+[models.claude-3-haiku.providers.anthropic]
+# ...
+type = "anthropic"
+api_base = "https://example.com/v1/messages"
+# ...
+```
+
 </Accordion>
 
 <Accordion title='type: "aws_bedrock"'>
@@ -1639,6 +1654,20 @@ The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_N
 # ...
 api_key_location = "dynamic::anthropic_api_key"
 # api_key_location = "env::ALTERNATE_ANTHROPIC_API_KEY"
+# ...
+```
+
+##### `defaults.api_base`
+
+- **Type:** string
+- **Required:** no (default: `https://api.anthropic.com/v1/messages`)
+
+Sets a global override for the Anthropic Messages API base URL that will be applied to shorthand (`anthropic::model`) references. The URL should include the full endpoint path, such as `https://example.com/v1/messages`.
+
+```toml title="tensorzero.toml"
+[provider_types.anthropic.defaults]
+# ...
+api_base = "https://example.com/v1/messages"
 # ...
 ```
 
