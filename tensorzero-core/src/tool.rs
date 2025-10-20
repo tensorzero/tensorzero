@@ -102,7 +102,7 @@ impl ProviderToolScope {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
     #[serde(default)]
-    scope: ProviderToolScope,
+    pub scope: ProviderToolScope,
     pub tool: Value,
 }
 
@@ -269,16 +269,17 @@ impl ToolCallConfig {
             .parallel_tool_calls
             .or(function_parallel_tool_calls);
 
-        let tool_call_config_option = if tools_available.is_empty() {
-            None
-        } else {
-            Some(Self {
-                tools_available,
-                tool_choice,
-                provider_tools: dynamic_tool_params.provider_tools,
-                parallel_tool_calls,
-            })
-        };
+        let tool_call_config_option =
+            if tools_available.is_empty() && dynamic_tool_params.provider_tools.is_none() {
+                None
+            } else {
+                Some(Self {
+                    tools_available,
+                    tool_choice,
+                    provider_tools: dynamic_tool_params.provider_tools,
+                    parallel_tool_calls,
+                })
+            };
 
         Ok(tool_call_config_option)
     }
