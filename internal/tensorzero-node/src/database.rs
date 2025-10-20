@@ -67,12 +67,15 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn get_feedback_timeseries(&self, params: String) -> Result<String, napi::Error> {
+    pub async fn get_cumulative_feedback_timeseries(
+        &self,
+        params: String,
+    ) -> Result<String, napi::Error> {
         napi_call!(
             &self,
-            get_feedback_timeseries,
+            get_cumulative_feedback_timeseries,
             params,
-            GetFeedbackTimeseriesParams {
+            GetCumulativeFeedbackTimeseriesParams {
                 function_name,
                 metric_name,
                 variant_names,
@@ -108,6 +111,34 @@ impl DatabaseClient {
     }
 
     #[napi]
+    pub async fn query_feedback_by_target_id(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            query_feedback_by_target_id,
+            params,
+            QueryFeedbackByTargetIdParams {
+                target_id,
+                before,
+                after,
+                page_size
+            }
+        )
+    }
+
+    #[napi]
+    pub async fn query_feedback_bounds_by_target_id(
+        &self,
+        params: String,
+    ) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            query_feedback_bounds_by_target_id,
+            params,
+            QueryFeedbackBoundsByTargetIdParams { target_id }
+        )
+    }
+
+    #[napi]
     pub async fn count_datasets(&self) -> Result<u32, napi::Error> {
         napi_call_no_deserializing!(&self, count_datasets)
     }
@@ -136,12 +167,40 @@ impl DatabaseClient {
     }
 
     #[napi]
+    pub async fn count_feedback_by_target_id(&self, params: String) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            count_feedback_by_target_id,
+            params,
+            CountFeedbackByTargetIdParams { target_id }
+        )
+    }
+
+    #[napi]
     pub async fn get_adjacent_datapoint_ids(&self, params: String) -> Result<String, napi::Error> {
         napi_call!(
             &self,
             get_adjacent_datapoint_ids,
             params,
             GetAdjacentDatapointIdsParams
+        )
+    }
+
+    #[napi]
+    pub async fn query_demonstration_feedback_by_inference_id(
+        &self,
+        params: String,
+    ) -> Result<String, napi::Error> {
+        napi_call!(
+            &self,
+            query_demonstration_feedback_by_inference_id,
+            params,
+            QueryDemonstrationFeedbackByInferenceIdParams {
+                inference_id,
+                before,
+                after,
+                page_size
+            }
         )
     }
 
@@ -186,13 +245,15 @@ struct GetModelLatencyQuantilesParams {
 #[ts(export, optional_fields)]
 struct QueryEpisodeTableParams {
     pub page_size: u32,
+    #[ts(optional)]
     pub before: Option<Uuid>,
+    #[ts(optional)]
     pub after: Option<Uuid>,
 }
 
 #[derive(Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-struct GetFeedbackTimeseriesParams {
+struct GetCumulativeFeedbackTimeseriesParams {
     pub function_name: String,
     pub metric_name: String,
     pub variant_names: Option<Vec<String>>,
@@ -202,8 +263,39 @@ struct GetFeedbackTimeseriesParams {
 
 #[derive(Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
+struct QueryFeedbackByTargetIdParams {
+    target_id: Uuid,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
+    page_size: Option<u32>,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct QueryDemonstrationFeedbackByInferenceIdParams {
+    inference_id: Uuid,
+    before: Option<Uuid>,
+    after: Option<Uuid>,
+    page_size: Option<u32>,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct QueryFeedbackBoundsByTargetIdParams {
+    target_id: Uuid,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct CountFeedbackByTargetIdParams {
+    target_id: Uuid,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 struct GetFeedbackByVariantParams {
-    pub metric_name: String,
-    pub function_name: String,
-    pub variant_names: Option<Vec<String>>,
+    metric_name: String,
+    function_name: String,
+    #[ts(optional)]
+    variant_names: Option<Vec<String>>,
 }

@@ -1,5 +1,5 @@
 use crate::{
-    db::{FeedbackTimeSeriesPoint, InternalFeedbackTimeSeriesPoint},
+    db::feedback::{CumulativeFeedbackTimeSeriesPoint, InternalCumulativeFeedbackTimeSeriesPoint},
     error::{Error, ErrorDetails},
 };
 
@@ -27,7 +27,7 @@ use crate::{
 ///
 /// # Returns
 ///
-/// Returns a `Result` containing a vector of `FeedbackTimeSeriesPoint` with confidence
+/// Returns a `Result` containing a vector of `CumulativeFeedbackTimeSeriesPoint` with confidence
 /// sequence bounds (`cs_lower`, `cs_upper`) added to each point. The bounds are symmetric
 /// around the mean, with margin computed as:
 ///
@@ -54,7 +54,7 @@ use crate::{
 ///
 /// ```ignore
 /// let feedback = vec![
-///     InternalFeedbackTimeSeriesPoint {
+///     InternalCumulativeFeedbackTimeSeriesPoint {
 ///         period_end: chrono::Utc::now(),
 ///         variant_name: "control".to_string(),
 ///         mean: 0.5,
@@ -66,10 +66,10 @@ use crate::{
 /// // result[0].cs_lower and result[0].cs_upper contain 95% confidence bounds
 /// ```
 pub fn asymp_cs(
-    feedback: Vec<InternalFeedbackTimeSeriesPoint>,
+    feedback: Vec<InternalCumulativeFeedbackTimeSeriesPoint>,
     alpha: f32,
     rho: Option<f32>,
-) -> Result<Vec<FeedbackTimeSeriesPoint>, Error> {
+) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error> {
     if alpha <= 0.0 || alpha >= 1.0 {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: format!("alpha must be in (0, 1), got {alpha}"),
@@ -96,7 +96,7 @@ pub fn asymp_cs(
             let margin = ((cv_rho2 + 1.0) / (count_f32 * count_f32 * rho2)
                 * ((cv_rho2 + 1.0) / alpha2).ln())
             .sqrt();
-            FeedbackTimeSeriesPoint {
+            CumulativeFeedbackTimeSeriesPoint {
                 period_end: f.period_end,
                 variant_name: f.variant_name.clone(),
                 mean: f.mean,
@@ -115,8 +115,12 @@ mod tests {
     use super::*;
     use chrono::Utc;
 
-    fn create_test_point(mean: f32, variance: f32, count: u64) -> InternalFeedbackTimeSeriesPoint {
-        InternalFeedbackTimeSeriesPoint {
+    fn create_test_point(
+        mean: f32,
+        variance: f32,
+        count: u64,
+    ) -> InternalCumulativeFeedbackTimeSeriesPoint {
+        InternalCumulativeFeedbackTimeSeriesPoint {
             period_end: Utc::now(),
             variant_name: "test_variant".to_string(),
             mean,
@@ -269,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_preserves_input_fields() {
-        let feedback = vec![InternalFeedbackTimeSeriesPoint {
+        let feedback = vec![InternalCumulativeFeedbackTimeSeriesPoint {
             period_end: Utc::now(),
             variant_name: "variant_a".to_string(),
             mean: 0.42,

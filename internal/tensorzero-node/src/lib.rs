@@ -14,7 +14,7 @@ use tensorzero::{
 use tensorzero_core::{
     cache::CacheEnabledMode,
     config::{Config, ConfigFileGlob, MetricConfigOptimize},
-    db::{clickhouse::ClickHouseConnectionInfo, FeedbackByVariant},
+    db::{clickhouse::ClickHouseConnectionInfo, feedback::FeedbackByVariant},
     experimentation::track_and_stop::estimate_optimal_probabilities::{
         estimate_optimal_probabilities as estimate_optimal_probabilities_core,
         EstimateOptimalProbabilitiesArgs,

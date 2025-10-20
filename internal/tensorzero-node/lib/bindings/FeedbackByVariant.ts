@@ -4,5 +4,5 @@ export type FeedbackByVariant = {
   variant_name: string;
   mean: number;
   variance: number;
-  count: number;
+  count: bigint;
 };
