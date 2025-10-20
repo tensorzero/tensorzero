@@ -24,7 +24,7 @@ use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
-    resolved_input_message_content_to_python, serialize_to_dict,
+    resolved_content_block_to_python, resolved_input_message_content_to_python, serialize_to_dict,
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -524,8 +524,6 @@ impl ResolvedRequestMessage {
     #[getter]
     fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         use pyo3::types::PyList;
-
-        use crate::inference::types::pyo3_helpers::resolved_content_block_to_python;
 
         let content = self
             .content
