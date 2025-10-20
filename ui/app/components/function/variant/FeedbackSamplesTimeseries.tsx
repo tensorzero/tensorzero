@@ -1,5 +1,7 @@
-import type { CumulativeFeedbackTimeSeriesPoint } from "tensorzero-node";
-import type { TimeWindowUnit } from "~/utils/clickhouse/function";
+import type {
+  CumulativeFeedbackTimeSeriesPoint,
+  TimeWindow,
+} from "tensorzero-node";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS } from "~/utils/chart";
 
@@ -18,8 +20,8 @@ export function FeedbackSamplesTimeseries({
   onTimeGranularityChange,
 }: {
   feedbackTimeseries: CumulativeFeedbackTimeSeriesPoint[];
-  time_granularity: TimeWindowUnit;
-  onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
+  time_granularity: TimeWindow;
+  onTimeGranularityChange: (time_granularity: TimeWindow) => void;
 }) {
   const { data, variantNames } =
     transformFeedbackTimeseries(feedbackTimeseries);

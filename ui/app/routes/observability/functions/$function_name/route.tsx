@@ -21,7 +21,6 @@ import {
   getVariantCounts,
   getVariantPerformances,
   getFunctionThroughputByVariant,
-  type TimeWindowUnit,
 } from "~/utils/clickhouse/function";
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
@@ -56,10 +55,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
   const metric_name = url.searchParams.get("metric_name") || undefined;
   const time_granularity = (url.searchParams.get("time_granularity") ||
-    "week") as TimeWindowUnit;
+    "week") as TimeWindow;
   const throughput_time_granularity = (url.searchParams.get(
     "throughput_time_granularity",
-  ) || "week") as TimeWindowUnit;
+  ) || "week") as TimeWindow;
   const feedback_time_granularity = (url.searchParams.get(
     "feedback_time_granularity",
   ) || "week") as TimeWindow;
@@ -356,9 +355,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     [metricsWithFeedback],
   );
 
-  const [time_granularity, setTimeGranularity] =
-    useState<TimeWindowUnit>("week");
-  const handleTimeGranularityChange = (granularity: TimeWindowUnit) => {
+  const [time_granularity, setTimeGranularity] = useState<TimeWindow>("week");
+  const handleTimeGranularityChange = (granularity: TimeWindow) => {
     setTimeGranularity(granularity);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("time_granularity", granularity);
@@ -366,15 +364,13 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   };
 
   const [throughput_time_granularity, setThroughputTimeGranularity] =
-    useState<TimeWindowUnit>(() => {
+    useState<TimeWindow>(() => {
       const param = searchParams.get(
         "throughput_time_granularity",
-      ) as TimeWindowUnit;
+      ) as TimeWindow;
       return param || "week";
     });
-  const handleThroughputTimeGranularityChange = (
-    granularity: TimeWindowUnit,
-  ) => {
+  const handleThroughputTimeGranularityChange = (granularity: TimeWindow) => {
     setThroughputTimeGranularity(granularity);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("throughput_time_granularity", granularity);
@@ -382,13 +378,11 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   };
 
   const [feedback_time_granularity, setFeedbackTimeGranularity] =
-    useState<TimeWindowUnit>(() => {
-      const param = searchParams.get(
-        "feedback_time_granularity",
-      ) as TimeWindowUnit;
+    useState<TimeWindow>(() => {
+      const param = searchParams.get("feedback_time_granularity") as TimeWindow;
       return param || "week";
     });
-  const handleFeedbackTimeGranularityChange = (granularity: TimeWindowUnit) => {
+  const handleFeedbackTimeGranularityChange = (granularity: TimeWindow) => {
     setFeedbackTimeGranularity(granularity);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("feedback_time_granularity", granularity);

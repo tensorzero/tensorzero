@@ -51,11 +51,11 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         {label !== undefined && (
           <div className="text-fg-secondary flex items-center gap-1.5 text-sm font-normal">
             {icon && (
-              <div
+              <span
                 className={`${iconBg} flex size-5 items-center justify-center rounded-sm`}
               >
                 {icon}
-              </div>
+              </span>
             )}
 
             {label}
