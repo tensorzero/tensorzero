@@ -124,6 +124,196 @@ response = t0.inference(
 )
 ```
 
+<Accordion title="Sample Response">
+
+```python
+ChatInferenceResponse(
+    inference_id=UUID('0199ff78-6246-7c12-b4b0-6e3a881cc6b9'),
+    episode_id=UUID('0199ff78-6246-7c12-b4b0-6e4367f949b8'),
+    variant_name='gpt-5-mini-responses-web-search',
+    content=[
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo9...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59fda57d481969c3603df0d675348',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {
+                    'type': 'search',
+                    'query': 'Japan population 2025 October 2025 population estimate Statistics Bureau of Japan'
+                }
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59fdf9b988196b36756d639e2b015',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {
+                    'type': 'search',
+                    'query': "Ministry of Internal Affairs and Communications Japan population Oct 1 2024 'total population' 'Japan' 'population estimates' '2024' 'Oct. 1' '総人口' '令和6年' "
+                }
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59fe1a388819684971acfdaf4cd44',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {
+                    'type': 'search',
+                    'query': "Ministry of Internal Affairs and Communications population Japan Oct 1 2024 total population 'Oct. 1, 2024' 'population' 'Japan' 'MIC' 'population estimates' '2024' '総人口' "
+                }
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59fe439788196911a195c70cc8ca9',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {'type': 'search'}
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59fe6b140819690a4468d3304fece',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {'type': 'search'}
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59fe81e408196921b69174f6abaf7',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {'type': 'search'}
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59feda6188196827a0b5aa01e96a1',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {
+                    'type': 'search',
+                    'query': "United Nations World Population Prospects 2024 Japan 2025 population 'Japan population 2025' 'World Population Prospects 2024' 'Japan' "
+                }
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59ff3cc8881968d1c5c9c1bbe4ecc',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {
+                    'type': 'search',
+                    'query': "UN World Population Prospects 2024 Japan population 2025 '123,103,479' 'Japan 2025' 'World Population Prospects' 'Japan' '2025' "
+                }
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        UnknownContentBlock(
+            data={
+                'id': 'ws_05489a0b57dc84980168f59ff67ed48196a0054a38e96f8e0c',
+                'type': 'web_search_call',
+                'status': 'completed',
+                'action': {
+                    'type': 'search',
+                    'query': "United Nations population Japan 2025 'World Population Prospects 2024' 'Japan population 2025' site:un.org"
+                }
+            },
+            model_provider_name='tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai',
+            type='unknown'
+        ),
+        Thought(
+            text=None,
+            type='thought',
+            signature='gAAAAABo...',
+            _internal_provider_type=None
+        ),
+        Text(
+            text="Short answer: about 123–124 million people.\n\nMore precisely:\n- Japan's official estimate (Ministry of Internal Affairs and Communications / e‑Stat) reported a total population of 123,802,000 (including foreign residents) as of October 1, 2024 (release published Apr 14, 2025). ([e-stat.go.jp](https://www.e-stat.go.jp/en/stat-search/files?layout=dataset&page=1&query=Population+Estimates%2C+natural))  \n- The United Nations (WPP 2024, used by sources such as Worldometer) gives a mid‑2025 estimate of about 123.1 million. ([srv1.worldometers.info](https://srv1.worldometers.info/world-population/japan-population/?utm_source=openai))\n\nDo you want a live "right now" estimate for today (Oct 20, 2025) or a breakdown by Japanese nationals vs. foreign residents? I can fetch the latest live or official figures for the exact date you want.",
+            arguments=None,
+            type='text'
+        )
+    ],
+    usage=Usage(input_tokens=29904, output_tokens=1921),
+    finish_reason=None,
+    original_response=None
+)
+```
+
+</Accordion>
+
 </Step>
 
 </Steps>
@@ -232,6 +422,52 @@ response = oai.chat.completions.create(
 )
 ```
 
+<Accordion title="Sample Response">
+
+<Note>
+
+The OpenAI SDK does not support additional content blocks (e.g. thoughts) in the chat completions API, so they are omitted.
+Please use the TensorZero SDK if you want access to these auxiliary content blocks.
+
+</Note>
+
+```python
+ChatCompletion(
+    id='0199ff78-5bad-7312-ab13-e4c5fa0bde8d',
+    choices=[
+        Choice(
+            finish_reason='stop',
+            index=0,
+            logprobs=None,
+            message=ChatCompletionMessage(
+                content="Short answer — it depends on the source/date:\n\n- Japan's official demographic survey (Ministry of Internal Affairs and Communications, reported by major Japanese outlets) shows a total population of 124,330,690 as of January 1, 2025 (this includes foreign residents). ([asahi.com](https://www.asahi.com/ajw/articles/15952384?utm_source=openai))\n\n- International mid‑year estimates (United Nations/UNFPA) put Japan's 2025 population at about 123.1 million (mid‑2025 estimate), which uses a different methodology and reference date. ([unfpa.org](https://www.unfpa.org/data/world-population/JP?utm_source=openai))\n\nToday is October 20, 2025 — would you like me to fetch a live or another specific estimate (e.g., UN mid‑year, World Bank, or the latest Japanese government update)?",
+                refusal=None,
+                role='assistant',
+                annotations=None,
+                audio=None,
+                function_call=None,
+                tool_calls=[]
+            )
+        )
+    ],
+    created=1760927745,
+    model='tensorzero::model_name::gpt-5-mini-responses-web-search',
+    object='chat.completion',
+    service_tier=None,
+    system_fingerprint='',
+    usage=CompletionUsage(
+        completion_tokens=2304,
+        prompt_tokens=21444,
+        total_tokens=23748,
+        completion_tokens_details=None,
+        prompt_tokens_details=None
+    ),
+    episode_id='0199ff78-5bad-7312-ab13-e4d8708e5b73'
+)
+```
+
+</Accordion>
+
 </Step>
 
 </Steps>
@@ -335,6 +571,47 @@ const response = await oai.chat.completions.create({
 });
 ```
 
+<Accordion title="Sample Response">
+
+<Note>
+
+The OpenAI SDK does not support additional content blocks (e.g. thoughts) in the chat completions API, so they are omitted.
+Please use the TensorZero SDK if you want access to these auxiliary content blocks.
+
+</Note>
+
+```json
+{
+  id: '0199ff74-0203-70d1-857a-a52b89291955',
+  episode_id: '0199ff74-0203-70d1-857a-a53eb122c72f',
+  choices: [
+    {
+      index: 0,
+      finish_reason: 'stop',
+      message: {
+        content: 'According to Japan’s Statistics Bureau, the preliminary population count was 12,317 ten‑thousand (i.e., 123,170,000) as of September 1, 2025. ([stat.go.jp](https://www.stat.go.jp/english/?s=1&vm=r))\n' +
+          '\n' +
+          'Would you like a mid‑year UN estimate or the latest monthly update?',
+        tool_calls: [],
+        role: 'assistant'
+      }
+    }
+  ],
+  created: 1760927476,
+  model: 'tensorzero::model_name::gpt-5-mini-responses-web-search',
+  system_fingerprint: '',
+  service_tier: null,
+  object: 'chat.completion',
+  usage: {
+    prompt_tokens: 32210,
+    completion_tokens: 2253,
+    total_tokens: 34463
+  }
+}
+```
+
+</Accordion>
+
 </Step>
 
 </Steps>
@@ -418,6 +695,173 @@ curl -X POST "http://localhost:3000/inference" \
     }
   }'
 ```
+
+<Accordion title="Sample Response">
+
+```json
+{
+  "inference_id": "0199ff71-33e2-7700-9d5f-43caeb1125ed",
+  "episode_id": "0199ff71-33e2-7700-9d5f-43d703c41609",
+  "variant_name": "gpt-5-mini-responses-web-search",
+  "content": [
+    {
+      "type": "thought",
+      "text": null,
+      "signature": "gAAAAABo...",
+      "summary": [],
+      "_internal_provider_type": "openai"
+    },
+    {
+      "type": "unknown",
+      "data": {
+        "id": "ws_0dd147cea07b72510168f59e0496608194a85c1b0ff33c6203",
+        "type": "web_search_call",
+        "status": "completed",
+        "action": {
+          "type": "search",
+          "query": "Japan population 2025 estimated population October 2025 Japan population"
+        }
+      },
+      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+    },
+    {
+      "type": "thought",
+      "text": null,
+      "signature": "gAAAAABo...",
+      "summary": [],
+      "_internal_provider_type": "openai"
+    },
+    {
+      "type": "unknown",
+      "data": {
+        "id": "ws_0dd147cea07b72510168f59e08f80881948b4ad8dbd8003a36",
+        "type": "web_search_call",
+        "status": "completed",
+        "action": {
+          "type": "search",
+          "query": "UN World Population Prospects 2024 Japan population 2025 mid-year 'Japan population 2025' 'World Population Prospects 2024' 'Japan' "
+        }
+      },
+      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+    },
+    {
+      "type": "thought",
+      "text": null,
+      "signature": "gAAAAABo...",
+      "summary": [],
+      "_internal_provider_type": "openai"
+    },
+    {
+      "type": "unknown",
+      "data": {
+        "id": "ws_0dd147cea07b72510168f59e0c90f88194b1f0cf35f706c756",
+        "type": "web_search_call",
+        "status": "completed",
+        "action": {
+          "type": "search"
+        }
+      },
+      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+    },
+    {
+      "type": "thought",
+      "text": null,
+      "signature": "gAAAAABo...",
+      "summary": [],
+      "_internal_provider_type": "openai"
+    },
+    {
+      "type": "unknown",
+      "data": {
+        "id": "ws_0dd147cea07b72510168f59e0f26a88194aa6a8e82fad8fc7f",
+        "type": "web_search_call",
+        "status": "completed",
+        "action": {
+          "type": "search",
+          "query": "Statistics Bureau of Japan population October 1 2025 \"Population Estimates\" \"Japan\" site:stat.go.jp"
+        }
+      },
+      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+    },
+    {
+      "type": "thought",
+      "text": null,
+      "signature": "gAAAAABo...",
+      "summary": [],
+      "_internal_provider_type": "openai"
+    },
+    {
+      "type": "unknown",
+      "data": {
+        "id": "ws_0dd147cea07b72510168f59e166aac8194a8913647411512b4",
+        "type": "web_search_call",
+        "status": "completed",
+        "action": {
+          "type": "search",
+          "query": "UN World Population Prospects 2024 Japan population 2025 'Japan population 2025 UN WPP' 'United Nations Department of Economic and Social Affairs' 'Japan 2025 population' "
+        }
+      },
+      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+    },
+    {
+      "type": "thought",
+      "text": null,
+      "signature": "gAAAAABo...",
+      "summary": [],
+      "_internal_provider_type": "openai"
+    },
+    {
+      "type": "unknown",
+      "data": {
+        "id": "ws_0dd147cea07b72510168f59e1925088194bb9a8f934b1e6bf1",
+        "type": "web_search_call",
+        "status": "completed",
+        "action": {
+          "type": "search",
+          "query": "World Population Prospects 2024 Japan population 2025 site:un.org"
+        }
+      },
+      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+    },
+    {
+      "type": "thought",
+      "text": null,
+      "signature": "gAAAAABo...",
+      "summary": [],
+      "_internal_provider_type": "openai"
+    },
+    {
+      "type": "unknown",
+      "data": {
+        "id": "ws_0dd147cea07b72510168f59e1ea20081948eb2d81de67d12bb",
+        "type": "web_search_call",
+        "status": "completed",
+        "action": {
+          "type": "search"
+        }
+      },
+      "model_provider_name": "tensorzero::model_name::gpt-5-mini-responses-web-search::provider_name::openai"
+    },
+    {
+      "type": "thought",
+      "text": null,
+      "signature": "gAAAAABo...",
+      "summary": [],
+      "_internal_provider_type": "openai"
+    },
+    {
+      "type": "text",
+      "text": "Short answer: The most recent official estimate: 123,802,000 people (123.802 million) — this is the Statistics Bureau of Japan’s estimate for the total population as of October 1, 2024. ([stat.go.jp](https://www.stat.go.jp/english/data/jinsui/2024np/index.html?utm_source=openai))\n\nNotes / other common estimates\n- The United Nations' World Population Prospects (mid‑year 2025 estimate, medium variant) and datasets yield a mid‑2025 figure of about 123.1 million (different sources interpolate mid‑year values slightly differently). ([statisticstimes.com](https://statisticstimes.com/demographics/country/japan-population.php?utm_source=openai))  \n- Real‑time aggregators that produce daily \"live\" counters (e.g., Worldometer) show a slightly different number because they extrapolate from different baseline data and update continuously (Worldometer showed ~122.9 million on Oct 19, 2025). ([srv1.worldometers.info](https://srv1.worldometers.info/world-population/japan-population/?utm_source=openai))\n\nWhy numbers differ: sources use different reference dates (e.g., Oct 1 of each year, mid‑year July 1) and methods (census/register‑based counts vs. demographic projections), so small discrepancies are normal.\n\nWould you like me to fetch the very latest live estimate (timestamped to today, Oct 20, 2025) and show the source?"
+    }
+  ],
+  "usage": {
+    "input_tokens": 21229,
+    "output_tokens": 1889
+  }
+}
+```
+
+</Accordion>
 
 </Step>
 
