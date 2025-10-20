@@ -501,7 +501,9 @@ Defines the location of the API key for the Anthropic provider.
 
 Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none`.
+
+See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
 [models.claude-3-haiku.providers.anthropic]
@@ -654,7 +656,9 @@ Defines the location of the API key for the Azure OpenAI provider.
 
 Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::ENVIRONMENT_VARIABLE` and `dynamic::ARGUMENT_NAME` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#credential-fallbacks) for more details).
+The supported locations are `env::ENVIRONMENT_VARIABLE`, `dynamic::ARGUMENT_NAME`, and `none`.
+
+See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
 [models.gpt-4o-mini.providers.azure]
@@ -792,13 +796,15 @@ model_name = "accounts/fireworks/models/llama-v3p1-8b-instruct"
 ##### `credential_location`
 
 - **Type:** string or object
-- **Required:** no (default: `env::GCP_CREDENTIALS_PATH` unless otherwise set in `provider_type.gcp_vertex_anthropic.defaults.credential_location`)
+- **Required:** no (default: `path_from_env::GCP_VERTEX_CREDENTIALS_PATH` unless otherwise set in `provider_type.gcp_vertex_anthropic.defaults.credential_location`)
 
 Defines the location of the credentials for the GCP Vertex Anthropic provider.
 
 Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME`, `path::PATH_TO_CREDENTIALS_FILE`, and `path_from_env::ENVIRONMENT_VARIABLE` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#credential-fallbacks) for more details).
+The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `path_from_env::ENVIRONMENT_VARIABLE`, `dynamic::CREDENTIALS_ARGUMENT_NAME`, `path::PATH_TO_CREDENTIALS_FILE`, and `sdk` (use Google Cloud SDK to auto-discover credentials).
+
+See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
 [models.claude-3-haiku.providers.gcp_vertex]
@@ -806,7 +812,10 @@ The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIA
 type = "gcp_vertex_anthropic"
 credential_location = "dynamic::gcp_credentials_path"
 # credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
+# credential_location = "path_from_env::GCP_CREDENTIALS_PATH"
 # credential_location = "path::/etc/secrets/gcp-key.json"
+# credential_location = "sdk"
+# credential_location = { default = "sdk", fallback = "path::/etc/secrets/gcp-key.json" }
 # credential_location = { default = "dynamic::gcp_credentials_path", fallback = "env::GCP_CREDENTIALS_PATH" }
 # ...
 ```
@@ -876,13 +885,15 @@ project_id = "your-project-id"
 ##### `credential_location`
 
 - **Type:** string or object
-- **Required:** no (default: `env::GCP_CREDENTIALS_PATH` unless otherwise set in `provider_type.gcp_vertex_gemini.defaults.credential_location`)
+- **Required:** no (default: `path_from_env::GCP_VERTEX_CREDENTIALS_PATH` unless otherwise set in `provider_type.gcp_vertex_gemini.defaults.credential_location`)
 
 Defines the location of the credentials for the GCP Vertex Gemini provider.
 
 Can be either a string for a single credential location, or an object with `default` and `fallback` fields for credential fallback support.
 
-The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIALS_ARGUMENT_NAME`, `path::PATH_TO_CREDENTIALS_FILE`, and `path_from_env::ENVIRONMENT_VARIABLE` (see [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#credential-fallbacks) for more details).
+The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `path_from_env::ENVIRONMENT_VARIABLE`, `dynamic::CREDENTIALS_ARGUMENT_NAME`, `path::PATH_TO_CREDENTIALS_FILE`, and `sdk` (use Google Cloud SDK to auto-discover credentials).
+
+See [the API reference](/gateway/api-reference/inference/#credentials) and [Credential Management](/operations/manage-credentials/#credential-fallbacks) for more details.
 
 ```toml title="tensorzero.toml"
 [models."gemini-1.5-flash".providers.gcp_vertex]
@@ -890,7 +901,10 @@ The supported locations are `env::PATH_TO_CREDENTIALS_FILE`, `dynamic::CREDENTIA
 type = "gcp_vertex_gemini"
 credential_location = "dynamic::gcp_credentials_path"
 # credential_location = "env::ALTERNATE_GCP_CREDENTIALS_PATH"
+# credential_location = "path_from_env::GCP_CREDENTIALS_PATH"
 # credential_location = "path::/etc/secrets/gcp-key.json"
+# credential_location = "sdk"
+# credential_location = { default = "sdk", fallback = "path::/etc/secrets/gcp-key.json" }
 # credential_location = { default = "dynamic::gcp_credentials_path", fallback = "env::GCP_CREDENTIALS_PATH" }
 # ...
 ```
@@ -1758,7 +1772,7 @@ api_key_location = "dynamic::fireworks_api_key"
 ##### `defaults.credential_location`
 
 - **Type:** string or object
-- **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
+- **Required:** no (default: `path_from_env::GCP_VERTEX_CREDENTIALS_PATH`)
 
 Defines the location of the credentials for the GCP Vertex Anthropic provider.
 
@@ -1822,7 +1836,7 @@ Defines the Google Cloud Storage URI prefix where batch output files will be sto
 ##### `defaults.credential_location`
 
 - **Type:** string or object
-- **Required:** no (default: `env::GCP_CREDENTIALS_PATH`)
+- **Required:** no (default: `path_from_env::GCP_VERTEX_CREDENTIALS_PATH`)
 
 Defines the location of the credentials for the GCP Vertex Gemini provider.
 
