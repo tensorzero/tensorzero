@@ -48,8 +48,7 @@ class Text(ContentBlock):
             raise ValueError("Only one of `text` or `arguments` must be provided.")
 
         # Warn about on going deprecation: https://github.com/tensorzero/tensorzero/issues/1170
-        # pyright: ignore [reportUnnecessaryIsInstance]
-        if self.text is not None and not isinstance(self.text, str):
+        if self.text is not None and not isinstance(self.text, str):  # pyright: ignore [reportUnnecessaryIsInstance]
             warnings.warn(
                 'Please use `ContentBlock(type="text", arguments=...)` when providing arguments for a prompt template/schema. In a future release, `Text(type="text", text=...)` will require a string literal.',
                 DeprecationWarning,
