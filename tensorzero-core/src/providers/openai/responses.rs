@@ -332,14 +332,10 @@ impl<'a> OpenAIResponsesRequest<'a> {
             })
             .unwrap_or_default();
         // If we have built_in_tools we should extend the list with them
-        tools.extend(
-            built_in_tools
-                .iter()
-                .map(|tool| OpenAIResponsesTool::BuiltIn(&tool)),
-        );
-        if let Some(provider_tools) = request.tool_config.as_ref().map(|tc| {
-            &tc.get_scoped_provider_tools(tensorzero_model_name, tensorzero_model_provider_name)
-        }) {
+        tools.extend(built_in_tools.iter().map(OpenAIResponsesTool::BuiltIn));
+        if let Some(tc) = request.tool_config.as_ref() {
+            let provider_tools =
+                tc.get_scoped_provider_tools(tensorzero_model_name, tensorzero_model_provider_name);
             tools.extend(
                 provider_tools
                     .iter()
