@@ -8,19 +8,19 @@ interface NewRunButtonProps {
 }
 
 export function NewRunButton({
-  onClick,
   className,
   disabled = false,
+  ...props
 }: NewRunButtonProps) {
   return (
     <Button
       variant="outline"
       size="sm"
-      onClick={onClick}
       className={className}
       disabled={disabled}
+      {...props}
     >
-      <Plus className="text-fg-tertiary mr-2 h-4 w-4" />
+      <Plus className="text-fg-tertiary mr-2 h-4 w-4" aria-hidden />
       New Run
     </Button>
   );
