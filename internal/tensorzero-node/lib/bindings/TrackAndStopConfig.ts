@@ -7,4 +7,5 @@ export type TrackAndStopConfig = {
   min_samples_per_variant: bigint;
   delta: number;
   epsilon: number;
+  min_prob: number | null;
 };

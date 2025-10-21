@@ -241,6 +241,12 @@ pub async fn inference(
         span.record("episode_id", episode_id.to_string());
     }
 
+    config
+        .gateway
+        .export
+        .otlp
+        .mark_openinference_chain_span(&span);
+
     // Automatically add internal tag when internal=true
     if params.internal {
         params
