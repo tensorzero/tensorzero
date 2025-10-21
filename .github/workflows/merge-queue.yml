@@ -333,13 +333,13 @@ jobs:
         run: cat vllm_gpt_oss_modal_logs.txt
 
       - if: always() && github.event_name == 'merge_group'
-        run: echo "BROWSERSTACK_BUILD_NAME='Merge Queue'" >> $GITHUB_ENV
+        run: echo "BROWSERSTACK_BUILD_NAME=Merge Queue" >> $GITHUB_ENV
 
       - if: always() && github.event_name == 'schedule'
-        run: echo "BROWSERSTACK_BUILD_NAME='Daily Cron'" >> $GITHUB_ENV
+        run: echo "BROWSERSTACK_BUILD_NAME=Daily Cron" >> $GITHUB_ENV
 
       - if: always() && github.event_name == 'workflow_dispatch'
-        run: echo "BROWSERSTACK_BUILD_NAME='Manual Run'" >> $GITHUB_ENV
+        run: echo "BROWSERSTACK_BUILD_NAME=Manual Run" >> $GITHUB_ENV
 
       - name: Upload test results
         if: always()
