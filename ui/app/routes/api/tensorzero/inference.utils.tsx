@@ -612,6 +612,7 @@ function resolvedFileContentToClientFile(
   const data = content.file.dataUrl.split(",")[1];
   return {
     type: "file",
+    file_type: "base64",
     mime_type: content.file.mime_type,
     data: data,
   };
