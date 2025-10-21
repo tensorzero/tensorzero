@@ -89,6 +89,7 @@ pub struct TrackAndStopConfig {
     epsilon: f64,
     #[ts(skip)]
     update_period: Duration,
+    min_prob: Option<f64>,
     #[serde(skip)]
     metric_optimize: MetricConfigOptimize,
     #[serde(skip)]
@@ -179,6 +180,7 @@ pub struct UninitializedTrackAndStopConfig {
     delta: f64,
     epsilon: f64,
     update_period_s: u64,
+    min_prob: Option<f64>,
 }
 
 impl UninitializedTrackAndStopConfig {
@@ -270,6 +272,7 @@ impl UninitializedTrackAndStopConfig {
             delta: self.delta,
             epsilon: self.epsilon,
             update_period: Duration::from_secs(self.update_period_s),
+            min_prob: self.min_prob,
             metric_optimize: metric_config.optimize,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(keep_variants),
@@ -347,6 +350,7 @@ impl VariantSampler for TrackAndStopConfig {
             min_samples_per_variant: self.min_samples_per_variant,
             epsilon: self.epsilon,
             delta: self.delta,
+            min_prob: self.min_prob,
             metric_optimize: self.metric_optimize,
             cancel_token,
         }));
@@ -420,6 +424,7 @@ struct ProbabilityUpdateTaskArgs {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
+    min_prob: Option<f64>,
     metric_optimize: MetricConfigOptimize,
     cancel_token: CancellationToken,
 }
@@ -445,6 +450,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
         min_samples_per_variant,
         epsilon,
         delta,
+        min_prob,
         metric_optimize,
         cancel_token,
     } = args;
@@ -467,6 +473,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
             min_samples_per_variant,
             epsilon,
             delta,
+            min_prob,
             metric_optimize,
         })
         .await;
@@ -489,6 +496,7 @@ struct UpdateProbabilitiesArgs<'a> {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
+    min_prob: Option<f64>,
     metric_optimize: MetricConfigOptimize,
 }
 
@@ -502,6 +510,7 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
         min_samples_per_variant,
         epsilon,
         delta,
+        min_prob,
         metric_optimize,
     } = args;
 
@@ -519,6 +528,7 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
             min_samples_per_variant,
             delta,
             epsilon,
+            min_prob,
             metric_optimize,
         )
     })
@@ -646,6 +656,7 @@ impl TrackAndStopState {
         min_samples_per_variant: u64,
         delta: f64,
         epsilon: f64,
+        min_prob: Option<f64>,
         metric_optimize: MetricConfigOptimize,
     ) -> Result<Self, TrackAndStopError> {
         let variant_performances = if variant_performances.len() > candidate_variants.len() {
@@ -708,7 +719,7 @@ impl TrackAndStopState {
                                 feedback: variant_performances,
                                 epsilon: Some(epsilon),
                                 variance_floor: None,
-                                min_prob: None,
+                                min_prob,
                                 reg0: None,
                                 metric_optimize,
                             },
@@ -775,7 +786,7 @@ impl TrackAndStopState {
                                 feedback: bandit_feedback,
                                 epsilon: Some(epsilon),
                                 variance_floor: None,
-                                min_prob: None,
+                                min_prob,
                                 reg0: None,
                                 metric_optimize,
                             },
@@ -1332,6 +1343,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -1359,6 +1371,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -1394,6 +1407,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Min,
         )
         .unwrap();
@@ -1420,6 +1434,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -1450,6 +1465,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Min,
         )
         .unwrap();
@@ -1486,6 +1502,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -1514,6 +1531,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Min,
         );
 
@@ -1716,6 +1734,7 @@ mod tests {
             5,
             0.1,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .expect("state builds");
@@ -1752,6 +1771,7 @@ mod tests {
             5,
             0.1,
             0.0,
+            None,
             MetricConfigOptimize::Min,
         )
         .expect("state builds");
@@ -1784,6 +1804,7 @@ mod tests {
             delta: 0.05,
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
+            min_prob: Some(0.001),
             metric_optimize: MetricConfigOptimize::Min,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
@@ -1830,6 +1851,7 @@ mod tests {
             delta: 0.05,
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
+            min_prob: Some(0.001),
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
