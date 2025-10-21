@@ -15,7 +15,7 @@ use crate::error::Error;
  * this code.
  */
 
-#[derive(Debug, Deserialize, Copy, Clone, Serialize, ts_rs::TS)]
+#[derive(Debug, Deserialize, Copy, Clone, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 pub struct RetryConfig {
     #[serde(default = "default_num_retries")]
@@ -42,6 +42,10 @@ fn default_max_delay_s() -> f32 {
 }
 
 impl RetryConfig {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
     pub fn retry<R, F: Future<Output = Result<R, Error>>>(
         &self,
         func: impl FnMut() -> F,
