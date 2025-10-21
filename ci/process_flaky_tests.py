@@ -7,10 +7,10 @@ and restructures them to show test retries more clearly. Each retry is converted
 separate test case with a <failure> tag.
 """
 
-import xml.etree.ElementTree as ET
 import argparse
-import sys
 from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
 
 
 def process_flaky_tests(input_file, output_file=None):
