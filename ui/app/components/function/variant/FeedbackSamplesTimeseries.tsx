@@ -23,8 +23,16 @@ export function FeedbackSamplesTimeseries({
   time_granularity: TimeWindow;
   onTimeGranularityChange: (time_granularity: TimeWindow) => void;
 }) {
-  const { data, variantNames } =
-    transformFeedbackTimeseries(feedbackTimeseries);
+  const { data, variantNames } = transformFeedbackTimeseries(
+    feedbackTimeseries,
+    time_granularity,
+  );
+
+  // Convert date strings to timestamps for proper spacing
+  const dataWithTimestamps = data.map((row) => ({
+    ...row,
+    timestamp: new Date(row.date).getTime(),
+  }));
 
   const chartConfig: Record<string, { label: string; color: string }> =
     variantNames.reduce(
@@ -37,6 +45,26 @@ export function FeedbackSamplesTimeseries({
       }),
       {},
     );
+
+  // Format x-axis labels based on time granularity
+  const formatXAxisTick = (value: number) => {
+    const date = new Date(value);
+    if (time_granularity === "hour") {
+      // Show month-day and hour for hourly granularity (without year)
+      return date.toISOString().slice(5, 13).replace("T", " ") + ":00";
+    }
+    // Show just the date for day, week, month
+    return date.toISOString().slice(0, 10);
+  };
+
+  // Format tooltip labels based on time granularity
+  const formatTooltipLabel = (value: number) => {
+    const date = new Date(value);
+    if (time_granularity === "hour") {
+      return date.toISOString().slice(0, 13).replace("T", " ") + ":00";
+    }
+    return date.toISOString().slice(0, 10);
+  };
 
   return (
     <div className="space-y-8">
@@ -52,16 +80,17 @@ export function FeedbackSamplesTimeseries({
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfig} className="h-80 w-full">
-            <AreaChart accessibilityLayer data={data}>
+            <AreaChart accessibilityLayer data={dataWithTimestamps}>
               <CartesianGrid vertical={false} />
               <XAxis
-                dataKey="date"
+                dataKey="timestamp"
+                type="number"
+                domain={["dataMin", "dataMax"]}
                 tickLine={false}
                 tickMargin={10}
                 axisLine={true}
-                tickFormatter={(value) =>
-                  new Date(value).toISOString().slice(0, 10)
-                }
+                tickFormatter={formatXAxisTick}
+                scale="linear"
               />
               <YAxis
                 tickLine={false}
@@ -71,6 +100,8 @@ export function FeedbackSamplesTimeseries({
                   value: "Feedback Sample Count",
                   angle: -90,
                   position: "insideLeft",
+                  style: { textAnchor: "middle" },
+                  offset: 10,
                 }}
                 tickFormatter={(value) => {
                   const num = Number(value);
@@ -94,7 +125,7 @@ export function FeedbackSamplesTimeseries({
                   return (
                     <div className="border-border/50 bg-background grid min-w-[8rem] items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
                       <div className="font-medium">
-                        {new Date(label).toISOString().slice(0, 10)}
+                        {formatTooltipLabel(label)}
                       </div>
                       <div className="grid gap-1.5">
                         {payload
@@ -165,11 +196,17 @@ export type FeedbackTimeseriesData = {
 
 export function transformFeedbackTimeseries(
   parsedRows: CumulativeFeedbackTimeSeriesPoint[],
+  timeGranularity: TimeWindow,
 ): {
   data: FeedbackTimeseriesData[];
   variantNames: string[];
 } {
   const variantNames = [...new Set(parsedRows.map((row) => row.variant_name))];
+
+  // If no data, return empty
+  if (parsedRows.length === 0) {
+    return { data: [], variantNames: [] };
+  }
 
   // Group by date
   const groupedByDate = parsedRows.reduce<
@@ -186,41 +223,149 @@ export function transformFeedbackTimeseries(
     return acc;
   }, {});
 
-  // Convert to array and sort by date
-  // Note: ClickHouse already returns cumulative counts, so we don't need to compute them again
-  const sortedData = Object.entries(groupedByDate)
-    .map(([date, variants]) => {
-      const row: FeedbackTimeseriesData = { date };
-      variantNames.forEach((variant) => {
-        row[variant] = variants[variant] ?? 0;
-      });
-      return row;
-    })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  // Get all unique periods from the data, sorted chronologically
+  const allPeriods = Object.keys(groupedByDate).sort();
 
-  // Forward-fill missing cumulative values for each variant
-  // (ClickHouse only returns a row for a variant when it has new data in that period)
+  // Helper to normalize a date to match ClickHouse's period format
+  const normalizePeriod = (date: Date): Date => {
+    const normalized = new Date(date);
+    switch (timeGranularity) {
+      case "minute":
+        // Truncate to minute
+        normalized.setUTCSeconds(0, 0);
+        break;
+      case "hour":
+        // Truncate to hour
+        normalized.setUTCMinutes(0, 0, 0);
+        break;
+      case "day":
+        // Truncate to day
+        normalized.setUTCHours(0, 0, 0, 0);
+        break;
+      case "week":
+        // Truncate to day
+        normalized.setUTCHours(0, 0, 0, 0);
+        break;
+      case "month":
+        // Truncate to day
+        normalized.setUTCHours(0, 0, 0, 0);
+        break;
+      case "cumulative":
+        // No truncation needed for cumulative
+        break;
+    }
+    return normalized;
+  };
+
+  // Helper to add one period to a date based on granularity
+  const addPeriod = (date: Date): string => {
+    const result = new Date(date);
+    switch (timeGranularity) {
+      case "minute":
+        result.setUTCMinutes(result.getUTCMinutes() + 1);
+        break;
+      case "hour":
+        result.setUTCHours(result.getUTCHours() + 1);
+        break;
+      case "day":
+        result.setUTCDate(result.getUTCDate() + 1);
+        break;
+      case "week":
+        result.setUTCDate(result.getUTCDate() + 7);
+        break;
+      case "month":
+        result.setUTCMonth(result.getUTCMonth() + 1);
+        break;
+      case "cumulative":
+        // No period addition for cumulative
+        break;
+    }
+    return normalizePeriod(result).toISOString();
+  };
+
+  // Fill in missing periods between the ones we have from ClickHouse
+  const filledPeriods: string[] = [];
+  for (let i = 0; i < allPeriods.length; i++) {
+    const currentPeriod = allPeriods[i];
+    filledPeriods.push(currentPeriod);
+
+    // Check if there's a next period to compare against
+    if (i < allPeriods.length - 1) {
+      const nextPeriod = allPeriods[i + 1];
+      let current = new Date(currentPeriod);
+      const next = new Date(nextPeriod);
+
+      // Fill in any missing periods between current and next
+      while (true) {
+        const nextPeriodStr = addPeriod(current);
+        current = new Date(nextPeriodStr);
+        if (current.getTime() >= next.getTime()) break;
+        filledPeriods.push(nextPeriodStr);
+      }
+    }
+  }
+
+  // If we have fewer than 10 periods, add more going backwards from the earliest
+  if (filledPeriods.length < 10) {
+    const earliestPeriod = new Date(filledPeriods[0]);
+    const periodsToAdd = 10 - filledPeriods.length;
+    const additionalPeriods: string[] = [];
+
+    for (let i = 1; i <= periodsToAdd; i++) {
+      const period = new Date(earliestPeriod);
+      switch (timeGranularity) {
+        case "minute":
+          period.setUTCMinutes(earliestPeriod.getUTCMinutes() - i);
+          break;
+        case "hour":
+          period.setUTCHours(earliestPeriod.getUTCHours() - i);
+          break;
+        case "day":
+          period.setUTCDate(earliestPeriod.getUTCDate() - i);
+          break;
+        case "week":
+          period.setUTCDate(earliestPeriod.getUTCDate() - i * 7);
+          break;
+        case "month":
+          period.setUTCMonth(earliestPeriod.getUTCMonth() - i);
+          break;
+        case "cumulative":
+          // No period subtraction for cumulative
+          break;
+      }
+      const normalized = normalizePeriod(period);
+      additionalPeriods.unshift(normalized.toISOString());
+    }
+
+    filledPeriods.unshift(...additionalPeriods);
+  }
+
+  // Take only the last 10 periods
+  const periodsToShow = filledPeriods.slice(-10);
+
+  // Initialize cumulative counts for forward-filling
   const lastKnownCounts: Record<string, number> = {};
   variantNames.forEach((variant) => {
     lastKnownCounts[variant] = 0;
   });
 
-  const filledData = sortedData.map((row) => {
-    const filledRow: FeedbackTimeseriesData = { date: row.date };
-    variantNames.forEach((variant) => {
-      const currentValue = row[variant] as number;
-      // If we have a new value, use it and update the last known count
-      if (currentValue > 0) {
-        lastKnownCounts[variant] = currentValue;
-      }
-      // Always use the last known count (forward-fill)
-      filledRow[variant] = lastKnownCounts[variant];
-    });
-    return filledRow;
-  });
+  // Create data for each period, forward-filling cumulative counts
+  const data: FeedbackTimeseriesData[] = periodsToShow.map((period) => {
+    const row: FeedbackTimeseriesData = { date: period };
 
-  // Take only the 10 most recent periods
-  const data = filledData.slice(-10);
+    variantNames.forEach((variant) => {
+      // Check if we have actual data for this period
+      const periodData = groupedByDate[period];
+      if (periodData && periodData[variant] !== undefined) {
+        // Update with actual cumulative count from ClickHouse
+        lastKnownCounts[variant] = periodData[variant];
+      }
+      // Use the last known cumulative count (forward-fill)
+      row[variant] = lastKnownCounts[variant];
+    });
+
+    return row;
+  });
 
   return {
     data,
