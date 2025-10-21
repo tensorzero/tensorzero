@@ -108,7 +108,7 @@ temperature = 0
 
 [functions.extract_entities.experimentation]
 type = "track_and_stop"
-metric = "count_sports"
+metric = "jaro_winkler_similarity"
 candidate_variants = [
     "gpt4o_mini_initial_prompt",
     "gpt4o_initial_prompt",
@@ -379,6 +379,11 @@ optimize = "max"
 type = "float"
 level = "episode"
 optimize = "min"
+
+[metrics.jaro_winkler_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
 
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
