@@ -1123,20 +1123,22 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
             });
 
             // The incomplete_details field indicates if response was cut short
-            let finish_reason = response.get("incomplete_details").and_then(|details| {
-                serde_json::from_value::<OpenAIResponsesIncompleteDetails>(details.clone())
-                    .ok()
-                    .map(|incomplete_details| {
-                        incomplete_details_option_to_finish_reason(Some(&incomplete_details))
+            let finish_reason = incomplete_details_option_to_finish_reason(
+                response
+                    .get("incomplete_details")
+                    .and_then(|details| {
+                        serde_json::from_value::<OpenAIResponsesIncompleteDetails>(details.clone())
+                            .ok()
                     })
-            });
+                    .as_ref(),
+            );
 
             Ok(Some(ProviderInferenceResponseChunk::new(
                 vec![],
                 usage,
                 raw_message,
                 message_latency,
-                finish_reason,
+                Some(finish_reason),
             )))
         }
 
