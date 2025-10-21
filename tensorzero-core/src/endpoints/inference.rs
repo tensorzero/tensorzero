@@ -22,9 +22,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
 use crate::cache::{CacheOptions, CacheParamsOptions};
-use crate::config::{
-    Config, ErrorContext, OtlpConfig, OtlpTracesFormat, SchemaData, UninitializedVariantInfo,
-};
+use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedVariantInfo};
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
@@ -240,16 +238,11 @@ pub async fn inference(
         span.record("episode_id", episode_id.to_string());
     }
 
-    let traces_config = &config.gateway.export.otlp.traces;
-
-    if traces_config.enabled {
-        match traces_config.format {
-            OtlpTracesFormat::OpenTelemetry => {}
-            OtlpTracesFormat::OpenInference => {
-                span.set_attribute("openinference.span.kind", "CHAIN");
-            }
-        }
-    }
+    config
+        .gateway
+        .export
+        .otlp
+        .mark_openinference_chain_span(&span);
 
     // Automatically add internal tag when internal=true
     if params.internal {

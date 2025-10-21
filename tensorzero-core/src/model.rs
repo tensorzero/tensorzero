@@ -399,16 +399,7 @@ impl ModelConfig {
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
         let span = tracing::Span::current();
-
-        let traces_config = &clients.otlp_config.traces;
-        if traces_config.enabled {
-            match traces_config.format {
-                OtlpTracesFormat::OpenTelemetry => {}
-                OtlpTracesFormat::OpenInference => {
-                    span.set_attribute("openinference.span.kind", "CHAIN");
-                }
-            }
-        }
+        clients.otlp_config.mark_openinference_chain_span(&span);
 
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
@@ -512,6 +503,9 @@ impl ModelConfig {
         clients: &InferenceClients,
         model_name: &'request str,
     ) -> Result<StreamResponseAndMessages, Error> {
+        clients
+            .otlp_config
+            .mark_openinference_chain_span(&tracing::Span::current());
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {

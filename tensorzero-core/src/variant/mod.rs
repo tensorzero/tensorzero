@@ -12,10 +12,9 @@ use std::sync::Arc;
 use tokio::time::error::Elapsed;
 use tokio::time::Duration;
 use tracing::instrument;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use crate::config::{OtlpTracesFormat, PathWithContents, TimeoutsConfig};
+use crate::config::{PathWithContents, TimeoutsConfig};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -284,16 +283,9 @@ impl Variant for VariantInfo {
     ) -> Result<InferenceResult, Error> {
         let variant_name = inference_config.variant_name.clone();
 
-        let span = tracing::Span::current();
-        let traces_config = &clients.otlp_config.traces;
-        if traces_config.enabled {
-            match traces_config.format {
-                OtlpTracesFormat::OpenTelemetry => {}
-                OtlpTracesFormat::OpenInference => {
-                    span.set_attribute("openinference.span.kind", "CHAIN");
-                }
-            }
-        }
+        clients
+            .otlp_config
+            .mark_openinference_chain_span(&tracing::Span::current());
 
         let fut = async {
             match &self.inner {
@@ -391,6 +383,9 @@ impl Variant for VariantInfo {
         clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+        clients
+            .otlp_config
+            .mark_openinference_chain_span(&tracing::Span::current());
         let variant_name = inference_config.variant_name.clone();
         let fut = async {
             match &self.inner {
