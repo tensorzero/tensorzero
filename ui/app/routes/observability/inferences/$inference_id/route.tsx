@@ -356,14 +356,7 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
         ...request.cache_options,
         enabled: "write_only",
       };
-      void submit({ data: JSON.stringify(request) }).catch((error) => {
-        logger.error("Failed to resubmit inference request:", error);
-        toast({
-          title: "Request Error",
-          description: "Failed to refresh inference. Please try again.",
-          variant: "destructive",
-        });
-      });
+      submit({ data: JSON.stringify(request) });
     } catch (error) {
       logger.error("Failed to prepare inference request for refresh:", error);
       toast({
