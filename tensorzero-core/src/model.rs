@@ -931,6 +931,8 @@ pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
+        api_base: Option<Url>,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "aws_bedrock")]
@@ -1077,9 +1079,11 @@ impl UninitializedProviderConfig {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
                 model_name,
+                api_base,
                 api_key_location,
             } => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
+                api_base,
                 AnthropicKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
@@ -2200,6 +2204,7 @@ impl ShorthandModelConfig for ModelConfig {
         let provider_config = match provider_type {
             "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
+                None,
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
@@ -3324,6 +3329,7 @@ mod tests {
         let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
             ProviderConfig::Anthropic(AnthropicProvider::new(
                 "claude".to_string(),
+                None,
                 AnthropicCredentials::None,
             ))
         });
