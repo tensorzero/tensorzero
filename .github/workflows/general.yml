@@ -240,7 +240,7 @@ jobs:
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
   validate:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: namespace-profile-tensorzero-8x32
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'

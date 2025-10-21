@@ -2153,6 +2153,7 @@ version = "2025.10.6"
 dependencies = [
  "axum",
  "clap",
+ "metrics-exporter-prometheus",
  "mimalloc",
  "reqwest",
  "serde",

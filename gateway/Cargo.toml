@@ -21,6 +21,7 @@ serde = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true }
 tower-http = { workspace = true }
 tokio-util = "0.7.15"
+metrics-exporter-prometheus = { workspace = true }
 
 [lints]
 workspace = true
