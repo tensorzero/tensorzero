@@ -1,9 +1,3 @@
-use axum::extract::{DefaultBodyLimit, Request};
-use axum::http::HeaderValue;
-use axum::middleware::Next;
-use axum::response::Response;
-use axum::routing::{delete, get, post, put};
-use axum::Router;
 use clap::{Args, Parser};
 use mimalloc::MiMalloc;
 use std::fmt::Display;
@@ -12,18 +6,16 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::signal;
-use tower_http::trace::{DefaultOnFailure, TraceLayer};
-use tracing::Level;
 
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
-use tensorzero_core::endpoints;
-use tensorzero_core::endpoints::openai_compatible::RouterExt as _;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error;
-use tensorzero_core::observability::{self, LogFormat, RouterExt as _};
+use tensorzero_core::observability::{self, LogFormat};
 use tensorzero_core::utils::gateway;
+
+mod routes;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -60,32 +52,6 @@ struct MigrationCommands {
     /// Run PostgreSQL migrations manually then exit.
     #[arg(long)]
     run_postgres_migrations: bool,
-}
-
-async fn add_version_header(request: Request, next: Next) -> Response {
-    #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
-    let mut version = HeaderValue::from_static(TENSORZERO_VERSION);
-
-    #[cfg(feature = "e2e_tests")]
-    {
-        if request
-            .headers()
-            .contains_key("x-tensorzero-e2e-version-remove")
-        {
-            tracing::info!("Removing version header due to e2e header");
-            return next.run(request).await;
-        }
-        if let Some(header_version) = request.headers().get("x-tensorzero-e2e-version-override") {
-            tracing::info!("Overriding version header with e2e header: {header_version:?}");
-            version = header_version.clone();
-        }
-    }
-
-    let mut response = next.run(request).await;
-    response
-        .headers_mut()
-        .insert("x-tensorzero-gateway-version", version);
-    response
 }
 
 #[tokio::main]
@@ -222,97 +188,6 @@ async fn main() {
     error::set_unstable_error_json(config.gateway.unstable_error_json)
         .expect_pretty("Failed to set unstable error JSON");
 
-    let api_routes = Router::new()
-        .route("/inference", post(endpoints::inference::inference_handler))
-        .route(
-            "/batch_inference",
-            post(endpoints::batch_inference::start_batch_inference_handler),
-        )
-        .route(
-            "/batch_inference/{batch_id}",
-            get(endpoints::batch_inference::poll_batch_inference_handler),
-        )
-        .route(
-            "/batch_inference/{batch_id}/inference/{inference_id}",
-            get(endpoints::batch_inference::poll_batch_inference_handler),
-        )
-        .register_openai_compatible_routes()
-        .route("/feedback", post(endpoints::feedback::feedback_handler))
-        // Everything above this layer has OpenTelemetry tracing enabled
-        // Note - we do *not* attach a `OtelInResponseLayer`, as this seems to be incorrect according to the W3C Trace Context spec
-        // (the only response header is `traceresponse` for a completed trace)
-        .apply_otel_http_trace_layer(delayed_log_config.otel_tracer.clone())
-        // Everything below the Otel layers does not have OpenTelemetry tracing enabled
-        .route("/status", get(endpoints::status::status_handler))
-        .route("/health", get(endpoints::status::health_handler))
-        .route(
-            "/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::create_datapoints_handler),
-        )
-        // TODO(#3459): Deprecated in #3721. Remove in a future release.
-        .route(
-            "/datasets/{dataset_name}/datapoints/bulk",
-            post(endpoints::datasets::bulk_insert_datapoints_handler),
-        )
-        .route(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
-            delete(endpoints::datasets::delete_datapoint_handler),
-        )
-        .route(
-            "/datasets/{dataset_name}/datapoints",
-            get(endpoints::datasets::list_datapoints_handler),
-        )
-        .route(
-            "/datasets/{dataset_name}",
-            delete(endpoints::datasets::stale_dataset_handler),
-        )
-        .route(
-            "/datasets/{dataset_name}/datapoints/{datapoint_id}",
-            get(endpoints::datasets::get_datapoint_handler),
-        )
-        .route(
-            "/internal/datasets/{dataset_name}/datapoints",
-            post(endpoints::datasets::insert_from_existing_datapoint_handler),
-        )
-        .route(
-            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
-            put(endpoints::datasets::update_datapoint_handler),
-        )
-        .route(
-            "/internal/object_storage",
-            get(endpoints::object_storage::get_object_handler),
-        )
-        // Workflow evaluation endpoints (new)
-        .route(
-            "/workflow_evaluation_run",
-            post(endpoints::workflow_evaluation_run::workflow_evaluation_run_handler),
-        )
-        .route(
-            "/workflow_evaluation_run/{run_id}/episode",
-            post(endpoints::workflow_evaluation_run::workflow_evaluation_run_episode_handler),
-        )
-        // DEPRECATED: Use /workflow_evaluation_run endpoints instead
-        .route(
-            "/dynamic_evaluation_run",
-            post(endpoints::workflow_evaluation_run::dynamic_evaluation_run_handler),
-        )
-        .route(
-            "/dynamic_evaluation_run/{run_id}/episode",
-            post(endpoints::workflow_evaluation_run::dynamic_evaluation_run_episode_handler),
-        )
-        .route(
-            "/metrics",
-            get(move || std::future::ready(metrics_handle.render())),
-        )
-        .route(
-            "/experimental_optimization_workflow",
-            post(endpoints::optimization::launch_optimization_workflow_handler),
-        )
-        .route(
-            "/experimental_optimization/{job_handle}",
-            get(endpoints::optimization::poll_optimization_handler),
-        );
-
     let base_path = config.gateway.base_path.as_deref().unwrap_or("/");
     if !base_path.starts_with("/") {
         tracing::error!("[gateway.base_path] must start with a `/` : `{base_path}`");
@@ -320,23 +195,12 @@ async fn main() {
     }
     let base_path = base_path.trim_end_matches("/");
 
-    // The path was just `/` (or multiple slashes)
-    let router = if base_path.is_empty() {
-        Router::new().merge(api_routes)
-    } else {
-        Router::new().nest(base_path, api_routes)
-    };
-
-    let router = router
-        .fallback(endpoints::fallback::handle_404)
-        .layer(axum::middleware::from_fn(add_version_header))
-        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
-        // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
-        // This is only used to output request/response information to our logs
-        // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
-        // We log failed requests messages at 'DEBUG', since we already have our own error-logging code,
-        .layer(TraceLayer::new_for_http().on_failure(DefaultOnFailure::new().level(Level::DEBUG)))
-        .with_state(gateway_handle.app_state.clone());
+    let router = routes::build_axum_router(
+        base_path,
+        delayed_log_config.otel_tracer.clone(),
+        gateway_handle.app_state.clone(),
+        metrics_handle,
+    );
 
     // Bind to the socket address specified in the config, or default to 0.0.0.0:3000
     let bind_address = config

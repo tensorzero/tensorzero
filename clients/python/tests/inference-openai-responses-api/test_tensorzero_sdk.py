@@ -18,6 +18,7 @@ from tensorzero import (
 from tensorzero.types import (
     ChatChunk,
     Thought,
+    ThoughtSummaryBlock,
     ToolCallChunk,
     UnknownContentBlock,
 )
@@ -354,7 +355,18 @@ async def test_openai_responses_reasoning(async_client: AsyncTensorZeroGateway):
         assert isinstance(thought, Thought)
         assert thought.type == "thought"
 
-    # TODO (#4043): Check summary field when we expose it in the Python SDK
+    # Check that at least one thought has a summary
+    thought_with_summary = [t for t in thought_blocks if t.summary is not None]
+    assert len(thought_with_summary) > 0, "Expected at least one thought block to have a summary"
+
+    # Verify the summary structure
+    for thought in thought_with_summary:
+        assert isinstance(thought.summary, list)
+        assert len(thought.summary) > 0
+        for summary_block in thought.summary:
+            assert isinstance(summary_block, ThoughtSummaryBlock)
+            assert isinstance(summary_block.text, str)
+            assert len(summary_block.text) > 0
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
@@ -414,7 +426,9 @@ async def test_openai_responses_reasoning_streaming(
     # Should have received thought chunks when reasoning is enabled
     assert has_thought, "Expected thought content blocks when reasoning is enabled"
 
-    # TODO (#4043): Check summary field when we expose it in the Python SDK
+    # Note: Checking streaming summary chunks would require aggregating chunks across
+    # multiple messages, which is complex. The summary is fully tested in the
+    # non-streaming test above.
 
 
 @pytest.mark.asyncio

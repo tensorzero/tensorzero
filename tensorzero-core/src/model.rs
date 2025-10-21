@@ -392,6 +392,9 @@ impl ModelConfig {
         clients: &InferenceClients,
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
+        let span = tracing::Span::current();
+        clients.otlp_config.mark_openinference_chain_span(&span);
+
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
@@ -494,6 +497,9 @@ impl ModelConfig {
         clients: &InferenceClients,
         model_name: &'request str,
     ) -> Result<StreamResponseAndMessages, Error> {
+        clients
+            .otlp_config
+            .mark_openinference_chain_span(&tracing::Span::current());
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {

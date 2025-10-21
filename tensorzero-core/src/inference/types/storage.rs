@@ -12,11 +12,11 @@ use pyo3::prelude::*;
 /// We test against Amazon S3, GCS, Cloudflare R2, and Minio
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS)]
+#[ts(export)]
 pub enum StorageKind {
-    // ts(optional_fields) is only available for structs, not enums.
     S3Compatible {
+        // TODO(shuyangli): mark all of these as ts(optional)
         bucket_name: Option<String>,
         region: Option<String>,
         endpoint: Option<String>,
@@ -75,9 +75,12 @@ impl StorageKind {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(test, ts(export))]
+/// Path to a file in an object storage backend.
+/// This is part of the public API for `File`s. In particular, this is useful for roundtripping
+/// unresolved inputs from stored inferences or datapoints, without requiring clients to fetch
+/// file data first.
+#[derive(ts_rs::TS, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct StoragePath {
     pub kind: StorageKind,
@@ -85,7 +88,7 @@ pub struct StoragePath {
         serialize_with = "serialize_storage_path",
         deserialize_with = "deserialize_storage_path"
     )]
-    #[cfg_attr(test, ts(type = "string"))]
+    #[ts(type = "string")]
     pub path: object_store::path::Path,
 }
 

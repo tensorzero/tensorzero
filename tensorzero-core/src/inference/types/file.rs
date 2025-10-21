@@ -9,9 +9,9 @@ use url::Url;
 
 use super::{ContentBlock, RequestMessage};
 use crate::{
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
-    inference::types::resolved_input::LazyFile,
+    inference::types::{resolved_input::LazyFile, storage::StoragePath},
 };
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
@@ -50,14 +50,13 @@ pub struct Base64File {
 }
 
 /// Like `Base64File`, but without the data field.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     // The original url we used to download the file
     pub url: Option<Url>,
-    #[cfg_attr(test, ts(type = "string"))]
+    #[ts(type = "string")]
     pub mime_type: MediaType,
 }
 
@@ -101,20 +100,28 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
     })
 }
 
+/// A file for an inference or a datapoint.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(untagged, deny_unknown_fields)]
 pub enum File {
+    /// A file that can be located at a URL.
     Url {
         url: Url,
         #[serde(default)]
         #[ts(type = "string | null")]
         mime_type: Option<MediaType>,
     },
+    /// A file already encoded as base64.
     Base64 {
         #[ts(type = "string")]
         mime_type: MediaType,
         data: String,
+    },
+    /// A file stored in an object storage backend.
+    ObjectStorage {
+        metadata: Base64FileMetadata,
+        storage_path: StoragePath,
     },
 }
 
@@ -221,6 +228,11 @@ impl File {
                 mime_type,
                 data,
             }),
+            File::ObjectStorage { .. } => Err(Error::new(ErrorDetails::InternalError {
+                // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
+                // the base File::Url type calls this method.
+                message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+            })),
         }
     }
 }
@@ -251,6 +263,20 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                         }
                     }
                     LazyFile::FileWithPath(file) => Some(Cow::Borrowed(file)),
+                    LazyFile::ObjectStorage { future, .. } => {
+                        // If we actually sent the file bytes to some model provider, then the
+                        // Shared future must be ready, so we'll get a file from `now_or_never`.
+                        // Otherwise, the file cannot have been sent to a model provider (since the
+                        // future was never `.await`ed before we constructed `raw_request`), so
+                        // there's nothing to strip from the message.
+                        // We ignore errors here, since an error during file resolution means that
+                        // we cannot have included the file bytes in `raw_request`.
+                        if let Some(Ok(file)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(file))
+                        } else {
+                            None
+                        }
+                    }
                 };
                 if let Some(file) = file_with_path {
                     raw_request =
