@@ -31,6 +31,7 @@ jobs:
       - name: Trigger merge queue workflow
         id: trigger
         run: |
+          set -e
           gh workflow run merge-queue.yml --ref ${{ github.event.client_payload.pull_request.head.ref }}
 
           # Wait a moment for the workflow to be created
