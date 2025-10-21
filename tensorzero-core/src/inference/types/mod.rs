@@ -795,6 +795,7 @@ enum ContentBlockOutputType {
     Text,
     ToolCall,
     Thought,
+    Unknown,
 }
 
 /// Defines the types of content block that can come out of a model provider

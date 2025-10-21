@@ -1287,6 +1287,13 @@ fn process_chat_content_chunk(
                     "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
                 );
             }
+            ContentBlockChunk::Unknown { .. } => {
+                // OpenAI compatible endpoint does not support unknown blocks
+                // Users of this endpoint will need to check observability to see them
+                tracing::warn!(
+                    "Ignoring 'unknown' content block chunk when constructing OpenAI-compatible response"
+                );
+            }
         }
     }
     (content_str, tool_calls)

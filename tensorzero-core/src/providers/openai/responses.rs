@@ -1090,7 +1090,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Output item added - captures tool metadata when it's a function_call
         // This is where we emit the tool name to the client
-        OpenAIResponsesStreamEvent::ResponseOutputItemAdded { item, .. } => {
+        OpenAIResponsesStreamEvent::ResponseOutputItemAdded { item, output_index } => {
             // Check if this is a function_call item
             if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
                 if item_type == "function_call" {
@@ -1115,9 +1115,24 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                             None,
                         )));
                     }
+                } else if item_type == "message" {
+                    // Skip message items - these are handled by other events
+                    return Ok(None);
+                } else {
+                    // Unknown item type - return as unknown chunk
+                    return Ok(Some(ProviderInferenceResponseChunk::new(
+                        vec![ContentBlockChunk::Unknown {
+                            id: output_index.to_string(),
+                            data: item,
+                        }],
+                        None,
+                        raw_message,
+                        message_latency,
+                        None,
+                    )));
                 }
             }
-            // Don't emit a chunk for this event if it's not a function_call
+            // Don't emit a chunk if there's no type field
             Ok(None)
         }
 
