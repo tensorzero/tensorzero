@@ -6,7 +6,6 @@ use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use futures::FutureExt;
 use metrics::counter;
-use opentelemetry::trace::Status;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -461,10 +460,7 @@ pub async fn inference(
         .await;
 
         match result {
-            Ok(output) => {
-                span.set_status(Status::Ok);
-                return Ok(output);
-            }
+            Ok(output) => return Ok(output),
             Err(e) => {
                 tracing::warn!(
                     "functions.{function_name}.variants.{variant_name} failed during inference: {e}",
