@@ -5,7 +5,7 @@ import type {
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS } from "~/utils/chart";
 
-import { Card, CardContent, CardHeader } from "~/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
   ChartContainer,
   ChartLegend,
@@ -69,7 +69,8 @@ export function FeedbackSamplesTimeseries({
   return (
     <div className="space-y-8">
       <Card>
-        <CardHeader className="flex flex-row items-start justify-between">
+        <CardHeader>
+          <CardTitle>Cumulative Feedback Counts Over Time</CardTitle>
           <TimeGranularitySelector
             time_granularity={time_granularity}
             onTimeGranularityChange={onTimeGranularityChange}
