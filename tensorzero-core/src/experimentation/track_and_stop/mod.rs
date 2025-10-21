@@ -1909,4 +1909,123 @@ mod tests {
             "Setup should fail when Postgres is unhealthy"
         );
     }
+
+    // Tests for min_prob parameter being passed through correctly
+    #[test]
+    fn test_min_prob_passed_to_estimate_optimal_probabilities() {
+        // Test that min_prob is passed through to estimate_optimal_probabilities
+        // by checking that all probabilities respect the min_prob constraint
+        let candidates = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let performances = vec![
+            create_feedback("A", 20, 0.5, 0.1),
+            create_feedback("B", 20, 0.6, 0.2),
+            create_feedback("C", 20, 0.55, 0.15),
+        ];
+
+        let min_prob = 0.15; // Set a high min_prob to ensure it's enforced
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            Some(min_prob),
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
+
+        match state {
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities,
+            } => {
+                // All probabilities should be >= min_prob
+                for (variant_name, &prob) in &sampling_probabilities {
+                    assert!(
+                        prob >= min_prob - 1e-6,
+                        "Variant {variant_name} has probability {prob} which violates min_prob {min_prob}"
+                    );
+                }
+            }
+            _ => panic!("Expected BanditsOnly state, got {state:?}"),
+        }
+    }
+
+    #[test]
+    fn test_min_prob_none_uses_default() {
+        // Test that when min_prob is None, the default value from
+        // estimate_optimal_probabilities (1e-6) is used
+        let candidates = vec!["A".to_string(), "B".to_string()];
+        let performances = vec![
+            create_feedback("A", 20, 0.5, 0.1),
+            create_feedback("B", 20, 0.6, 0.2),
+        ];
+
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            None, // min_prob is None, should use default
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
+
+        match state {
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities,
+            } => {
+                // All probabilities should be >= default min_prob (1e-6)
+                for (variant_name, &prob) in &sampling_probabilities {
+                    assert!(
+                        prob >= 1e-6 - 1e-9,
+                        "Variant {variant_name} has probability {prob} which is less than default min_prob"
+                    );
+                }
+            }
+            _ => panic!("Expected BanditsOnly state, got {state:?}"),
+        }
+    }
+
+    #[test]
+    fn test_min_prob_in_nursery_and_bandits_state() {
+        // Test that min_prob is respected in NurseryAndBandits state
+        let candidates = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let performances = vec![
+            create_feedback("A", 20, 0.5, 0.1),  // Above cutoff
+            create_feedback("B", 20, 0.6, 0.2),  // Above cutoff
+            create_feedback("C", 5, 0.55, 0.15), // Below cutoff, in nursery
+        ];
+
+        let min_prob = 0.2;
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            Some(min_prob),
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
+
+        match state {
+            TrackAndStopState::NurseryAndBandits {
+                nursery,
+                sampling_probabilities,
+            } => {
+                // Nursery should have variant C
+                assert_eq!(nursery.variants, vec!["C".to_string()]);
+
+                // All bandit probabilities should be >= min_prob
+                for (variant_name, &prob) in &sampling_probabilities {
+                    assert!(
+                        prob >= min_prob - 1e-6,
+                        "Variant {variant_name} has probability {prob} which violates min_prob {min_prob}"
+                    );
+                }
+            }
+            _ => panic!("Expected NurseryAndBandits state, got {state:?}"),
+        }
+    }
 }
