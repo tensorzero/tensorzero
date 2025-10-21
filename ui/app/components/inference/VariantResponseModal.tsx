@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
@@ -26,6 +26,7 @@ interface ResponseColumnProps {
   onClose?: () => void;
   actions?: React.ReactNode;
   latencyMs?: number | null;
+  refreshButton?: React.ReactNode;
 }
 
 function ResponseColumn({
@@ -36,9 +37,11 @@ function ResponseColumn({
   onClose,
   actions,
   latencyMs,
+  refreshButton,
 }: ResponseColumnProps) {
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="relative flex flex-1 flex-col">
+      {refreshButton}
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold">{title}</h3>
       </div>
@@ -160,14 +163,14 @@ export function VariantResponseModal({
 
   const refreshButton = onRefresh && (
     <Button
-      variant="outline"
-      size="sm"
+      aria-label="Refresh variant response"
+      variant="ghost"
+      size="iconSm"
+      className="absolute top-1 right-1 z-5 h-6 w-6 cursor-pointer text-xs opacity-25 transition-opacity hover:opacity-100"
       onClick={onRefresh}
       disabled={isLoading}
-      className="flex items-center gap-2"
     >
-      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-      Refresh
+      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw />}
     </Button>
   );
 
@@ -235,12 +238,8 @@ export function VariantResponseModal({
                   errorMessage={error}
                   inferenceId={rawResponse?.inference_id}
                   onClose={onClose}
-                  actions={
-                    <div className="flex flex-col items-end gap-2">
-                      {refreshButton}
-                      {children}
-                    </div>
-                  }
+                  refreshButton={refreshButton}
+                  actions={children}
                   latencyMs={latencyMs}
                 />
               </div>
