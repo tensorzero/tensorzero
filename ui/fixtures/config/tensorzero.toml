@@ -108,7 +108,7 @@ temperature = 0
 
 [functions.extract_entities.experimentation]
 type = "track_and_stop"
-metric = "jaccard_similarity"
+metric = "count_sports"
 candidate_variants = [
     "gpt4o_mini_initial_prompt",
     "gpt4o_initial_prompt",

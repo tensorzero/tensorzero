@@ -46,6 +46,8 @@ export function FeedbackSamplesTimeseries({
             time_granularity={time_granularity}
             onTimeGranularityChange={onTimeGranularityChange}
             includeCumulative={false}
+            includeMinute={true}
+            includeHour={true}
           />
         </CardHeader>
         <CardContent>
