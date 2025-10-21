@@ -19,7 +19,6 @@ use crate::providers::azure::AzureProvider;
 use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
     RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest, RateLimitedResponse,
-    ScopeInfo,
 };
 use crate::{
     endpoints::inference::InferenceCredentials,
@@ -189,11 +188,8 @@ impl EmbeddingModelConfig {
                         return Ok(cache_lookup);
                     }
                 }
-                let scope_info = ScopeInfo {
-                    tags: &HashMap::default(),
-                };
                 let response = provider_config
-                    .embed(request, clients, &scope_info, &provider_config.into())
+                    .embed(request, clients, &provider_config.into())
                     .await;
 
                 match response {
@@ -566,12 +562,15 @@ impl EmbeddingProviderInfo {
         &self,
         request: &EmbeddingRequest,
         clients: &InferenceClients,
-        scope_info: &ScopeInfo<'_>,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
         let ticket_borrow = clients
             .rate_limiting_config
-            .consume_tickets(&clients.postgres_connection_info, scope_info, request)
+            .consume_tickets(
+                &clients.postgres_connection_info,
+                &clients.scope_info,
+                request,
+            )
             .await?;
         let response_fut = self.inner.embed(
             request,
@@ -825,6 +824,9 @@ mod tests {
                     rate_limiting_config: Arc::new(Default::default()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
+                    scope_info: crate::rate_limiting::ScopeInfo {
+                        tags: Arc::new(HashMap::new()),
+                    },
                 },
             )
             .await;

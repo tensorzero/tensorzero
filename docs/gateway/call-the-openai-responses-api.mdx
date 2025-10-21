@@ -60,6 +60,10 @@ model_name = "gpt-5-mini"
 api_type = "responses"
 include_encrypted_reasoning = true
 provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+# Enable plain-text summaries of encrypted reasoning
+extra_body = [
+    { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
+]
 ```
 
 </Step>
@@ -121,6 +125,7 @@ response = t0.inference(
             }
         ]
     },
+    # Thought summaries are enabled in tensorzero.toml via extra_body
 )
 ```
 
@@ -136,7 +141,13 @@ ChatInferenceResponse(
             text=None,
             type='thought',
             signature='gAAAAABo9...',
-            _internal_provider_type=None
+            summary=[
+                ThoughtSummaryBlock(
+                    text="I need to search for Japan's current population data.",
+                    type='summary_text'
+                )
+            ],
+            _internal_provider_type='openai'
         ),
         UnknownContentBlock(
             data={
@@ -360,6 +371,10 @@ model_name = "gpt-5-mini"
 api_type = "responses"
 include_encrypted_reasoning = true
 provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+# Enable plain-text summaries of encrypted reasoning
+extra_body = [
+    { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
+]
 ```
 
 </Step>
@@ -514,6 +529,10 @@ model_name = "gpt-5-mini"
 api_type = "responses"
 include_encrypted_reasoning = true
 provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+# Enable plain-text summaries of encrypted reasoning
+extra_body = [
+    { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
+]
 ```
 
 </Step>
@@ -648,6 +667,10 @@ model_name = "gpt-5-mini"
 api_type = "responses"
 include_encrypted_reasoning = true
 provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+# Enable plain-text summaries of encrypted reasoning
+extra_body = [
+    { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
+]
 ```
 
 </Step>
@@ -696,6 +719,12 @@ curl -X POST "http://localhost:3000/inference" \
   }'
 ```
 
+<Note>
+
+Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model configuration.
+
+</Note>
+
 <Accordion title="Sample Response">
 
 ```json
@@ -708,7 +737,12 @@ curl -X POST "http://localhost:3000/inference" \
       "type": "thought",
       "text": null,
       "signature": "gAAAAABo...",
-      "summary": [],
+      "summary": [
+        {
+          "type": "summary_text",
+          "text": "I need to search for Japan's current population data."
+        }
+      ],
       "_internal_provider_type": "openai"
     },
     {

@@ -2,6 +2,7 @@
 import type { CacheParamsOptions } from "./CacheParamsOptions";
 import type { ClientInput } from "./ClientInput";
 import type { InferenceParams } from "./InferenceParams";
+import type { ProviderTool } from "./ProviderTool";
 import type { Tool } from "./Tool";
 import type { ToolChoice } from "./ToolChoice";
 import type { UninitializedVariantInfo } from "./UninitializedVariantInfo";
@@ -35,4 +36,5 @@ export type ClientInferenceParams = {
   additional_tools: Array<Tool> | null;
   tool_choice: ToolChoice | null;
   parallel_tool_calls: boolean | null;
+  provider_tools: Array<ProviderTool> | null;
 };

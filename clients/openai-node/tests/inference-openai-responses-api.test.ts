@@ -403,6 +403,42 @@ describe("OpenAI Responses API", () => {
     ).toBe("tool_calls");
   });
 
+  it.concurrent(
+    "should handle dynamically configured provider tools (web search)",
+    async () => {
+      const messages: ChatCompletionMessageParam[] = [
+        {
+          role: "user",
+          content: "What is the current population of Japan?",
+        },
+      ];
+
+      const episodeId = uuidv7();
+      const result = await client.chat.completions.create({
+        messages,
+        model: "tensorzero::model_name::gpt-5-mini-responses",
+        // @ts-expect-error - custom TensorZero property
+        "tensorzero::episode_id": episodeId,
+        "tensorzero::provider_tools": [{ tool: { type: "web_search" } }],
+      });
+
+      // The response should contain content
+      expect(result.choices[0].message.content).not.toBeNull();
+      expect(result.choices[0].message.content!.length).toBeGreaterThan(0);
+
+      // Check that web search actually happened by looking for citations in markdown format
+      expect(result.choices[0].message.content).toContain("](");
+
+      // TODO (#4042): Check for web_search_call content blocks when we expose them in the OpenAI API
+      // The TensorZero SDK returns web_search_call content blocks, but the OpenAI API doesn't expose them yet
+
+      expect(result.usage).not.toBeNull();
+      expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
+      expect(result.usage?.completion_tokens).toBeGreaterThan(0);
+    },
+    90000
+  );
+
   it.concurrent("should handle shorthand model name", async () => {
     const messages: ChatCompletionMessageParam[] = [
       {

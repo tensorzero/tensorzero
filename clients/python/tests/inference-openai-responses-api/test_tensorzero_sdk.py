@@ -19,6 +19,7 @@ from tensorzero.types import (
     ChatChunk,
     FinishReason,
     Thought,
+    ThoughtSummaryBlock,
     ToolCallChunk,
     UnknownContentBlock,
 )
@@ -187,9 +188,11 @@ async def test_openai_responses_web_search_streaming(
 
     # Check that web search actually happened by looking for citations in markdown format
     full_text = "".join(text_chunks)
-    assert "](" in full_text, (
-        f"Expected concatenated text to contain citations in markdown format [text](url), but found none. Text length: {len(full_text)}"
-    )
+    assert (
+        "](" in full_text
+    ), f"Expected concatenated text to contain citations in markdown format [text](url), but found none. Text length: {
+        len(full_text)
+    }"
 
     # Check finish_reason in streaming response
     finish_reason_chunks = [chunk for chunk in chunks if chunk.finish_reason]
@@ -370,7 +373,18 @@ async def test_openai_responses_reasoning(async_client: AsyncTensorZeroGateway):
         assert isinstance(thought, Thought)
         assert thought.type == "thought"
 
-    # TODO (#4043): Check summary field when we expose it in the Python SDK
+    # Check that at least one thought has a summary
+    thought_with_summary = [t for t in thought_blocks if t.summary is not None]
+    assert len(thought_with_summary) > 0, "Expected at least one thought block to have a summary"
+
+    # Verify the summary structure
+    for thought in thought_with_summary:
+        assert isinstance(thought.summary, list)
+        assert len(thought.summary) > 0
+        for summary_block in thought.summary:
+            assert isinstance(summary_block, ThoughtSummaryBlock)
+            assert isinstance(summary_block.text, str)
+            assert len(summary_block.text) > 0
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
@@ -437,6 +451,40 @@ async def test_openai_responses_reasoning_streaming(
     assert finish_reason_chunks[-1].finish_reason == FinishReason.STOP
 
     # TODO (#4043): Check summary field when we expose it in the Python SDK
+    # Note: Checking streaming summary chunks would require aggregating chunks across
+    # multiple messages, which is complex. The summary is fully tested in the
+    # non-streaming test above.
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_web_search_dynamic_provider_tools(
+    async_client: AsyncTensorZeroGateway,
+):
+    """Test OpenAI Responses API with dynamically configured provider tools (web search)"""
+    response = await async_client.inference(
+        model_name="gpt-5-mini-responses",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the current population of Japan?",
+                }
+            ],
+        },
+        provider_tools=[{"tool": {"type": "web_search"}}],
+    )
+
+    assert isinstance(response, ChatInferenceResponse)
+
+    # The response should contain content
+    assert len(response.content) > 0
+    # Check that web search actually happened by looking for web_search_call content blocks
+    web_search_blocks = [
+        cb
+        for cb in response.content
+        if cb.type == "unknown" and isinstance(cb, UnknownContentBlock) and cb.data.get("type") == "web_search_call"
+    ]
+    assert len(web_search_blocks) > 0, "Expected web_search_call content blocks"
 
 
 @pytest.mark.asyncio

@@ -17,7 +17,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "2025.10.5"
+version = "2025.10.6"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
@@ -72,6 +72,9 @@ mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a6
 ] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "chrono", "uuid"] }
 rlt = "0.2.1"
+metrics-exporter-prometheus = { version = "0.17.2", features = [
+    "http-listener",
+], default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

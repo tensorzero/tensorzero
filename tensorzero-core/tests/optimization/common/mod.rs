@@ -3,6 +3,7 @@ use base64::Engine;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tensorzero_core::rate_limiting::ScopeInfo;
 use tokio::time::{sleep, Duration};
 use url::Url;
 use uuid::Uuid;
@@ -204,6 +205,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 rate_limiting_config: Arc::new(Default::default()),
                 otlp_config: Default::default(),
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
+                scope_info: ScopeInfo {
+                    tags: Arc::new(HashMap::new()),
+                },
             };
             // We didn't produce a real model, so there's nothing to test
             if use_mock_inference_provider() {

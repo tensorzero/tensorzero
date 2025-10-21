@@ -53,6 +53,7 @@ env:
   VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://localhost:4316
+  SQLX_OFFLINE: 1
 
 jobs:
   batch-tests:

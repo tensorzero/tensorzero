@@ -244,7 +244,7 @@ impl<'a> OpenAITool<'a> {
 #[serde(untagged)]
 pub enum OpenAIResponsesTool<'a> {
     Function(OpenAIResponsesFunctionTool<'a>),
-    BuiltIn(Value),
+    BuiltIn(&'a Value),
 }
 
 #[derive(Serialize, Debug)]
@@ -303,10 +303,12 @@ pub enum OpenAIResponsesToolReference {
 
 impl<'a> OpenAIResponsesRequest<'a> {
     pub async fn new(
-        model: &'a str,
+        openai_model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
         include_encrypted_reasoning: bool,
-        built_in_tools: &[Value],
+        built_in_tools: &'a [Value],
+        tensorzero_model_name: &str,
+        tensorzero_model_provider_name: &str,
     ) -> Result<OpenAIResponsesRequest<'a>, Error> {
         let mut tools: Vec<OpenAIResponsesTool> = request
             .tool_config
@@ -320,11 +322,16 @@ impl<'a> OpenAIResponsesRequest<'a> {
             })
             .unwrap_or_default();
         // If we have built_in_tools we should extend the list with them
-        tools.extend(
-            built_in_tools
-                .iter()
-                .map(|tool| OpenAIResponsesTool::BuiltIn(tool.clone())),
-        );
+        tools.extend(built_in_tools.iter().map(OpenAIResponsesTool::BuiltIn));
+        if let Some(tc) = request.tool_config.as_ref() {
+            let provider_tools =
+                tc.get_scoped_provider_tools(tensorzero_model_name, tensorzero_model_provider_name);
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| OpenAIResponsesTool::BuiltIn(&t.tool)),
+            );
+        }
 
         // For now, we don't allow selecting any built-in tools
         let tool_choice =
@@ -356,7 +363,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .tool_config
             .as_ref()
             .and_then(|config| config.parallel_tool_calls);
-        if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
+        if openai_model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
 
@@ -382,7 +389,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
         };
 
         Ok(Self {
-            model,
+            model: openai_model,
             input: prepare_openai_responses_messages(
                 request
                     .system

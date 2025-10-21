@@ -41,10 +41,10 @@ use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_t
 use super::openai::convert_stream_error;
 
 lazy_static! {
-    static ref ANTHROPIC_BASE_URL: Url = {
+    static ref ANTHROPIC_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
         Url::parse("https://api.anthropic.com/v1/messages")
-            .expect("Failed to parse ANTHROPIC_BASE_URL")
+            .expect("Failed to parse ANTHROPIC_DEFAULT_BASE_URL")
     };
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -56,20 +56,32 @@ pub const PROVIDER_TYPE: &str = "anthropic";
 #[cfg_attr(test, ts(export))]
 pub struct AnthropicProvider {
     model_name: String,
+    api_base: Option<Url>,
     #[serde(skip)]
     credentials: AnthropicCredentials,
 }
 
 impl AnthropicProvider {
-    pub fn new(model_name: String, credentials: AnthropicCredentials) -> Self {
+    pub fn new(
+        model_name: String,
+        api_base: Option<Url>,
+        credentials: AnthropicCredentials,
+    ) -> Self {
         AnthropicProvider {
             model_name,
+            api_base,
             credentials,
         }
     }
 
     pub fn model_name(&self) -> &str {
         &self.model_name
+    }
+
+    fn base_url(&self) -> &Url {
+        self.api_base
+            .as_ref()
+            .unwrap_or(&ANTHROPIC_DEFAULT_BASE_URL)
     }
 }
 
@@ -167,7 +179,7 @@ impl InferenceProvider for AnthropicProvider {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let builder = http_client
-            .post(ANTHROPIC_BASE_URL.as_ref())
+            .post(self.base_url().as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
@@ -262,7 +274,7 @@ impl InferenceProvider for AnthropicProvider {
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
         let builder = http_client
-            .post(ANTHROPIC_BASE_URL.as_ref())
+            .post(self.base_url().as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
@@ -1422,6 +1434,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(false),
             tools_available: vec![],
+            provider_tools: None,
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
@@ -1435,6 +1448,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
             tools_available: vec![],
+            provider_tools: None,
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1449,6 +1463,7 @@ mod tests {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             tools_available: vec![],
+            provider_tools: None,
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1463,6 +1478,7 @@ mod tests {
             tool_choice: ToolChoice::Specific("test".to_string()),
             parallel_tool_calls: Some(false),
             tools_available: vec![],
+            provider_tools: None,
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -2863,8 +2879,31 @@ mod tests {
     #[test]
     fn test_anthropic_base_url() {
         assert_eq!(
-            ANTHROPIC_BASE_URL.as_str(),
+            ANTHROPIC_DEFAULT_BASE_URL.as_str(),
             "https://api.anthropic.com/v1/messages"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_provider_custom_api_base() {
+        let custom_url = Url::parse("https://example.com/custom").unwrap();
+        let provider = AnthropicProvider::new(
+            "claude".to_string(),
+            Some(custom_url.clone()),
+            AnthropicCredentials::None,
+        );
+
+        assert_eq!(provider.base_url(), &custom_url);
+    }
+
+    #[test]
+    fn test_anthropic_provider_default_api_base() {
+        let provider =
+            AnthropicProvider::new("claude".to_string(), None, AnthropicCredentials::None);
+
+        assert_eq!(
+            provider.base_url().as_str(),
+            ANTHROPIC_DEFAULT_BASE_URL.as_str()
         );
     }
 
