@@ -23,6 +23,7 @@ use crate::{
     model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
     providers::openai::OpenAICredentials,
+    rate_limiting::ScopeInfo,
     stored_inference::RenderedSample,
     utils::retries::RetryConfig,
     variant::dicl::UninitializedDiclConfig,
@@ -536,6 +537,8 @@ async fn process_embedding_batch(
                 })
             })?;
 
+    let tags = Arc::new(HashMap::default());
+
     // Create InferenceClients context for the embedding model
     let deferred_tasks = tokio_util::task::TaskTracker::new();
     let clients = InferenceClients {
@@ -544,11 +547,12 @@ async fn process_embedding_batch(
         clickhouse_connection_info: ClickHouseConnectionInfo::new_disabled(),
         postgres_connection_info: PostgresConnectionInfo::Disabled,
         cache_options: CacheOptions::default(),
-        tags: Arc::new(HashMap::default()),
+        tags: tags.clone(),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),
         deferred_tasks: deferred_tasks.clone(),
+        scope_info: ScopeInfo { tags: tags.clone() },
     };
 
     let response = embedding_model_config
@@ -1323,6 +1327,7 @@ mod tests {
             tools_available: vec![], // Invalid: should have exactly 1 implicit tool
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
 
         FunctionConfig::Json(FunctionConfigJson {

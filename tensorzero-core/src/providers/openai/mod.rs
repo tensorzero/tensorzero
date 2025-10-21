@@ -233,8 +233,8 @@ impl WrappedProvider for OpenAIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
-            model_name: _,
+            provider_name,
+            model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
     ) -> Result<serde_json::Value, Error> {
@@ -245,6 +245,8 @@ impl WrappedProvider for OpenAIProvider {
                     request,
                     self.include_encrypted_reasoning,
                     &self.provider_tools,
+                    model_name,
+                    provider_name,
                 )
                 .await?,
             )
@@ -465,7 +467,7 @@ impl InferenceProvider for OpenAIProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -488,6 +490,8 @@ impl InferenceProvider for OpenAIProvider {
                         request,
                         false,
                         &self.provider_tools,
+                        model_name,
+                        provider_name,
                     )
                     .await?,
                 )
@@ -3420,6 +3424,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
+            provider_tools: None,
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

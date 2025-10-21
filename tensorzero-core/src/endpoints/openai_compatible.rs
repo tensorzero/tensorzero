@@ -41,7 +41,9 @@ use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
     InputMessage, InputMessageContent, Role, TemplateInput, TextKind, Usage,
 };
-use crate::tool::{DynamicToolParams, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult};
+use crate::tool::{
+    DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
+};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
 use serde::Deserializer;
@@ -565,6 +567,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_credentials: InferenceCredentials,
     #[serde(rename = "tensorzero::internal_dynamic_variant_config")]
     tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
+    #[serde(default, rename = "tensorzero::provider_tools")]
+    tensorzero_provider_tools: Option<Vec<ProviderTool>>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -717,6 +721,7 @@ impl Params {
                 .map(|tools| tools.into_iter().map(OpenAICompatibleTool::into).collect()),
             tool_choice,
             parallel_tool_calls: openai_compatible_params.parallel_tool_calls,
+            provider_tools: openai_compatible_params.tensorzero_provider_tools,
         };
         let output_schema = match openai_compatible_params.response_format {
             Some(OpenAICompatibleResponseFormat::JsonSchema { json_schema }) => json_schema.schema,
@@ -1448,6 +1453,7 @@ mod tests {
             stream_options: None,
             stop: None,
             tensorzero_internal_dynamic_variant_config: None,
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(params.function_name, Some("test_function".to_string()));
@@ -1941,6 +1947,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(params.cache_options, CacheParamsOptions::default());
@@ -1979,6 +1986,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(
@@ -2023,6 +2031,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(
@@ -2067,6 +2076,7 @@ mod tests {
             stop: None,
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
+            tensorzero_provider_tools: None,
         })
         .unwrap();
         assert_eq!(

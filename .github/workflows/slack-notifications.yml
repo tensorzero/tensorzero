@@ -61,14 +61,18 @@ jobs:
       - name: Build payload for new issue notification
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issues' && github.event.action == 'opened'
         id: build-issue-payload
+        env:
+          ACTOR: ${{ github.actor }}
+          TITLE: ${{ github.event.issue.title }}
+          URL: ${{ github.event.issue.html_url }}
         run: |
           PAYLOAD=$(jq -n \
             --arg channel "C09HC3Q2XV2" \
-            --arg text "🐛 New issue opened by ${{ github.actor }}" \
-            --arg url "${{ github.event.issue.html_url }}" \
-            --arg title "${{ github.event.issue.title }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg actor_url "https://github.com/${{ github.actor }}" \
+            --arg text "🐛 New issue opened by $ACTOR" \
+            --arg url "$URL" \
+            --arg title "$TITLE" \
+            --arg actor "$ACTOR" \
+            --arg actor_url "https://github.com/$ACTOR" \
             '{
               "channel": $channel,
               "text": $text,
@@ -97,14 +101,18 @@ jobs:
       - name: Build payload for issue comment notification
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'issue_comment'
         id: build-issue-comment-payload
+        env:
+          ACTOR: ${{ github.actor }}
+          TITLE: ${{ github.event.issue.title }}
+          URL: ${{ github.event.issue.html_url }}
         run: |
           PAYLOAD=$(jq -n \
             --arg channel "C09HC3Q2XV2" \
-            --arg text "💬 New comment on issue by ${{ github.actor }}" \
-            --arg url "${{ github.event.issue.html_url }}" \
-            --arg title "${{ github.event.issue.title }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg actor_url "https://github.com/${{ github.actor }}" \
+            --arg text "💬 New comment on issue by $ACTOR" \
+            --arg url "$URL" \
+            --arg title "$TITLE" \
+            --arg actor "$ACTOR" \
+            --arg actor_url "https://github.com/$ACTOR" \
             '{
               "channel": $channel,
               "text": $text,
@@ -133,14 +141,18 @@ jobs:
       - name: Build payload for new pull request notification
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_target' && github.event.action == 'opened'
         id: build-pr-payload
+        env:
+          ACTOR: ${{ github.actor }}
+          TITLE: ${{ github.event.pull_request.title }}
+          URL: ${{ github.event.pull_request.html_url }}
         run: |
           PAYLOAD=$(jq -n \
             --arg channel "C09HC3Q2XV2" \
-            --arg text "🔀 New pull request opened by ${{ github.actor }}" \
-            --arg url "${{ github.event.pull_request.html_url }}" \
-            --arg title "${{ github.event.pull_request.title }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg actor_url "https://github.com/${{ github.actor }}" \
+            --arg text "🔀 New pull request opened by $ACTOR" \
+            --arg url "$URL" \
+            --arg title "$TITLE" \
+            --arg actor "$ACTOR" \
+            --arg actor_url "https://github.com/$ACTOR" \
             '{
               "channel": $channel,
               "text": $text,
@@ -170,14 +182,18 @@ jobs:
         # TODO - figure out how to make this work on PRs from forks. Currently, we skip it, since we don't have secrets available.
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'pull_request_review' && !(github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]')
         id: build-pr-review-payload
+        env:
+          ACTOR: ${{ github.actor }}
+          TITLE: ${{ github.event.pull_request.title }}
+          URL: ${{ github.event.pull_request.html_url }}
         run: |
           PAYLOAD=$(jq -n \
             --arg channel "C09HC3Q2XV2" \
-            --arg text "👀 Pull request review submitted by ${{ github.actor }}" \
-            --arg url "${{ github.event.pull_request.html_url }}" \
-            --arg title "${{ github.event.pull_request.title }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg actor_url "https://github.com/${{ github.actor }}" \
+            --arg text "👀 Pull request review submitted by $ACTOR" \
+            --arg url "$URL" \
+            --arg title "$TITLE" \
+            --arg actor "$ACTOR" \
+            --arg actor_url "https://github.com/$ACTOR" \
             '{
               "channel": $channel,
               "text": $text,
@@ -207,14 +223,18 @@ jobs:
       - name: Build payload for new discussion notification
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion' && github.event.action == 'created'
         id: build-discussion-payload
+        env:
+          ACTOR: ${{ github.actor }}
+          TITLE: ${{ github.event.discussion.title }}
+          URL: ${{ github.event.discussion.html_url }}
         run: |
           PAYLOAD=$(jq -n \
             --arg channel "C09HC3Q2XV2" \
-            --arg text "💭 New discussion created by ${{ github.actor }}" \
-            --arg url "${{ github.event.discussion.html_url }}" \
-            --arg title "${{ github.event.discussion.title }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg actor_url "https://github.com/${{ github.actor }}" \
+            --arg text "💭 New discussion created by $ACTOR" \
+            --arg url "$URL" \
+            --arg title "$TITLE" \
+            --arg actor "$ACTOR" \
+            --arg actor_url "https://github.com/$ACTOR" \
             '{
               "channel": $channel,
               "text": $text,
@@ -243,14 +263,18 @@ jobs:
       - name: Build payload for discussion comment notification
         if: steps.check-skip.outputs.should_skip == 'false' && github.event_name == 'discussion_comment'
         id: build-discussion-comment-payload
+        env:
+          ACTOR: ${{ github.actor }}
+          TITLE: ${{ github.event.discussion.title }}
+          URL: ${{ github.event.discussion.html_url }}
         run: |
           PAYLOAD=$(jq -n \
             --arg channel "C09HC3Q2XV2" \
-            --arg text "💬 New comment on discussion by ${{ github.actor }}" \
-            --arg url "${{ github.event.discussion.html_url }}" \
-            --arg title "${{ github.event.discussion.title }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg actor_url "https://github.com/${{ github.actor }}" \
+            --arg text "💬 New comment on discussion by $ACTOR" \
+            --arg url "$URL" \
+            --arg title "$TITLE" \
+            --arg actor "$ACTOR" \
+            --arg actor_url "https://github.com/$ACTOR" \
             '{
               "channel": $channel,
               "text": $text,

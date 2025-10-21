@@ -1,7 +1,5 @@
-import type {
-  TimeWindowUnit,
-  VariantThroughput,
-} from "~/utils/clickhouse/function";
+import type { VariantThroughput } from "~/utils/clickhouse/function";
+import type { TimeWindow } from "tensorzero-node";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS } from "~/utils/chart";
 
@@ -20,8 +18,8 @@ export function VariantThroughput({
   onTimeGranularityChange,
 }: {
   variant_throughput: VariantThroughput[];
-  time_granularity: TimeWindowUnit;
-  onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
+  time_granularity: TimeWindow;
+  onTimeGranularityChange: (time_granularity: TimeWindow) => void;
 }) {
   const { data, variantNames } = transformVariantThroughput(variant_throughput);
 
