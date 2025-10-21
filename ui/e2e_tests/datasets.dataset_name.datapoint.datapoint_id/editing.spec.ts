@@ -583,7 +583,7 @@ test.describe("User Message - Template Blocks", () => {
 
     // Create datapoint from custom_template_test function which has named templates
     await createDatapointFromInference(page, {
-      inferenceId: "019a0320-0000-7000-8000-000000000001",
+      inferenceId: "019a0881-7437-7495-b506-782079c593bf",
       datasetName,
     });
 
@@ -1271,7 +1271,7 @@ test.describe("Assistant Message - Template Blocks", () => {
 
     // Create datapoint from custom_template_test function which has named templates
     await createDatapointFromInference(page, {
-      inferenceId: "019a0320-0000-7000-8000-000000000001",
+      inferenceId: "019a0881-7437-7495-b506-782079c593bf",
       datasetName,
     });
 
