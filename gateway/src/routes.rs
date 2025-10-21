@@ -81,7 +81,7 @@ fn build_api_routes(
 }
 
 /// Defines routes that should have top-level OpenTelemetry HTTP spans created
-/// All of these routes will a span named `METHOD <ROUTE>` (e.g. `POST /batch_inference/{batch_id}`)
+/// All of these routes will have a span named `METHOD <ROUTE>` (e.g. `POST /batch_inference/{batch_id}`)
 /// sent to OpenTelemetry
 fn build_otel_enabled_routes() -> Router<AppStateData> {
     Router::new()
