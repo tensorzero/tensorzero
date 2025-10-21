@@ -524,6 +524,7 @@ impl InferenceProvider for OpenAIProvider {
                     PROVIDER_TYPE.to_string(),
                     event_source.map_err(TensorZeroEventError::EventSource),
                     start_time,
+                    model_provider.discard_unknown_chunks,
                 )
                 .peekable();
                 Ok((stream, raw_request))

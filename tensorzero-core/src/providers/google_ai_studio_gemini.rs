@@ -972,12 +972,10 @@ fn content_part_to_tensorzero_chunk(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
                 return Ok(());
             }
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Unknown content part in Google AI Studio Gemini response".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(part.to_string()),
-            }));
+            output.push(ContentBlockChunk::Unknown {
+                id: "0".to_string(),
+                data: part.into_owned(),
+            });
         }
     }
     Ok(())
