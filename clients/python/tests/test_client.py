@@ -377,16 +377,37 @@ async def test_async_thought_signature_only_input(
 
 def test_display_thought():
     t1 = Thought(signature="my_signature")
-    assert str(t1) == "Thought(text=None, type='thought', signature='my_signature', _internal_provider_type=None)"
-    assert repr(t1) == "Thought(text=None, type='thought', signature='my_signature', _internal_provider_type=None)"
+    print("str t1")
+    print(str(t1))
+    print("repr t1")
+    print(repr(t1))
+    assert (
+        str(t1)
+        == "Thought(text=None, type='thought', signature='my_signature', summary=None, _internal_provider_type=None)"
+    )
+    assert (
+        repr(t1)
+        == "Thought(text=None, type='thought', signature='my_signature', summary=None, _internal_provider_type=None)"
+    )
 
     t2 = Thought(text="my_text", signature="my_signature")
-    assert str(t2) == "Thought(text='my_text', type='thought', signature='my_signature', _internal_provider_type=None)"
-    assert repr(t2) == "Thought(text='my_text', type='thought', signature='my_signature', _internal_provider_type=None)"
+    assert (
+        str(t2)
+        == "Thought(text='my_text', type='thought', signature='my_signature', summary=None, _internal_provider_type=None)"
+    )
+    assert (
+        repr(t2)
+        == "Thought(text='my_text', type='thought', signature='my_signature', summary=None, _internal_provider_type=None)"
+    )
 
     t3 = Thought(text="my_text")
-    assert str(t3) == "Thought(text='my_text', type='thought', signature=None, _internal_provider_type=None)"
-    assert repr(t3) == "Thought(text='my_text', type='thought', signature=None, _internal_provider_type=None)"
+    assert (
+        str(t3) == "Thought(text='my_text', type='thought', signature=None, summary=None, _internal_provider_type=None)"
+    )
+    assert (
+        repr(t3)
+        == "Thought(text='my_text', type='thought', signature=None, summary=None, _internal_provider_type=None)"
+    )
 
 
 @pytest.mark.asyncio
@@ -3137,7 +3158,8 @@ def test_text_arguments_deprecation_1170_warning(
                         "role": "user",
                         # Intentionally ignore the type error to check the deprecation warning
                         "content": [
-                            Text(type="text", text={"country": "Japan"}),  # type: ignore
+                            # type: ignore
+                            Text(type="text", text={"country": "Japan"}),
                         ],
                     }
                 ],
