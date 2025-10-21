@@ -103,7 +103,7 @@ fn build_otel_enabled_routes() -> Router<AppStateData> {
 }
 
 // Defines routes that should not have top-level OpenTelemetry HTTP spans created
-// We use this for internal routes which we don't want to expose to uesrs,
+// We use this for internal routes which we don't want to expose to users,
 // or uninteresting routes like /health
 fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
     Router::new()
