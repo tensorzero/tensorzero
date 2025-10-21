@@ -146,6 +146,7 @@ lazy_static! {
         })],
         tool_choice: ToolChoice::Specific("respond".to_string()),
         parallel_tool_calls: None,
+        provider_tools: None,
     };
 }
 
@@ -802,6 +803,7 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 
 #[cfg(test)]
 mod tests {
+    use crate::rate_limiting::ScopeInfo;
     use std::collections::HashMap;
 
     use uuid::Uuid;
@@ -1329,6 +1331,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let input = LazyResolvedInput {
             system: None,

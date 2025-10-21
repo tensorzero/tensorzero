@@ -529,6 +529,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
+        provider_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]] = None,
         parallel_tool_calls: Optional[bool] = None,
         internal: Optional[bool] = None,
@@ -563,6 +564,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                               The list of names should be a subset of the tools configured for the function.
                               Tools provided at inference time in `additional_tools` (if any) are always available.
         :param additional_tools: A list of additional tools to use for the request. Each element should look like {"name": str, "parameters": valid JSON Schema, "description": str}
+        :param provider_tools: A list of provider-specific tools to use for the request. Structure matches provider requirements.
         :param tool_choice: If set, overrides the tool choice strategy for the request.
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
@@ -944,6 +946,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
+        provider_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]] = None,
         parallel_tool_calls: Optional[bool] = None,
         internal: Optional[bool] = None,
@@ -978,6 +981,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                               The list of names should be a subset of the tools configured for the function.
                               Tools provided at inference time in `additional_tools` (if any) are always available.
         :param additional_tools: A list of additional tools to use for the request. Each element should look like {"name": str, "parameters": valid JSON Schema, "description": str}
+        :param provider_tools: A list of provider-specific tools to use for the request. Structure matches provider requirements.
         :param tool_choice: If set, overrides the tool choice strategy for the request.
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.

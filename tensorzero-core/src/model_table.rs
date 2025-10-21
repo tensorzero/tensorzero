@@ -7,10 +7,6 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use secrecy::SecretString;
-use serde::Serialize;
-use tokio::sync::OnceCell;
-
 use crate::{
     config::{provider_types::ProviderTypesConfig, skip_credential_validation},
     error::{Error, ErrorDetails},
@@ -38,7 +34,10 @@ use crate::{
     },
 };
 use lazy_static::lazy_static;
+use secrecy::SecretString;
+use serde::Serialize;
 use strum::VariantNames;
+use tokio::sync::OnceCell;
 
 // Reserve prefixes for all supported providers, regardless of whether or not a particular `BaseModelTable`
 // currently supports them.

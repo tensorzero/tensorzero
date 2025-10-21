@@ -418,6 +418,37 @@ async def test_openai_responses_reasoning_streaming(
 
 
 @pytest.mark.asyncio
+async def test_openai_responses_web_search_dynamic_provider_tools(
+    async_client: AsyncTensorZeroGateway,
+):
+    """Test OpenAI Responses API with dynamically configured provider tools (web search)"""
+    response = await async_client.inference(
+        model_name="gpt-5-mini-responses",
+        input={
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the current population of Japan?",
+                }
+            ],
+        },
+        provider_tools=[{"tool": {"type": "web_search"}}],
+    )
+
+    assert isinstance(response, ChatInferenceResponse)
+
+    # The response should contain content
+    assert len(response.content) > 0
+    # Check that web search actually happened by looking for web_search_call content blocks
+    web_search_blocks = [
+        cb
+        for cb in response.content
+        if cb.type == "unknown" and isinstance(cb, UnknownContentBlock) and cb.data.get("type") == "web_search_call"
+    ]
+    assert len(web_search_blocks) > 0, "Expected web_search_call content blocks"
+
+
+@pytest.mark.asyncio
 async def test_openai_responses_shorthand(async_client: AsyncTensorZeroGateway):
     """Test OpenAI Responses API using shorthand model name format"""
     response = await async_client.inference(

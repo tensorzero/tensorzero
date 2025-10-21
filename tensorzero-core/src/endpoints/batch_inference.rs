@@ -41,6 +41,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::model::ModelTable;
+use crate::rate_limiting::ScopeInfo;
 use crate::tool::{
     BatchDynamicToolParams, BatchDynamicToolParamsWithSize, DynamicToolParams, ToolCallConfig,
     ToolCallConfigDatabaseInsert,
@@ -225,6 +226,8 @@ pub async fn start_batch_inference(
         enabled: CacheEnabledMode::WriteOnly,
     };
 
+    let tags = Arc::new(HashMap::default()); // NOTE: we currently do not rate limit batch inference
+
     let inference_clients = InferenceClients {
         http_client: http_client.clone(),
         clickhouse_connection_info: clickhouse_connection_info.clone(),
@@ -232,9 +235,10 @@ pub async fn start_batch_inference(
         credentials: Arc::new(params.credentials.clone()),
         cache_options: cache_options.clone(),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
-        tags: Arc::new(HashMap::default()), // NOTE: we currently do not rate limit batch inference
+        tags: tags.clone(),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
+        scope_info: ScopeInfo { tags: tags.clone() },
     };
 
     let inference_models = InferenceModels {

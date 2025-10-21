@@ -74,6 +74,45 @@ impl Tool {
     }
 }
 
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[serde(untagged)]
+pub enum ProviderToolScope {
+    #[default]
+    Unscoped,
+    ModelProvider {
+        model_name: String,
+        model_provider_name: String,
+    },
+}
+
+impl ProviderToolScope {
+    fn matches(&self, scope_model_name: &str, scope_model_provider_name: &str) -> bool {
+        match self {
+            ProviderToolScope::Unscoped => true,
+            ProviderToolScope::ModelProvider {
+                model_name,
+                model_provider_name,
+            } => scope_model_name == model_name && scope_model_provider_name == model_provider_name,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct ProviderTool {
+    #[serde(default)]
+    pub scope: ProviderToolScope,
+    pub tool: Value,
+}
+
+impl std::fmt::Display for ProviderTool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -132,6 +171,7 @@ pub struct DynamicImplicitToolConfig {
 #[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
+    pub provider_tools: Option<Vec<ProviderTool>>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
 }
@@ -229,15 +269,17 @@ impl ToolCallConfig {
             .parallel_tool_calls
             .or(function_parallel_tool_calls);
 
-        let tool_call_config_option = if tools_available.is_empty() {
-            None
-        } else {
-            Some(Self {
-                tools_available,
-                tool_choice,
-                parallel_tool_calls,
-            })
-        };
+        let tool_call_config_option =
+            if tools_available.is_empty() && dynamic_tool_params.provider_tools.is_none() {
+                None
+            } else {
+                Some(Self {
+                    tools_available,
+                    tool_choice,
+                    provider_tools: dynamic_tool_params.provider_tools,
+                    parallel_tool_calls,
+                })
+            };
 
         Ok(tool_call_config_option)
     }
@@ -250,8 +292,23 @@ impl ToolCallConfig {
             ToolConfig::DynamicImplicit(_config) => false,
         })
     }
-}
 
+    pub fn get_scoped_provider_tools(
+        &self,
+        model_name: &str,
+        model_provider_name: &str,
+    ) -> Vec<&ProviderTool> {
+        self.provider_tools
+            .as_ref()
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter(|t| t.scope.matches(model_name, model_provider_name))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -306,6 +363,7 @@ pub struct DynamicToolParams {
     pub additional_tools: Option<Vec<Tool>>,
     pub tool_choice: Option<ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
+    pub provider_tools: Option<Vec<ProviderTool>>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -314,6 +372,7 @@ pub struct BatchDynamicToolParams {
     pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,
     pub tool_choice: Option<Vec<Option<ToolChoice>>>,
     pub parallel_tool_calls: Option<Vec<Option<bool>>>,
+    pub provider_tools: Option<Vec<Option<Vec<ProviderTool>>>>,
 }
 
 // Helper type for converting BatchDynamicToolParams into a Vec<DynamicToolParams>
@@ -486,6 +545,7 @@ impl ToolCallConfig {
             tools_available: vec![implicit_tool_config],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
+            provider_tools: None,
         }
     }
 }
@@ -650,6 +710,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
+        provider_tools: None,
     }
 }
 
@@ -668,6 +729,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                     additional_tools: None,
                     tool_choice: None,
                     parallel_tool_calls: None,
+                    provider_tools: None,
                 };
                 num_inferences
             ]);
@@ -677,6 +739,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
             additional_tools,
             tool_choice,
             parallel_tool_calls,
+            provider_tools,
         } = batch_dynamic_tool_params;
 
         // Verify all provided Vecs have the same length
@@ -728,17 +791,30 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                 .into());
             }
         }
+        if let Some(provider_tools) = &provider_tools {
+            if provider_tools.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "provider_tools vector length ({}) does not match number of inferences ({})",
+                        provider_tools.len(),
+                        num_inferences
+                    )
+                }.into());
+            }
+        }
         // Convert Option<Vec<Option<T>>> into Vec<Option<T>> by unwrapping or creating empty vec
         let allowed_tools = allowed_tools.unwrap_or_default();
         let additional_tools = additional_tools.unwrap_or_default();
         let tool_choice = tool_choice.unwrap_or_default();
         let parallel_tool_calls = parallel_tool_calls.unwrap_or_default();
+        let provider_tools = provider_tools.unwrap_or_default();
 
         // Create iterators that take ownership
         let mut allowed_tools_iter = allowed_tools.into_iter();
         let mut additional_tools_iter = additional_tools.into_iter();
         let mut tool_choice_iter = tool_choice.into_iter();
         let mut parallel_tool_calls_iter = parallel_tool_calls.into_iter();
+        let mut provider_tools_iter = provider_tools.into_iter();
 
         // Build params using the iterators
         let mut all_dynamic_tool_params = Vec::with_capacity(num_inferences);
@@ -750,6 +826,7 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
                 additional_tools: additional_tools_iter.next().unwrap_or(None),
                 tool_choice: tool_choice_iter.next().unwrap_or(None),
                 parallel_tool_calls: parallel_tool_calls_iter.next().unwrap_or(None),
+                provider_tools: provider_tools_iter.next().unwrap_or(None),
             });
         }
         Ok(all_dynamic_tool_params)
@@ -773,6 +850,8 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
                 .collect(),
             tool_choice: db_insert.tool_choice,
             parallel_tool_calls: db_insert.parallel_tool_calls,
+            provider_tools: None, // TODO(Viraj): address this once we start storing
+                                  // provider tools
         }
     }
 }
@@ -785,6 +864,7 @@ pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallCon
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
+        provider_tools: None,
     }
 }
 
@@ -1277,5 +1357,69 @@ mod tests {
             }
             .into()
         );
+    }
+
+    #[test]
+    fn test_get_scoped_provider_tools() {
+        // Set up provider tools with different scopes
+        let provider_tools = vec![
+            ProviderTool {
+                scope: ProviderToolScope::Unscoped,
+                tool: json!({"type": "unscoped_tool"}),
+            },
+            ProviderTool {
+                scope: ProviderToolScope::ModelProvider {
+                    model_name: "gpt-4".to_string(),
+                    model_provider_name: "openai".to_string(),
+                },
+                tool: json!({"type": "gpt4_tool"}),
+            },
+            ProviderTool {
+                scope: ProviderToolScope::ModelProvider {
+                    model_name: "claude-3".to_string(),
+                    model_provider_name: "anthropic".to_string(),
+                },
+                tool: json!({"type": "claude_tool"}),
+            },
+        ];
+
+        let config = ToolCallConfig {
+            tools_available: vec![],
+            provider_tools: Some(provider_tools),
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+        };
+
+        // Test matching gpt-4/openai: should return unscoped + gpt4_tool
+        let result = config.get_scoped_provider_tools("gpt-4", "openai");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
+        assert_eq!(result[1].tool, json!({"type": "gpt4_tool"}));
+
+        // Test matching claude-3/anthropic: should return unscoped + claude_tool
+        let result = config.get_scoped_provider_tools("claude-3", "anthropic");
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
+        assert_eq!(result[1].tool, json!({"type": "claude_tool"}));
+
+        // Test non-matching model: should return only unscoped
+        let result = config.get_scoped_provider_tools("llama-2", "meta");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
+
+        // Test partial match (correct model, wrong provider): should return only unscoped
+        let result = config.get_scoped_provider_tools("gpt-4", "azure");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
+
+        // Test with None provider_tools
+        let config_no_tools = ToolCallConfig {
+            tools_available: vec![],
+            provider_tools: None,
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: None,
+        };
+        let result = config_no_tools.get_scoped_provider_tools("gpt-4", "openai");
+        assert_eq!(result.len(), 0);
     }
 }

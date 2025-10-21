@@ -405,12 +405,12 @@ async fn embed_insert_example(
         rate_limiting_config: Arc::new(Default::default()),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
-    };
-    let scope_info = ScopeInfo {
-        tags: &HashMap::new(),
+        scope_info: ScopeInfo {
+            tags: Arc::new(HashMap::new()),
+        },
     };
     let response = provider_config
-        .embed(&request, &clients, &scope_info, &(&provider_config).into())
+        .embed(&request, &clients, &(&provider_config).into())
         .await
         .unwrap();
 
