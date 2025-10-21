@@ -20,7 +20,7 @@ impl ConnectionDropGuard {
     // Mark the guard as explicitly finished by the server.
     // This suppresses the warning that we would otherwise log in the `Drop` impl.
     // Note that we call this method even if the server produces an error - the purpose
-    // if this method is to detect early drops, when the server didn't produce a response of any kind.
+    // of this method is to detect early drops, when the server didn't produce a response of any kind.
     fn mark_finished(&self) {
         self.finished.set(true);
     }
