@@ -244,9 +244,7 @@ pub async fn inference(
 
     if traces_config.enabled {
         match traces_config.format {
-            OtlpTracesFormat::OpenTelemetry => {
-                span.set_attribute("gen_ai.operation.name", "chat");
-            }
+            OtlpTracesFormat::OpenTelemetry => {}
             OtlpTracesFormat::OpenInference => {
                 span.set_attribute("openinference.span.kind", "CHAIN");
             }
