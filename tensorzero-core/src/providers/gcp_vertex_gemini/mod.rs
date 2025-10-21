@@ -2777,6 +2777,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),

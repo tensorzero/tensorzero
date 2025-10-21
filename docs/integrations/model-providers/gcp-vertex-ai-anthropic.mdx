@@ -55,10 +55,18 @@ Alternatively, you can use the short-hand `gcp_vertex_anthropic::model_name` to 
 
 ### Credentials
 
-You must generate a GCP service account key in JWT form (described [here](https://cloud.google.com/docs/authentication/provide-credentials-adc#service-account)) and point to it in the `GCP_VERTEX_CREDENTIALS_PATH` environment variable.
+By default, TensorZero reads the path to your GCP service account JSON file from the `GCP_VERTEX_CREDENTIALS_PATH` environment variable (using `path_from_env::GCP_VERTEX_CREDENTIALS_PATH`).
 
-You can customize the credential location by setting the `credential_location` to `env::YOUR_ENVIRONMENT_VARIABLE`.
-See the [Credential Management](/gateway/guides/credential-management/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
+You must generate a GCP service account key in JSON format as described [here](https://cloud.google.com/docs/authentication/provide-credentials-adc#service-account).
+
+You can customize the credential location using:
+- `sdk`: use the Google Cloud SDK to auto-discover credentials
+- `path::/path/to/credentials.json`: use a specific file path
+- `path_from_env::YOUR_ENVIRONMENT_VARIABLE`: read file path from an environment variable (default behavior)
+- `dynamic::ARGUMENT_NAME`: provide credentials dynamically at inference time
+- `{ default = ..., fallback = ... }`: configure credential fallbacks
+
+See the [Credential Management](/operations/manage-credentials/) guide and [Configuration Reference](/gateway/configuration-reference/) for more information.
 
 ### Deployment (Docker Compose)
 

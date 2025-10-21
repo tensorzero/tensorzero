@@ -1,5 +1,5 @@
 use crate::{
-    db::{CumulativeFeedbackTimeSeriesPoint, InternalCumulativeFeedbackTimeSeriesPoint},
+    db::feedback::{CumulativeFeedbackTimeSeriesPoint, InternalCumulativeFeedbackTimeSeriesPoint},
     error::{Error, ErrorDetails},
 };
 
@@ -88,7 +88,7 @@ pub fn asymp_cs(
     let alpha2 = alpha * alpha;
 
     Ok(feedback
-        .iter()
+        .into_iter()
         .map(|f| {
             let count_f32 = f.count as f32;
             let cv_rho2 = count_f32 * f.variance * rho2;
@@ -98,7 +98,7 @@ pub fn asymp_cs(
             .sqrt();
             CumulativeFeedbackTimeSeriesPoint {
                 period_end: f.period_end,
-                variant_name: f.variant_name.clone(),
+                variant_name: f.variant_name,
                 mean: f.mean,
                 variance: f.variance,
                 count: f.count,

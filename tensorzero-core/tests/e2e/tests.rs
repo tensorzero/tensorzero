@@ -20,6 +20,7 @@ mod feedback;
 mod health;
 mod howdy;
 mod human_feedback;
+mod image_url;
 mod inference;
 mod inference_evaluation_human_feedback;
 mod list_inferences;

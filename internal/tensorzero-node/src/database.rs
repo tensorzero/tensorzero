@@ -208,6 +208,24 @@ impl DatabaseClient {
     pub async fn get_datapoint(&self, params: String) -> Result<String, napi::Error> {
         napi_call!(&self, get_datapoint, params, GetDatapointParams)
     }
+
+    #[napi]
+    pub async fn get_feedback_by_variant(&self, params: String) -> Result<String, napi::Error> {
+        let params_struct: GetFeedbackByVariantParams =
+            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        let result = self
+            .0
+            .get_feedback_by_variant(
+                &params_struct.metric_name,
+                &params_struct.function_name,
+                params_struct.variant_names.as_ref(),
+            )
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
 }
 
 #[derive(Deserialize, ts_rs::TS)]
@@ -271,4 +289,13 @@ struct QueryFeedbackBoundsByTargetIdParams {
 #[ts(export, optional_fields)]
 struct CountFeedbackByTargetIdParams {
     target_id: Uuid,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct GetFeedbackByVariantParams {
+    metric_name: String,
+    function_name: String,
+    #[ts(optional)]
+    variant_names: Option<Vec<String>>,
 }

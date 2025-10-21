@@ -44,6 +44,7 @@ use tensorzero_core::{
         together_sft::UninitializedTogetherSFTConfig, OptimizationJobInfoPyClass,
         OptimizationJobStatus, UninitializedOptimizerInfo,
     },
+    tool::ProviderTool,
     variant::{
         BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
         DiclConfigPyClass, MixtureOfNConfigPyClass,
@@ -318,7 +319,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -332,6 +333,7 @@ impl BaseTensorZeroGateway {
         dryrun: Option<bool>,
         output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
+        provider_tools: Option<Vec<Bound<'_, PyAny>>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
@@ -357,6 +359,7 @@ impl BaseTensorZeroGateway {
             output_schema,
             allowed_tools,
             additional_tools,
+            provider_tools,
             tool_choice,
             parallel_tool_calls,
             internal.unwrap_or(false),
@@ -428,6 +431,7 @@ impl BaseTensorZeroGateway {
         output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
+        provider_tools: Option<Vec<Bound<'_, PyAny>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
         internal: bool,
@@ -455,6 +459,18 @@ impl BaseTensorZeroGateway {
                     .into_iter()
                     .map(|key_vals| parse_tool(py, key_vals))
                     .collect::<Result<Vec<Tool>, PyErr>>()?,
+            )
+        } else {
+            None
+        };
+
+        let provider_tools: Option<Vec<ProviderTool>> = if let Some(provider_tools) = provider_tools
+        {
+            Some(
+                provider_tools
+                    .iter()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .collect::<PyResult<Vec<_>>>()?,
             )
         } else {
             None
@@ -517,6 +533,7 @@ impl BaseTensorZeroGateway {
                 parallel_tool_calls,
                 additional_tools,
                 tool_choice,
+                provider_tools,
             },
             input,
             credentials: credentials.unwrap_or_default(),
@@ -720,7 +737,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -772,6 +789,7 @@ impl TensorZeroGateway {
         output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
+        provider_tools: Option<Vec<Bound<'_, PyAny>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
         internal: Option<bool>,
@@ -797,6 +815,7 @@ impl TensorZeroGateway {
             output_schema,
             allowed_tools,
             additional_tools,
+            provider_tools,
             tool_choice,
             parallel_tool_calls,
             internal.unwrap_or(false),
@@ -1493,7 +1512,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1545,6 +1564,7 @@ impl AsyncTensorZeroGateway {
         output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
+        provider_tools: Option<Vec<Bound<'_, PyAny>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
         internal: Option<bool>,
@@ -1569,6 +1589,7 @@ impl AsyncTensorZeroGateway {
             output_schema,
             allowed_tools,
             additional_tools,
+            provider_tools,
             tool_choice,
             parallel_tool_calls,
             internal.unwrap_or(false),

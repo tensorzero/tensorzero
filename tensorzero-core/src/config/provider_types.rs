@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
-
 use crate::model::{CredentialLocation, CredentialLocationWithFallback};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

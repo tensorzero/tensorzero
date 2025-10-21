@@ -286,6 +286,61 @@ async def test_openai_responses_tool_call_streaming(async_openai_client):
     assert tool_call_name == "get_temperature"
 
 
+@pytest.mark.asyncio
+async def test_openai_responses_web_search_dynamic_provider_tools(async_openai_client):
+    """Test OpenAI Responses API with dynamically configured provider tools (web search)"""
+    response = await async_openai_client.chat.completions.create(
+        extra_body={
+            "tensorzero::episode_id": str(uuid7()),
+            "tensorzero::provider_tools": [{"tool": {"type": "web_search"}}],
+        },
+        messages=[
+            {
+                "role": "user",
+                "content": "What is the current population of Japan?",
+            }
+        ],
+        model="tensorzero::model_name::gpt-5-mini-responses",
+    )
+
+    # The response should contain content
+    assert response.choices[0].message.content is not None
+    assert len(response.choices[0].message.content) > 0
+
+    # Check that web search actually happened by looking for citations in markdown format
+    assert "](" in response.choices[0].message.content, (
+        f"Expected text to contain citations in markdown format [text](url), but found none. Text length: {len(response.choices[0].message.content)}"
+    )
+
+    # TODO (#4042): Check for web_search_call content blocks when we expose them in the OpenAI API
+    # The TensorZero SDK returns web_search_call content blocks, but the OpenAI API doesn't expose them yet
+
+    assert response.usage is not None
+    assert response.usage.prompt_tokens > 0
+    assert response.usage.completion_tokens > 0
+
+
 # Note:
 # The OpenAI SDK doesn't expose reasoning through chat completions, so there's no way to test that.
 # Use the TensorZero SDK to retrieve reasoning.
+
+
+@pytest.mark.asyncio
+async def test_openai_responses_shorthand(async_openai_client):
+    """Test OpenAI Responses API using shorthand model name format"""
+    response = await async_openai_client.chat.completions.create(
+        extra_body={"tensorzero::episode_id": str(uuid7())},
+        messages=[{"role": "user", "content": "What is the capital of France?"}],
+        model="tensorzero::model_name::openai::responses::gpt-5-codex",
+    )
+
+    # The response should contain content
+    assert response.choices[0].message.content is not None
+    assert len(response.choices[0].message.content) > 0
+
+    # Check that the response mentions Paris
+    assert "Paris" in response.choices[0].message.content, "Content should mention Paris"
+
+    assert response.usage is not None
+    assert response.usage.prompt_tokens > 0
+    assert response.usage.completion_tokens > 0

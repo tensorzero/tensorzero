@@ -126,10 +126,17 @@ class ToolCall(ContentBlock):
 
 
 @dataclass
+class ThoughtSummaryBlock:
+    text: str
+    type: str = "summary_text"
+
+
+@dataclass
 class Thought(ContentBlock):
     text: Optional[str] = None
     type: str = "thought"
     signature: Optional[str] = None
+    summary: Optional[List["ThoughtSummaryBlock"]] = None
     _internal_provider_type: Optional[str] = None
 
 
@@ -247,9 +254,14 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             type=block_type,
         )
     elif block_type == "thought":
+        summary_data = block.get("summary")
+        summary = None
+        if summary_data:
+            summary = [ThoughtSummaryBlock(text=s["text"]) for s in summary_data]
         return Thought(
-            text=block["text"],
+            text=block.get("text"),
             signature=block.get("signature"),
+            summary=summary,
             type=block_type,
         )
     elif block_type == "unknown":
@@ -291,9 +303,11 @@ class ToolCallChunk(ContentBlockChunk):
 @dataclass
 class ThoughtChunk(ContentBlockChunk):
     id: str
-    text: str
+    text: Optional[str]
     type: str = "thought"
     signature: Optional[str] = None
+    summary_id: Optional[str] = None
+    summary_text: Optional[str] = None
     _internal_provider_type: Optional[str] = None
 
 
@@ -374,7 +388,13 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
             raw_name=block["raw_name"],
         )
     elif block_type == "thought":
-        return ThoughtChunk(id=block["id"], text=block["text"])
+        return ThoughtChunk(
+            id=block["id"],
+            text=block.get("text"),
+            signature=block.get("signature"),
+            summary_id=block.get("summary_id"),
+            summary_text=block.get("summary_text"),
+        )
     else:
         raise ValueError(f"Unknown content block type: {block}")
 

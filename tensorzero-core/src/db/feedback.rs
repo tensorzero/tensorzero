@@ -61,12 +61,27 @@ pub trait FeedbackQueries {
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
     pub mean: f32,
     pub variance: f32,
     #[serde(deserialize_with = "deserialize_u64")]
+    pub count: u64,
+}
+
+#[derive(Clone, Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+pub struct InternalCumulativeFeedbackTimeSeriesPoint {
+    // Time point up to which cumulative statistics are computed
+    pub period_end: DateTime<Utc>,
+    pub variant_name: String,
+    // Mean of feedback values up to time point `period_end`
+    pub mean: f32,
+    // Variance of feedback values up to time point `period_end`
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    // Number of feedback values up to time point `period_end`
     pub count: u64,
 }
 

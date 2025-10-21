@@ -762,6 +762,7 @@ pub fn validate_all_schemas_have_templates(
 
 #[cfg(test)]
 mod tests {
+    use crate::rate_limiting::ScopeInfo;
     use std::collections::HashMap;
     use std::path::PathBuf;
 
@@ -1174,6 +1175,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let templates = Arc::new(get_test_template_config());
         let system_template = get_system_template();
@@ -2160,6 +2164,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
         let schema_any = StaticJSONSchema::from_value(json!({ "type": "object" })).unwrap();
@@ -2577,6 +2584,7 @@ mod tests {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
+                provider_tools: None,
             },
             description: None,
             all_explicit_template_names: HashSet::new(),
