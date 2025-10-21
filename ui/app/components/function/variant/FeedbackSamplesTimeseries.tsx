@@ -46,7 +46,7 @@ export function FeedbackSamplesTimeseries({
             time_granularity={time_granularity}
             onTimeGranularityChange={onTimeGranularityChange}
             includeCumulative={false}
-            includeMinute={true}
+            includeMinute={false}
             includeHour={true}
           />
         </CardHeader>
@@ -187,7 +187,8 @@ export function transformFeedbackTimeseries(
   }, {});
 
   // Convert to array and sort by date
-  const data = Object.entries(groupedByDate)
+  // Note: ClickHouse already returns cumulative counts, so we don't need to compute them again
+  const sortedData = Object.entries(groupedByDate)
     .map(([date, variants]) => {
       const row: FeedbackTimeseriesData = { date };
       variantNames.forEach((variant) => {
@@ -195,8 +196,31 @@ export function transformFeedbackTimeseries(
       });
       return row;
     })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(-10); // Take only the 10 most recent periods
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Forward-fill missing cumulative values for each variant
+  // (ClickHouse only returns a row for a variant when it has new data in that period)
+  const lastKnownCounts: Record<string, number> = {};
+  variantNames.forEach((variant) => {
+    lastKnownCounts[variant] = 0;
+  });
+
+  const filledData = sortedData.map((row) => {
+    const filledRow: FeedbackTimeseriesData = { date: row.date };
+    variantNames.forEach((variant) => {
+      const currentValue = row[variant] as number;
+      // If we have a new value, use it and update the last known count
+      if (currentValue > 0) {
+        lastKnownCounts[variant] = currentValue;
+      }
+      // Always use the last known count (forward-fill)
+      filledRow[variant] = lastKnownCounts[variant];
+    });
+    return filledRow;
+  });
+
+  // Take only the 10 most recent periods
+  const data = filledData.slice(-10);
 
   return {
     data,
