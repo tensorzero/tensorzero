@@ -25,7 +25,6 @@ interface ResponseColumnProps {
   inferenceId?: string | null;
   onClose?: () => void;
   actions?: React.ReactNode;
-  requestDurationMs?: number;
   refreshButton?: React.ReactNode;
 }
 
@@ -36,7 +35,6 @@ function ResponseColumn({
   inferenceId,
   onClose,
   actions,
-  requestDurationMs,
   refreshButton,
 }: ResponseColumnProps) {
   return (
@@ -81,27 +79,17 @@ function ResponseColumn({
             <div className="mt-4">{actions}</div>
 
             <div className="mt-4 grid grid-cols-2 justify-end gap-4">
-              <div>
-                <h4 className="mb-1 text-xs font-semibold">Usage</h4>
-                <p className="text-xs">
-                  Input Tokens:{" "}
-                  {response.usage !== undefined
-                    ? response.usage.input_tokens
-                    : "?"}
-                </p>
-                <p className="text-xs">
-                  Output Tokens:{" "}
-                  {response.usage !== undefined
-                    ? response.usage.output_tokens
-                    : "?"}
-                </p>
-                <p className="text-xs">
-                  Request Duration:{" "}
-                  {requestDurationMs !== undefined
-                    ? `${Math.round(requestDurationMs).toLocaleString()} ms`
-                    : "?"}
-                </p>
-              </div>
+              {response.usage && (
+                <div>
+                  <h4 className="mb-1 text-xs font-semibold">Usage</h4>
+                  <p className="text-xs">
+                    Input tokens: {response.usage.input_tokens}
+                  </p>
+                  <p className="text-xs">
+                    Output tokens: {response.usage.output_tokens}
+                  </p>
+                </div>
+              )}
             </div>
           </>
         )
@@ -126,7 +114,6 @@ interface VariantResponseModalProps {
   rawResponse: InferenceResponse | null;
   children?: React.ReactNode;
   onRefresh?: (() => void) | null;
-  requestDurationMs?: number;
 }
 
 export function VariantResponseModal({
@@ -142,7 +129,6 @@ export function VariantResponseModal({
   rawResponse,
   children,
   onRefresh,
-  requestDurationMs,
 }: VariantResponseModalProps) {
   const [showRawResponse, setShowRawResponse] = useState(false);
 
@@ -156,11 +142,6 @@ export function VariantResponseModal({
   const originalVariant =
     source === "inference"
       ? (item as ParsedInferenceRow).variant_name
-      : undefined;
-
-  const baselineLatencyMs =
-    source === "inference"
-      ? (item as ParsedInferenceRow).processing_time_ms
       : undefined;
 
   const refreshButton = onRefresh && (
@@ -229,11 +210,7 @@ export function VariantResponseModal({
           ) : (
             <>
               <div className="flex flex-col gap-4 md:grid md:min-h-[300px] md:grid-cols-2">
-                <ResponseColumn
-                  title="Original"
-                  response={baselineResponse}
-                  requestDurationMs={baselineLatencyMs}
-                />
+                <ResponseColumn title="Original" response={baselineResponse} />
                 <ResponseColumn
                   title="New"
                   response={variantResponse}
@@ -242,7 +219,6 @@ export function VariantResponseModal({
                   onClose={onClose}
                   refreshButton={refreshButton}
                   actions={children}
-                  requestDurationMs={requestDurationMs}
                 />
               </div>
 

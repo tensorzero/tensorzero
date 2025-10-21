@@ -543,7 +543,6 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           selectedVariant={selectedVariant}
           source={variantSource}
           onRefresh={lastRequestArgs ? handleRefresh : null}
-          requestDurationMs={variantInferenceFetcher.requestDurationMs}
         >
           {variantInferenceFetcher.data?.info && (
             <demonstrationFeedbackFetcher.Form method="post">

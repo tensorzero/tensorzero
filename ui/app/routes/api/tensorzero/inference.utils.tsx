@@ -87,7 +87,6 @@ type ActionFetcher = InferenceActionContext & {
     target: SubmitTarget,
     opts?: Omit<FetcherSubmitOptions, "method" | "encType" | "action">,
   ): Promise<void>;
-  requestDurationMs?: number;
 };
 
 /**
@@ -96,10 +95,6 @@ type ActionFetcher = InferenceActionContext & {
  */
 export function useInferenceActionFetcher() {
   const fetcher = useFetcher<InferenceResponse>();
-  const requestStartRef = React.useRef<number | null>(null);
-  const [requestDurationMs, setRequestDurationMs] = React.useState<
-    number | undefined
-  >(undefined);
   /**
    * The fetcher's state gives us the current status of the request alongside
    * its data, but it does so in a generic interface that we still need to parse
@@ -168,8 +163,6 @@ export function useInferenceActionFetcher() {
 
   const submit = React.useCallback<ActionFetcher["submit"]>(
     (target, opts) => {
-      requestStartRef.current = Date.now();
-      setRequestDurationMs(undefined);
       const submit = fetcher.submit;
       return submit(target, {
         ...opts,
@@ -194,32 +187,10 @@ export function useInferenceActionFetcher() {
     }
   }, [context.error]);
 
-  React.useEffect(() => {
-    if (
-      (context.state === "submitting" || context.state === "loading") &&
-      requestStartRef.current === null
-    ) {
-      requestStartRef.current = Date.now();
-    }
-
-    if (
-      (context.state === "idle" || context.state === "error") &&
-      requestStartRef.current !== null
-    ) {
-      setRequestDurationMs(Date.now() - requestStartRef.current);
-      requestStartRef.current = null;
-    }
-
-    if (context.state === "init") {
-      requestStartRef.current = null;
-    }
-  }, [context.state]);
-
   return {
     ...context,
     Form,
     submit,
-    requestDurationMs: requestDurationMs,
   } satisfies ActionFetcher;
 }
 

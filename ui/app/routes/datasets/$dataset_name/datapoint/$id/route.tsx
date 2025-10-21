@@ -517,7 +517,6 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           selectedVariant={selectedVariant}
           source="datapoint"
           onRefresh={lastRequestArgs ? handleRefresh : null}
-          requestDurationMs={variantInferenceFetcher.requestDurationMs}
         />
       )}
     </PageLayout>
