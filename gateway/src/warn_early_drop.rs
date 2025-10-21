@@ -51,7 +51,7 @@ impl Drop for ConnectionDropGuard {
 ///
 /// This is used to log a warning when the client closes a streaming response early.
 /// It's insufficient to just use a `ConnectionDropGuard` in a middleware function, because,
-/// because the middleware itself will return a (streaming) response body, which Axum them
+/// because the middleware itself will return a (streaming) response body, which Axum then
 /// streams to the client outside of our middleware/handler code.
 /// Instead, we must instrument the body itself, to detect whether the body is polled to completion
 /// or dropped early.
