@@ -160,6 +160,8 @@ pub enum CheckStoppingError {
     GLRError,
     #[error("Error in checking stopping condition")]
     StoppingError,
+    #[error("Missing variance for variant '{variant_name}' - variance must be non-null")]
+    MissingVariance { variant_name: String },
 }
 
 /// Compute the pairwise generalized likelihood ratio (GLR) statistic.
@@ -319,10 +321,18 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
         })
         .collect();
 
-    let variances: Vec<f64> = feedback
+    // Validate and extract variances - all must be present
+    let variances: Result<Vec<f64>, CheckStoppingError> = feedback
         .iter()
-        .map(|x| (x.variance as f64).max(variance_floor))
+        .map(|x| {
+            x.variance
+                .map(|v| (v as f64).max(variance_floor))
+                .ok_or_else(|| CheckStoppingError::MissingVariance {
+                    variant_name: x.variant_name.clone(),
+                })
+        })
         .collect();
+    let variances = variances?;
     let num_arms: usize = pull_counts.len();
 
     // Can't stop the experiment if any arms haven't been pulled up to the min pull count
@@ -402,7 +412,7 @@ mod tests {
             .map(|(i, ((count, mean), variance))| FeedbackByVariant {
                 variant_name: format!("variant_{i}"),
                 mean: mean as f32,
-                variance: variance as f32,
+                variance: Some(variance as f32),
                 count,
             })
             .collect()
