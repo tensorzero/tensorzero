@@ -200,11 +200,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter className="relative">
         {state === "expanded" && <TensorZeroStatusIndicator />}
-        <SidebarTrigger className="justify-left mt-1 flex">
-          <span className="sr-only">
-            {state === "expanded" ? "Collapse sidebar" : "Expand sidebar"}
-          </span>
-        </SidebarTrigger>
+        <SidebarTrigger className="justify-left mt-1 flex" />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

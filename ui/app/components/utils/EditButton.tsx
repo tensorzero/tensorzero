@@ -3,7 +3,6 @@ import { Button } from "~/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
@@ -23,49 +22,39 @@ export function EditButton({
   if (disabled) {
     // For disabled buttons, wrap in a span to ensure tooltip works
     return (
-      <TooltipProvider>
-        <Tooltip delayDuration={100}>
-          <TooltipTrigger asChild>
-            <span className="inline-block">
-              <Button
-                variant="outline"
-                size="iconSm"
-                className={className}
-                disabled={disabled}
-                aria-label={tooltip}
-                title={tooltip}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-block">
+            <Button
+              variant="outline"
+              size="iconSm"
+              className={className}
+              disabled={disabled}
+              aria-label={tooltip}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
     );
   }
 
   return (
-    <TooltipProvider>
-      <Tooltip delayDuration={100}>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="iconSm"
-            onClick={onClick}
-            className={className}
-            aria-label={tooltip}
-            title={tooltip}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="iconSm"
+          onClick={onClick}
+          className={className}
+          aria-label={tooltip}
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }

@@ -25,7 +25,6 @@ import { Badge } from "~/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { TagsTable } from "~/components/tags/TagsTable";
@@ -381,33 +380,29 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
         tag={
           <>
             {datapoint.is_custom && (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="secondary" className="ml-2 cursor-help">
-                      Custom
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    This datapoint is not based on a historical inference. It
-                    was either edited or created manually.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="ml-2 cursor-help">
+                    Custom
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  This datapoint is not based on a historical inference. It was
+                  either edited or created manually.
+                </TooltipContent>
+              </Tooltip>
             )}
             {datapoint.staled_at && (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="secondary" className="ml-2 cursor-help">
-                      Stale
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    This datapoint has since been edited or deleted.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="ml-2 cursor-help">
+                    Stale
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  This datapoint has since been edited or deleted.
+                </TooltipContent>
+              </Tooltip>
             )}
           </>
         }
