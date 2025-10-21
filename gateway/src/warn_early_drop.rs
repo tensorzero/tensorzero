@@ -9,7 +9,7 @@ use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use http_body::{Frame, SizeHint};
 use tracing::Span;
 
-/// A drop guard that logs a message on drop if `start_time is set.`
+/// A drop guard that logs a message on drop if `start_time` is set.
 struct ConnectionDropGuard {
     span: Span,
     start_time: Instant,
