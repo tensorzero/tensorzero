@@ -14,6 +14,7 @@ use crate::{
     http::TensorzeroHttpClient,
     inference::types::Usage,
     rate_limiting::ScopeInfo,
+    utils::retries::RetryConfig,
 };
 
 use super::inference::InferenceCredentials;
@@ -129,6 +130,7 @@ mod tests {
             routing: vec!["dummy".to_string().into()],
             providers: HashMap::from([("dummy".to_string().into(), provider_info)]),
             timeout_ms: None,
+            retries: RetryConfig::default(),
         };
 
         // Create a minimal config with just the embedding model

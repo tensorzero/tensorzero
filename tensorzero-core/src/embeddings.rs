@@ -28,6 +28,7 @@ use crate::{
     },
     model::ProviderConfig,
     providers::openai::{OpenAIAPIType, OpenAIProvider},
+    utils::retries::RetryConfig,
 };
 use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
@@ -80,6 +81,7 @@ impl ShorthandModelConfig for EmbeddingModelConfig {
             routing: vec![provider_type.to_string().into()],
             providers: HashMap::from([(provider_type.to_string().into(), provider_info)]),
             timeout_ms: None,
+            retries: RetryConfig::default(),
         })
     }
 
@@ -99,6 +101,8 @@ pub struct UninitializedEmbeddingModelConfig {
     pub timeout_ms: Option<u64>,
     #[serde(default)]
     pub timeouts: TimeoutsConfig,
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 impl UninitializedEmbeddingModelConfig {
@@ -139,6 +143,7 @@ impl UninitializedEmbeddingModelConfig {
             routing: self.routing,
             providers,
             timeout_ms,
+            retries: RetryConfig::default(),
         })
     }
 }
@@ -150,6 +155,8 @@ pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
     pub timeout_ms: Option<u64>,
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 impl EmbeddingModelConfig {
@@ -801,6 +808,7 @@ mod tests {
                 ("good".to_string().into(), good_provider_info),
             ]),
             timeout_ms: None,
+            retries: RetryConfig::default(),
         };
         let request = EmbeddingRequest {
             input: "Hello, world!".to_string().into(),

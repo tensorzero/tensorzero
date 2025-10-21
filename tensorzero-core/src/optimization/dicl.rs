@@ -70,6 +70,8 @@ pub struct DiclOptimizationConfig {
     pub credentials: OpenAICredentials,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credential_location: Option<CredentialLocationWithFallback>,
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -93,6 +95,8 @@ pub struct UninitializedDiclOptimizationConfig {
     pub append_to_existing_variants: bool,
     #[cfg_attr(test, ts(type = "string | null"))]
     pub credentials: Option<CredentialLocationWithFallback>,
+    #[serde(default)]
+    pub retries: RetryConfig,
 }
 
 impl Default for UninitializedDiclOptimizationConfig {
@@ -108,6 +112,7 @@ impl Default for UninitializedDiclOptimizationConfig {
             model: default_model(),
             append_to_existing_variants: default_append_to_existing_variants(),
             credentials: None,
+            retries: RetryConfig::default(),
         }
     }
 }
@@ -213,6 +218,7 @@ impl UninitializedDiclOptimizationConfig {
                 .get_defaulted_credential(self.credentials.as_ref(), default_credentials)
                 .await?,
             credential_location: self.credentials,
+            retries: self.retries,
         })
     }
 }
@@ -849,6 +855,7 @@ mod tests {
                 routing: vec![Arc::from("dummy")],
                 providers,
                 timeout_ms: None,
+                retries: RetryConfig::default(),
             };
             let provider_types = ProviderTypesConfig::default();
             Config {
