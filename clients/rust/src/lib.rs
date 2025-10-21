@@ -699,7 +699,7 @@ impl Client {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::object_storage::get_object(
-                        &gateway.handle.app_state.config,
+                        gateway.handle.app_state.config.object_store_info.as_ref(),
                         storage_path,
                     )
                     .await
