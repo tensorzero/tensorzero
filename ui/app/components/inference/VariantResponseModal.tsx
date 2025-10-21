@@ -25,7 +25,7 @@ interface ResponseColumnProps {
   inferenceId?: string | null;
   onClose?: () => void;
   actions?: React.ReactNode;
-  latencyMs?: number | null;
+  requestDurationMs?: number;
   refreshButton?: React.ReactNode;
 }
 
@@ -36,13 +36,13 @@ function ResponseColumn({
   inferenceId,
   onClose,
   actions,
-  latencyMs,
+  requestDurationMs,
   refreshButton,
 }: ResponseColumnProps) {
   return (
     <div className="relative flex flex-1 flex-col">
       {refreshButton}
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2">
         <h3 className="text-sm font-semibold">{title}</h3>
       </div>
       {errorMessage ? (
@@ -78,27 +78,29 @@ function ResponseColumn({
               </div>
             )}
 
+            <div className="mt-4">{actions}</div>
+
             <div className="mt-4 grid grid-cols-2 justify-end gap-4">
-              {response.usage && (
-                <div>
-                  <h4 className="mb-1 text-xs font-semibold">Usage</h4>
-                  <p className="text-xs">
-                    Input tokens: {response.usage.input_tokens}
-                  </p>
-                  <p className="text-xs">
-                    Output tokens: {response.usage.output_tokens}
-                  </p>
-                </div>
-              )}
-              <div className="flex flex-col items-end gap-2">
-                {typeof latencyMs === "number" && (
-                  <div className="text-muted-foreground text-xs">
-                    <span className="text-foreground font-medium">
-                      Latency: {Math.round(latencyMs).toLocaleString()} ms
-                    </span>
-                  </div>
-                )}
-                {actions}
+              <div>
+                <h4 className="mb-1 text-xs font-semibold">Usage</h4>
+                <p className="text-xs">
+                  Input Tokens:{" "}
+                  {response.usage !== undefined
+                    ? response.usage.input_tokens
+                    : "?"}
+                </p>
+                <p className="text-xs">
+                  Output Tokens:{" "}
+                  {response.usage !== undefined
+                    ? response.usage.output_tokens
+                    : "?"}
+                </p>
+                <p className="text-xs">
+                  Request Duration:{" "}
+                  {requestDurationMs !== undefined
+                    ? `${Math.round(requestDurationMs).toLocaleString()} ms`
+                    : "?"}
+                </p>
               </div>
             </div>
           </>
@@ -124,7 +126,7 @@ interface VariantResponseModalProps {
   rawResponse: InferenceResponse | null;
   children?: React.ReactNode;
   onRefresh?: (() => void) | null;
-  latencyMs?: number | null;
+  requestDurationMs?: number;
 }
 
 export function VariantResponseModal({
@@ -140,7 +142,7 @@ export function VariantResponseModal({
   rawResponse,
   children,
   onRefresh,
-  latencyMs,
+  requestDurationMs,
 }: VariantResponseModalProps) {
   const [showRawResponse, setShowRawResponse] = useState(false);
 
@@ -159,7 +161,7 @@ export function VariantResponseModal({
   const baselineLatencyMs =
     source === "inference"
       ? (item as ParsedInferenceRow).processing_time_ms
-      : null;
+      : undefined;
 
   const refreshButton = onRefresh && (
     <Button
@@ -230,7 +232,7 @@ export function VariantResponseModal({
                 <ResponseColumn
                   title="Original"
                   response={baselineResponse}
-                  latencyMs={baselineLatencyMs}
+                  requestDurationMs={baselineLatencyMs}
                 />
                 <ResponseColumn
                   title="New"
@@ -240,7 +242,7 @@ export function VariantResponseModal({
                   onClose={onClose}
                   refreshButton={refreshButton}
                   actions={children}
-                  latencyMs={latencyMs}
+                  requestDurationMs={requestDurationMs}
                 />
               </div>
 
