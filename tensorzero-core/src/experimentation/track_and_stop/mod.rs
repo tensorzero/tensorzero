@@ -250,6 +250,36 @@ impl UninitializedTrackAndStopConfig {
             }));
         }
 
+        // Validate min_prob if provided
+        if let Some(min_prob) = self.min_prob {
+            // Check non-negative
+            if min_prob < 0.0 {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("Track-and-Stop min_prob must be >= 0, got {min_prob}"),
+                }));
+            }
+
+            // Check finite
+            if !min_prob.is_finite() {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("Track-and-Stop min_prob must be finite, got {min_prob}"),
+                }));
+            }
+
+            // Check that min_prob * num_candidate_variants <= 1.0
+            // Only candidate variants get probability mass, not fallback variants
+            let num_candidate_variants = self.candidate_variants.len();
+            let min_total_prob = min_prob * (num_candidate_variants as f64);
+            if min_total_prob > 1.0 + 1e-9 {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Track-and-Stop min_prob is too large: min_prob ({min_prob}) * num_candidate_variants ({num_candidate_variants}) = {min_total_prob} > 1.0. \
+                        The sum of minimum probabilities for candidate variants cannot exceed 1.0."
+                    ),
+                }));
+            }
+        }
+
         let keep_variants: Vec<String> = self
             .candidate_variants
             .iter()
