@@ -25,7 +25,7 @@ import {
 import { queryMetricsWithFeedback } from "~/utils/clickhouse/feedback";
 import { getInferenceTableName } from "~/utils/clickhouse/common";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
 import { FeedbackSamplesTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
@@ -336,15 +336,12 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   const disableNextInferencePage =
     !bottomInference || inference_bounds.first_id === bottomInference.id;
 
-  const [metric_name, setMetricName] = useState(
-    () => searchParams.get("metric_name") || "",
-  );
+  const metric_name = searchParams.get("metric_name") || "";
 
   const handleMetricChange = (metric: string) => {
-    setMetricName(metric);
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("metric_name", metric);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(window.location.search);
+    newSearchParams.set("metric_name", metric);
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   const metricsExcludingDemonstrations = useMemo(
@@ -356,12 +353,12 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     [metricsWithFeedback],
   );
 
-  const [time_granularity, setTimeGranularity] = useState<TimeWindow>("week");
+  const time_granularity = (searchParams.get("time_granularity") ||
+    "week") as TimeWindow;
   const handleTimeGranularityChange = (granularity: TimeWindow) => {
-    setTimeGranularity(granularity);
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("time_granularity", granularity);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    const newSearchParams = new URLSearchParams(window.location.search);
+    newSearchParams.set("time_granularity", granularity);
+    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
   const throughput_time_granularity = (searchParams.get(
