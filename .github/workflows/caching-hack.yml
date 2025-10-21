@@ -12,6 +12,10 @@ on:
   push:
     branches: ["main"]
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   check-python-client-build:
     if: github.repository == 'tensorzero/tensorzero'

@@ -57,6 +57,8 @@ env:
 
 jobs:
   batch-tests:
+    permissions:
+      contents: read
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
@@ -342,6 +344,8 @@ jobs:
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/upload-provider-proxy-cache.sh
 
   check-production-docker-container:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -378,6 +382,9 @@ jobs:
 
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
+    permissions:
+      contents: read
+      actions: read
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
@@ -392,6 +399,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:
+    permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
