@@ -39,6 +39,8 @@ pub async fn get_tool_params_args(
                 additional_tools: Some(additional_tools),
                 tool_choice: Some(tool_params.tool_choice.clone()),
                 parallel_tool_calls: tool_params.parallel_tool_calls,
+                // TODO (Viraj): once we have this stored in the database, be sure to add it
+                provider_tools: None,
             }
         }
         // This branch is actually unreachable
@@ -47,6 +49,7 @@ pub async fn get_tool_params_args(
             additional_tools: None,
             tool_choice: None,
             parallel_tool_calls: None,
+            provider_tools: None,
         },
     }
 }
@@ -87,13 +90,16 @@ pub struct HumanFeedbackResult {
     pub evaluator_inference_id: Uuid,
 }
 
-pub async fn check_static_eval_human_feedback(
+pub async fn check_inference_evaluation_human_feedback(
     clickhouse: &ClickHouseConnectionInfo,
     metric_name: &str,
     datapoint_id: Uuid,
     inference_output: &InferenceResponse,
 ) -> Result<Option<HumanFeedbackResult>> {
     let serialized_output = inference_output.get_serialized_output()?;
+    // Note: StaticEvaluationHumanFeedback is the actual database table name,
+    // retained for backward compatibility even though this feature is now
+    // called "Inference Evaluations" in the product and user-facing documentation.
     let query = r"
         SELECT value, evaluator_inference_id FROM StaticEvaluationHumanFeedback
         WHERE
@@ -176,6 +182,7 @@ mod tests {
                     parameters: json!({}),
                     strict: true,
                 }]),
+                provider_tools: None,
             }
         );
 
@@ -208,6 +215,7 @@ mod tests {
                 parallel_tool_calls: None,
                 allowed_tools: Some(vec!["tool_1".to_string()]),
                 additional_tools: Some(vec![]),
+                provider_tools: None,
             }
         );
     }

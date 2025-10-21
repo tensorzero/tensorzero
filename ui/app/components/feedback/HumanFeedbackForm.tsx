@@ -10,7 +10,7 @@ import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   filterMetricsByLevel,
-  filterStaticEvaluationMetrics,
+  filterInferenceEvaluationMetrics,
 } from "~/utils/config/feedback";
 import BooleanFeedbackInput from "./BooleanFeedbackInput";
 import FloatFeedbackInput from "./FloatFeedbackInput";
@@ -38,7 +38,7 @@ export function HumanFeedbackForm({
   const config = useConfig();
   // If there is no inference output this is likely an episode-level feedback and
   // we should filter demonstration out of the list of metrics.
-  const metrics = filterStaticEvaluationMetrics(
+  const metrics = filterInferenceEvaluationMetrics(
     inferenceOutput === undefined
       ? filterMetricsByLevel(config.metrics, "episode")
       : filterMetricsByLevel(config.metrics, "inference"),

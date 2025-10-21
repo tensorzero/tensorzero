@@ -779,6 +779,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
+            provider_tools: None,
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

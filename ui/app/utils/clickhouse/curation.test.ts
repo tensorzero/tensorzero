@@ -39,6 +39,7 @@ test("countCuratedInferences for boolean metrics", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },
@@ -102,6 +103,7 @@ test("countCuratedInferences for float metrics", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },
@@ -124,6 +126,7 @@ test("countCuratedInferences for float metrics", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },
@@ -185,6 +188,7 @@ test("countCuratedInferences for demonstration metrics", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },
@@ -228,6 +232,7 @@ test("getCuratedInferences retrieves correct data", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },
@@ -271,6 +276,7 @@ test("getCuratedInferences retrieves correct data", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },
@@ -294,6 +300,7 @@ test("getCuratedInferences retrieves correct data", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },
@@ -320,6 +327,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },
@@ -359,6 +367,7 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
+        provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
       },

@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::{collections::HashMap, sync::Arc};
 
+use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use tensorzero_derive::TensorZeroDeserialize;
 
@@ -40,17 +41,21 @@ pub const LLM_JUDGE_BOOLEAN_OUTPUT_SCHEMA_TEXT: &str =
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct StaticEvaluationConfig {
+pub struct InferenceEvaluationConfig {
     pub evaluators: HashMap<String, EvaluatorConfig>,
     pub function_name: String,
 }
+
+/// Deprecated: Use `InferenceEvaluationConfig` instead
+pub type StaticEvaluationConfig = InferenceEvaluationConfig;
 
 #[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EvaluationConfig {
-    Static(StaticEvaluationConfig),
+    #[serde(alias = "static")]
+    Inference(InferenceEvaluationConfig),
 }
 
 #[derive(Debug, Serialize)]
@@ -82,6 +87,7 @@ impl EvaluatorConfig {
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[serde(deny_unknown_fields)]
 pub struct ExactMatchConfig {
     #[serde(default)]
     pub cutoff: Option<f32>,
@@ -90,6 +96,7 @@ pub struct ExactMatchConfig {
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[serde(deny_unknown_fields)]
 pub struct LLMJudgeConfig {
     pub input_format: LLMJudgeInputFormat,
     pub output_type: LLMJudgeOutputType,
@@ -101,6 +108,7 @@ pub struct LLMJudgeConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[serde(deny_unknown_fields)]
 pub struct LLMJudgeIncludeConfig {
     #[serde(default)]
     pub reference_output: bool,
@@ -160,12 +168,9 @@ pub fn get_evaluator_metric_name(evaluation_name: &str, evaluator_name: &str) ->
     format!("tensorzero::evaluation_name::{evaluation_name}::evaluator_name::{evaluator_name}")
 }
 
-#[derive(Debug, TensorZeroDeserialize)]
-#[serde(tag = "type")]
-#[serde(rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
+#[derive(Debug)]
 pub enum UninitializedEvaluationConfig {
-    Static(UninitializedStaticEvaluationConfig),
+    Inference(UninitializedInferenceEvaluationConfig),
 }
 
 impl UninitializedEvaluationConfig {
@@ -176,29 +181,95 @@ impl UninitializedEvaluationConfig {
         evaluation_name: &str,
     ) -> EvaluationLoadResult {
         match self {
-            UninitializedEvaluationConfig::Static(config) => {
+            UninitializedEvaluationConfig::Inference(config) => {
                 config.load(functions, evaluation_name)
             }
         }
     }
 }
 
+// Custom deserializer to log deprecation warning when "static" is used
+impl<'de> Deserialize<'de> for UninitializedEvaluationConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct EvaluationConfigVisitor;
+
+        impl<'de> Visitor<'de> for EvaluationConfigVisitor {
+            type Value = UninitializedEvaluationConfig;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("struct UninitializedEvaluationConfig")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<UninitializedEvaluationConfig, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut type_value: Option<String> = None;
+                let mut other_fields = serde_json::Map::new();
+
+                while let Some(key) = map.next_key::<String>()? {
+                    if key == "type" {
+                        type_value = Some(map.next_value()?);
+                    } else {
+                        let value: serde_json::Value = map.next_value()?;
+                        other_fields.insert(key, value);
+                    }
+                }
+
+                let type_str = type_value.ok_or_else(|| de::Error::missing_field("type"))?;
+
+                // Log deprecation warning if "static" is used
+                if type_str == "static" {
+                    tracing::warn!(
+                        "DEPRECATED: The evaluation type 'static' is deprecated. Please use 'inference' instead. Support for 'static' will be removed in a future version."
+                    );
+                }
+
+                // Validate type
+                if type_str != "inference" && type_str != "static" {
+                    return Err(de::Error::unknown_variant(&type_str, &["inference"]));
+                }
+
+                // Deserialize the config
+                let config: UninitializedInferenceEvaluationConfig =
+                    serde_json::from_value(serde_json::Value::Object(other_fields))
+                        .map_err(de::Error::custom)?;
+
+                Ok(UninitializedEvaluationConfig::Inference(config))
+            }
+        }
+
+        deserializer.deserialize_struct(
+            "UninitializedEvaluationConfig",
+            &["type"],
+            EvaluationConfigVisitor,
+        )
+    }
+}
+
 #[derive(Debug, Deserialize)]
-pub struct UninitializedStaticEvaluationConfig {
+#[serde(deny_unknown_fields)]
+pub struct UninitializedInferenceEvaluationConfig {
     evaluators: HashMap<String, UninitializedEvaluatorConfig>,
     function_name: String,
 }
 
+/// Deprecated: Use `UninitializedInferenceEvaluationConfig` instead
+pub type UninitializedStaticEvaluationConfig = UninitializedInferenceEvaluationConfig;
+
 type EvaluationLoadResult = Result<
     (
-        StaticEvaluationConfig,               // The evaluation itself
+        InferenceEvaluationConfig,            // The evaluation itself
         HashMap<String, Arc<FunctionConfig>>, // All functions which the evaluation needs {function_name -> function_config}
         HashMap<String, MetricConfig>, // All metrics which the evaluation needs {metric_name -> metric_config}
     ),
     Error,
 >;
 
-impl UninitializedStaticEvaluationConfig {
+impl UninitializedInferenceEvaluationConfig {
     pub fn load(
         self,
         functions: &HashMap<String, Arc<FunctionConfig>>,
@@ -259,7 +330,7 @@ impl UninitializedStaticEvaluationConfig {
             );
         }
         Ok((
-            StaticEvaluationConfig {
+            InferenceEvaluationConfig {
                 evaluators,
                 function_name: self.function_name,
             },
@@ -279,6 +350,7 @@ enum UninitializedEvaluatorConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeConfig {
     #[serde(default)]
     input_format: LLMJudgeInputFormat,
@@ -566,6 +638,7 @@ fn default_timeout() -> f64 {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeBestOfNVariantConfig {
     #[serde(default)]
     active: Option<bool>,
@@ -577,6 +650,7 @@ struct UninitializedLLMJudgeBestOfNVariantConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeMixtureOfNVariantConfig {
     #[serde(default)]
     active: Option<bool>,
@@ -588,6 +662,7 @@ struct UninitializedLLMJudgeMixtureOfNVariantConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeDiclVariantConfig {
     #[serde(default)]
     active: Option<bool>,
@@ -612,6 +687,7 @@ struct UninitializedLLMJudgeDiclVariantConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct UninitializedLLMJudgeChainOfThoughtVariantConfig {
     #[serde(flatten)]
     inner: UninitializedLLMJudgeChatCompletionVariantConfig,
@@ -1024,7 +1100,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: Some(0.4) }),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1107,7 +1183,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1231,7 +1307,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1301,7 +1377,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: "nonexistent_function".to_string(),
             };
@@ -1322,7 +1398,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1419,7 +1495,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1463,7 +1539,7 @@ mod tests {
                 UninitializedEvaluatorConfig::ExactMatch(ExactMatchConfig { cutoff: None }),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1527,7 +1603,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1596,7 +1672,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1669,7 +1745,7 @@ mod tests {
                 UninitializedEvaluatorConfig::LLMJudge(llm_judge_config),
             );
 
-            let uninitialized_config = UninitializedStaticEvaluationConfig {
+            let uninitialized_config = UninitializedInferenceEvaluationConfig {
                 evaluators,
                 function_name: function_name.to_string(),
             };
@@ -1683,6 +1759,64 @@ mod tests {
                 }
             );
         }
+    }
+
+    /// Test backward compatibility: verify deprecated "static" type still works
+    #[test]
+    fn test_backward_compatibility_static_type() {
+        // Setup: Create a function that the evaluation will reference
+        let mut functions = HashMap::new();
+        let function_name = "test_function";
+        let function_config = FunctionConfig::Json(FunctionConfigJson {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            output_schema: create_test_schema(),
+            implicit_tool_call_config: create_implicit_tool_call_config(create_test_schema()),
+            description: None,
+            all_explicit_template_names: HashSet::new(),
+            experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
+        });
+        functions.insert(function_name.to_string(), Arc::new(function_config));
+
+        // Test TOML config with deprecated "static" type
+        let toml = format!(
+            r#"
+            type = "static"
+            function_name = "{function_name}"
+
+            [evaluators.test_evaluator]
+            type = "exact_match"
+        "#
+        );
+
+        // Deserialize the TOML
+        let uninitialized: UninitializedEvaluationConfig = toml::from_str(&toml).unwrap();
+
+        // Verify it loads correctly despite using deprecated "static" type
+        let result = uninitialized.load(&functions, "test_backward_compat");
+        assert!(
+            result.is_ok(),
+            "Expected successful load with 'static' type"
+        );
+
+        let (config, additional_functions, metric_configs) = result.unwrap();
+
+        // Verify the config was loaded correctly
+        assert_eq!(config.function_name, function_name);
+        assert_eq!(config.evaluators.len(), 1);
+        assert!(config.evaluators.contains_key("test_evaluator"));
+
+        // Verify exact match evaluator was loaded
+        match config.evaluators.get("test_evaluator").unwrap() {
+            EvaluatorConfig::ExactMatch(_) => {} // Expected
+            EvaluatorConfig::LLMJudge(_) => panic!("Expected ExactMatch evaluator"),
+        }
+
+        // Verify no additional functions (exact match doesn't need them)
+        assert_eq!(additional_functions.len(), 0);
+
+        // Verify metric was created
+        assert_eq!(metric_configs.len(), 1);
     }
 
     // Helper functions for tests

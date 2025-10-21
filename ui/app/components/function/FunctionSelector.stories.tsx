@@ -49,6 +49,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
     },
     implicit_tool_call_config: {
       tools_available: [],
+      provider_tools: null,
       tool_choice: "auto",
       parallel_tool_calls: false,
     },
@@ -64,6 +65,7 @@ const mockFunctions: Record<string, FunctionConfig> = {
     },
     implicit_tool_call_config: {
       tools_available: [],
+      provider_tools: null,
       tool_choice: "auto",
       parallel_tool_calls: false,
     },

@@ -1,7 +1,5 @@
-import type {
-  TimeWindowUnit,
-  VariantPerformanceRow,
-} from "~/utils/clickhouse/function";
+import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
+import type { TimeWindow } from "tensorzero-node";
 // import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
@@ -35,8 +33,8 @@ export function VariantPerformance({
 }: {
   variant_performances: VariantPerformanceRow[];
   metric_name: string;
-  time_granularity: TimeWindowUnit;
-  onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
+  time_granularity: TimeWindow;
+  onTimeGranularityChange: (time_granularity: TimeWindow) => void;
   singleVariantMode?: boolean;
 }) {
   const { data, variantNames } =

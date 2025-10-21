@@ -19,6 +19,21 @@ pub trait FeedbackQueries {
         variant_names: Option<&Vec<String>>,
     ) -> Result<Vec<FeedbackByVariant>, Error>;
 
+    /// Retrieves a time series of feedback statistics for a given metric and function,
+    /// optionally filtered by variant names. Returns cumulative statistics
+    /// (mean, variance, count) for each variant at each time point - each time point
+    /// includes all data from the beginning up to that point. This will return max_periods
+    /// complete time periods worth of data if present as well as the current time period's data.
+    /// So there are at most max_periods + 1 time periods worth of data returned.
+    async fn get_cumulative_feedback_timeseries(
+        &self,
+        function_name: String,
+        metric_name: String,
+        variant_names: Option<Vec<String>>,
+        time_window: super::TimeWindow,
+        max_periods: u32,
+    ) -> Result<Vec<CumulativeFeedbackTimeSeriesPoint>, Error>;
+
     /// Queries all feedback (boolean metrics, float metrics, comments, demonstrations) for a given target ID
     async fn query_feedback_by_target_id(
         &self,
@@ -46,13 +61,48 @@ pub trait FeedbackQueries {
     ) -> Result<Vec<DemonstrationFeedbackRow>, Error>;
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
     pub mean: f32,
     pub variance: f32,
     #[serde(deserialize_with = "deserialize_u64")]
     pub count: u64,
+}
+
+#[derive(Clone, Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+pub struct InternalCumulativeFeedbackTimeSeriesPoint {
+    // Time point up to which cumulative statistics are computed
+    pub period_end: DateTime<Utc>,
+    pub variant_name: String,
+    // Mean of feedback values up to time point `period_end`
+    pub mean: f32,
+    // Variance of feedback values up to time point `period_end`
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    // Number of feedback values up to time point `period_end`
+    pub count: u64,
+}
+
+#[derive(Debug, ts_rs::TS, Serialize, Deserialize, PartialEq)]
+#[ts(export)]
+pub struct CumulativeFeedbackTimeSeriesPoint {
+    // Time point up to which cumulative statistics are computed
+    pub period_end: DateTime<Utc>,
+    pub variant_name: String,
+    // Mean of feedback values up to time point `period_end`
+    pub mean: f32,
+    // Variance of feedback values up to time point `period_end`
+    pub variance: f32,
+    #[serde(deserialize_with = "deserialize_u64")]
+    // Number of feedback values up to time point `period_end`
+    pub count: u64,
+    // 1 - confidence level for the asymptotic confidence sequence
+    pub alpha: f32,
+    // Confidence sequence lower and upper bounds
+    pub cs_lower: f32,
+    pub cs_upper: f32,
 }
 
 // Feedback by target ID types

@@ -10,9 +10,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-/// We maintain a table StaticEvaluationHumanFeedback for datapoints which
-/// have had humans label them so we can keep track of that and reuse it to
-/// "short-circuit" future evaluations.
+/// We maintain a table StaticEvaluationHumanFeedback (note: this is the actual database
+/// table name, which retains "Static" prefix for backward compatibility even though
+/// the feature is now called "Inference Evaluations") for datapoints which have had
+/// humans label them so we can keep track of that and reuse it to "short-circuit"
+/// future evaluations.
 /// To do this at write time we need to make sure that that table is populated.
 /// We saw memory issues in the materialized view 0028 so have dropped it.
 /// Instead we read & write to the table here.
@@ -52,9 +54,9 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
     Ok(())
 }
 
-/// Extracts static evaluation human feedback info from tags.
+/// Extracts inference evaluation human feedback info from tags.
 ///
-/// Returns `Ok(Some(StaticEvaluationInfo))` if all 3 required tags are present:
+/// Returns `Ok(Some(InferenceEvaluationInfo))` if all 3 required tags are present:
 /// - `tensorzero::datapoint_id` (must be a valid UUID)
 /// - `tensorzero::evaluator_inference_id` (must be a valid UUID)
 /// - `tensorzero::human_feedback` (any value, only presence is checked)
@@ -63,7 +65,7 @@ pub(super) async fn write_static_evaluation_human_feedback_if_necessary(
 /// Returns `Err` if UUIDs are malformed.
 fn get_static_evaluation_human_feedback_info(
     tags: &HashMap<String, String>,
-) -> Result<Option<StaticEvaluationInfo>, Error> {
+) -> Result<Option<InferenceEvaluationInfo>, Error> {
     let Some(datapoint_id_str) = tags.get("tensorzero::datapoint_id") else {
         return Ok(None);
     };
@@ -86,14 +88,14 @@ fn get_static_evaluation_human_feedback_info(
         })
     })?;
 
-    Ok(Some(StaticEvaluationInfo {
+    Ok(Some(InferenceEvaluationInfo {
         datapoint_id,
         evaluator_inference_id,
     }))
 }
 
 #[derive(Debug)]
-struct StaticEvaluationInfo {
+struct InferenceEvaluationInfo {
     datapoint_id: Uuid,
     evaluator_inference_id: Uuid,
 }
@@ -133,6 +135,11 @@ struct OutputResponse {
     output: String,
 }
 
+/// Represents a row in the StaticEvaluationHumanFeedback database table.
+///
+/// Note: The "Static" prefix is retained for backward compatibility with existing
+/// database schemas. This feature is now called "Inference Evaluations" in the
+/// product, configuration, and user-facing documentation.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct StaticEvaluationHumanFeedback {
     pub metric_name: String,

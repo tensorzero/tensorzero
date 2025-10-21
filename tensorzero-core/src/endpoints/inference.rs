@@ -44,15 +44,15 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::rate_limiting::RateLimitingConfig;
+use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
-use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
 use super::validate_tags;
+use super::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Deserialize)]
@@ -98,6 +98,9 @@ pub struct Params {
     // parallel_tool_calls: Option<bool>,
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
+    // provider_tools: Vec<ProviderTool> (defaults to [])
+    // If set, will attempt to pass this vector of tools to providers which run server-side tools
+    // that satisfy the scopes required.
     pub output_schema: Option<Value>,
     #[serde(default)]
     pub cache_options: CacheParamsOptions,
@@ -257,7 +260,7 @@ pub async fn inference(
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
 
-    validate_inference_episode_id_and_apply_dynamic_evaluation_run(
+    validate_inference_episode_id_and_apply_workflow_evaluation_run(
         episode_id,
         params.function_name.as_ref(),
         &mut params.variant_name,
@@ -334,16 +337,19 @@ pub async fn inference(
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
 
+    let tags = Arc::new(params.tags.clone());
+
     let inference_clients = InferenceClients {
         http_client: http_client.clone(),
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
-        tags: Arc::new(params.tags.clone()),
+        tags: tags.clone(),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
+        scope_info: ScopeInfo { tags: tags.clone() },
     };
 
     let inference_models = InferenceModels {
@@ -1281,6 +1287,7 @@ pub struct InferenceClients {
     pub rate_limiting_config: Arc<RateLimitingConfig>,
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,
+    pub scope_info: ScopeInfo,
 }
 
 // Carryall struct for models used in inference

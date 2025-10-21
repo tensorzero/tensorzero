@@ -2372,6 +2372,7 @@ mod tests {
             })],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
 
         // Test valid arguments for additional tool
@@ -2494,6 +2495,7 @@ mod tests {
             })],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
 
         // Test allowed tool call

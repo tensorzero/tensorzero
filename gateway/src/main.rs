@@ -282,13 +282,23 @@ async fn main() {
             "/internal/object_storage",
             get(endpoints::object_storage::get_object_handler),
         )
+        // Workflow evaluation endpoints (new)
+        .route(
+            "/workflow_evaluation_run",
+            post(endpoints::workflow_evaluation_run::workflow_evaluation_run_handler),
+        )
+        .route(
+            "/workflow_evaluation_run/{run_id}/episode",
+            post(endpoints::workflow_evaluation_run::workflow_evaluation_run_episode_handler),
+        )
+        // DEPRECATED: Use /workflow_evaluation_run endpoints instead
         .route(
             "/dynamic_evaluation_run",
-            post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_handler),
+            post(endpoints::workflow_evaluation_run::dynamic_evaluation_run_handler),
         )
         .route(
             "/dynamic_evaluation_run/{run_id}/episode",
-            post(endpoints::dynamic_evaluation_run::dynamic_evaluation_run_episode_handler),
+            post(endpoints::workflow_evaluation_run::dynamic_evaluation_run_episode_handler),
         )
         .route(
             "/metrics",
@@ -368,18 +378,10 @@ async fn main() {
     print_configuration_info(glob.as_ref());
 
     // Print whether observability is enabled
-    let observability_description = format!(
-        "client_type: {}, database: {}",
-        gateway_handle
-            .app_state
-            .clickhouse_connection_info
-            .client_type(),
-        gateway_handle
-            .app_state
-            .clickhouse_connection_info
-            .database()
+    tracing::info!(
+        "├ Observability (ClickHouse): {}",
+        gateway_handle.app_state.clickhouse_connection_info
     );
-    tracing::info!("├ Observability: {observability_description}");
     if config.gateway.observability.batch_writes.enabled {
         tracing::info!(
             "├ Batch Writes: enabled (flush_interval_ms = {}, max_rows = {})",

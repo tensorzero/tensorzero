@@ -17,10 +17,8 @@ import {
   queryInferenceTableBoundsByVariantName,
   queryInferenceTableByVariantName,
 } from "~/utils/clickhouse/inference.server";
-import {
-  getVariantPerformances,
-  type TimeWindowUnit,
-} from "~/utils/clickhouse/function";
+import { getVariantPerformances } from "~/utils/clickhouse/function";
+import type { TimeWindow } from "tensorzero-node";
 import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";
@@ -95,7 +93,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           function_config,
           metric_name,
           metric_config: config.metrics[metric_name],
-          time_window_unit: time_granularity as TimeWindowUnit,
+          time_window_unit: time_granularity as TimeWindow,
           variant_name,
         })
       : undefined;
@@ -203,9 +201,8 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     [metricsWithFeedback],
   );
 
-  const [time_granularity, setTimeGranularity] =
-    useState<TimeWindowUnit>("week");
-  const handleTimeGranularityChange = (granularity: TimeWindowUnit) => {
+  const [time_granularity, setTimeGranularity] = useState<TimeWindow>("week");
+  const handleTimeGranularityChange = (granularity: TimeWindow) => {
     setTimeGranularity(granularity);
     const searchParams = new URLSearchParams(window.location.search);
     searchParams.set("time_granularity", granularity);

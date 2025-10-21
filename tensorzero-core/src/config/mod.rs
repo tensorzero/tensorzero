@@ -438,11 +438,10 @@ impl MetricConfigType {
     }
 }
 
-#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[ts(export)]
 pub enum MetricConfigOptimize {
     Min,
     Max,
@@ -831,7 +830,10 @@ impl Config {
         for (name, evaluation_config) in uninitialized_config.evaluations {
             let (evaluation_config, evaluation_function_configs, evaluation_metric_configs) =
                 evaluation_config.load(&config.functions, &name)?;
-            evaluations.insert(name, Arc::new(EvaluationConfig::Static(evaluation_config)));
+            evaluations.insert(
+                name,
+                Arc::new(EvaluationConfig::Inference(evaluation_config)),
+            );
             for (evaluation_function_name, evaluation_function_config) in
                 evaluation_function_configs
             {
