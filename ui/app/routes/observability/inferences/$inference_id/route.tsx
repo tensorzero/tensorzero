@@ -271,6 +271,9 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
   }, [newFeedbackId, toast]);
 
   const variantInferenceFetcher = useInferenceActionFetcher();
+  const [lastRequestArgs, setLastRequestArgs] = useState<
+    Parameters<typeof prepareInferenceActionRequest>[0] | null
+  >(null);
   const variantSource = "inference";
   const variantInferenceIsLoading =
     // only concerned with rendering loading state when the modal is open
@@ -289,9 +292,10 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       // Set state and open modal only if request preparation succeeds
       setSelectedVariant(option);
       setOpenModal("variant-response");
+      setLastRequestArgs(args);
 
       try {
-        submit({ data: JSON.stringify(request) });
+        void submit({ data: JSON.stringify(request) });
       } catch (stringifyError) {
         logger.error("Failed to stringify request:", stringifyError);
         toast({
@@ -339,6 +343,35 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
       source: variantSource,
       model_name: model,
     });
+  };
+
+  const handleRefresh = () => {
+    if (!lastRequestArgs) {
+      return;
+    }
+
+    try {
+      const request = prepareInferenceActionRequest(lastRequestArgs);
+      request.cache_options = {
+        ...request.cache_options,
+        enabled: "write_only",
+      };
+      void submit({ data: JSON.stringify(request) }).catch((error) => {
+        logger.error("Failed to resubmit inference request:", error);
+        toast({
+          title: "Request Error",
+          description: "Failed to refresh inference. Please try again.",
+          variant: "destructive",
+        });
+      });
+    } catch (error) {
+      logger.error("Failed to prepare inference request for refresh:", error);
+      toast({
+        title: "Request Preparation Error",
+        description: "Failed to refresh inference. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const humanFeedbackFetcher = useFetcherWithReset<typeof action>();
@@ -510,11 +543,14 @@ export default function InferencePage({ loaderData }: Route.ComponentProps) {
           onClose={() => {
             setOpenModal(null);
             setSelectedVariant(null);
+            setLastRequestArgs(null);
           }}
           item={inference}
           inferenceUsage={getTotalInferenceUsage(model_inferences)}
           selectedVariant={selectedVariant}
           source={variantSource}
+          onRefresh={lastRequestArgs ? handleRefresh : null}
+          latencyMs={variantInferenceFetcher.latencyMs}
         >
           {variantInferenceFetcher.data?.info && (
             <demonstrationFeedbackFetcher.Form method="post">

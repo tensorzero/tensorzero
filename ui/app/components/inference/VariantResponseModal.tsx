@@ -24,7 +24,8 @@ interface ResponseColumnProps {
   errorMessage?: string | null;
   inferenceId?: string | null;
   onClose?: () => void;
-  children?: React.ReactNode;
+  actions?: React.ReactNode;
+  latencyMs?: number | null;
 }
 
 function ResponseColumn({
@@ -33,7 +34,8 @@ function ResponseColumn({
   errorMessage,
   inferenceId,
   onClose,
-  children,
+  actions,
+  latencyMs,
 }: ResponseColumnProps) {
   return (
     <div className="flex flex-1 flex-col">
@@ -85,7 +87,16 @@ function ResponseColumn({
                   </p>
                 </div>
               )}
-              <div className="flex justify-end">{children}</div>
+              <div className="flex flex-col items-end gap-2">
+                {typeof latencyMs === "number" && (
+                  <div className="text-muted-foreground text-xs">
+                    <span className="text-foreground font-medium">
+                      Latency: {Math.round(latencyMs).toLocaleString()} ms
+                    </span>
+                  </div>
+                )}
+                {actions}
+              </div>
             </div>
           </>
         )
@@ -109,6 +120,8 @@ interface VariantResponseModalProps {
   variantResponse: VariantResponseInfo | null;
   rawResponse: InferenceResponse | null;
   children?: React.ReactNode;
+  onRefresh?: (() => void) | null;
+  latencyMs?: number | null;
 }
 
 export function VariantResponseModal({
@@ -123,6 +136,8 @@ export function VariantResponseModal({
   variantResponse,
   rawResponse,
   children,
+  onRefresh,
+  latencyMs,
 }: VariantResponseModalProps) {
   const [showRawResponse, setShowRawResponse] = useState(false);
 
@@ -137,6 +152,24 @@ export function VariantResponseModal({
     source === "inference"
       ? (item as ParsedInferenceRow).variant_name
       : undefined;
+
+  const baselineLatencyMs =
+    source === "inference"
+      ? (item as ParsedInferenceRow).processing_time_ms
+      : null;
+
+  const refreshButton = onRefresh && (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onRefresh}
+      disabled={isLoading}
+      className="flex items-center gap-2"
+    >
+      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+      Refresh
+    </Button>
+  );
 
   useEffect(() => {
     // reset when modal opens or closes
@@ -191,16 +224,25 @@ export function VariantResponseModal({
           ) : (
             <>
               <div className="flex flex-col gap-4 md:grid md:min-h-[300px] md:grid-cols-2">
-                <ResponseColumn title="Original" response={baselineResponse} />
+                <ResponseColumn
+                  title="Original"
+                  response={baselineResponse}
+                  latencyMs={baselineLatencyMs}
+                />
                 <ResponseColumn
                   title="New"
                   response={variantResponse}
                   errorMessage={error}
                   inferenceId={rawResponse?.inference_id}
                   onClose={onClose}
-                >
-                  {children}
-                </ResponseColumn>
+                  actions={
+                    <div className="flex flex-col items-end gap-2">
+                      {refreshButton}
+                      {children}
+                    </div>
+                  }
+                  latencyMs={latencyMs}
+                />
               </div>
 
               <Separator className="my-4" />

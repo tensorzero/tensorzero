@@ -15,9 +15,22 @@ export async function action({ request }: Route.ActionArgs): Promise<Response> {
     if (typeof data !== "string") {
       return Response.json({ error: "Missing request data" }, { status: 400 });
     }
-    const parsed = JSON.parse(data);
+    const parsed = JSON.parse(data) as ClientInferenceParams;
     const extraOptions = getExtraInferenceOptions();
-    const request = { ...parsed, ...extraOptions } as ClientInferenceParams;
+    let request = { ...parsed, ...extraOptions } as ClientInferenceParams;
+
+    if (
+      parsed.cache_options?.enabled === "write_only" &&
+      request.cache_options
+    ) {
+      request = {
+        ...request,
+        cache_options: {
+          ...request.cache_options,
+          enabled: "write_only",
+        },
+      };
+    }
     const nativeClient = await getNativeTensorZeroClient();
     const inference = await nativeClient.inference(request).catch((error) => {
       if (isErrorLike(error)) {

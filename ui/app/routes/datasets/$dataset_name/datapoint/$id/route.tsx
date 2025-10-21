@@ -341,6 +341,9 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
   const variants = Object.keys(functionConfig?.variants || {});
 
   const variantInferenceFetcher = useInferenceActionFetcher();
+  const [lastRequestArgs, setLastRequestArgs] = useState<
+    Parameters<typeof prepareInferenceActionRequest>[0] | null
+  >(null);
   const variantSource = "datapoint";
   const variantInferenceIsLoading =
     // only concerned with rendering loading state when the modal is open
@@ -349,21 +352,46 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       variantInferenceFetcher.state === "loading");
 
   const { submit } = variantInferenceFetcher;
+  const submitVariantInference = (
+    args: Parameters<typeof prepareInferenceActionRequest>[0],
+    { bypassCache }: { bypassCache?: boolean } = {},
+  ) => {
+    try {
+      const request = prepareInferenceActionRequest(args);
+      if (bypassCache) {
+        request.cache_options = {
+          ...request.cache_options,
+          enabled: "write_only",
+        };
+      }
+      setLastRequestArgs(args);
+      void submit({ data: JSON.stringify(request) });
+    } catch (error) {
+      logger.error("Failed to prepare datapoint inference request:", error);
+    }
+  };
+
   const onVariantSelect = (variant: string) => {
     setSelectedVariant(variant);
     setIsModalOpen(true);
-    const request = prepareInferenceActionRequest({
+    submitVariantInference({
       resource: datapoint,
       source: variantSource,
       variant,
     });
-    // TODO: handle JSON.stringify error
-    submit({ data: JSON.stringify(request) });
   };
 
   const handleModalClose = () => {
     setIsModalOpen(false);
     setSelectedVariant(null);
+    setLastRequestArgs(null);
+  };
+
+  const handleRefresh = () => {
+    if (!lastRequestArgs) {
+      return;
+    }
+    submitVariantInference(lastRequestArgs, { bypassCache: true });
   };
 
   const handleRenameDatapoint = async (newName: string) => {
@@ -488,6 +516,8 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
           item={datapoint}
           selectedVariant={selectedVariant}
           source="datapoint"
+          onRefresh={lastRequestArgs ? handleRefresh : null}
+          latencyMs={variantInferenceFetcher.latencyMs}
         />
       )}
     </PageLayout>
