@@ -1,3 +1,4 @@
+// TEST MODE: This is a test comment added by experimental-ci-bot
 /**
  * Tests for OpenAI Responses API integration
  */
