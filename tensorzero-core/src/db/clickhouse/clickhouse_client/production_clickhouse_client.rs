@@ -152,7 +152,7 @@ fn make_clickhouse_http_client(
             })
         })?;
         password_header_value.set_sensitive(true);
-        headers.insert("X-ClickHouse-Password", password_header_value);
+        headers.insert("X-ClickHouse-Key", password_header_value);
     }
     Client::builder()
         .default_headers(headers)
