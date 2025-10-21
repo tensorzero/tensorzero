@@ -7,4 +7,5 @@ import type { ChatCompletionInferenceParams } from "./ChatCompletionInferencePar
  */
 export type InferenceParams = {
   chat_completion: ChatCompletionInferenceParams;
+  foo: string;
 };
