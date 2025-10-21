@@ -44,8 +44,14 @@ function extractVariantWeights(
         }),
       );
     }
-    // If no optimal probabilities yet, return empty (no chart to show)
-    return [];
+    // If no optimal probabilities yet (e.g., due to null variances or insufficient data),
+    // show equal weights for all candidate variants (nursery phase)
+    const candidateVariants = experimentationConfig.candidate_variants;
+    const equalWeight = 1.0 / candidateVariants.length;
+    return candidateVariants.map((variant_name) => ({
+      variant_name,
+      weight: equalWeight,
+    }));
   }
 
   // Default case (shouldn't happen, but TypeScript requires it)
