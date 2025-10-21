@@ -15,6 +15,7 @@ interface ReadOnlyContextValue {
 }
 
 const ReadOnlyContext = createContext<ReadOnlyContextValue | null>(null);
+ReadOnlyContext.displayName = "ReadOnlyContext";
 
 /**
  * Hook to check if the application is in read-only mode
