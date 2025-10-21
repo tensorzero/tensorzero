@@ -7,9 +7,9 @@ and restructures them to show test retries more clearly. Each retry is converted
 separate test case with a <failure> tag.
 """
 
-import xml.etree.ElementTree as ET
 import argparse
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
