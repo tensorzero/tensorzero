@@ -143,7 +143,7 @@ impl UninitializedEmbeddingModelConfig {
             routing: self.routing,
             providers,
             timeout_ms,
-            retries: RetryConfig::default(),
+            retries: self.retries,
         })
     }
 }
@@ -155,7 +155,7 @@ pub struct EmbeddingModelConfig {
     pub routing: Vec<Arc<str>>,
     pub providers: HashMap<Arc<str>, EmbeddingProviderInfo>,
     pub timeout_ms: Option<u64>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "RetryConfig::is_default")]
     pub retries: RetryConfig,
 }
 
