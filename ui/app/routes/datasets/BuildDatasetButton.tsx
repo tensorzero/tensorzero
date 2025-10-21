@@ -8,18 +8,11 @@ interface BuildDatasetButtonProps {
 }
 
 export function BuildDatasetButton({
-  onClick,
-  className,
   disabled = false,
+  ...props
 }: BuildDatasetButtonProps) {
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={onClick}
-      className={className}
-      disabled={disabled}
-    >
+    <Button variant="outline" size="sm" disabled={disabled} {...props}>
       <Plus className="text-fg-tertiary mr-2 h-4 w-4" />
       Build Dataset
     </Button>
