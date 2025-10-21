@@ -336,7 +336,7 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("019926fd-1a06-7fe2-b7f4-2318de2f2046");
+  expect(bounds.last_id).toBe("019a0881-7437-7495-b506-782079c593bf");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
