@@ -109,7 +109,7 @@ async fn test_log_early_drop_streaming(model_name: &str) {
     );
 
     // Tower will log a somewhat misleading 'finished processing request' line when our *route handler* finishes -
-    // that it, when we return the stream body object to axum.
+    // that is, when we return the stream body object to axum.
     // The actual processing will continue on indefinitely, since we still need to pull chunks from the remote
     // server, transform them, and send them to the client.
     // We expect to see this line, but then still see a 'Client closed the connection before the response was sent' line,
