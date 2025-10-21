@@ -29,7 +29,7 @@ export function SFTForm({
     phase: "idle" | "submitting" | "pending" | "complete",
   ) => void;
 }) {
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const form = useForm<SFTFormValues>({
     defaultValues: {
       function: "",

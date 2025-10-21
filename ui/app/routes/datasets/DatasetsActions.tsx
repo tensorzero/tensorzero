@@ -7,7 +7,7 @@ interface DatasetsActionsProps {
 }
 
 export function DatasetsActions({ onBuildDataset }: DatasetsActionsProps) {
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   return (
     <ActionBar>
       <BuildDatasetButton onClick={onBuildDataset} disabled={isReadOnly} />

@@ -7,7 +7,7 @@ interface EvaluationsActionsProps {
 }
 
 export function EvaluationsActions({ onNewRun }: EvaluationsActionsProps) {
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   return (
     <ActionBar>
       <NewRunButton onClick={onNewRun} disabled={isReadOnly} />

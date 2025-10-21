@@ -9,7 +9,7 @@ import { AlertCircle } from "lucide-react";
 import { useReadOnly } from "~/context/read-only";
 
 export function ReadOnlyBanner() {
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
 
   if (!isReadOnly) {
     return null;
