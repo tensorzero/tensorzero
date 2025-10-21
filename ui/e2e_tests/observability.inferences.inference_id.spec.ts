@@ -104,7 +104,7 @@ test("tag navigation works by evaluation_name", async ({ page }) => {
   // Use a more specific selector for the code element with entity_extraction
   // Look for a table cell containing the exact text "entity_extraction"
   const entityExtractionCell = page
-    .locator("code")
+    .locator("span")
     .filter({ hasText: /^entity_extraction$/ })
     .first();
 
@@ -496,13 +496,9 @@ test("should be able to add a datapoint from the inference page", async ({
 }) => {
   // NOTE: this datapoint has auxiliary_content as "" so was failing to insert into dataset
   // We want to make sure that we can add it to a dataset now that we've fixed that issue.
-  const datasetName =
-    "test_json_dataset_" + Math.random().toString(36).substring(2, 15);
-
   // Create a new datapoint from an inference
-  await createDatapointFromInference(page, {
-    inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
-    datasetName,
+  const datasetName = await createDatapointFromInference(page, {
+    inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307", // `extract_entities`
   });
 
   // Assert that the page URL starts with /datasets/test_json_dataset/datapoint/

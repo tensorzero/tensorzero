@@ -6,7 +6,9 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {});
+    const datasetName = await createDatapointFromInference(page, {
+      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307", // `extract_entities`
+    });
 
     // Navigate to evaluations page
     await page.goto("/evaluations");

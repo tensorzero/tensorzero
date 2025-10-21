@@ -33,13 +33,8 @@ test("should show the datapoint detail page", async ({ page }) => {
 test("should be able to add, edit and save a json datapoint", async ({
   page,
 }) => {
-  const datasetName =
-    "test_json_dataset_" + Math.random().toString(36).substring(2, 15);
-
-  // Create a new datapoint from an inference
   await createDatapointFromInference(page, {
     inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
-    datasetName,
   });
 
   await expect(page.getByText("Custom")).not.toBeVisible();
@@ -87,13 +82,9 @@ test("should be able to add, edit and save a json datapoint", async ({
 });
 
 test("should be able to add, edit, and delete tags", async ({ page }) => {
-  const datasetName =
-    "test_tags_dataset_" + Math.random().toString(36).substring(2, 15);
-
   // Create a new datapoint from an inference
-  await createDatapointFromInference(page, {
+  const datasetName = await createDatapointFromInference(page, {
     inferenceId: "0196a0ea-c165-7b93-85e9-0e9f2ff0fcea",
-    datasetName,
   });
 
   // Enter edit mode

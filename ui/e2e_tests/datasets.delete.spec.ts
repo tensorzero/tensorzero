@@ -6,7 +6,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {});
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -50,7 +50,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {});
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -82,7 +82,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {});
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -116,7 +116,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {});
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -154,7 +154,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {});
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 

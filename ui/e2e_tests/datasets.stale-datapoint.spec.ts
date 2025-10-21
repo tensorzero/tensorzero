@@ -5,14 +5,8 @@ import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 test("should show stale badge and disable edit/delete buttons on stale datapoint", async ({
   page,
 }) => {
-  const datasetName =
-    "test_stale_dataset_" + Math.random().toString(36).substring(2, 15);
-
   // Step 1: Create a new datapoint from an inference
-  await createDatapointFromInference(page, {
-    inferenceId: "0196374b-0d7a-7a22-b2d2-598a14f2eacc",
-    datasetName,
-  });
+  const datasetName = await createDatapointFromInference(page);
 
   // Step 2: Capture the original datapoint ID from URL
   const originalUrl = page.url();

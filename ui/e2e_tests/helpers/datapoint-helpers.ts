@@ -53,7 +53,7 @@ export async function createDatapointFromInference(
 ): Promise<string> {
   // Collect an inference if not provided
   const inferenceId =
-    options?.inferenceId || "0196368f-1ae8-7551-b5df-9a61593eb307";
+    options?.inferenceId || "0196c682-72e0-7c83-a92b-9d1a3c7630f2"; // default is a `write_haiku` inference
 
   // Generate a unique dataset name if not provided
   const datasetName = options?.datasetName || `test_dataset_${uuidv7()}`;
@@ -95,7 +95,7 @@ export async function createDatapointFromInference(
   await viewButton.click();
 
   // Wait for navigation to the new page
-  if (options?.waitForNavigation) {
+  if (options?.waitForNavigation !== false) {
     await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
       timeout: 10000,
     });
