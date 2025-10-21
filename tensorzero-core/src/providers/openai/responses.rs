@@ -1823,7 +1823,7 @@ mod tests {
                 output_tokens: 25
             })
         );
-        assert_eq!(result.finish_reason, None);
+        assert_eq!(result.finish_reason, Some(FinishReason::Stop));
     }
 
     #[test]
