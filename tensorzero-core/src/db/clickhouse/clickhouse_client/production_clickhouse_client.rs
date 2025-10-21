@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use http::{HeaderMap, HeaderValue};
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
@@ -41,8 +42,6 @@ pub struct ProductionClickHouseClient {
     database: String,
     client: Client,
     batch_sender: Option<Arc<BatchSender>>,
-    username: Option<String>,
-    password: Option<SecretString>,
 }
 
 impl ProductionClickHouseClient {
@@ -107,10 +106,8 @@ impl ProductionClickHouseClient {
             sanitized_database_url: sanitized_database_url.to_string(),
             cluster_name,
             database,
-            client: make_clickhouse_http_client()?,
+            client: make_clickhouse_http_client(username, password)?,
             batch_sender: None,
-            username,
-            password,
         };
 
         // Create the batch sender if enabled
@@ -131,21 +128,34 @@ impl ProductionClickHouseClient {
         temp_connection_info.inner.health().await?;
         Ok(client)
     }
-
-    fn apply_clickhouse_auth(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
-        let mut request = request;
-        if let Some(username) = &self.username {
-            request = request.header("X-ClickHouse-User", username);
-        }
-        if let Some(password) = &self.password {
-            request = request.header("X-ClickHouse-Key", password.expose_secret());
-        }
-        request
-    }
 }
 
-fn make_clickhouse_http_client() -> Result<Client, Error> {
+fn make_clickhouse_http_client(
+    username: Option<String>,
+    password: Option<SecretString>,
+) -> Result<Client, Error> {
+    let mut headers = HeaderMap::new();
+    if let Some(username) = username.as_ref() {
+        headers.insert(
+        "X-ClickHouse-User",
+        HeaderValue::from_str(username).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseConnection {
+                message: format!("Failed to build ClickHouse HTTP client because username contains invalid bytes: {e}"),
+            })
+        })?,
+    );
+    }
+    if let Some(password) = password {
+        let mut password_header_value = HeaderValue::from_str(password.expose_secret()).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseConnection {
+                message: format!("Failed to build ClickHouse HTTP client because password contains invalid bytes: {e}"),
+            })
+        })?;
+        password_header_value.set_sensitive(true);
+        headers.insert("X-ClickHouse-Password", password_header_value);
+    }
     Client::builder()
+        .default_headers(headers)
         // https://github.com/ClickHouse/clickhouse-rs/blob/56c5dd3fc95693acc5aa3d02db1f910a26fe5b1c/src/http_client.rs#L45
         .pool_idle_timeout(Duration::from_secs(2))
         // https://github.com/ClickHouse/clickhouse-rs/blob/56c5dd3fc95693acc5aa3d02db1f910a26fe5b1c/src/http_client.rs#L41
@@ -233,7 +243,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .query_pairs_mut()
             .append_pair("alter_sync", "2");
         let res = self
-            .apply_clickhouse_auth(self.client.post(database_url).body(query))
+            .client
+            .post(database_url)
+            .body(query)
             .send()
             .await
             .map_err(|e| {
@@ -319,7 +331,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .text("query", query);
 
         let res = self
-            .apply_clickhouse_auth(self.client.post(database_url).multipart(form))
+            .client
+            .post(database_url)
+            .multipart(form)
             .send()
             .await
             .map_err(|e| {
@@ -385,7 +399,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .finish();
         let query = "SELECT COUNT() FROM system.databases WHERE name={name:String}".to_string();
         let response = self
-            .apply_clickhouse_auth(self.client.post(base_url).body(query))
+            .client
+            .post(base_url)
+            .body(query)
             .send()
             .await
             .map_err(|e| {
@@ -456,7 +472,9 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .finish();
 
         let response = self
-            .apply_clickhouse_auth(self.client.post(base_url).body(query))
+            .client
+            .post(base_url)
+            .body(query)
             .send()
             .await
             .map_err(|e| {
@@ -598,11 +616,7 @@ impl HealthCheckable for ProductionClickHouseClient {
 
         let timeout = Duration::from_secs(180);
 
-        match self
-            .apply_clickhouse_auth(self.client.get(ping_url).timeout(timeout))
-            .send()
-            .await
-        {
+        match self.client.get(ping_url).timeout(timeout).send().await {
             Ok(response) if response.status().is_success() => Ok(()),
             Ok(response) => Err(ErrorDetails::ClickHouseConnection {
                 message: format!(
@@ -655,12 +669,9 @@ async fn write_production<T: Serialize + Send + Sync>(
     );
 
     let response = client
-        .apply_clickhouse_auth(
-            client
-                .client
-                .post(client.sanitized_database_url.as_str())
-                .body(query),
-        )
+        .client
+        .post(client.sanitized_database_url.as_str())
+        .body(query)
         .send()
         .await
         .map_err(|e| {
