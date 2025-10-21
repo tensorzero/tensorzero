@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { randomUUID } from "crypto";
 import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 
 test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
@@ -7,11 +6,7 @@ test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {
-      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
-      datasetName: `eval-localstorage-test-${Date.now()}-${randomUUID()}`,
-      waitForNavigation: false,
-    });
+    const datasetName = await createDatapointFromInference(page, {});
 
     // Navigate to evaluations page
     await page.goto("/evaluations");

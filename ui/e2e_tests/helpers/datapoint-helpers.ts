@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { v7 as uuidv7 } from "uuid";
 
 /**
  * Options for creating a datapoint from an inference
@@ -7,7 +8,7 @@ export interface CreateDatapointFromInferenceOptions {
   /**
    * The inference ID to navigate to (e.g., "0196374b-0d7a-7a22-b2d2-598a14f2eacc")
    */
-  inferenceId: string;
+  inferenceId?: string;
   /**
    * The dataset name to create/use
    * If not provided, a unique name will be generated
@@ -48,18 +49,14 @@ export interface CreateDatapointFromInferenceOptions {
  */
 export async function createDatapointFromInference(
   page: Page,
-  options: CreateDatapointFromInferenceOptions,
+  options?: CreateDatapointFromInferenceOptions,
 ): Promise<string> {
-  const {
-    inferenceId,
-    datasetName: providedDatasetName,
-    waitForNavigation = true,
-  } = options;
+  // Collect an inference if not provided
+  const inferenceId =
+    options?.inferenceId || "0196368f-1ae8-7551-b5df-9a61593eb307";
 
   // Generate a unique dataset name if not provided
-  const datasetName =
-    providedDatasetName ||
-    `test_dataset_${Math.random().toString(36).substring(2, 15)}`;
+  const datasetName = options?.datasetName || `test_dataset_${uuidv7()}`;
 
   // Navigate to the inference page
   await page.goto(`/observability/inferences/${inferenceId}`);
@@ -98,7 +95,7 @@ export async function createDatapointFromInference(
   await viewButton.click();
 
   // Wait for navigation to the new page
-  if (waitForNavigation) {
+  if (options?.waitForNavigation) {
     await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
       timeout: 10000,
     });

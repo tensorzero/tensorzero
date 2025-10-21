@@ -13,13 +13,9 @@ import { createDatapointFromInference } from "../helpers/datapoint-helpers";
 
 test.describe("System Message - Text", () => {
   test("should add, edit, and delete system text", async ({ page }) => {
-    const datasetName =
-      "test_system_text_" + Math.random().toString(36).substring(2, 15);
-
     // Create a new datapoint from an inference without a system message
     await createDatapointFromInference(page, {
       inferenceId: "0196374b-0d7a-7a22-b2d2-598a14f2eacc",
-      datasetName,
     });
 
     // Step 1: Add system text
@@ -121,13 +117,9 @@ test.describe("System Message - Template", () => {
   }) => {
     // Use answer_question function which has system_schema
     // This allows us to add a system template (JSON content)
-    const datasetName =
-      "test_system_template_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Step 1: Delete existing system template and re-add in same edit session
@@ -220,13 +212,9 @@ test.describe("User Message - Text Blocks", () => {
   test("should add, edit, and delete text block in user message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_user_text_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference without user_schema (answer_question function)
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -351,13 +339,9 @@ test.describe("User Message - Tool Call Blocks", () => {
   test("should add, edit, and delete tool call block in user message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_tool_call_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference without user_schema
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -465,13 +449,9 @@ test.describe("User Message - Tool Result Blocks", () => {
   test("should add, edit, and delete tool result block in user message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_tool_result_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference without user_schema
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -578,13 +558,9 @@ test.describe("User Message - Template Blocks", () => {
   test("should delete, re-add, and edit template block in user message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_user_template_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from custom_template_test function which has named templates
     await createDatapointFromInference(page, {
       inferenceId: "019a0881-7437-7495-b506-782079c593bf",
-      datasetName,
     });
 
     // Step 1: Delete the text content, add a template
@@ -684,13 +660,9 @@ test.describe("User Message - Thought Blocks", () => {
   test("should add, edit, and delete thought block in user message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_user_thought_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference without user_schema (answer_question function)
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -819,13 +791,9 @@ test.describe("Assistant Message - Text Blocks", () => {
   test("should add, edit, and delete text block in assistant message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_asst_text_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference without assistant message in input
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -958,13 +926,9 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
   test("should add, edit, and delete tool call block in assistant message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_asst_tool_call_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference without assistant message in input
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -1115,13 +1079,9 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
   test("should add, edit, and delete tool result block in assistant message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_asst_tool_result_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference without assistant message in input
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -1266,13 +1226,9 @@ test.describe("Assistant Message - Template Blocks", () => {
   test("should add, edit, and delete template block in assistant message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_asst_template_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from custom_template_test function which has named templates
     await createDatapointFromInference(page, {
       inferenceId: "019a0881-7437-7495-b506-782079c593bf",
-      datasetName,
     });
 
     // Enter edit mode
@@ -1417,13 +1373,9 @@ test.describe("Assistant Message - Thought Blocks", () => {
   test("should add, edit, and delete thought block in assistant message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_assistant_thought_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference without assistant message
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -1560,13 +1512,9 @@ test.describe("Output - Text Blocks", () => {
   test("should add, edit, and delete text block in output", async ({
     page,
   }) => {
-    const datasetName =
-      "test_output_text_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference with chat output
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -1687,13 +1635,9 @@ test.describe("Output - Tool Call Blocks", () => {
   test("should add, edit, and delete tool call block in output", async ({
     page,
   }) => {
-    const datasetName =
-      "test_output_tool_call_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint from inference with tool-enabled function
     await createDatapointFromInference(page, {
       inferenceId: "0196a0e5-ba06-7fd1-bf50-aed8fc9cf2ae",
-      datasetName,
     });
 
     // Enter edit mode
@@ -1844,13 +1788,9 @@ test.describe("Output - Tool Call Blocks", () => {
 
 test.describe("Message Operations", () => {
   test("should add and delete user message", async ({ page }) => {
-    const datasetName =
-      "test_add_msg_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -1937,13 +1877,9 @@ test.describe("Message Operations", () => {
   });
 
   test("should add and delete assistant message", async ({ page }) => {
-    const datasetName =
-      "test_add_asst_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint
     await createDatapointFromInference(page, {
       inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
-      datasetName,
     });
 
     // Enter edit mode
@@ -2043,13 +1979,9 @@ test.describe("Delete Action Buttons", () => {
   test("should show and hide delete buttons based on edit mode", async ({
     page,
   }) => {
-    const datasetName =
-      "test_delete_btns_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint
     await createDatapointFromInference(page, {
       inferenceId: "0196374b-0d7a-7a22-b2d2-598a14f2eacc",
-      datasetName,
     });
 
     // In read-only mode, delete buttons should not be visible
@@ -2112,13 +2044,9 @@ test.describe("Edge Cases", () => {
   test("should handle mixed content blocks in one message", async ({
     page,
   }) => {
-    const datasetName =
-      "test_mixed_" + Math.random().toString(36).substring(2, 15);
-
     // Create datapoint
     await createDatapointFromInference(page, {
       inferenceId: "0196a0e8-a760-7a90-9f8a-8925365133b6",
-      datasetName,
     });
 
     // Enter edit mode

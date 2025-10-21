@@ -6,10 +6,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {
-      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
-      datasetName: `datapoint-delete-test-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-    });
+    const datasetName = await createDatapointFromInference(page, {});
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -53,10 +50,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {
-      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
-      datasetName: `datapoint-cancel-test-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-    });
+    const datasetName = await createDatapointFromInference(page, {});
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -88,10 +82,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {
-      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
-      datasetName: `dataset-delete-test-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-    });
+    const datasetName = await createDatapointFromInference(page, {});
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -125,10 +116,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {
-      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
-      datasetName: `dataset-cancel-test-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-    });
+    const datasetName = await createDatapointFromInference(page, {});
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -166,10 +154,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createDatapointFromInference(page, {
-      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307",
-      datasetName: `last-datapoint-test-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-    });
+    const datasetName = await createDatapointFromInference(page, {});
 
     await page.goto(`/datasets/${datasetName}`);
 
