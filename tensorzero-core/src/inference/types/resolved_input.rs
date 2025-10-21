@@ -148,42 +148,42 @@ pub async fn write_file(
     raw: Base64File,
     storage_path: StoragePath,
 ) -> Result<(), Error> {
-    if let Some(object_store) = object_store {
-        // The store might be explicitly disabled
-        if let Some(store) = object_store.object_store.as_ref() {
-            let data = raw.data()?;
-            let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
-                Error::new(ErrorDetails::ObjectStoreWrite {
-                    message: format!("Failed to decode file as base64: {e:?}"),
-                    path: storage_path.clone(),
-                })
-            })?;
-            let res = store
-                .put_opts(
-                    &storage_path.path,
-                    bytes.into(),
-                    PutOptions {
-                        mode: PutMode::Create,
-                        ..Default::default()
-                    },
-                )
-                .await;
-            match res {
-                Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
-                Err(e) => {
-                    return Err(ErrorDetails::ObjectStoreWrite {
-                        message: format!("Failed to write file to object store: {e:?}"),
-                        path: storage_path.clone(),
-                    }
-                    .into());
-                }
-            }
-        }
-    } else {
+    let Some(object_store) = object_store else {
         return Err(ErrorDetails::InternalError {
             message: "Called `write_file` with no object store configured".to_string(),
         }
         .into());
+    };
+
+    // The store might be explicitly disabled
+    if let Some(store) = object_store.object_store.as_ref() {
+        let data = raw.data()?;
+        let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
+            Error::new(ErrorDetails::ObjectStoreWrite {
+                message: format!("Failed to decode file as base64: {e:?}"),
+                path: storage_path.clone(),
+            })
+        })?;
+        let res = store
+            .put_opts(
+                &storage_path.path,
+                bytes.into(),
+                PutOptions {
+                    mode: PutMode::Create,
+                    ..Default::default()
+                },
+            )
+            .await;
+        match res {
+            Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
+            Err(e) => {
+                return Err(ErrorDetails::ObjectStoreWrite {
+                    message: format!("Failed to write file to object store: {e:?}"),
+                    path: storage_path.clone(),
+                }
+                .into());
+            }
+        }
     }
     Ok(())
 }

@@ -369,4 +369,222 @@ async fn convert_input_to_stored_input(
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    use super::*;
+    use crate::config::{ObjectStoreInfo, SchemaData};
+    use crate::experimentation::ExperimentationConfig;
+    use crate::function::FunctionConfigChat;
+    use crate::http::TensorzeroHttpClient;
+    use crate::inference::types::storage::{StorageKind, StoragePath};
+    use crate::inference::types::StoredInputMessageContent;
+    use crate::inference::types::{File, Input, InputMessage, InputMessageContent, Role};
+    use crate::tool::ToolChoice;
+    use object_store::path::Path as ObjectStorePath;
+    use std::collections::{HashMap, HashSet};
+
+    #[tokio::test]
+    async fn test_convert_input_with_object_storage_does_not_refetch() {
+        // This test verifies that File::ObjectStorage inputs bypass object storage access entirely.
+        // We use StorageKind::Disabled with object_store: None to ensure that if the code
+        // tried to access object storage, it would fail. The fact that this test passes
+        // proves that File::ObjectStorage is handled specially and never triggers storage access.
+
+        // TODO(shuyangli): Provide proper object storage mocks for tests. This requires a mock for
+        // `ObjectStore` which we don't own, so it's a little complicated.
+
+        // Create a File::ObjectStorage that should NOT be fetched
+        let storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/path/image.png").unwrap(),
+        };
+
+        let file = File::ObjectStorage {
+            source_url: Some("https://example.com/original.png".parse().unwrap()),
+            mime_type: mime::IMAGE_PNG,
+            storage_path: storage_path.clone(),
+        };
+
+        let input = Input {
+            system: None,
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::File(file.clone())],
+            }],
+        };
+
+        // Create minimal function config
+        let function_config = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(true),
+            description: None,
+            experimentation: ExperimentationConfig::Uniform,
+            all_explicit_templates_names: HashSet::new(),
+        });
+
+        // Create fetch context with NO actual object storage info.
+        // If the code tries to access object storage, it will fail with an error.
+        let http_client = TensorzeroHttpClient::new().unwrap();
+        let object_store_info: Option<ObjectStoreInfo> = None;
+        let fetch_context = FetchContext {
+            client: &http_client,
+            object_store_info: &object_store_info,
+        };
+
+        // Convert input to stored input
+        // This succeeds ONLY because File::ObjectStorage bypasses storage access
+        let result = convert_input_to_stored_input(Some(input), &fetch_context, &function_config)
+            .await
+            .unwrap();
+
+        // Verify the result
+        assert!(result.is_some());
+        let stored_input = result.unwrap();
+        assert_eq!(stored_input.messages.len(), 1);
+        assert_eq!(stored_input.messages[0].content.len(), 1);
+
+        // Verify that the File::ObjectStorage was passed through without fetching
+        match &stored_input.messages[0].content[0] {
+            StoredInputMessageContent::File(stored_file) => {
+                assert_eq!(stored_file.storage_path.path, storage_path.path);
+                assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(
+                    stored_file.file.url,
+                    Some("https://example.com/original.png".parse().unwrap())
+                );
+            }
+            _ => panic!("Expected File content"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_convert_input_with_base64_processes_without_actual_storage() {
+        // This test verifies that File::Base64 goes through the write_file() code path,
+        // but gracefully handles disabled storage (for testing). In contrast,
+        // File::ObjectStorage completely bypasses the write_file() path.
+        //
+        // The key difference tested here vs test_convert_input_with_object_storage_does_not_refetch:
+        // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
+        // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
+
+        let file = File::Base64 {
+            mime_type: mime::IMAGE_PNG,
+            data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+        };
+
+        let input = Input {
+            system: None,
+            messages: vec![InputMessage {
+                role: Role::User,
+                content: vec![InputMessageContent::File(file.clone())],
+            }],
+        };
+
+        // Create minimal function config
+        let function_config = FunctionConfig::Chat(FunctionConfigChat {
+            variants: HashMap::new(),
+            schemas: SchemaData::default(),
+            tools: vec![],
+            tool_choice: ToolChoice::Auto,
+            parallel_tool_calls: Some(true),
+            description: None,
+            experimentation: ExperimentationConfig::Uniform,
+            all_explicit_templates_names: HashSet::new(),
+        });
+
+        // Create fetch context with disabled storage
+        // File::Base64 will call write_file() but it no-ops with disabled storage
+        let http_client = TensorzeroHttpClient::new().unwrap();
+        let object_store_info = Some(ObjectStoreInfo {
+            object_store: None, // Disabled storage - write_file() returns Ok(()) without writing
+            kind: StorageKind::Disabled,
+        });
+        let fetch_context = FetchContext {
+            client: &http_client,
+            object_store_info: &object_store_info,
+        };
+
+        // Convert input to stored input
+        // This succeeds because write_file() gracefully handles disabled storage
+        let result = convert_input_to_stored_input(Some(input), &fetch_context, &function_config)
+            .await
+            .unwrap();
+
+        // Verify the result
+        assert!(result.is_some());
+        let stored_input = result.unwrap();
+        assert_eq!(stored_input.messages.len(), 1);
+        assert_eq!(stored_input.messages[0].content.len(), 1);
+
+        // Verify that the File::Base64 was converted to StoredFile
+        match &stored_input.messages[0].content[0] {
+            StoredInputMessageContent::File(stored_file) => {
+                // Should have been processed into a stored file
+                assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
+                // With disabled storage, path should still be generated
+                assert!(!stored_file.storage_path.path.as_ref().is_empty());
+                // URL should be None since this came from Base64
+                assert_eq!(stored_file.file.url, None);
+            }
+            _ => panic!("Expected File content"),
+        }
+    }
+
+    #[test]
+    fn test_file_object_storage_serializes_with_tagged_format() {
+        // Test that File::ObjectStorage uses the new tagged format with flattened structure
+        let storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/path/image.png").unwrap(),
+        };
+
+        let file = File::ObjectStorage {
+            source_url: Some("https://example.com/original.png".parse().unwrap()),
+            mime_type: mime::IMAGE_PNG,
+            storage_path: storage_path.clone(),
+        };
+
+        let serialized = serde_json::to_value(&file).unwrap();
+
+        // Verify tagged format
+        assert_eq!(serialized["file_type"], "object_storage");
+        assert_eq!(serialized["source_url"], "https://example.com/original.png");
+        assert_eq!(serialized["mime_type"], "image/png");
+        assert!(serialized.get("storage_path").is_some());
+
+        // Verify flattened structure (no "metadata" field)
+        assert!(serialized.get("metadata").is_none());
+    }
+
+    #[test]
+    fn test_file_url_serializes_with_tagged_format() {
+        let file = File::Url {
+            url: "https://example.com/image.png".parse().unwrap(),
+            mime_type: Some(mime::IMAGE_PNG),
+        };
+
+        let serialized = serde_json::to_value(&file).unwrap();
+
+        // Verify tagged format
+        assert_eq!(serialized["file_type"], "url");
+        assert_eq!(serialized["url"], "https://example.com/image.png");
+        assert_eq!(serialized["mime_type"], "image/png");
+    }
+
+    #[test]
+    fn test_file_base64_serializes_with_tagged_format() {
+        let file = File::Base64 {
+            mime_type: mime::IMAGE_PNG,
+            data: "base64data".to_string(),
+        };
+
+        let serialized = serde_json::to_value(&file).unwrap();
+
+        // Verify tagged format
+        assert_eq!(serialized["file_type"], "base64");
+        assert_eq!(serialized["mime_type"], "image/png");
+        assert_eq!(serialized["data"], "base64data");
+    }
+}

@@ -51,6 +51,7 @@ use crate::inference::types::resolved_input::{
     write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
     LazyResolvedInputMessageContent,
 };
+use crate::inference::types::storage::StorageKind;
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
@@ -251,6 +252,16 @@ impl LazyResolvedInputMessage {
     }
 }
 
+/// Extracts the StorageKind from the FetchContext, or returns an error if the object store is not configured.
+fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
+    let object_store_info = context.object_store_info.as_ref().ok_or_else(|| {
+        Error::new(ErrorDetails::ObjectStoreUnconfigured {
+            block_type: "file".to_string(),
+        })
+    })?;
+    Ok(object_store_info.kind.clone())
+}
+
 impl InputMessageContent {
     /// The 'role' parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
     /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
@@ -308,31 +319,12 @@ impl InputMessageContent {
                 }
             }
             InputMessageContent::File(file) => {
-                let storage_kind = context
-                    .object_store_info
-                    .as_ref()
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::ObjectStoreUnconfigured {
-                            block_type: "file".to_string(),
-                        })
-                    })?
-                    .kind
-                    .clone();
                 match &file {
                     File::Url { url, mime_type } => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
-                        let storage_kind = context
-                            .object_store_info
-                            .as_ref()
-                            .ok_or_else(|| {
-                                Error::new(ErrorDetails::ObjectStoreUnconfigured {
-                                    block_type: "file".to_string(),
-                                })
-                            })?
-                            .kind
-                            .clone();
+                        let storage_kind = get_storage_kind(&context)?;
                         let client = context.client.clone();
                         // Construct a future that will actually fetch the file URL from the network.
                         // Important - we do *not* use `tokio::spawn` here. As a result, the future
@@ -362,7 +354,7 @@ impl InputMessageContent {
                             mime_type: mime_type.clone(),
                             data: data.clone(),
                         };
-
+                        let storage_kind = get_storage_kind(&context)?;
                         let path = storage_kind.file_path(&file)?;
 
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(
