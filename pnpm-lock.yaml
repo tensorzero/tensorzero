@@ -102,7 +102,7 @@ importers:
   internal/tensorzero-node:
     dependencies:
       buildkite-test-collector:
-        specifier: ^1.9.2
+        specifier: ^1.9.1
         version: 1.9.2
     devDependencies:
       '@eslint/js':
