@@ -314,67 +314,75 @@ export const InferenceQueryBuilder = forwardRef<
         <FormLabel>Filter</FormLabel>
 
         {filters.length > 0 && (
-          <div className="relative space-y-3">
-            {filters.length > 1 && (
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      onClick={handleToggleOperator}
-                      className="bg-background hover:text-fg-secondary absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer px-2 text-sm font-semibold transition-colors"
-                    >
-                      {operator.toUpperCase()}
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    <span className="text-xs">
-                      Toggle to {operator === "and" ? "OR" : "AND"}
-                    </span>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            <div className="border-border space-y-3 border-l-2 pl-4">
-              {filters.map((filter, index) => {
-                if (filter.type === "tag") {
-                  return (
-                    <TagFilterRow
-                      key={index}
-                      filter={filter}
-                      onUpdate={(updates) => handleUpdateFilter(index, updates)}
-                      onRemove={() => handleRemoveFilter(index)}
-                    />
-                  );
-                }
-                if (filter.type === "float_metric") {
-                  const metricConfig = config.metrics[filter.metric_name];
-                  if (!metricConfig) return null;
-                  return (
-                    <FloatMetricFilterRow
-                      key={index}
-                      filter={filter}
-                      metricConfig={metricConfig}
-                      onUpdate={(updates) => handleUpdateFilter(index, updates)}
-                      onRemove={() => handleRemoveFilter(index)}
-                    />
-                  );
-                }
-                if (filter.type === "boolean_metric") {
-                  const metricConfig = config.metrics[filter.metric_name];
-                  if (!metricConfig) return null;
-                  return (
-                    <BooleanMetricFilterRow
-                      key={index}
-                      filter={filter}
-                      metricConfig={metricConfig}
-                      onUpdate={(updates) => handleUpdateFilter(index, updates)}
-                      onRemove={() => handleRemoveFilter(index)}
-                    />
-                  );
-                }
-                return null;
-              })}
+          <div className="py-1">
+            <div className="relative space-y-3">
+              {filters.length > 1 && (
+                <TooltipProvider delayDuration={300}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={handleToggleOperator}
+                        className="bg-background hover:text-fg-secondary absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer px-2 text-sm font-semibold transition-colors"
+                      >
+                        {operator.toUpperCase()}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      <span className="text-xs">
+                        Toggle to {operator === "and" ? "OR" : "AND"}
+                      </span>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              <div className="border-border space-y-3 border-l-2 pl-4">
+                {filters.map((filter, index) => {
+                  if (filter.type === "tag") {
+                    return (
+                      <TagFilterRow
+                        key={index}
+                        filter={filter}
+                        onUpdate={(updates) =>
+                          handleUpdateFilter(index, updates)
+                        }
+                        onRemove={() => handleRemoveFilter(index)}
+                      />
+                    );
+                  }
+                  if (filter.type === "float_metric") {
+                    const metricConfig = config.metrics[filter.metric_name];
+                    if (!metricConfig) return null;
+                    return (
+                      <FloatMetricFilterRow
+                        key={index}
+                        filter={filter}
+                        metricConfig={metricConfig}
+                        onUpdate={(updates) =>
+                          handleUpdateFilter(index, updates)
+                        }
+                        onRemove={() => handleRemoveFilter(index)}
+                      />
+                    );
+                  }
+                  if (filter.type === "boolean_metric") {
+                    const metricConfig = config.metrics[filter.metric_name];
+                    if (!metricConfig) return null;
+                    return (
+                      <BooleanMetricFilterRow
+                        key={index}
+                        filter={filter}
+                        metricConfig={metricConfig}
+                        onUpdate={(updates) =>
+                          handleUpdateFilter(index, updates)
+                        }
+                        onRemove={() => handleRemoveFilter(index)}
+                      />
+                    );
+                  }
+                  return null;
+                })}
+              </div>
             </div>
           </div>
         )}
