@@ -2226,7 +2226,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             res["error"]
                 .as_str()
                 .unwrap()
-                .contains(format!("Error from {} server", provider.model_provider_name).as_str()),
+                .contains(format!("from {} server", provider.model_provider_name).as_str()),
             "Missing provider type in error: {res}"
         );
     }
