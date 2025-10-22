@@ -1,0 +1,35 @@
+name: PR Base Branch Check
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  check-base-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR base branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const baseBranch = pr.base.ref;
+            const prBody = pr.body || '';
+
+            // Check if the override is present in the PR body
+            if (prBody.includes('DISABLE_PR_BASE_BRANCH_CHECK')) {
+              core.notice('PR base branch check disabled by user');
+              return;
+            }
+
+            // Check if base branch is main
+            if (baseBranch !== 'main') {
+              core.setFailed(
+                `PR base branch is '${baseBranch}' but should be 'main'. ` +
+                `If this is intentional, add 'DISABLE_PR_BASE_BRANCH_CHECK' to the PR description.`
+              );
+            } else {
+              core.info('PR base branch is correctly set to main');
+            }

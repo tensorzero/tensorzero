@@ -1,6 +1,6 @@
 import type { SFTFormValues } from "~/routes/optimization/supervised-fine-tuning/types";
 import type {
-  InferenceFilterTreeNode,
+  InferenceFilter,
   InferenceOutputSource,
   OptimizationJobHandle,
   OptimizationJobInfo,
@@ -27,7 +27,7 @@ export async function launch_sft_job(
   const openAINativeSFTBase = getEnv().OPENAI_BASE_URL;
   const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
   const togetherNativeSFTBase = getEnv().TOGETHER_BASE_URL;
-  let filters: InferenceFilterTreeNode | null = null;
+  let filters: InferenceFilter | null = null;
   let output_source: InferenceOutputSource = "Inference";
   if (data.metric === "demonstration") {
     output_source = "Demonstration";
@@ -143,7 +143,7 @@ export async function launch_sft_job(
 export async function createFilters(
   metric: string,
   threshold: number,
-): Promise<InferenceFilterTreeNode> {
+): Promise<InferenceFilter> {
   const config = await getConfig();
   const metricConfig = config.metrics[metric];
   if (!metricConfig) {

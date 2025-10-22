@@ -14,9 +14,8 @@ use super::{storage::StoragePath, Base64File, Role, Thought};
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
-use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
-    StoredInput, StoredInputMessage, StoredInputMessageContent,
+    StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
 use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput};
 use crate::rate_limiting::RateLimitedInputContent;
@@ -42,7 +41,7 @@ pub struct LazyResolvedInputMessage {
 }
 
 // This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
-// TODO - decide on the precise caching behavior that we want for file URLs
+// TODO - decide on the precise caching behavior that we want for file URLs and object storage paths.
 #[derive(Clone, Debug, Serialize)]
 pub enum LazyFile {
     Url {
@@ -51,6 +50,12 @@ pub enum LazyFile {
         future: FileFuture,
     },
     FileWithPath(FileWithPath),
+    ObjectStorage {
+        metadata: Base64FileMetadata,
+        storage_path: StoragePath,
+        #[serde(skip)]
+        future: FileFuture,
+    },
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -70,6 +75,7 @@ impl LazyFile {
                 file_url: _,
             } => Ok(Cow::Owned(future.clone().await?)),
             LazyFile::FileWithPath(file) => Ok(Cow::Borrowed(file)),
+            LazyFile::ObjectStorage { future, .. } => Ok(Cow::Owned(future.clone().await?)),
         }
     }
 }
@@ -475,6 +481,7 @@ impl RateLimitedInputContent for LazyFile {
                 file: _,
                 storage_path: _,
             }) => {}
+            LazyFile::ObjectStorage { .. } => {}
             // Forwarding a url is inherently incompatible with input token estimation,
             // so we'll need to continue using a hardcoded value here, even if we start
             // estimating tokens LazyFile::FileWithPath
