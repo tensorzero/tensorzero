@@ -72,8 +72,10 @@ gateway:
     #      - tensorzero-gateway.local
 
     # Create legacy ingress with old naming pattern for zero-downtime upgrades
+    # IMPORTANT: Only set to true if upgrading from a version that used the old ingress naming
+    # For new installations, leave this as false to avoid ingress conflicts
     # Set to false after migrating DNS/load balancers to the new ingress name
-    createLegacyIngress: true
+    createLegacyIngress: false
 
 # UI Configuration
 ui:

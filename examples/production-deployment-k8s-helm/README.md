@@ -66,19 +66,20 @@ The following table lists the configurable parameters of the chart and their def
 
 ### Gateway Configuration
 
-| Parameter                    | Description                | Default                         |
-| ---------------------------- | -------------------------- | ------------------------------- |
-| `gateway.replicaCount`       | Number of gateway replicas | `1`                             |
-| `gateway.image.repository`   | Gateway image repository   | `tensorzero/gateway`            |
-| `gateway.image.tag`          | Gateway image tag          | `latest`                        |
-| `gateway.image.pullPolicy`   | Gateway image pull policy  | `IfNotPresent`                  |
-| `gateway.service.type`       | Gateway service type       | `ClusterIP`                     |
-| `gateway.service.port`       | Gateway service port       | `3000`                          |
-| `gateway.resources.limits`   | Gateway resource limits    | `cpu: 2000m, memory: 4096Mi`    |
-| `gateway.resources.requests` | Gateway resource requests  | `cpu: 2000m, memory: 4096Mi`    |
-| `gateway.ingress.enabled`    | Enable gateway ingress     | `true`                          |
-| `gateway.ingress.className`  | Gateway ingress class      | `traefik-ingress-controller-v3` |
-| `gateway.ingress.hosts`      | Gateway ingress hosts      | `tensorzero-gateway.local`      |
+| Parameter                             | Description                                                  | Default                         |
+| ------------------------------------- | ------------------------------------------------------------ | ------------------------------- |
+| `gateway.replicaCount`                | Number of gateway replicas                                   | `1`                             |
+| `gateway.image.repository`            | Gateway image repository                                     | `tensorzero/gateway`            |
+| `gateway.image.tag`                   | Gateway image tag                                            | `latest`                        |
+| `gateway.image.pullPolicy`            | Gateway image pull policy                                    | `IfNotPresent`                  |
+| `gateway.service.type`                | Gateway service type                                         | `ClusterIP`                     |
+| `gateway.service.port`                | Gateway service port                                         | `3000`                          |
+| `gateway.resources.limits`            | Gateway resource limits                                      | `cpu: 2000m, memory: 4096Mi`    |
+| `gateway.resources.requests`          | Gateway resource requests                                    | `cpu: 2000m, memory: 4096Mi`    |
+| `gateway.ingress.enabled`             | Enable gateway ingress                                       | `true`                          |
+| `gateway.ingress.className`           | Gateway ingress class                                        | `traefik-ingress-controller-v3` |
+| `gateway.ingress.hosts`               | Gateway ingress hosts                                        | `tensorzero-gateway.local`      |
+| `gateway.ingress.createLegacyIngress` | Create legacy ingress for zero-downtime upgrades (see below) | `false`                         |
 
 ### UI Configuration
 
@@ -99,18 +100,18 @@ The following table lists the configurable parameters of the chart and their def
 
 ### Persistence Configuration
 
-| Parameter                    | Description                | Default                         |
-| ---------------------------- | -------------------------- | ------------------------------- |
-| `persistence.enabled`        | Enable persistent storage  | `false`                         |
-| `persistence.size`           | Storage size               | `10Gi`                          |
-| `persistence.accessModes`    | Access modes               | `["ReadWriteOnce"]`             |
-| `persistence.storageClass`   | Storage class name         | `""`                            |
-| `persistence.mountPath`      | Mount path in containers   | `/app/storage`                  |
+| Parameter                  | Description               | Default             |
+| -------------------------- | ------------------------- | ------------------- |
+| `persistence.enabled`      | Enable persistent storage | `false`             |
+| `persistence.size`         | Storage size              | `10Gi`              |
+| `persistence.accessModes`  | Access modes              | `["ReadWriteOnce"]` |
+| `persistence.storageClass` | Storage class name        | `""`                |
+| `persistence.mountPath`    | Mount path in containers  | `/app/storage`      |
 
 ### Monitoring Configuration
 
 | Parameter                     | Description                                   | Default |
-|-------------------------------|-----------------------------------------------|---------|
+| ----------------------------- | --------------------------------------------- | ------- |
 | `monitoring.metrics.enabled`  | Enable ServiceMonitor creation                | `false` |
 | `monitoring.metrics.interval` | Scrape interval                               | `"30s"` |
 | `monitoring.metrics.labels`   | Additional labels to attach to ServiceMonitor | `{}`    |
@@ -190,6 +191,18 @@ helm install tensorzero ./tensorzero -n tensorzero -f custom-values.yaml
 2. In production, never store sensitive data in your version-controlled `values.yaml` file.
 3. Make sure your cluster has sufficient resources for the configured replicas and resource limits.
 4. The ingress configuration assumes you have a working ingress controller installed.
+
+### Legacy Ingress Migration
+
+The `gateway.ingress.createLegacyIngress` setting enables zero-downtime upgrades for users migrating from older chart versions that used a different ingress naming convention.
+
+- **New installations**: Leave `createLegacyIngress: false` (default) to avoid ingress conflicts
+- **Upgrading from older versions**: If you previously had a gateway ingress, temporarily set `createLegacyIngress: true` to create both the legacy and new ingress. Then:
+  1. Migrate your DNS/load balancers to point to the new ingress name (`<release-name>-gateway`)
+  2. Set `createLegacyIngress: false` and upgrade again
+  3. Manually delete the legacy ingress: `kubectl delete ingress <release-name> -n <namespace>`
+
+Note: The legacy ingress includes `helm.sh/resource-policy: keep` to prevent accidental deletion during upgrades.
 
 ## Calling the Gateway Endpoint
 
