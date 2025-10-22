@@ -41,10 +41,8 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import {
-  estimateTrackAndStopOptimalProbabilities,
-  type TimeWindow,
-} from "tensorzero-node";
+import type { TimeWindow } from "tensorzero-node";
+import { computeTrackAndStopOptimalProbabilities } from "~/utils/experimentation.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -152,76 +150,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   // Compute optimal probabilities for track_and_stop experimentation
-  let optimal_probabilities: Record<string, number> | undefined;
-  if (function_config.experimentation.type === "track_and_stop") {
-    try {
-      const dbClient = await getNativeDatabaseClient();
-      const experimentationConfig = function_config.experimentation;
-      const metric_config = config.metrics[experimentationConfig.metric];
-
-      if (metric_config) {
-        const feedback = await dbClient.getFeedbackByVariant({
-          metric_name: experimentationConfig.metric,
-          function_name,
-          variant_names: experimentationConfig.candidate_variants,
-        });
-
-        // Build feedback count map
-        const feedbackCounts = new Map(
-          feedback.map((f) => [f.variant_name, Number(f.count)]),
-        );
-
-        // Separate nursery and bandit variants
-        const K = experimentationConfig.candidate_variants.length;
-        const nurseryVariants = experimentationConfig.candidate_variants.filter(
-          (v) =>
-            (feedbackCounts.get(v) || 0) <
-            Number(experimentationConfig.min_samples_per_variant),
-        );
-        const banditVariants = experimentationConfig.candidate_variants.filter(
-          (v) =>
-            (feedbackCounts.get(v) || 0) >=
-            Number(experimentationConfig.min_samples_per_variant),
-        );
-
-        const num_bandit_variants = banditVariants.length;
-
-        // Initialize probabilities
-        optimal_probabilities = {};
-
-        // Assign 1/K to each nursery variant
-        for (const variant of nurseryVariants) {
-          optimal_probabilities[variant] = 1 / K;
-        }
-
-        // Compute and scale optimal probabilities for bandit variants
-        if (num_bandit_variants > 0) {
-          const banditFeedback = feedback.filter((f) =>
-            banditVariants.includes(f.variant_name),
-          );
-
-          if (banditFeedback.length > 0) {
-            const banditOptimalProbs = estimateTrackAndStopOptimalProbabilities(
-              {
-                feedback: banditFeedback,
-                epsilon: experimentationConfig.epsilon,
-                metric_optimize: metric_config.optimize,
-              },
-            );
-
-            // Scale bandit probabilities by B/K
-            const scale = num_bandit_variants / K;
-            for (const [variant, prob] of Object.entries(banditOptimalProbs)) {
-              optimal_probabilities[variant] = prob * scale;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      logger.error("Failed to compute optimal probabilities:", error);
-      optimal_probabilities = undefined;
-    }
-  }
+  const optimal_probabilities = await computeTrackAndStopOptimalProbabilities(
+    function_name,
+    function_config,
+    config,
+  );
 
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
     let variant_config = function_config.variants[
