@@ -44,6 +44,7 @@ use std::time::Duration;
 use once_cell::sync::OnceCell;
 
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::observability::exporter_wrapper::ExporterWrapperUnsetToOk;
 use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
@@ -79,6 +80,7 @@ use uuid::Uuid;
 use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
+mod exporter_wrapper;
 pub mod tracing_bug;
 
 #[derive(Clone, Debug, Default, ValueEnum)]
@@ -271,10 +273,10 @@ fn build_tracer<T: SpanExporter + 'static>(
             .build(),
     );
 
-    if let Some(exporter) = override_exporter {
-        builder = builder.with_simple_exporter(exporter);
+    if let Some(override_exporter) = override_exporter {
+        builder = builder.with_simple_exporter(ExporterWrapperUnsetToOk::new(override_exporter));
     } else {
-        builder = builder.with_batch_exporter(exporter);
+        builder = builder.with_batch_exporter(ExporterWrapperUnsetToOk::new(exporter));
     }
     let provider = builder.build();
 
