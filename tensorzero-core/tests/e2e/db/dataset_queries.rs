@@ -2,6 +2,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use object_store::path::Path as ObjectStorePath;
 use tensorzero::{
     Datapoint, DatasetQueryParams, FloatComparisonOperator, GetDatapointParams,
     GetDatasetMetadataParams, Role,
@@ -14,6 +15,9 @@ use tensorzero_core::db::datasets::{
     GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter, StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
+use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
+use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
     StoredInputMessageContent, Text,
@@ -2070,4 +2074,293 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
         0,
         "Should not return datapoint when querying wrong dataset"
     );
+}
+
+#[tokio::test]
+async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
+    let clickhouse = get_clickhouse().await;
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
+
+    // Create a StoredFile with ObjectStorage
+    let stored_file = StoredFile {
+        file: Base64FileMetadata {
+            url: Some("https://example.com/original.png".parse().unwrap()),
+            mime_type: mime::IMAGE_PNG,
+        },
+        storage_path: StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/files/image.png").unwrap(),
+        },
+    };
+
+    let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_with_file".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::File(Box::new(
+                    stored_file.clone(),
+                ))],
+            }],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "response".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    });
+
+    // Insert the datapoint
+    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Retrieve the datapoint
+    let retrieved_datapoint = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    // Verify the file was preserved correctly
+    if let Datapoint::Chat(chat_dp) = retrieved_datapoint {
+        assert_eq!(chat_dp.id, datapoint_id);
+        assert_eq!(chat_dp.input.messages.len(), 1);
+        assert_eq!(chat_dp.input.messages[0].content.len(), 1);
+
+        match &chat_dp.input.messages[0].content[0] {
+            StoredInputMessageContent::File(file) => {
+                assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(
+                    file.file.url,
+                    Some("https://example.com/original.png".parse().unwrap())
+                );
+                assert_eq!(file.storage_path.path, stored_file.storage_path.path);
+            }
+            _ => panic!("Expected File content"),
+        }
+    } else {
+        panic!("Expected chat datapoint");
+    }
+}
+
+#[tokio::test]
+async fn test_json_datapoint_with_file_object_storage_roundtrip() {
+    let clickhouse = get_clickhouse().await;
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
+
+    // Create a StoredFile with ObjectStorage
+    let stored_file = StoredFile {
+        file: Base64FileMetadata {
+            url: Some("https://example.com/data.json".parse().unwrap()),
+            mime_type: mime::APPLICATION_JSON,
+        },
+        storage_path: StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/files/data.json").unwrap(),
+        },
+    };
+
+    let json_datapoint = DatapointInsert::Json(JsonInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_json_with_file".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::File(Box::new(
+                    stored_file.clone(),
+                ))],
+            }],
+        },
+        output: Some(JsonInferenceOutput {
+            parsed: Some(json!({"result": "success"})),
+            raw: Some("{\"result\":\"success\"}".to_string()),
+        }),
+        output_schema: json!({"type": "object"}),
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    });
+
+    // Insert the datapoint
+    clickhouse.insert_datapoint(&json_datapoint).await.unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Retrieve the datapoint
+    let retrieved_datapoint = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    // Verify the file was preserved correctly
+    if let Datapoint::Json(json_dp) = retrieved_datapoint {
+        assert_eq!(json_dp.id, datapoint_id);
+        assert_eq!(json_dp.input.messages.len(), 1);
+        assert_eq!(json_dp.input.messages[0].content.len(), 1);
+
+        match &json_dp.input.messages[0].content[0] {
+            StoredInputMessageContent::File(file) => {
+                assert_eq!(file.file.mime_type, mime::APPLICATION_JSON);
+                assert_eq!(
+                    file.file.url,
+                    Some("https://example.com/data.json".parse().unwrap())
+                );
+                assert_eq!(file.storage_path.path, stored_file.storage_path.path);
+            }
+            _ => panic!("Expected File content"),
+        }
+    } else {
+        panic!("Expected json datapoint");
+    }
+}
+
+#[tokio::test]
+async fn test_datapoint_with_mixed_file_types() {
+    let clickhouse = get_clickhouse().await;
+    let datapoint_id = Uuid::now_v7();
+    let dataset_name = format!("test_mixed_files_{}", Uuid::now_v7());
+
+    // Create multiple StoredFiles
+    let stored_file1 = StoredFile {
+        file: Base64FileMetadata {
+            url: Some("https://example.com/image1.png".parse().unwrap()),
+            mime_type: mime::IMAGE_PNG,
+        },
+        storage_path: StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
+        },
+    };
+
+    let stored_file2 = StoredFile {
+        file: Base64FileMetadata {
+            url: None, // No source URL
+            mime_type: mime::IMAGE_JPEG,
+        },
+        storage_path: StoragePath {
+            kind: StorageKind::Disabled,
+            path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
+        },
+    };
+
+    let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "test_function".to_string(),
+        id: datapoint_id,
+        name: Some("test_mixed_files".to_string()),
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![
+                StoredInputMessage {
+                    role: Role::User,
+                    content: vec![
+                        StoredInputMessageContent::Text {
+                            value: "Here are some files".into(),
+                        },
+                        StoredInputMessageContent::File(Box::new(stored_file1.clone())),
+                    ],
+                },
+                StoredInputMessage {
+                    role: Role::User,
+                    content: vec![StoredInputMessageContent::File(Box::new(
+                        stored_file2.clone(),
+                    ))],
+                },
+            ],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "response".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    });
+
+    // Insert the datapoint
+    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+
+    // Sleep for 1 second for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Retrieve the datapoint
+    let retrieved_datapoint = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: None,
+        })
+        .await
+        .unwrap();
+
+    // Verify all files were preserved correctly
+    if let Datapoint::Chat(chat_dp) = retrieved_datapoint {
+        assert_eq!(chat_dp.id, datapoint_id);
+        assert_eq!(chat_dp.input.messages.len(), 2);
+
+        // Check first message with text and file
+        assert_eq!(chat_dp.input.messages[0].content.len(), 2);
+        match &chat_dp.input.messages[0].content[0] {
+            StoredInputMessageContent::Text { value } => {
+                // value is a JSON string, so we need to deserialize it
+                let text: String = serde_json::from_value(value.clone()).unwrap();
+                assert_eq!(text, "Here are some files");
+            }
+            _ => panic!("Expected Text content"),
+        }
+        match &chat_dp.input.messages[0].content[1] {
+            StoredInputMessageContent::File(file) => {
+                assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(
+                    file.file.url,
+                    Some("https://example.com/image1.png".parse().unwrap())
+                );
+                assert_eq!(file.storage_path.path, stored_file1.storage_path.path);
+            }
+            _ => panic!("Expected File content"),
+        }
+
+        // Check second message with file only
+        assert_eq!(chat_dp.input.messages[1].content.len(), 1);
+        match &chat_dp.input.messages[1].content[0] {
+            StoredInputMessageContent::File(file) => {
+                assert_eq!(file.file.mime_type, mime::IMAGE_JPEG);
+                assert_eq!(file.file.url, None);
+                assert_eq!(file.storage_path.path, stored_file2.storage_path.path);
+            }
+            _ => panic!("Expected File content"),
+        }
+    } else {
+        panic!("Expected chat datapoint");
+    }
 }
