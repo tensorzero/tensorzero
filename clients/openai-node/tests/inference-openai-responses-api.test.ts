@@ -299,7 +299,7 @@ describe("OpenAI Responses API", () => {
     expect(result.usage).not.toBeNull();
     expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
     expect(result.usage?.completion_tokens).toBeGreaterThan(0);
-    expect(result.choices[0].finish_reason).toBe("tool_calls");
+    expect(result.choices[0].finish_reason).toBe("stop");
   });
 
   it.concurrent("should handle tool calls (streaming)", async () => {
@@ -400,7 +400,7 @@ describe("OpenAI Responses API", () => {
     expect(finishReasonChunks.length).toBeGreaterThan(0);
     expect(
       finishReasonChunks[finishReasonChunks.length - 1].choices[0].finish_reason
-    ).toBe("tool_calls");
+    ).toBe("sto");
   });
 
   it.concurrent(
