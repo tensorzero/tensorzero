@@ -1551,7 +1551,10 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         Err(object_store::Error::NotFound { .. }) => {
             // Expected - object should not exist
         }
-        _ => {
+        Err(e) => {
+            panic!("Unexpected error: {e}");
+        }
+        Ok(_) => {
             panic!("Object should not exist after deletion");
         }
     }
