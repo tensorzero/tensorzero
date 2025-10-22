@@ -3130,13 +3130,13 @@ mod tests {
                     is_custom, 
                     staled_at, 
                     formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL
                     WHERE true
                     AND dataset_name = {dataset_name:String}
                     AND id IN ['123e4567-e89b-12d3-a456-426614174000']
                     AND staled_at IS NULL");
                 assert_query_contains(query, "ORDER BY updated_at DESC, id DESC 
-                    LIMIT {{subquery_page_size:UInt32}}");
+                    LIMIT {subquery_page_size:UInt32}");
                 assert_query_contains(query, "UNION ALL");
                 assert_query_contains(query, "
                 SELECT
@@ -3158,7 +3158,7 @@ mod tests {
                     is_custom,
                     staled_at,
                     formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL
                     WHERE true
                     AND dataset_name = {dataset_name:String}
                     AND id IN ['123e4567-e89b-12d3-a456-426614174000']
@@ -3166,14 +3166,14 @@ mod tests {
                 assert_query_contains(query, "SELECT *
                     FROM dataset
                     ORDER BY updated_at DESC, id DESC
-                    LIMIT {{page_size:UInt32}}
-                    OFFSET {{offset:UInt32}}
+                    LIMIT {page_size:UInt32}
+                    OFFSET {offset:UInt32}
                 FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
-                assert_eq!(parameters.get("page_size"), Some(&"10"));
-                assert_eq!(parameters.get("offset"), Some(&"20"));
-                assert_eq!(parameters.get("subquery_page_size"), Some(&"30"));
+                assert_eq!(parameters.get("page_size"), Some(&"1"));
+                assert_eq!(parameters.get("offset"), Some(&"0"));
+                assert_eq!(parameters.get("subquery_page_size"), Some(&"1"));
 
                 assert!(!parameters.contains_key("datapoint_id"), "Datapoint ID should be passed as a list of IDs");
 
@@ -3218,9 +3218,9 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "WITH dataset as (");
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "id IN ['323e4567-e89b-12d3-a456-426614174000']");
                 assert_query_contains(query, "staled_at IS NULL");
 
@@ -3426,9 +3426,9 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "WITH dataset as (");
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "id IN ['123e4567-e89b-12d3-a456-426614174000']");
                 assert_query_contains(query, "staled_at IS NULL");
                 assert_query_contains(query, "FORMAT JSONEachRow");
@@ -3482,9 +3482,9 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "WITH dataset as (");
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "id IN ['123e4567-e89b-12d3-a456-426614174000','223e4567-e89b-12d3-a456-426614174000','323e4567-e89b-12d3-a456-426614174000']");
                 assert_query_contains(query, "staled_at IS NULL");
 
@@ -3632,9 +3632,9 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "id IN ['123e4567-e89b-12d3-a456-426614174000','223e4567-e89b-12d3-a456-426614174000']");
 
                 assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
@@ -3792,10 +3792,10 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
-                assert_query_contains(query, "AND tags[{key0:String}] = {value1:String}");
+                assert_query_contains(query, "AND tags[{p0:String}] = {p1:String}");
 
-                assert_eq!(parameters.get("key0"), Some(&"environment"));
-                assert_eq!(parameters.get("value1"), Some(&"production"));
+                assert_eq!(parameters.get("p0"), Some(&"environment"));
+                assert_eq!(parameters.get("p1"), Some(&"production"));
 
                 true
             })
