@@ -28,5 +28,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commands: |
             regen-fixtures
+            merge-queue
           # Use our custom permission check above, since `peter-evans/slash-command-dispatch` doesn't handle organizations
           permission: none
