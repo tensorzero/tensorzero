@@ -3,8 +3,25 @@ include:
 
 services:
   clickhouse:
+    image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
+    environment:
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
     volumes:
       - ./config.xml:/etc/clickhouse-server/config.d/docker_related_config.xml:ro
+    ports:
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
 
   gateway:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
