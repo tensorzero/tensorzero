@@ -147,17 +147,19 @@ function FilterGroup({
 
   return (
     <div className="relative">
-      {filter.children.length > -1 && (
+      {/* AND/OR toggle with X button */}
+      <div className="absolute top-1/2 left-0 flex -translate-x-1/2 -translate-y-1/2 -rotate-90 items-center gap-1">
         <TooltipProvider delayDuration={300}>
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button
                 type="button"
+                variant="outline"
                 onClick={handleToggleOperator}
-                className="bg-muted hover:bg-muted/80 hover:text-fg-secondary absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer px-2 text-sm font-semibold transition-colors"
+                className="hover:text-fg-secondary h-5 cursor-pointer px-1 text-sm font-semibold"
               >
                 {filter.type.toUpperCase()}
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
               <span className="text-xs">
@@ -166,20 +168,26 @@ function FilterGroup({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-      )}
+
+        <DeleteRowButton onRemove={onRemove} />
+      </div>
       <div
-        className={`border-border space-y-3 border-l-2 py-4 pr-4 pl-6 ${backgroundClass}`}
+        className={`border-border border-l-2 py-5 pr-4 pl-6 ${backgroundClass}`}
       >
-        {filter.children.map((child, index) => (
-          <FilterNodeRenderer
-            key={index}
-            filter={child}
-            onUpdate={(newChild) => handleUpdateChild(index, newChild)}
-            onRemove={() => handleRemoveChild(index)}
-            depth={depth + 1}
-            config={config}
-          />
-        ))}
+        {filter.children.length > 0 && (
+          <div className="mb-4 space-y-3">
+            {filter.children.map((child, index) => (
+              <FilterNodeRenderer
+                key={index}
+                filter={child}
+                onUpdate={(newChild) => handleUpdateChild(index, newChild)}
+                onRemove={() => handleRemoveChild(index)}
+                depth={depth + 1}
+                config={config}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <MetricSelectorPopover onSelect={handleAddMetric} config={config} />
@@ -223,18 +231,6 @@ function FilterGroup({
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          )}
-
-          {depth > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onRemove}
-            >
-              <X className="text-fg-tertiary h-4 w-4" />
-              Remove Group
-            </Button>
           )}
         </div>
       </div>
@@ -543,6 +539,24 @@ function AddButton({ label, onClick }: AddButtonProps) {
   );
 }
 
+interface DeleteRowButtonProps {
+  onRemove: () => void;
+}
+
+function DeleteRowButton({ onRemove }: DeleteRowButtonProps) {
+  return (
+    <Button
+      type="button"
+      variant="destructiveOutline"
+      size="icon"
+      onClick={onRemove}
+      className="text-fg-tertiary h-5 w-5"
+    >
+      <X />
+    </Button>
+  );
+}
+
 interface TagFilterRowProps {
   filter: InferenceFilter & { type: "tag" };
   onUpdate: (updates: {
@@ -556,7 +570,7 @@ interface TagFilterRowProps {
 function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
   return (
     <div>
-      <FormLabel>Tag</FormLabel>
+      <FormLabel className="mt-[-1]">Tag</FormLabel>
       <div className="flex items-center gap-2">
         <div className="flex-1">
           <Input
@@ -593,15 +607,7 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
           />
         </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onRemove}
-          className="h-8 w-8"
-        >
-          <X className="text-fg-tertiary h-4 w-4" />
-        </Button>
+        <DeleteRowButton onRemove={onRemove} />
       </div>
     </div>
   );
@@ -625,7 +631,7 @@ function FloatMetricFilterRow({
 }: FloatMetricFilterRowProps) {
   return (
     <div>
-      <FormLabel>Metric</FormLabel>
+      <FormLabel className="mt-[-1]">Metric</FormLabel>
       <div className="flex items-center gap-2">
         <div className="flex flex-1 items-center gap-2">
           <MetricNameWithTooltip
@@ -681,15 +687,7 @@ function FloatMetricFilterRow({
           />
         </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onRemove}
-          className="h-8 w-8"
-        >
-          <X className="text-fg-tertiary h-4 w-4" />
-        </Button>
+        <DeleteRowButton onRemove={onRemove} />
       </div>
     </div>
   );
@@ -710,7 +708,7 @@ function BooleanMetricFilterRow({
 }: BooleanMetricFilterRowProps) {
   return (
     <div>
-      <FormLabel>Metric</FormLabel>
+      <FormLabel className="mt-[-1]">Metric</FormLabel>
       <div className="flex items-center gap-2">
         <div className="flex flex-1 items-center gap-2">
           <MetricNameWithTooltip
@@ -736,15 +734,7 @@ function BooleanMetricFilterRow({
           </Select>
         </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onClick={onRemove}
-          className="h-8 w-8"
-        >
-          <X className="text-fg-tertiary h-4 w-4" />
-        </Button>
+        <DeleteRowButton onRemove={onRemove} />
       </div>
     </div>
   );
