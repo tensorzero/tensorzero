@@ -11,6 +11,9 @@ if (!clickhouseUrl) {
   throw new Error("TENSORZERO_CLICKHOUSE_URL is not set");
 }
 const postgresUrl = process.env.TENSORZERO_POSTGRES_URL;
+if (!clickhouseUrl) {
+  throw new Error("TENSORZERO_POSTGRES_URL is not set");
+}
 const client = await TensorZeroClient.buildEmbedded(
   configPath,
   clickhouseUrl,
