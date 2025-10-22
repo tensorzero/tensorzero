@@ -1,11 +1,16 @@
 use clap::{Args, Parser};
+use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
 use std::fmt::Display;
+use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::signal;
+use tokio_stream::wrappers::IntervalStream;
+use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
@@ -196,7 +201,7 @@ async fn main() {
     }
     let base_path = base_path.trim_end_matches("/");
 
-    let router = routes::build_axum_router(
+    let (router, in_flight_requests_counter) = routes::build_axum_router(
         base_path,
         delayed_log_config.otel_tracer.clone(),
         gateway_handle.app_state.clone(),
@@ -267,17 +272,51 @@ async fn main() {
         tracing::info!("└ OpenTelemetry: disabled");
     }
 
-    // Start the server
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .expect_pretty("Failed to start server");
+    let shutdown_signal = shutdown_signal().shared();
+
+    let server_fut = axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_signal.clone())
+        .into_future()
+        .map(|r| r.expect_pretty("Failed to start server"))
+        .shared();
+
+    tokio::spawn(monitor_sever_shutdown(
+        shutdown_signal,
+        server_fut.clone(),
+        in_flight_requests_counter,
+    ));
+
+    // Wait for the server to finish - this happens once the shutdown signal is received,
+    // and after axum completes its graceful shutdown.
+    server_fut.await;
 
     if let Some(tracer_wrapper) = delayed_log_config.otel_tracer {
         tracing::info!("Shutting down OpenTelemetry exporter");
         tracer_wrapper.shutdown().await;
         tracing::info!("OpenTelemetry exporter shut down");
     }
+}
+
+/// A background task that waits for the server shutdown to initiate, and then logs status information every 5 seconds until
+/// the server completes its shutdown.
+async fn monitor_sever_shutdown(
+    shutdown_signal: impl Future<Output = ()>,
+    server_fut: impl Future<Output = ()>,
+    in_flight_requests_counter: InFlightRequestsCounter,
+) {
+    // First, wait for the shutdown signal
+    shutdown_signal.await;
+    // The server should now be shutting down, so print a message every 5 seconds until it completes
+    IntervalStream::new(tokio::time::interval(Duration::from_secs(5)))
+        .take_until(server_fut)
+        .for_each(|_| async {
+            tracing::info!(
+                "Server shutdown in progress: {} in-flight requests remaining",
+                in_flight_requests_counter.get()
+            );
+        })
+        .await;
+    tracing::info!("Server shutdown complete");
 }
 
 fn get_postgres_status_string(postgres: &PostgresConnectionInfo) -> String {
