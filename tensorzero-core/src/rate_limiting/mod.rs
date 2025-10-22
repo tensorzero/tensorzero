@@ -387,23 +387,16 @@ pub enum RateLimitResource {
 }
 
 #[derive(Debug)]
-pub struct RateLimitResourceUsage {
-    pub model_inferences: u64,
-    pub tokens: u64,
-    /// If `true`, we were only able to estimate the usage (e.g. if an error occurred in an inference stream)
+pub enum RateLimitResourceUsage {
+    /// We received an exact usage amount back from the provider, so we can consume extra/release unused
+    /// rate limiting resources, depending on whether our initial estimate was too high or too low
+    Exact { model_inferences: u64, tokens: u64 },
+    /// We were only able to estimate the usage (e.g. if an error occurred in an inference stream,
+    /// and there might have bene additional usage chunks that we missed)
     /// We'll still consume tokens/inferences if we went over the initial estimate, but we will *not*
     /// return tickets if our initial estimate seems to be too high (since the error could have
     /// hidden the actual usage).
-    pub is_estimate: bool,
-}
-
-impl RateLimitResourceUsage {
-    pub fn get_usage(&self, resource: RateLimitResource) -> u64 {
-        match resource {
-            RateLimitResource::ModelInference => self.model_inferences,
-            RateLimitResource::Token => self.tokens,
-        }
-    }
+    UnderEstimate { model_inferences: u64, tokens: u64 },
 }
 
 #[derive(Debug)]
@@ -677,21 +670,42 @@ impl TicketBorrows {
                 receipt,
                 active_limit,
             } = borrow;
-            let actual_usage_this_request = actual_usage.get_usage(active_limit.limit.resource);
+
+            // Extract the actual value - we'll check 'Exact/UnderEstimate' further on
+            let actual_usage_this_request = match active_limit.limit.resource {
+                RateLimitResource::ModelInference => match actual_usage {
+                    RateLimitResourceUsage::Exact {
+                        model_inferences, ..
+                    }
+                    | RateLimitResourceUsage::UnderEstimate {
+                        model_inferences, ..
+                    } => model_inferences,
+                },
+                RateLimitResource::Token => match actual_usage {
+                    RateLimitResourceUsage::Exact { tokens, .. }
+                    | RateLimitResourceUsage::UnderEstimate { tokens, .. } => tokens,
+                },
+            };
+
             match actual_usage_this_request.cmp(&receipt.tickets_consumed) {
                 std::cmp::Ordering::Greater => {
                     // Actual usage exceeds borrowed, add the difference to requests and log a warning
+                    // We don't care about 'RateLimitResourceUsage::Exact' vs ' RateLimitResourceUsage::UnderEstimate' here.
                     tracing::warn!("Actual usage exceeds borrowed for {:?}: {} estimated and {actual_usage_this_request} used", active_limit.limit.resource, receipt.tickets_consumed);
                     let difference = actual_usage_this_request - receipt.tickets_consumed;
                     requests.push(active_limit.get_consume_tickets_request_for_return(difference)?);
                 }
                 std::cmp::Ordering::Less => {
-                    // If our returned usage is only an estimate, then don't return any tickets,
-                    // even if it looks like we over-borrowed.
-                    if !actual_usage.is_estimate {
-                        // Borrowed exceeds actual usage, add the difference to returns
-                        let difference = receipt.tickets_consumed - actual_usage_this_request;
-                        returns.push(active_limit.get_return_tickets_request(difference)?);
+                    match actual_usage {
+                        RateLimitResourceUsage::Exact { .. } => {
+                            // Borrowed exceeds actual usage, add the difference to returns
+                            let difference = receipt.tickets_consumed - actual_usage_this_request;
+                            returns.push(active_limit.get_return_tickets_request(difference)?);
+                        }
+                        RateLimitResourceUsage::UnderEstimate { .. } => {
+                            // If our returned usage is only an estimate, then don't return any tickets,
+                            // even if it looks like we over-borrowed.
+                        }
                     }
                 }
                 std::cmp::Ordering::Equal => (),

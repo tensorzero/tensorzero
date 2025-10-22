@@ -669,12 +669,20 @@ async fn wrap_provider_stream(
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, RateLimitResourceUsage {
+            let usage = if errored {
+                RateLimitResourceUsage::UnderEstimate {
                     model_inferences: 1,
                     tokens: total_usage.total_tokens() as u64,
-                    is_estimate: errored,
-                })
+                }
+             } else {
+                RateLimitResourceUsage::Exact {
+                    model_inferences: 1,
+                    tokens: total_usage.total_tokens() as u64,
+                }
+            };
+
+            if let Err(e) = ticket_borrow
+                .return_tickets(&postgres_connection_info, usage)
                 .await
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
