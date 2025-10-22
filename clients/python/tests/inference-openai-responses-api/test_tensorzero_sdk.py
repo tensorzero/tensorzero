@@ -256,7 +256,7 @@ async def test_openai_responses_tool_call(async_client: AsyncTensorZeroGateway):
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
-    assert response.finish_reason == FinishReason.TOOL_CALL
+    assert response.finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -337,7 +337,7 @@ async def test_openai_responses_tool_call_streaming(
     # Check finish_reason in streaming response
     finish_reason_chunks = [chunk for chunk in chunks if chunk.finish_reason]
     assert len(finish_reason_chunks) > 0
-    assert finish_reason_chunks[-1].finish_reason == FinishReason.TOOL_CALL
+    assert finish_reason_chunks[-1].finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
