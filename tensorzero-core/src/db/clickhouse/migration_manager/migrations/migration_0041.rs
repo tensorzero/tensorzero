@@ -1,4 +1,4 @@
-use super::{check_column_exists, check_table_exists, get_column_type};
+use super::{check_column_exists, check_table_exists};
 use crate::db::clickhouse::migration_manager::migration_trait::Migration;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
@@ -50,13 +50,49 @@ impl Migration for Migration0041<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS name Nullable(String);"
+                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS dynamic_tools Nullable(Array(String))"
                     .to_string(),
             )
             .await?;
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE JsonInferenceDatapoint ADD COLUMN IF NOT EXISTS name Nullable(String);"
+                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS allowed_tools Nullable(String)"
+                    .to_string(),
+            )
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(
+                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS tool_choice Nullable(String)"
+                    .to_string(),
+            )
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(
+                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS parallel_tool_calls Nullable(Bool)"
+                    .to_string(),
+            )
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(
+                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS dynamic_tools Nullable(Array(String))"
+                    .to_string(),
+            )
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(
+                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS allowed_tools Nullable(String)"
+                    .to_string(),
+            )
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(
+                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS tool_choice Nullable(String)"
+                    .to_string(),
+            )
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(
+                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS parallel_tool_calls Nullable(Bool)"
                     .to_string(),
             )
             .await?;
@@ -65,8 +101,14 @@ impl Migration for Migration0041<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ChatInferenceDatapoint DROP COLUMN name;
-        ALTER TABLE JsonInferenceDatapoint DROP COLUMN name;"
+        r"ALTER TABLE ChatInference DROP COLUMN dynamic_tools;
+          ALTER TABLE ChatInference DROP COLUMN allowed_tools;
+          ALTER TABLE ChatInference DROP COLUMN tool_choice;
+          ALTER TABLE ChatInference DROP COLUMN parallel_tool_calls;
+          ALTER TABLE ChatInferenceDatapoint DROP COLUMN dynamic_tools;
+          ALTER TABLE ChatInferenceDatapoint DROP COLUMN allowed_tools;
+          ALTER TABLE ChatInferenceDatapoint DROP COLUMN tool_choice;
+          ALTER TABLE ChatInferenceDatapoint DROP COLUMN parallel_tool_calls;"
             .to_string()
     }
 
