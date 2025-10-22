@@ -165,13 +165,15 @@ pub struct DynamicImplicitToolConfig {
 
 /// Records / lists the tools that were allowed in the request
 /// Also lists how they were set (default, dynamically set)
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[cfg_attr(test, ts(export))]
 pub struct AllowedTools {
     tools: Vec<String>,
     choice: AllowedToolsChoice,
 }
 
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
     #[default]
@@ -203,7 +205,7 @@ impl ToolCallConfig {
     ) -> Result<Option<Self>, Error> {
         // If `allowed_tools` is not provided, use the function's configured tools.
         // This means we allow all tools for the function.
-        let mut allowed_tools = match dynamic_tool_params.allowed_tools {
+        let allowed_tools = match dynamic_tool_params.allowed_tools {
             Some(allowed_tools) => AllowedTools {
                 tools: allowed_tools,
                 choice: AllowedToolsChoice::DynamicAllowedTools,
@@ -302,6 +304,7 @@ impl ToolCallConfig {
                     tool_choice,
                     provider_tools: dynamic_tool_params.provider_tools,
                     parallel_tool_calls,
+                    allowed_tools,
                 })
             };
 
@@ -570,6 +573,7 @@ impl ToolCallConfig {
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         }
     }
 }
@@ -735,6 +739,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
         provider_tools: None,
+        allowed_tools: AllowedTools::default(),
     }
 }
 
@@ -875,7 +880,8 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
             tool_choice: db_insert.tool_choice,
             parallel_tool_calls: db_insert.parallel_tool_calls,
             provider_tools: None, // TODO(Viraj): address this once we start storing
-                                  // provider tools
+            // provider tools
+            allowed_tools: AllowedTools::default(),
         }
     }
 }
@@ -889,6 +895,7 @@ pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallCon
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
         provider_tools: None,
+        allowed_tools: AllowedTools::default(),
     }
 }
 
@@ -1412,6 +1419,7 @@ mod tests {
             provider_tools: Some(provider_tools),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test matching gpt-4/openai: should return unscoped + gpt4_tool
@@ -1442,6 +1450,7 @@ mod tests {
             provider_tools: None,
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
         };
         let result = config_no_tools.get_scoped_provider_tools("gpt-4", "openai");
         assert_eq!(result.len(), 0);

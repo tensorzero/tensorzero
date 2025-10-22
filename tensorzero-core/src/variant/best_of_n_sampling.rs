@@ -147,6 +147,7 @@ lazy_static! {
         tool_choice: ToolChoice::Specific("respond".to_string()),
         parallel_tool_calls: None,
         provider_tools: None,
+        allowed_tools: crate::tool::AllowedTools::default(),
     };
 }
 

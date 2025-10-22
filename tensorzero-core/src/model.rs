@@ -2439,6 +2439,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
@@ -3085,6 +3086,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
@@ -3212,6 +3214,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();

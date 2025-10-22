@@ -2585,6 +2585,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 provider_tools: None,
+                allowed_tools: crate::tool::AllowedTools::default(),
             },
             description: None,
             all_explicit_template_names: HashSet::new(),
