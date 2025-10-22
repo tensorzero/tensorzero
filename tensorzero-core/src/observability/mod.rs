@@ -193,6 +193,7 @@ pub struct TracerWrapper {
     // memory is freed immediately when a shutdown tasks exists. We wait on all remaining tasks
     // in `TracerWrapper::shutdown`
     shutdown_tasks: TaskTracker,
+    // See `InFlightSpan` for more information.
     in_flight_spans: TaskTracker,
 }
 
