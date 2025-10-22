@@ -5,6 +5,8 @@ on:
   # merge_group:
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   merge-queue-tests:
     runs-on: ubuntu-latest

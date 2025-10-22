@@ -7,7 +7,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    config::{Config, ObjectStoreInfo},
+    config::ObjectStoreInfo,
     error::{Error, ErrorDetails},
     inference::types::storage::StoragePath,
     utils::gateway::{AppState, AppStateData},
@@ -46,7 +46,9 @@ pub async fn get_object_handler(
             message: format!("Error parsing storage path: {e}"),
         })
     })?;
-    Ok(Json(get_object(&config, storage_path).await?))
+    Ok(Json(
+        get_object(config.object_store_info.as_ref(), storage_path).await?,
+    ))
 }
 
 /// Fetches an object using the object store and path specified by the encoded `StoragePath`.
@@ -55,12 +57,12 @@ pub async fn get_object_handler(
 /// However, if the provider requires authentication, the gateway must have the correct credentials
 /// set as environment variables.
 pub async fn get_object(
-    config: &Config,
+    object_store_info: Option<&ObjectStoreInfo>,
     storage_path: StoragePath,
 ) -> Result<ObjectResponse, Error> {
     // Use the existing object store if it matches the requested kind, so
     // that we can re-use our connection pool.
-    let store = match &config.object_store_info {
+    let store = match object_store_info {
         Some(store) if store.kind == storage_path.kind => Cow::Borrowed(store),
         _ => Cow::Owned(
             ObjectStoreInfo::new(Some(storage_path.kind))?.ok_or_else(|| {
