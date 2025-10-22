@@ -99,6 +99,8 @@ jobs:
 
       - name: Run `pnpm test` for tensorzero-node
         working-directory: internal/tensorzero-node
+        env:
+          TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
         run: pnpm test
 
       - name: Print Docker Compose logs
