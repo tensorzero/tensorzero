@@ -1,7 +1,13 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { forwardRef, useImperativeHandle, useState, useId } from "react";
+import {
+  forwardRef,
+  useImperativeHandle,
+  useState,
+  useId,
+  useEffect,
+} from "react";
 import { Form } from "~/components/ui/form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
@@ -44,6 +50,7 @@ import {
 } from "~/components/ui/command";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
+import { cn } from "~/utils/common";
 
 // Constants
 const MAX_NESTING_DEPTH = 2;
@@ -261,19 +268,7 @@ function FilterGroup({
     }
   };
 
-  const handleAddAndGroup = () => {
-    handleAddChild(createGroupFilter("and"));
-  };
-
-  const handleAddOrGroup = () => {
-    handleAddChild(createGroupFilter("or"));
-  };
-
   const canAddGroup = depth < MAX_NESTING_DEPTH;
-
-  // Background shading based on depth
-  const backgroundClass =
-    depth === 0 ? "" : depth === 1 ? "bg-muted/40" : "bg-muted/80";
 
   return (
     <div className="relative">
@@ -302,7 +297,11 @@ function FilterGroup({
         <DeleteRowButton onRemove={onRemove} />
       </div>
       <div
-        className={`border-border border-l-2 py-5 pr-4 pl-6 ${backgroundClass}`}
+        className={cn(
+          "border-border border-l-2 py-5 pr-4 pl-6",
+          depth === 1 && "bg-muted/40",
+          depth === 2 && "bg-muted/80",
+        )}
       >
         {filter.children.length > 0 && (
           <div className="mb-4 space-y-3">
@@ -323,8 +322,14 @@ function FilterGroup({
           <AddButton label="Tag" onClick={handleAddTag} />
           {canAddGroup ? (
             <>
-              <AddButton label="And" onClick={handleAddAndGroup} />
-              <AddButton label="Or" onClick={handleAddOrGroup} />
+              <AddButton
+                label="And"
+                onClick={() => handleAddChild(createGroupFilter("and"))}
+              />
+              <AddButton
+                label="Or"
+                onClick={() => handleAddChild(createGroupFilter("or"))}
+              />
             </>
           ) : (
             <TooltipProvider>
@@ -682,7 +687,7 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Input
-            className={`font-mono ${keyError ? "border-red-500" : ""}`}
+            className={cn("font-mono", keyError && "border-red-500")}
             placeholder="tag"
             aria-label="Tag key"
             aria-invalid={!!keyError}
@@ -736,7 +741,7 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
 
         <div className="relative w-48">
           <Input
-            className={`font-mono ${valueError ? "border-red-500" : ""}`}
+            className={cn("font-mono", valueError && "border-red-500")}
             placeholder="value"
             aria-label="Tag value"
             aria-invalid={!!valueError}
@@ -788,6 +793,11 @@ function FloatMetricFilterRow({
   const [inputValue, setInputValue] = useState(filter.value.toString());
   const [error, setError] = useState<string>();
   const errorId = useId();
+
+  // Sync with external changes to filter.value
+  useEffect(() => {
+    setInputValue(filter.value.toString());
+  }, [filter.value]);
 
   return (
     <div>
@@ -849,7 +859,7 @@ function FloatMetricFilterRow({
                 setError(result.error.errors[0]?.message ?? "Invalid input");
               }
             }}
-            className={error ? "border-red-500" : ""}
+            className={cn(error && "border-red-500")}
           />
           {error && (
             <p
