@@ -290,6 +290,22 @@ async fn main() {
 
     // Wait for the server to finish - this happens once the shutdown signal is received,
     // and after axum completes its graceful shutdown.
+    //
+    // The overall shutdown happens in multiple phases:
+    // 1. The 'shutdown_signal' resolves (e.g. due to a Ctrl-C signal)
+    // 2. Axum detects the shutdown signal via `with_graceful_shutdown`.
+    //    It stops accepting new requests, and finishes processing existing requests
+    // 3. The 'server_fut' future resolves when Axum itself is finished. However,
+    //     we still might have running `tokio::task`s with spans that descend from
+    //     HTTP request spans (e.g. rate-limiting `return_tickets` calls)
+    // 4. When OpenTelemetry is enabled, we call `tracer_wrapper.shutdown()`.
+    //    * We first wait for all of the spans descending from HTTP requests to finish.
+    //      At this point, no new OTEL-exported spans should be created, or they might
+    //      not be exported to OTLP before we exit.
+    //    * We then start the shutdown of all our OpenTelemetry exporters, and wait
+    //      for them to complete.
+    // 5.  Our `GatewayHandle` drops, and blocks on any final remaining shutdown tasks
+    //     (e.g. the ClickHouse batch writer task)
     server_fut.await;
 
     if let Some(tracer_wrapper) = delayed_log_config.otel_tracer {
