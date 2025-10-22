@@ -1,48 +1,26 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import {
-  InferenceQueryBuilder,
-  type InferenceQueryBuilderRef,
-} from "./InferenceQueryBuilder";
+import InferenceQueryBuilder from "./InferenceQueryBuilder";
 import { ConfigProvider } from "~/context/config";
 import type { FunctionConfig, Config, InferenceFilter } from "tensorzero-node";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useArgs } from "storybook/preview-api";
-import { useRef } from "react";
-import { Button } from "~/components/ui/button";
 
 const meta = {
   title: "QueryBuilder/InferenceQueryBuilder",
   component: InferenceQueryBuilder,
   decorators: [
-    (Story) => (
-      <div className="border-border w-2xl rounded border p-4">
-        <Story />
-      </div>
-    ),
     (Story, context) => {
       const { inferenceFilter } = context.args;
-      const formRef = (
-        context.args as {
-          formRef?: React.RefObject<InferenceQueryBuilderRef>;
-        }
-      ).formRef;
       return (
         <>
-          <Story />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
+          <div className="border-border w-2xl rounded border p-4">
+            <Story />
+          </div>
+          <div className="mt-4 w-2xl rounded border border-blue-300 bg-blue-50 p-4">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="font-semibold text-blue-900">
                 Debug: InferenceFilter State
               </h3>
-              {formRef && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => formRef.current?.triggerValidation()}
-                >
-                  Trigger Validation
-                </Button>
-              )}
             </div>
             <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
               {inferenceFilter === undefined
@@ -59,6 +37,7 @@ const meta = {
     setInferenceFilter: () => {},
   },
   parameters: {
+    layout: "padded",
     controls: {
       exclude: ["inferenceFilter", "setInferenceFilter"],
     },
@@ -235,16 +214,10 @@ export const Default: Story = {
       inferenceFilter?: InferenceFilter;
     }>();
 
-    const formRef = useRef<InferenceQueryBuilderRef>(null);
-
-    // Make formRef available to the decorator
-    (args as { formRef?: typeof formRef }).formRef = formRef;
-
     return (
       <ConfigProvider value={mockConfig}>
         <InferenceQueryBuilder
           {...args}
-          ref={formRef}
           inferenceFilter={inferenceFilter}
           setInferenceFilter={(filter) => {
             const newFilter =
@@ -264,11 +237,6 @@ export const EmptyFunctions: Story = {
       inferenceFilter?: InferenceFilter;
     }>();
 
-    const formRef = useRef<InferenceQueryBuilderRef>(null);
-
-    // Make formRef available to the decorator
-    (args as { formRef?: typeof formRef }).formRef = formRef;
-
     const emptyConfig: Config = {
       ...mockConfig,
       functions: {},
@@ -278,7 +246,6 @@ export const EmptyFunctions: Story = {
       <ConfigProvider value={emptyConfig}>
         <InferenceQueryBuilder
           {...args}
-          ref={formRef}
           inferenceFilter={inferenceFilter}
           setInferenceFilter={(filter) => {
             const newFilter =
