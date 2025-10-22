@@ -701,14 +701,12 @@ fn make_otel_http_span<B>(
         url.path = req.uri().path(),
         url.query = req.uri().query(),
         url.scheme = url_scheme(req.uri()),
-        otel.name = %http_method, // to set by router of "webframework" after
         otel.kind = ?opentelemetry::trace::SpanKind::Server,
         otel.status_code = Empty, // to set on response
         trace_id = Empty, // to set on response
         request_id = Empty, // to set
         exception.message = Empty, // to set on response
         "span.type" = "web", // non-official open-telemetry key, only supported by Datadog
-        // Added by TensorZero
         otel.name = format!("{} {}", req.method(), route.unwrap_or_default()).trim(),
     );
 
