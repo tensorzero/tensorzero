@@ -440,6 +440,7 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
             // We mark this as a dynamic filter so that `tracing` doesn't cache the result
             // (it depends on the current call stack via the opentelemetry `Context`),
             // not just the static call site of the immediate span/event being filtered.
+            #[allow(unused_mut, clippy::allow_attributes)]
             let mut filter =
                 filter::dynamic_filter_fn(|metadata, _context| accept_errors_and_otel(metadata));
 
