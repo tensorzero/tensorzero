@@ -176,7 +176,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
         // Build feedback count map
         const feedbackCounts = new Map(
-          feedback.map((f) => [f.variant_name, f.count]),
+          feedback.map((f) => [f.variant_name, Number(f.count)]),
         );
 
         // Separate nursery and bandit variants
