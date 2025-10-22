@@ -62,9 +62,7 @@ jsonschema = "0.33.0"
 jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
 lazy_static = { workspace = true }
 metrics = "0.24.2"
-metrics-exporter-prometheus = { version = "0.17.2", features = [
-    "http-listener",
-], default-features = false }
+metrics-exporter-prometheus = { workspace = true }
 minijinja = { version = "2.12.0", features = [
     "loader",
     "debug",
@@ -138,7 +136,7 @@ ts-rs = { workspace = true }
 moka = { version = "0.12.10", features = ["sync"] }
 tonic = { version = "0.14.2", default-features = false }
 sqlx = { workspace = true }
-pin-project = "1.1.10"
+pin-project = { workspace = true }
 once_cell = "1.21.3"
 clarabel = { version = "0", default-features = false, features = ["serde"] }
 typed-builder = "0.22.0"

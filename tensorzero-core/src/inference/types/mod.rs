@@ -44,7 +44,9 @@
 //!
 //! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
 //! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
+use crate::endpoints::object_storage::get_object;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
     FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
 };
@@ -330,6 +332,41 @@ impl InputMessageContent {
                             },
                         )))
                     }
+                    File::ObjectStorage {
+                        source_url,
+                        mime_type,
+                        storage_path,
+                    } => {
+                        let source_url = source_url.clone();
+                        let object_store_info = context.object_store_info.clone();
+                        let owned_storage_path = storage_path.clone();
+                        let mime_type_for_closure = mime_type.clone();
+                        // Construct a future that will fetch the file from the object store.
+                        // Important - the future will not actually begin executing (including opening the network connection)
+                        // until the first time the `Shared` wrapper is `.await`ed.
+                        let delayed_file_future = async move {
+                            let object_response =
+                                get_object(object_store_info.as_ref(), owned_storage_path.clone())
+                                    .await?;
+                            let file = Base64File {
+                                url: None,
+                                mime_type: mime_type_for_closure,
+                                data: object_response.data,
+                            };
+                            Ok(FileWithPath {
+                                file,
+                                storage_path: owned_storage_path,
+                            })
+                        };
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::ObjectStorage {
+                            metadata: Base64FileMetadata {
+                                url: source_url,
+                                mime_type: mime_type.clone(),
+                            },
+                            storage_path: storage_path.clone(),
+                            future: delayed_file_future.boxed().shared(),
+                        }))
+                    }
                 }
             }
             InputMessageContent::Unknown {
@@ -370,6 +407,9 @@ impl LazyResolvedInputMessageContent {
                     file_url: _,
                 } => ResolvedInputMessageContent::File(Box::new(future.await?)),
                 LazyFile::FileWithPath(file) => ResolvedInputMessageContent::File(Box::new(file)),
+                LazyFile::ObjectStorage { future, .. } => {
+                    ResolvedInputMessageContent::File(Box::new(future.await?))
+                }
             },
             LazyResolvedInputMessageContent::Unknown {
                 data,

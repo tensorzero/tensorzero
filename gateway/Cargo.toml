@@ -21,6 +21,10 @@ serde = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true }
 tower-http = { workspace = true }
 tokio-util = "0.7.15"
+metrics-exporter-prometheus = { workspace = true }
+http = { workspace = true }
+http-body = "1.0.1"
+pin-project = { workspace = true }
 
 [lints]
 workspace = true
@@ -34,3 +38,6 @@ reqwest.workspace = true
 tempfile = "3.21.0"
 tensorzero = { path = "../clients/rust" }
 tracing-test = "0.2"
+serde_json = { workspace = true }
+reqwest-eventsource = { workspace = true }
+futures = { workspace = true }
