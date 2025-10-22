@@ -1435,6 +1435,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
@@ -1449,6 +1450,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1464,6 +1466,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1479,6 +1482,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());

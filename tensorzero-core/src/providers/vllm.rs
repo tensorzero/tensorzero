@@ -780,6 +780,7 @@ mod tests {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             provider_tools: None,
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None
