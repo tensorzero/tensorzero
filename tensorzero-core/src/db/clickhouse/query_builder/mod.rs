@@ -282,23 +282,17 @@ pub struct TimeFilter {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum InferenceFilterTreeNode {
+pub enum InferenceFilter {
     FloatMetric(FloatMetricFilter),
     BooleanMetric(BooleanMetricFilter),
     Tag(TagFilter),
     Time(TimeFilter),
-    And {
-        children: Vec<InferenceFilterTreeNode>,
-    },
-    Or {
-        children: Vec<InferenceFilterTreeNode>,
-    },
-    Not {
-        child: Box<InferenceFilterTreeNode>,
-    },
+    And { children: Vec<InferenceFilter> },
+    Or { children: Vec<InferenceFilter> },
+    Not { child: Box<InferenceFilter> },
 }
 
-impl InferenceFilterTreeNode {
+impl InferenceFilter {
     /// Converts the filter tree to a ClickHouse SQL string.
     ///
     /// The returned string will contain the filter condition that should be added to the WHERE clause.
@@ -320,7 +314,7 @@ impl InferenceFilterTreeNode {
         param_idx_counter: &mut usize,
     ) -> Result<String, Error> {
         match self {
-            InferenceFilterTreeNode::FloatMetric(fm_node) => {
+            InferenceFilter::FloatMetric(fm_node) => {
                 let metric_config = config
                     .metrics
                     .get(fm_node.metric_name.as_str())
@@ -354,7 +348,7 @@ impl InferenceFilterTreeNode {
                     "{join_alias}.value {comparison_operator} {value_placeholder}"
                 ))
             }
-            InferenceFilterTreeNode::BooleanMetric(bm_node) => {
+            InferenceFilter::BooleanMetric(bm_node) => {
                 let metric_config = config.metrics.get(&bm_node.metric_name).ok_or_else(|| {
                     Error::new(ErrorDetails::InvalidMetricName {
                         metric_name: bm_node.metric_name.clone(),
@@ -381,7 +375,7 @@ impl InferenceFilterTreeNode {
                 // We handle this farther up the recursive tree
                 Ok(format!("{join_alias}.value = {value_placeholder}"))
             }
-            InferenceFilterTreeNode::Tag(TagFilter {
+            InferenceFilter::Tag(TagFilter {
                 key,
                 value,
                 comparison_operator,
@@ -395,7 +389,7 @@ impl InferenceFilterTreeNode {
                     "i.tags[{key_placeholder}] {comparison_operator} {value_placeholder}"
                 ))
             }
-            InferenceFilterTreeNode::Time(TimeFilter {
+            InferenceFilter::Time(TimeFilter {
                 time,
                 comparison_operator,
             }) => {
@@ -410,7 +404,7 @@ impl InferenceFilterTreeNode {
                     "i.timestamp {comparison_operator} parseDateTimeBestEffort({time_placeholder})"
                 ))
             }
-            InferenceFilterTreeNode::And { children } => {
+            InferenceFilter::And { children } => {
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
@@ -431,7 +425,7 @@ impl InferenceFilterTreeNode {
                 let child_sqls_str = child_sqls.join(" AND ");
                 Ok(format!("({child_sqls_str})"))
             }
-            InferenceFilterTreeNode::Or { children } => {
+            InferenceFilter::Or { children } => {
                 let child_sqls: Vec<String> = children
                     .iter()
                     .map(|child| {
@@ -452,7 +446,7 @@ impl InferenceFilterTreeNode {
                 let child_sqls_str = child_sqls.join(" OR ");
                 Ok(format!("({child_sqls_str})"))
             }
-            InferenceFilterTreeNode::Not { child } => {
+            InferenceFilter::Not { child } => {
                 let child_sql = child.to_clickhouse_sql(
                     config,
                     params_map,
@@ -514,7 +508,7 @@ fn generate_order_by_sql(
 pub struct ListInferencesParams<'a> {
     pub function_name: &'a str,
     pub variant_name: Option<&'a str>,
-    pub filters: Option<&'a InferenceFilterTreeNode>,
+    pub filters: Option<&'a InferenceFilter>,
     pub output_source: InferenceOutputSource,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
@@ -957,7 +951,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_simple_query_with_float_filters() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+        let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
             metric_name: "jaccard_similarity".to_string(),
             value: 0.5,
             comparison_operator: FloatComparisonOperator::GreaterThan,
@@ -1040,7 +1034,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_unknown_metric_name() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+        let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
             metric_name: "unknown_metric_name".to_string(),
             value: 0.5,
             comparison_operator: FloatComparisonOperator::GreaterThan,
@@ -1107,7 +1101,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_boolean_metric_filter() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+        let filter_node = InferenceFilter::BooleanMetric(BooleanMetricFilter {
             metric_name: "task_success".to_string(),
             value: true,
         });
@@ -1168,7 +1162,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_boolean_metric_filter_false() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+        let filter_node = InferenceFilter::BooleanMetric(BooleanMetricFilter {
             metric_name: "task_success".to_string(),
             value: false,
         });
@@ -1229,20 +1223,20 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_and_filter_multiple_float_metrics() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::And {
+        let filter_node = InferenceFilter::And {
             children: vec![
-                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                InferenceFilter::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.5,
                     comparison_operator: FloatComparisonOperator::GreaterThan,
                 }),
                 // We test that the join is not duplicated
-                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                InferenceFilter::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.8,
                     comparison_operator: FloatComparisonOperator::LessThan,
                 }),
-                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                InferenceFilter::FloatMetric(FloatMetricFilter {
                     metric_name: "brevity_score".to_string(),
                     value: 10.0,
                     comparison_operator: FloatComparisonOperator::LessThan,
@@ -1327,18 +1321,18 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_or_filter_mixed_metrics() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Or {
+        let filter_node = InferenceFilter::Or {
             children: vec![
-                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                InferenceFilter::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.8,
                     comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
                 }),
-                InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+                InferenceFilter::BooleanMetric(BooleanMetricFilter {
                     metric_name: "exact_match".to_string(),
                     value: true,
                 }),
-                InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+                InferenceFilter::BooleanMetric(BooleanMetricFilter {
                     // Episode-level metric
                     metric_name: "goal_achieved".to_string(),
                     value: true,
@@ -1436,14 +1430,14 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_not_filter() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Not {
-            child: Box::new(InferenceFilterTreeNode::Or {
+        let filter_node = InferenceFilter::Not {
+            child: Box::new(InferenceFilter::Or {
                 children: vec![
-                    InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+                    InferenceFilter::BooleanMetric(BooleanMetricFilter {
                         metric_name: "task_success".to_string(),
                         value: true,
                     }),
-                    InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+                    InferenceFilter::BooleanMetric(BooleanMetricFilter {
                         metric_name: "task_success".to_string(),
                         value: false,
                     }),
@@ -1511,29 +1505,27 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nested_complex_filter() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::And {
+        let filter_node = InferenceFilter::And {
             children: vec![
-                InferenceFilterTreeNode::Or {
+                InferenceFilter::Or {
                     children: vec![
-                        InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                        InferenceFilter::FloatMetric(FloatMetricFilter {
                             metric_name: "jaccard_similarity".to_string(),
                             value: 0.7,
                             comparison_operator: FloatComparisonOperator::GreaterThan,
                         }),
-                        InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                        InferenceFilter::FloatMetric(FloatMetricFilter {
                             metric_name: "brevity_score".to_string(),
                             value: 5.0,
                             comparison_operator: FloatComparisonOperator::LessThanOrEqual,
                         }),
                     ],
                 },
-                InferenceFilterTreeNode::Not {
-                    child: Box::new(InferenceFilterTreeNode::BooleanMetric(
-                        BooleanMetricFilter {
-                            metric_name: "task_success".to_string(),
-                            value: false,
-                        },
-                    )),
+                InferenceFilter::Not {
+                    child: Box::new(InferenceFilter::BooleanMetric(BooleanMetricFilter {
+                        metric_name: "task_success".to_string(),
+                        value: false,
+                    })),
                 },
             ],
         };
@@ -1598,27 +1590,27 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nested_complex_filter_with_time() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::And {
+        let filter_node = InferenceFilter::And {
             children: vec![
-                InferenceFilterTreeNode::Time(TimeFilter {
+                InferenceFilter::Time(TimeFilter {
                     time: DateTime::from_timestamp(1609459200, 0).unwrap(), // 2021-01-01 00:00:00 UTC
                     comparison_operator: TimeComparisonOperator::GreaterThan,
                 }),
-                InferenceFilterTreeNode::Or {
+                InferenceFilter::Or {
                     children: vec![
-                        InferenceFilterTreeNode::Time(TimeFilter {
+                        InferenceFilter::Time(TimeFilter {
                             time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                             comparison_operator: TimeComparisonOperator::LessThan,
                         }),
-                        InferenceFilterTreeNode::And {
+                        InferenceFilter::And {
                             children: vec![
-                                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                                InferenceFilter::FloatMetric(FloatMetricFilter {
                                     metric_name: "jaccard_similarity".to_string(),
                                     value: 0.9,
                                     comparison_operator:
                                         FloatComparisonOperator::GreaterThanOrEqual,
                                 }),
-                                InferenceFilterTreeNode::Tag(TagFilter {
+                                InferenceFilter::Tag(TagFilter {
                                     key: "priority".to_string(),
                                     value: "high".to_string(),
                                     comparison_operator: TagComparisonOperator::Equal,
@@ -1778,7 +1770,7 @@ FORMAT JSONEachRow";
         ];
 
         for (op, expected_op_str) in operators {
-            let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+            let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
                 metric_name: "jaccard_similarity".to_string(),
                 value: 0.5,
                 comparison_operator: op,
@@ -1843,7 +1835,7 @@ FORMAT JSONEachRow",
     #[tokio::test(flavor = "multi_thread")]
     async fn test_simple_tag_filter_equal() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Tag(TagFilter {
+        let filter_node = InferenceFilter::Tag(TagFilter {
             key: "environment".to_string(),
             value: "production".to_string(),
             comparison_operator: TagComparisonOperator::Equal,
@@ -1897,7 +1889,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_tag_filter_not_equal() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Tag(TagFilter {
+        let filter_node = InferenceFilter::Tag(TagFilter {
             key: "version".to_string(),
             value: "v1.0".to_string(),
             comparison_operator: TagComparisonOperator::NotEqual,
@@ -1951,14 +1943,14 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_tag_filters_in_and_condition() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::And {
+        let filter_node = InferenceFilter::And {
             children: vec![
-                InferenceFilterTreeNode::Tag(TagFilter {
+                InferenceFilter::Tag(TagFilter {
                     key: "environment".to_string(),
                     value: "production".to_string(),
                     comparison_operator: TagComparisonOperator::Equal,
                 }),
-                InferenceFilterTreeNode::Tag(TagFilter {
+                InferenceFilter::Tag(TagFilter {
                     key: "region".to_string(),
                     value: "us-west".to_string(),
                     comparison_operator: TagComparisonOperator::Equal,
@@ -2022,14 +2014,14 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_tag_and_metric_filters_combined() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::And {
+        let filter_node = InferenceFilter::And {
             children: vec![
-                InferenceFilterTreeNode::Tag(TagFilter {
+                InferenceFilter::Tag(TagFilter {
                     key: "experiment".to_string(),
                     value: "A".to_string(),
                     comparison_operator: TagComparisonOperator::Equal,
                 }),
-                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                InferenceFilter::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.7,
                     comparison_operator: FloatComparisonOperator::GreaterThan,
@@ -2101,14 +2093,14 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_combined_variant_filter_and_metrics() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::And {
+        let filter_node = InferenceFilter::And {
             children: vec![
-                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                InferenceFilter::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.6,
                     comparison_operator: FloatComparisonOperator::GreaterThan,
                 }),
-                InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+                InferenceFilter::BooleanMetric(BooleanMetricFilter {
                     metric_name: "exact_match".to_string(),
                     value: true,
                 }),
@@ -2206,7 +2198,7 @@ FORMAT JSONEachRow";
     #[tokio::test(flavor = "multi_thread")]
     async fn test_simple_time_filter() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::Time(TimeFilter {
+        let filter_node = InferenceFilter::Time(TimeFilter {
             time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
             comparison_operator: TimeComparisonOperator::GreaterThan,
         });
@@ -2265,7 +2257,7 @@ FORMAT JSONEachRow";
         ];
 
         for (op, expected_op_str) in operators {
-            let filter_node = InferenceFilterTreeNode::Time(TimeFilter {
+            let filter_node = InferenceFilter::Time(TimeFilter {
                 time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                 comparison_operator: op,
             });
@@ -2317,18 +2309,18 @@ FORMAT JSONEachRow",
     #[tokio::test(flavor = "multi_thread")]
     async fn test_time_filter_combined_with_other_filters() {
         let config = get_e2e_config().await;
-        let filter_node = InferenceFilterTreeNode::And {
+        let filter_node = InferenceFilter::And {
             children: vec![
-                InferenceFilterTreeNode::Time(TimeFilter {
+                InferenceFilter::Time(TimeFilter {
                     time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
                     comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
                 }),
-                InferenceFilterTreeNode::Tag(TagFilter {
+                InferenceFilter::Tag(TagFilter {
                     key: "environment".to_string(),
                     value: "production".to_string(),
                     comparison_operator: TagComparisonOperator::Equal,
                 }),
-                InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+                InferenceFilter::FloatMetric(FloatMetricFilter {
                     metric_name: "jaccard_similarity".to_string(),
                     value: 0.8,
                     comparison_operator: FloatComparisonOperator::GreaterThan,
