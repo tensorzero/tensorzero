@@ -230,6 +230,16 @@ impl File {
                     })
                 })?;
 
+                // Check status code
+                let status = response.status();
+                if !status.is_success() {
+                    let error_body = response.text().await.unwrap_or_else(|_| String::from("(unable to read response body)"));
+                    return Err(Error::new(ErrorDetails::BadFileFetch {
+                        url: url.clone(),
+                        message: format!("HTTP error {status}: {error_body}"),
+                    }));
+                }
+
                 // Extract headers before consuming response
                 let content_type_header =
                     response.headers().get(http::header::CONTENT_TYPE).cloned();
