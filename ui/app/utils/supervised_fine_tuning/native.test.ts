@@ -10,10 +10,11 @@ const clickhouseUrl = process.env.TENSORZERO_CLICKHOUSE_URL;
 if (!clickhouseUrl) {
   throw new Error("TENSORZERO_CLICKHOUSE_URL is not set");
 }
+const postgresUrl = process.env.TENSORZERO_POSTGRES_URL;
 const client = await TensorZeroClient.buildEmbedded(
   configPath,
   clickhouseUrl,
-  undefined,
+  postgresUrl,
 );
 
 describe("native sft", () => {
