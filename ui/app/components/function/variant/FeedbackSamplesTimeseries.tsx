@@ -43,11 +43,6 @@ export function FeedbackSamplesTimeseries({
     time_granularity,
   );
 
-  console.log(
-    "meansData from transform:",
-    meansData.map((d) => d.date),
-  );
-
   // Convert date strings to timestamps for proper spacing
   const countsDataWithTimestamps = countsData.map((row) => ({
     ...row,
@@ -61,16 +56,7 @@ export function FeedbackSamplesTimeseries({
     timestamp: new Date(row.date).getTime(),
   }));
 
-  console.log(
-    "meanDataWithTimestamps:",
-    meanDataWithTimestamps.map((d) => ({
-      date: d.date,
-      timestamp: d.timestamp,
-    })),
-  );
-
   // Filter to only include data points where at least one variant has a non-null value
-  // This is necessary because Recharts won't render lines if the first point is null
   const meanChartData = meanDataWithTimestamps.filter((row) =>
     variantNames.some(
       (variant) =>
@@ -78,22 +64,6 @@ export function FeedbackSamplesTimeseries({
         row[variant as keyof typeof row] !== undefined,
     ),
   );
-
-  console.log("variantNames:", variantNames);
-  console.log("Full meanChartData:", meanChartData);
-  console.log("meanChartData length:", meanChartData.length);
-
-  // Check if we have any non-null values at all
-  variantNames.forEach((variant) => {
-    const values = meanChartData
-      .map((d) => d[variant as keyof typeof d])
-      .filter(
-        (v) => v !== null && v !== undefined && typeof v === "number",
-      ) as number[];
-    console.log(
-      `${variant}: ${values.length} non-null values, range: ${Math.min(...values)} to ${Math.max(...values)}`,
-    );
-  });
 
   const chartConfig: Record<string, { label: string; color: string }> =
     variantNames.reduce(
@@ -343,29 +313,18 @@ export function FeedbackSamplesTimeseries({
               <ChartLegend
                 content={<ChartLegendContent className="font-mono text-xs" />}
               />
-              {variantNames.map((variantName) => {
-                console.log(
-                  "Creating Line for:",
-                  variantName,
-                  "with dataKey:",
-                  variantName,
-                  "stroke:",
-                  chartConfig[variantName].color,
-                );
-
-                return (
-                  <Line
-                    key={variantName}
-                    type="monotone"
-                    dataKey={variantName}
-                    name={variantName}
-                    stroke={chartConfig[variantName].color}
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                );
-              })}
+              {variantNames.map((variantName) => (
+                <Line
+                  key={variantName}
+                  type="monotone"
+                  dataKey={variantName}
+                  name={variantName}
+                  stroke={chartConfig[variantName].color}
+                  strokeWidth={2}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              ))}
             </LineChart>
           </ChartContainer>
         </CardContent>
