@@ -132,6 +132,7 @@ pub struct TrackAndStopTestConfig<'a> {
     pub delta: f64,
     pub epsilon: f64,
     pub update_period_s: u64,
+    pub min_prob: Option<f64>,
 }
 
 impl Default for TrackAndStopTestConfig<'static> {
@@ -146,6 +147,7 @@ impl Default for TrackAndStopTestConfig<'static> {
             delta: 0.05,
             epsilon: 0.1,
             update_period_s: 300,
+            min_prob: None,
         }
     }
 }
@@ -168,6 +170,7 @@ pub fn make_track_and_stop_config(config: TrackAndStopTestConfig) -> String {
         delta,
         epsilon,
         update_period_s,
+        min_prob,
     } = config;
     // Create variant definitions for the union of candidate and fallback variants
     let all_variants: std::collections::HashSet<&str> = candidate_variants
@@ -201,6 +204,10 @@ model = "test_model"
         .collect::<Vec<_>>()
         .join(", ");
 
+    let min_prob_line = min_prob
+        .map(|value| format!("min_prob = {value}\n"))
+        .unwrap_or_default();
+
     format!(
         r#"
 gateway.unstable_disable_feedback_target_validation = true
@@ -230,7 +237,7 @@ min_samples_per_variant = {min_samples_per_variant}
 delta = {delta}
 epsilon = {epsilon}
 update_period_s = {update_period_s}
-"#,
+{min_prob_line}"#,
         variants = variant_configs.join("\n"),
     )
 }
@@ -649,6 +656,7 @@ async fn test_config_valid() {
         delta: 0.05,
         epsilon: 0.1,
         update_period_s: 300,
+        min_prob: None,
     });
 
     // This should not error
@@ -683,6 +691,7 @@ async fn test_min_pulls() {
         delta: 0.05,
         epsilon: 0.1,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
@@ -737,6 +746,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_max() {
         delta: 0.05,   // Reasonable confidence level
         epsilon: 0.01, // Very small epsilon - we want the clear best arm
         update_period_s: 1,
+        min_prob: None,
     });
 
     // Set up bandit with very clear winner (variant_c has much higher success rate)
@@ -822,6 +832,7 @@ async fn test_winner_arm_pulled_after_stopping_optimize_min() {
         delta: 0.05,   // Reasonable confidence level
         epsilon: 0.01, // Very small epsilon - we want the clear best arm
         update_period_s: 1,
+        min_prob: None,
     });
 
     // Set up bandit with very clear winner (variant_a has much lower mean)
@@ -906,6 +917,7 @@ async fn test_effect_of_delta_on_stopping() {
         delta: 0.05,
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (setup_client, clickhouse, guard) =
@@ -949,6 +961,7 @@ async fn test_effect_of_delta_on_stopping() {
         delta: 0.50, // Large delta = stops easily
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (client_large, _) =
@@ -980,6 +993,7 @@ async fn test_effect_of_delta_on_stopping() {
         delta: 1e-6, // Small delta = needs strong evidence
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (client_small, _) =
@@ -1033,6 +1047,7 @@ async fn test_effect_of_epsilon_on_stopping() {
         delta: 0.05,
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (setup_client, clickhouse, guard) =
@@ -1071,6 +1086,7 @@ async fn test_effect_of_epsilon_on_stopping() {
         delta: 0.05,
         epsilon: 0.20,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (client_large, _) =
@@ -1099,6 +1115,7 @@ async fn test_effect_of_epsilon_on_stopping() {
         delta: 0.05,
         epsilon: 1e-4,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (client_small, _) =
@@ -1158,6 +1175,7 @@ async fn test_cold_start_with_stopped_experiment() {
         delta: 0.05,
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (client, clickhouse, _guard) = make_embedded_gateway_with_clean_clickhouse(&config).await;
@@ -1301,6 +1319,7 @@ async fn test_new_variant_triggers_reexploration() {
         delta: shared_delta,
         epsilon: shared_epsilon,
         update_period_s: shared_update_period_s,
+        min_prob: None,
     });
 
     let (client, clickhouse, _guard) =
@@ -1370,6 +1389,7 @@ async fn test_new_variant_triggers_reexploration() {
         delta: shared_delta,
         epsilon: shared_epsilon,
         update_period_s: shared_update_period_s,
+        min_prob: None,
     });
 
     // Create new bandit that includes the new variant
@@ -1473,6 +1493,7 @@ async fn test_remove_winner_variant_after_stopping() {
         delta: 0.05,
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (client, clickhouse, _guard) =
@@ -1526,6 +1547,7 @@ async fn test_remove_winner_variant_after_stopping() {
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
     // Create new config without variant_b
+    // Set high minimum probability. Just want to confirm that neither variant gets labeled the winner.
     let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "float",
@@ -1533,16 +1555,14 @@ async fn test_remove_winner_variant_after_stopping() {
         candidate_variants: &["variant_a", "variant_c"], // Removed variant_b
         fallback_variants: &[],
         min_samples_per_variant: 20,
-        delta: 0.05,
+        delta: 0.01,
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: Some(0.48),
     });
 
-    // Create new bandit for remaining variants (same means, different variance)
-    let new_bandit_distribution = vec![
-        ("variant_a", 0.50, 0.10),
-        ("variant_c", 0.55, 0.15), // Slightly higher mean, different variance
-    ];
+    // Create new bandit for remaining variants
+    let new_bandit_distribution = vec![("variant_a", 0.50, 0.10), ("variant_c", 0.50, 0.11)];
     let new_bandit = GaussianBandit::new(new_bandit_distribution, Some(seed));
 
     let (new_client, new_clickhouse) =
@@ -1596,7 +1616,7 @@ async fn test_remove_winner_variant_after_stopping() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_remove_non_winner_variant_after_stopping() {
     let initial_bandit_distribution = vec![
-        ("variant_a", 0.50), // Clear winner
+        ("variant_a", 0.05), // Clear winner
         ("variant_b", 0.90),
         ("variant_c", 0.95),
     ];
@@ -1615,6 +1635,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
         delta: 0.05,
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (client, clickhouse, _guard) =
@@ -1662,22 +1683,22 @@ async fn test_remove_non_winner_variant_after_stopping() {
     );
 
     // Phase 2: Remove variant_b (a non-winner) and verify winner (variant_a) still selected
-
     drop(client);
     drop(bandit);
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
-    // Create new config without variant_a
+    // Create new config without variant_b
     let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
         optimize: "min",
-        candidate_variants: &["variant_a", "variant_c"], // Removed variant_a
+        candidate_variants: &["variant_a", "variant_c"], // Removed variant_b
         fallback_variants: &[],
         min_samples_per_variant: 20,
         delta: 0.05,
         epsilon: 0.05,
         update_period_s: 1,
+        min_prob: None,
     });
 
     let (new_client, new_clickhouse) =
@@ -1686,7 +1707,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
 
     tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
-    // Run a batch and verify variant_b (winner) is still heavily sampled
+    // Run a batch and verify variant_a (winner) is still heavily sampled
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
     let variant_names: Vec<String> = inference_results
         .into_iter()
@@ -1698,14 +1719,14 @@ async fn test_remove_non_winner_variant_after_stopping() {
         *variant_counts.entry(name.clone()).or_insert(0) += 1;
     }
 
-    let variant_b_count = *variant_counts.get("variant_a").unwrap_or(&0);
-    let variant_b_fraction = variant_b_count as f64 / variant_names.len() as f64;
+    let variant_a_count = *variant_counts.get("variant_a").unwrap_or(&0);
+    let variant_a_fraction = variant_a_count as f64 / variant_names.len() as f64;
 
-    // variant_b should still dominate (at least 80% of pulls)
+    // variant_a should still be the winner (100% of pulls)
     assert!(
-        variant_b_fraction == 1.0,
+        variant_a_fraction == 1.0,
         "Expected variant_a (winner) to dominate after non-winner removal, got {:.2}%",
-        variant_b_fraction * 100.0
+        variant_a_fraction * 100.0
     );
 
     clickhouse_flush_async_insert(&new_clickhouse).await;

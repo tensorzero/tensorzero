@@ -1,0 +1,10 @@
+{
+  "name": "tensorzero-examples-docs-gateway-call-the-openai-responses-api",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "openai": "^6.4.0",
+    "uuid": "^11.0.5"
+  }
+}

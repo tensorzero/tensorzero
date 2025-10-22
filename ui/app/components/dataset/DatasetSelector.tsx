@@ -155,6 +155,7 @@ export function DatasetSelector({
                           setOpen(false);
                         }}
                         className="group flex w-full items-center gap-2"
+                        data-dataset-name={dataset.name}
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-2">
                           {selected === dataset.name ? (

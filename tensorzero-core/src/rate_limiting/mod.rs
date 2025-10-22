@@ -89,8 +89,9 @@ impl Default for RateLimitingConfig {
 // Utility struct to pass in at "check time"
 // This should contain the information about the current request
 // needed to determine if a rate limit is exceeded.
-pub struct ScopeInfo<'a> {
-    pub tags: &'a HashMap<String, String>,
+#[derive(Clone, Debug)]
+pub struct ScopeInfo {
+    pub tags: Arc<HashMap<String, String>>,
 }
 
 impl RateLimitingConfig {
@@ -118,7 +119,7 @@ impl RateLimitingConfig {
     pub async fn consume_tickets<'a>(
         &'a self,
         client: &impl RateLimitQueries,
-        scope_info: &'a ScopeInfo<'a>,
+        scope_info: &'a ScopeInfo,
         rate_limited_request: &impl RateLimitedRequest,
     ) -> Result<TicketBorrows, Error> {
         let limits = self.get_active_limits(scope_info);
@@ -344,7 +345,7 @@ pub struct RateLimitingConfigRule {
 impl RateLimitingConfigRule {
     fn get_rate_limits_if_match_update_priority<'a>(
         &'a self,
-        scope_info: &'a ScopeInfo<'a>,
+        scope_info: &'a ScopeInfo,
         max_priority: &mut usize,
     ) -> Option<Vec<ActiveRateLimit>> {
         let key = self.scope.get_key_if_matches(scope_info)?;
@@ -748,7 +749,9 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "123".to_string());
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let key = scope.get_key_if_matches(&info).unwrap();
         match key {
@@ -770,7 +773,9 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "456".to_string());
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let key = scope.get_key_if_matches(&info);
         assert!(key.is_none());
@@ -786,7 +791,9 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "any_value".to_string());
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let key = scope.get_key_if_matches(&info).unwrap();
         match key {
@@ -808,7 +815,9 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "specific_value".to_string());
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let key = scope.get_key_if_matches(&info).unwrap();
         match key {
@@ -828,7 +837,9 @@ mod tests {
 
         let tags = HashMap::new(); // Empty tags
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let key = scope.get_key_if_matches(&info);
         assert!(key.is_none());
@@ -839,7 +850,9 @@ mod tests {
         let scopes = RateLimitingConfigScopes::new(vec![]).unwrap();
 
         let tags = HashMap::new();
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
         assert_eq!(keys.len(), 0);
@@ -856,7 +869,9 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "123".to_string());
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
         assert_eq!(keys.len(), 1);
@@ -881,7 +896,9 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "456".to_string());
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let keys = scopes.get_key_if_matches(&info);
         assert!(keys.is_none());
@@ -903,7 +920,9 @@ mod tests {
         tags.insert("application_id".to_string(), "app123".to_string());
         tags.insert("user_id".to_string(), "user456".to_string());
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let keys = scopes.get_key_if_matches(&info).unwrap();
         assert_eq!(keys.len(), 2);
@@ -941,7 +960,9 @@ mod tests {
         tags.insert("application_id".to_string(), "app123".to_string());
         tags.insert("user_id".to_string(), "user789".to_string()); // Different value
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         // Should return None because not all scopes match
         let keys = scopes.get_key_if_matches(&info);
@@ -966,14 +987,18 @@ mod tests {
         tags1.insert("application_id".to_string(), "app123".to_string());
         tags1.insert("user_id".to_string(), "user456".to_string());
 
-        let info1 = ScopeInfo { tags: &tags1 };
+        let info1 = ScopeInfo {
+            tags: Arc::new(tags1),
+        };
 
         // Second ScopeInfo with different tag values but same structure
         let mut tags2 = HashMap::new();
         tags2.insert("application_id".to_string(), "app789".to_string());
         tags2.insert("user_id".to_string(), "user101".to_string());
 
-        let info2 = ScopeInfo { tags: &tags2 };
+        let info2 = ScopeInfo {
+            tags: Arc::new(tags2),
+        };
 
         let keys1 = scopes.get_key_if_matches(&info1).unwrap();
         let keys2 = scopes.get_key_if_matches(&info2).unwrap();
@@ -1144,7 +1169,9 @@ mod tests {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "123".to_string());
 
-        let info = ScopeInfo { tags: &tags };
+        let info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         // Test each scope individually to verify different key types
         let key_concrete = scope_concrete.get_key_if_matches(&info).unwrap();
@@ -1245,7 +1272,9 @@ mod tests {
         // Test get_active_limits behavior
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "123".to_string());
-        let scope_info = ScopeInfo { tags: &tags };
+        let scope_info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         // Disabled config should return empty limits
         let active_limits_disabled = config_disabled.get_active_limits(&scope_info);
@@ -1312,7 +1341,9 @@ mod tests {
     fn test_rate_limiting_config_priority_logic() {
         let mut tags = HashMap::new();
         tags.insert("user_id".to_string(), "test".to_string());
-        let scope_info = ScopeInfo { tags: &tags };
+        let scope_info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         let token_limit = Arc::new(RateLimit {
             resource: RateLimitResource::Token,
@@ -1744,7 +1775,9 @@ mod tests {
     #[test]
     fn test_max_tokens_validation_with_rate_limits() {
         let tags = HashMap::new();
-        let scope_info = ScopeInfo { tags: &tags };
+        let scope_info = ScopeInfo {
+            tags: Arc::new(tags),
+        };
 
         // Token rate limits active - should include Token resource
         let token_limit = Arc::new(RateLimit {

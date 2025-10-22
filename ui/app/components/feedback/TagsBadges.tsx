@@ -11,11 +11,13 @@ import {
  */
 
 interface TagsBadgesProps {
-  tags: Record<string, string>;
+  tags: Record<string, string | undefined>;
 }
 
 export function TagsBadges({ tags }: TagsBadgesProps) {
-  const tagEntries = Object.entries(tags);
+  const tagEntries = Object.entries(tags).filter(
+    (entry): entry is [string, string] => typeof entry[1] === "string",
+  );
 
   if (tagEntries.length === 0) {
     return <span className="text-muted-foreground text-sm">—</span>;

@@ -8,8 +8,8 @@ import {
   toDatapointUrl,
   toEvaluationUrl,
   toEvaluationDatapointUrl,
-  toDynamicEvaluationRunUrl,
-  toDynamicEvaluationProjectUrl,
+  toWorkflowEvaluationRunUrl,
+  toWorkflowEvaluationProjectUrl,
 } from "./urls";
 
 describe("URL helper functions", () => {
@@ -107,24 +107,24 @@ describe("URL helper functions", () => {
     });
   });
 
-  describe("toDynamicEvaluationRunUrl", () => {
+  describe("toWorkflowEvaluationRunUrl", () => {
     it("should encode run IDs", () => {
-      expect(toDynamicEvaluationRunUrl("run_1")).toBe(
-        "/dynamic_evaluations/runs/run_1",
+      expect(toWorkflowEvaluationRunUrl("run_1")).toBe(
+        "/workflow_evaluations/runs/run_1",
       );
-      expect(toDynamicEvaluationRunUrl("run/test")).toBe(
-        "/dynamic_evaluations/runs/run%2Ftest",
+      expect(toWorkflowEvaluationRunUrl("run/test")).toBe(
+        "/workflow_evaluations/runs/run%2Ftest",
       );
     });
   });
 
-  describe("toDynamicEvaluationProjectUrl", () => {
+  describe("toWorkflowEvaluationProjectUrl", () => {
     it("should encode project names", () => {
-      expect(toDynamicEvaluationProjectUrl("project_1")).toBe(
-        "/dynamic_evaluations/projects/project_1",
+      expect(toWorkflowEvaluationProjectUrl("project_1")).toBe(
+        "/workflow_evaluations/projects/project_1",
       );
-      expect(toDynamicEvaluationProjectUrl("project/test")).toBe(
-        "/dynamic_evaluations/projects/project%2Ftest",
+      expect(toWorkflowEvaluationProjectUrl("project/test")).toBe(
+        "/workflow_evaluations/projects/project%2Ftest",
       );
     });
   });

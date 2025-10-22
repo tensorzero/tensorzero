@@ -202,7 +202,7 @@ pub enum ErrorDetails {
     BatchNotFound {
         id: Uuid,
     },
-    BadImageFetch {
+    BadFileFetch {
         url: Url,
         message: String,
     },
@@ -356,7 +356,7 @@ pub enum ErrorDetails {
     InvalidDiclConfig {
         message: String,
     },
-    InvalidDynamicEvaluationRun {
+    InvalidWorkflowEvaluationRun {
         episode_id: Uuid,
     },
     InvalidTensorzeroUuid {
@@ -581,7 +581,7 @@ impl ErrorDetails {
             ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
-            ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
+            ErrorDetails::BadFileFetch { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
@@ -615,7 +615,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidWorkflowEvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
@@ -723,7 +723,7 @@ impl ErrorDetails {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
             ErrorDetails::Base64 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::BadImageFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BadFileFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::FatalStreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -746,7 +746,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEndpoint { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidWorkflowEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
@@ -906,7 +906,7 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidInferenceTarget { message } => {
                 write!(f, "Invalid inference target: {message}")
             }
-            ErrorDetails::BadImageFetch { url, message } => {
+            ErrorDetails::BadFileFetch { url, message } => {
                 write!(f, "Error fetching image from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
@@ -1130,10 +1130,10 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidDatasetName { dataset_name } => {
                 write!(f, "Invalid dataset name: {dataset_name}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"")
             }
-            ErrorDetails::InvalidDynamicEvaluationRun { episode_id } => {
+            ErrorDetails::InvalidWorkflowEvaluationRun { episode_id } => {
                 write!(
                     f,
-                    "Dynamic evaluation run not found for episode id: {episode_id}",
+                    "Workflow evaluation run not found for episode id: {episode_id}",
                 )
             }
             ErrorDetails::InvalidDynamicEndpoint { url } => {

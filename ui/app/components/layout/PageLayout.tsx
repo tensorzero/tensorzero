@@ -49,17 +49,17 @@ const PageHeader: React.FC<PageHeaderProps> = ({
     <div className="flex flex-col">
       <div className="flex flex-col gap-2">
         {label !== undefined && (
-          <p className="text-fg-secondary flex items-center gap-1.5 text-sm font-normal">
+          <div className="text-fg-secondary flex items-center gap-1.5 text-sm font-normal">
             {icon && (
-              <div
+              <span
                 className={`${iconBg} flex size-5 items-center justify-center rounded-sm`}
               >
                 {icon}
-              </div>
+              </span>
             )}
 
             {label}
-          </p>
+          </div>
         )}
         <div className="flex items-center gap-2">
           {heading !== undefined && (

@@ -14,8 +14,7 @@ use tokio::time::Duration;
 use tracing::instrument;
 use uuid::Uuid;
 
-use crate::config::PathWithContents;
-use crate::config::TimeoutsConfig;
+use crate::config::{PathWithContents, TimeoutsConfig};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::InferenceIds;
 use crate::endpoints::inference::{InferenceClients, InferenceModels, InferenceParams};
@@ -283,6 +282,11 @@ impl Variant for VariantInfo {
         inference_params: InferenceParams,
     ) -> Result<InferenceResult, Error> {
         let variant_name = inference_config.variant_name.clone();
+
+        clients
+            .otlp_config
+            .mark_openinference_chain_span(&tracing::Span::current());
+
         let fut = async {
             match &self.inner {
                 VariantConfig::ChatCompletion(params) => {
@@ -379,6 +383,9 @@ impl Variant for VariantInfo {
         clients: InferenceClients,
         inference_params: InferenceParams,
     ) -> Result<(InferenceResultStream, ModelUsedInfo), Error> {
+        clients
+            .otlp_config
+            .mark_openinference_chain_span(&tracing::Span::current());
         let variant_name = inference_config.variant_name.clone();
         let fut = async {
             match &self.inner {
@@ -875,6 +882,7 @@ mod tests {
         DummyProvider, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_JSON_RESPONSE_RAW,
         DUMMY_STREAMING_RESPONSE,
     };
+    use crate::rate_limiting::ScopeInfo;
     use crate::tool::{ToolCallConfig, ToolChoice};
 
     use serde_json::json;
@@ -892,6 +900,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let tool_config_arc = Arc::new(tool_config.clone());
 
@@ -1133,6 +1142,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let templates = Arc::new(get_test_template_config());
         let inference_params = InferenceParams::default();
@@ -1275,6 +1287,7 @@ mod tests {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
+                provider_tools: None,
             },
             description: None,
             all_explicit_template_names: HashSet::new(),
@@ -1439,6 +1452,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let templates = Arc::new(get_test_template_config());
         let inference_params = InferenceParams::default();
@@ -1605,6 +1621,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let retry_config = RetryConfig::default();
         // Create a dummy function config (chat completion)
@@ -1756,6 +1775,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let inference_params = InferenceParams::default();
 

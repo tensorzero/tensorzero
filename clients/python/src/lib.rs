@@ -20,8 +20,8 @@ use pyo3::{
     IntoPyObjectExt,
 };
 use python_helpers::{
-    parse_dynamic_evaluation_run_episode_response, parse_dynamic_evaluation_run_response,
     parse_feedback_response, parse_inference_chunk, parse_inference_response, parse_tool,
+    parse_workflow_evaluation_run_episode_response, parse_workflow_evaluation_run_response,
     python_uuid_to_uuid,
 };
 use tensorzero_core::{
@@ -44,6 +44,7 @@ use tensorzero_core::{
         together_sft::UninitializedTogetherSFTConfig, OptimizationJobInfoPyClass,
         OptimizationJobStatus, UninitializedOptimizerInfo,
     },
+    tool::ProviderTool,
     variant::{
         BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
         DiclConfigPyClass, MixtureOfNConfigPyClass,
@@ -51,7 +52,8 @@ use tensorzero_core::{
 };
 use tensorzero_core::{
     endpoints::{
-        datasets::InsertDatapointParams, dynamic_evaluation_run::DynamicEvaluationRunEpisodeParams,
+        datasets::InsertDatapointParams,
+        workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
     },
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
@@ -61,9 +63,9 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
-    DynamicEvaluationRunParams, DynamicToolParams, FeedbackParams, InferenceOutput,
-    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
-    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream,
+    LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle, RenderedSample,
+    StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -317,7 +319,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -331,6 +333,7 @@ impl BaseTensorZeroGateway {
         dryrun: Option<bool>,
         output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
+        provider_tools: Option<Vec<Bound<'_, PyAny>>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
@@ -356,6 +359,7 @@ impl BaseTensorZeroGateway {
             output_schema,
             allowed_tools,
             additional_tools,
+            provider_tools,
             tool_choice,
             parallel_tool_calls,
             internal.unwrap_or(false),
@@ -427,6 +431,7 @@ impl BaseTensorZeroGateway {
         output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
+        provider_tools: Option<Vec<Bound<'_, PyAny>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
         internal: bool,
@@ -454,6 +459,18 @@ impl BaseTensorZeroGateway {
                     .into_iter()
                     .map(|key_vals| parse_tool(py, key_vals))
                     .collect::<Result<Vec<Tool>, PyErr>>()?,
+            )
+        } else {
+            None
+        };
+
+        let provider_tools: Option<Vec<ProviderTool>> = if let Some(provider_tools) = provider_tools
+        {
+            Some(
+                provider_tools
+                    .iter()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .collect::<PyResult<Vec<_>>>()?,
             )
         } else {
             None
@@ -516,6 +533,7 @@ impl BaseTensorZeroGateway {
                 parallel_tool_calls,
                 additional_tools,
                 tool_choice,
+                provider_tools,
             },
             input,
             credentials: credentials.unwrap_or_default(),
@@ -719,7 +737,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -771,6 +789,7 @@ impl TensorZeroGateway {
         output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
+        provider_tools: Option<Vec<Bound<'_, PyAny>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
         internal: Option<bool>,
@@ -796,6 +815,7 @@ impl TensorZeroGateway {
             output_schema,
             allowed_tools,
             additional_tools,
+            provider_tools,
             tool_choice,
             parallel_tool_calls,
             internal.unwrap_or(false),
@@ -823,13 +843,46 @@ impl TensorZeroGateway {
         }
     }
 
+    /// Make a request to the /workflow_evaluation_run endpoint.
+    ///
+    /// :param variants: A dictionary mapping function names to pinned variant names.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the workflow evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the workflow evaluation run.
+    /// :param run_display_name: (Optional) The display name of the workflow evaluation run.
+    /// :return: A `WorkflowEvaluationRunResponse` object.
+    #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
+    fn workflow_evaluation_run(
+        this: PyRef<'_, Self>,
+        variants: HashMap<String, String>,
+        tags: Option<HashMap<String, String>>,
+        project_name: Option<String>,
+        display_name: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        let client = this.as_super().client.clone();
+        let params = WorkflowEvaluationRunParams {
+            internal: false,
+            variants,
+            tags: tags.unwrap_or_default(),
+            project_name,
+            display_name,
+        };
+        let fut = client.workflow_evaluation_run(params);
+
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        match resp {
+            Ok(resp) => parse_workflow_evaluation_run_response(this.py(), resp),
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
+    }
+
+    /// DEPRECATED: Use workflow_evaluation_run instead.
     /// Make a request to the /dynamic_evaluation_run endpoint.
     ///
     /// :param variants: A dictionary mapping function names to pinned variant names.
     /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
     /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
     /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
-    /// :return: A `DynamicEvaluationRunResponse` object.
+    /// :return: A `DynamicEvaluationRunResponse` object (alias for WorkflowEvaluationRunResponse).
     #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
     fn dynamic_evaluation_run(
         this: PyRef<'_, Self>,
@@ -838,31 +891,25 @@ impl TensorZeroGateway {
         project_name: Option<String>,
         display_name: Option<String>,
     ) -> PyResult<Py<PyAny>> {
-        let client = this.as_super().client.clone();
-        let params = DynamicEvaluationRunParams {
-            internal: false,
-            variants,
-            tags: tags.unwrap_or_default(),
-            project_name,
-            display_name,
-        };
-        let fut = client.dynamic_evaluation_run(params);
-
-        let resp = tokio_block_on_without_gil(this.py(), fut);
-        match resp {
-            Ok(resp) => parse_dynamic_evaluation_run_response(this.py(), resp),
-            Err(e) => Err(convert_error(this.py(), e)),
-        }
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "The dynamic_evaluation_run method is deprecated. Please use workflow_evaluation_run instead. Support for dynamic_evaluation_run will be removed in a future version.",
+                this.py().get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
+        Self::workflow_evaluation_run(this, variants, tags, project_name, display_name)
     }
 
-    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
+    /// Make a request to the /workflow_evaluation_run_episode endpoint.
     ///
-    /// :param run_id: The run ID to use for the dynamic evaluation run.
-    /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
-    /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
+    /// :param run_id: The run ID to use for the workflow evaluation run.
+    /// :param task_name: The name of the task to use for the workflow evaluation run.
+    /// :param tags: A dictionary of tags to add to the workflow evaluation run.
+    /// :return: A `WorkflowEvaluationRunEpisodeResponse` object.
     #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
-    fn dynamic_evaluation_run_episode(
+    fn workflow_evaluation_run_episode(
         this: PyRef<'_, Self>,
         run_id: Bound<'_, PyAny>,
         task_name: Option<String>,
@@ -870,16 +917,41 @@ impl TensorZeroGateway {
     ) -> PyResult<Py<PyAny>> {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
-        let params = DynamicEvaluationRunEpisodeParams {
+        let params = WorkflowEvaluationRunEpisodeParams {
             task_name,
             tags: tags.unwrap_or_default(),
         };
-        let fut = client.dynamic_evaluation_run_episode(run_id, params);
+        let fut = client.workflow_evaluation_run_episode(run_id, params);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
-            Ok(resp) => parse_dynamic_evaluation_run_episode_response(this.py(), resp),
+            Ok(resp) => parse_workflow_evaluation_run_episode_response(this.py(), resp),
             Err(e) => Err(convert_error(this.py(), e)),
         }
+    }
+
+    /// DEPRECATED: Use workflow_evaluation_run_episode instead.
+    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
+    ///
+    /// :param run_id: The run ID to use for the dynamic evaluation run.
+    /// :param task_name: The name of the task to use for the dynamic evaluation run.
+    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunEpisodeResponse` object (alias for WorkflowEvaluationRunEpisodeResponse).
+    #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
+    fn dynamic_evaluation_run_episode(
+        this: PyRef<'_, Self>,
+        run_id: Bound<'_, PyAny>,
+        task_name: Option<String>,
+        tags: Option<HashMap<String, String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "The dynamic_evaluation_run_episode method is deprecated. Please use workflow_evaluation_run_episode instead. Support for dynamic_evaluation_run_episode will be removed in a future version.",
+                this.py().get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
+        Self::workflow_evaluation_run_episode(this, run_id, task_name, tags)
     }
 
     ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
@@ -1440,7 +1512,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1492,6 +1564,7 @@ impl AsyncTensorZeroGateway {
         output_schema: Option<&Bound<'_, PyDict>>,
         allowed_tools: Option<Vec<String>>,
         additional_tools: Option<Vec<HashMap<String, Bound<'_, PyAny>>>>,
+        provider_tools: Option<Vec<Bound<'_, PyAny>>>,
         tool_choice: Option<Bound<'_, PyAny>>,
         parallel_tool_calls: Option<bool>,
         internal: Option<bool>,
@@ -1516,6 +1589,7 @@ impl AsyncTensorZeroGateway {
             output_schema,
             allowed_tools,
             additional_tools,
+            provider_tools,
             tool_choice,
             parallel_tool_calls,
             internal.unwrap_or(false),
@@ -1598,15 +1672,15 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    /// Make a request to the /dynamic_evaluation_run endpoint.
+    /// Make a request to the /workflow_evaluation_run endpoint.
     ///
     /// :param variants: A dictionary mapping function names to pinned variant names.
-    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
-    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
-    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
-    /// :return: A `DynamicEvaluationRunResponse` object.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the workflow evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the workflow evaluation run.
+    /// :param run_display_name: (Optional) The display name of the workflow evaluation run.
+    /// :return: A `WorkflowEvaluationRunResponse` object.
     #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
-    fn dynamic_evaluation_run(
+    fn workflow_evaluation_run(
         this: PyRef<'_, Self>,
         variants: HashMap<String, String>,
         tags: Option<HashMap<String, String>>,
@@ -1614,7 +1688,7 @@ impl AsyncTensorZeroGateway {
         display_name: Option<String>,
     ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
-        let params = DynamicEvaluationRunParams {
+        let params = WorkflowEvaluationRunParams {
             internal: false,
             variants,
             tags: tags.unwrap_or_default(),
@@ -1623,22 +1697,49 @@ impl AsyncTensorZeroGateway {
         };
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.dynamic_evaluation_run(params).await;
+            let res = client.workflow_evaluation_run(params).await;
             Python::attach(|py| match res {
-                Ok(resp) => parse_dynamic_evaluation_run_response(py, resp),
+                Ok(resp) => parse_workflow_evaluation_run_response(py, resp),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
     }
 
-    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
+    /// DEPRECATED: Use workflow_evaluation_run instead.
+    /// Make a request to the /dynamic_evaluation_run endpoint.
     ///
-    /// :param run_id: The run ID to use for the dynamic evaluation run.
-    /// :param task_name: The name of the task to use for the dynamic evaluation run.
-    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
-    /// :return: A `DynamicEvaluationRunEpisodeResponse` object.
+    /// :param variants: A dictionary mapping function names to pinned variant names.
+    /// :param tags: A dictionary containing tags that should be applied to every inference in the dynamic evaluation run.
+    /// :param project_name: (Optional) The name of the project to associate with the dynamic evaluation run.
+    /// :param run_display_name: (Optional) The display name of the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunResponse` object (alias for WorkflowEvaluationRunResponse).
+    #[pyo3(signature = (*, variants, tags=None, project_name=None, display_name=None))]
+    fn dynamic_evaluation_run(
+        this: PyRef<'_, Self>,
+        variants: HashMap<String, String>,
+        tags: Option<HashMap<String, String>>,
+        project_name: Option<String>,
+        display_name: Option<String>,
+    ) -> PyResult<Bound<'_, PyAny>> {
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "The dynamic_evaluation_run method is deprecated. Please use workflow_evaluation_run instead. Support for dynamic_evaluation_run will be removed in a future version.",
+                this.py().get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
+        Self::workflow_evaluation_run(this, variants, tags, project_name, display_name)
+    }
+
+    /// Make a request to the /workflow_evaluation_run_episode endpoint.
+    ///
+    /// :param run_id: The run ID to use for the workflow evaluation run.
+    /// :param task_name: The name of the task to use for the workflow evaluation run.
+    /// :param tags: A dictionary of tags to add to the workflow evaluation run.
+    /// :return: A `WorkflowEvaluationRunEpisodeResponse` object.
     #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
-    fn dynamic_evaluation_run_episode<'a>(
+    fn workflow_evaluation_run_episode<'a>(
         this: PyRef<'a, Self>,
         run_id: Bound<'_, PyAny>,
         task_name: Option<String>,
@@ -1646,18 +1747,43 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'a, PyAny>> {
         let run_id = python_uuid_to_uuid("run_id", run_id)?;
         let client = this.as_super().client.clone();
-        let params = DynamicEvaluationRunEpisodeParams {
+        let params = WorkflowEvaluationRunEpisodeParams {
             task_name,
             tags: tags.unwrap_or_default(),
         };
 
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.dynamic_evaluation_run_episode(run_id, params).await;
+            let res = client.workflow_evaluation_run_episode(run_id, params).await;
             Python::attach(|py| match res {
-                Ok(resp) => parse_dynamic_evaluation_run_episode_response(py, resp),
+                Ok(resp) => parse_workflow_evaluation_run_episode_response(py, resp),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
+    }
+
+    /// DEPRECATED: Use workflow_evaluation_run_episode instead.
+    /// Make a request to the /dynamic_evaluation_run_episode endpoint.
+    ///
+    /// :param run_id: The run ID to use for the dynamic evaluation run.
+    /// :param task_name: The name of the task to use for the dynamic evaluation run.
+    /// :param tags: A dictionary of tags to add to the dynamic evaluation run.
+    /// :return: A `DynamicEvaluationRunEpisodeResponse` object (alias for WorkflowEvaluationRunEpisodeResponse).
+    #[pyo3(signature = (*, run_id, task_name=None, tags=None))]
+    fn dynamic_evaluation_run_episode<'a>(
+        this: PyRef<'a, Self>,
+        run_id: Bound<'_, PyAny>,
+        task_name: Option<String>,
+        tags: Option<HashMap<String, String>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let warnings = PyModule::import(this.py(), "warnings")?;
+        warnings.call_method1(
+            "warn",
+            (
+                "The dynamic_evaluation_run_episode method is deprecated. Please use workflow_evaluation_run_episode instead. Support for dynamic_evaluation_run_episode will be removed in a future version.",
+                this.py().get_type::<PyDeprecationWarning>(),
+            ),
+        )?;
+        Self::workflow_evaluation_run_episode(this, run_id, task_name, tags)
     }
 
     ///  Make a POST request to the /datasets/{dataset_name}/datapoints endpoint.
