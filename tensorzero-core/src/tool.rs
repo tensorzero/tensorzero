@@ -163,6 +163,22 @@ pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
 }
 
+/// Records / lists the tools that were allowed in the request
+/// Also lists how they were set (default, dynamically set)
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+pub struct AllowedTools {
+    tools: Vec<String>,
+    choice: AllowedToolsChoice,
+}
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AllowedToolsChoice {
+    #[default]
+    FunctionDefault,
+    DynamicAllowedTools,
+}
+
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
@@ -174,6 +190,7 @@ pub struct ToolCallConfig {
     pub provider_tools: Option<Vec<ProviderTool>>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
+    pub allowed_tools: AllowedTools,
 }
 
 impl ToolCallConfig {
@@ -186,13 +203,20 @@ impl ToolCallConfig {
     ) -> Result<Option<Self>, Error> {
         // If `allowed_tools` is not provided, use the function's configured tools.
         // This means we allow all tools for the function.
-        let allowed_tools = dynamic_tool_params
-            .allowed_tools
-            .as_deref()
-            .unwrap_or(function_tools);
+        let mut allowed_tools = match dynamic_tool_params.allowed_tools {
+            Some(allowed_tools) => AllowedTools {
+                tools: allowed_tools,
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            None => AllowedTools {
+                tools: function_tools.to_vec(),
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+        };
 
         // Get each tool from the static tool config.
         let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
+            .tools
             .iter()
             .map(|tool_name| {
                 static_tools
