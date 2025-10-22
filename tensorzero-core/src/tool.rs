@@ -168,8 +168,8 @@ pub struct DynamicImplicitToolConfig {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[cfg_attr(test, ts(export))]
 pub struct AllowedTools {
-    tools: Vec<String>,
-    choice: AllowedToolsChoice,
+    pub tools: Vec<String>,
+    pub choice: AllowedToolsChoice,
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]

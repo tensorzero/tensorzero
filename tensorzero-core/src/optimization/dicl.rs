@@ -814,6 +814,7 @@ mod tests {
         },
         endpoints::inference::InferenceCredentials,
         experimentation::ExperimentationConfig,
+        tool::AllowedTools,
     };
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
@@ -1328,7 +1329,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             provider_tools: None,
-            allowed_tools: crate::tool::AllowedTools::default(),
+            allowed_tools: AllowedTools::default(),
         };
 
         FunctionConfig::Json(FunctionConfigJson {

@@ -501,6 +501,7 @@ mod tests {
             },
             test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
+        tool::AllowedTools,
     };
 
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -780,7 +781,7 @@ mod tests {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             provider_tools: None,
-            allowed_tools: crate::tool::AllowedTools::default(),
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

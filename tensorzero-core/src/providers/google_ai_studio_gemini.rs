@@ -1316,7 +1316,7 @@ mod tests {
     use super::*;
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{ToolCallConfig, ToolResult};
+    use crate::tool::{AllowedTools, ToolCallConfig, ToolResult};
 
     #[test]
     #[traced_test]
@@ -1550,7 +1550,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             provider_tools: None,
-            allowed_tools: crate::tool::AllowedTools::default(),
+            allowed_tools: AllowedTools::default(),
         };
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),

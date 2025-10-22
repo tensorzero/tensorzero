@@ -23,7 +23,9 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::{ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{
+    AllowedTools, AllowedToolsChoice, ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
+};
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -125,7 +127,6 @@ impl UninitializedBestOfNSamplingConfig {
         })
     }
 }
-
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
         #[expect(clippy::expect_used)]
@@ -147,7 +148,10 @@ lazy_static! {
         tool_choice: ToolChoice::Specific("respond".to_string()),
         parallel_tool_calls: None,
         provider_tools: None,
-        allowed_tools: crate::tool::AllowedTools::default(),
+        allowed_tools: AllowedTools {
+            tools: vec!["respond".to_string()],
+            choice: AllowedToolsChoice::FunctionDefault,
+        }
     };
 }
 

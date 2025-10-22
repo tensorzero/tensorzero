@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::jsonschema_util::StaticJSONSchema;
-use crate::tool::{StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
+use crate::tool::{AllowedTools, StaticToolConfig, ToolCallConfig, ToolChoice, ToolConfig};
 use lazy_static::lazy_static;
 use serde_json::json;
 
@@ -27,7 +27,7 @@ lazy_static! {
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),
         parallel_tool_calls: None,
         provider_tools: None,
-        allowed_tools: crate::tool::AllowedTools::default(),
+        allowed_tools: AllowedTools::default(),
     };
     pub static ref QUERY_TOOL_CONFIG_STATIC: Arc<StaticToolConfig> = Arc::new(StaticToolConfig {
         name: "query_articles".to_string(),
@@ -52,7 +52,7 @@ lazy_static! {
         tool_choice: ToolChoice::Required,
         parallel_tool_calls: Some(true),
         provider_tools: None,
-        allowed_tools: crate::tool::AllowedTools::default(),
+        allowed_tools: AllowedTools::default(),
     };
 }
 
@@ -64,6 +64,6 @@ pub fn get_temperature_tool_config() -> ToolCallConfig {
         tool_choice: ToolChoice::Specific("get_temperature".to_string()),
         parallel_tool_calls: Some(false),
         provider_tools: None,
-        allowed_tools: crate::tool::AllowedTools::default(),
+        allowed_tools: AllowedTools::default(),
     }
 }
