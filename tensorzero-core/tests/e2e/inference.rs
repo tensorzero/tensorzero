@@ -16,6 +16,7 @@ use opentelemetry_sdk::trace::SpanData;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
+use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
@@ -1934,6 +1935,8 @@ model = "dummy::flaky_model"
     "#,
     )
     .await;
+
+    let _guard = enter_fake_http_request_otel();
 
     let params = ClientInferenceParams {
         function_name: Some("mixture_of_n".to_string()),
