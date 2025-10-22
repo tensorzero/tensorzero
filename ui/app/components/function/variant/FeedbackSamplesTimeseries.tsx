@@ -4,6 +4,7 @@ import type {
 } from "tensorzero-node";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
+import { normalizePeriod, addPeriod } from "~/utils/date";
 
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import {
@@ -182,16 +183,36 @@ export function FeedbackSamplesTimeseries({
   );
 }
 
-export type FeedbackTimeseriesData = {
+type FeedbackTimeSeriesData = {
   date: string;
   [key: string]: string | number;
 };
 
-export function transformFeedbackTimeseries(
+/**
+ * Transforms cumulative feedback time series data for chart visualization.
+ *
+ * This function processes raw feedback data points and prepares them for display
+ * in a time series chart by:
+ * 1. Grouping data by time period and variant
+ * 2. Filling in missing periods to ensure continuous time series (because ClickHouse
+ *    query returns sparse data)
+ * 3. Forward-filling cumulative counts (so gaps maintain the last known value)
+ * 4. Limiting to the most recent 10 periods for display
+ *
+ * The function ensures that cumulative counts are preserved across periods where
+ * no new feedback was recorded, which is essential for displaying cumulative metrics.
+ *
+ * @param parsedRows - Array of cumulative feedback data points from ClickHousr
+ * @param timeGranularity - The time window unit (minute, hour, day, week, month, cumulative)
+ * @returns Object containing:
+ *   - data: Array of chart-ready data points with period dates and variant counts
+ *   - variantNames: Unique list of variant names present in the data
+ */
+function transformFeedbackTimeseries(
   parsedRows: CumulativeFeedbackTimeSeriesPoint[],
   timeGranularity: TimeWindow,
 ): {
-  data: FeedbackTimeseriesData[];
+  data: FeedbackTimeSeriesData[];
   variantNames: string[];
 } {
   const variantNames = [...new Set(parsedRows.map((row) => row.variant_name))];
@@ -219,63 +240,6 @@ export function transformFeedbackTimeseries(
   // Get all unique periods from the data, sorted chronologically
   const allPeriods = Object.keys(groupedByDate).sort();
 
-  // Helper to normalize a date to match ClickHouse's period format
-  const normalizePeriod = (date: Date): Date => {
-    const normalized = new Date(date);
-    switch (timeGranularity) {
-      case "minute":
-        // Truncate to minute
-        normalized.setUTCSeconds(0, 0);
-        break;
-      case "hour":
-        // Truncate to hour
-        normalized.setUTCMinutes(0, 0, 0);
-        break;
-      case "day":
-        // Truncate to day
-        normalized.setUTCHours(0, 0, 0, 0);
-        break;
-      case "week":
-        // Truncate to day
-        normalized.setUTCHours(0, 0, 0, 0);
-        break;
-      case "month":
-        // Truncate to day
-        normalized.setUTCHours(0, 0, 0, 0);
-        break;
-      case "cumulative":
-        // No truncation needed for cumulative
-        break;
-    }
-    return normalized;
-  };
-
-  // Helper to add one period to a date based on granularity
-  const addPeriod = (date: Date): string => {
-    const result = new Date(date);
-    switch (timeGranularity) {
-      case "minute":
-        result.setUTCMinutes(result.getUTCMinutes() + 1);
-        break;
-      case "hour":
-        result.setUTCHours(result.getUTCHours() + 1);
-        break;
-      case "day":
-        result.setUTCDate(result.getUTCDate() + 1);
-        break;
-      case "week":
-        result.setUTCDate(result.getUTCDate() + 7);
-        break;
-      case "month":
-        result.setUTCMonth(result.getUTCMonth() + 1);
-        break;
-      case "cumulative":
-        // No period addition for cumulative
-        break;
-    }
-    return normalizePeriod(result).toISOString();
-  };
-
   // Fill in missing periods between the ones we have from ClickHouse
   const filledPeriods: string[] = [];
   for (let i = 0; i < allPeriods.length; i++) {
@@ -290,7 +254,7 @@ export function transformFeedbackTimeseries(
 
       // Fill in any missing periods between current and next
       while (true) {
-        const nextPeriodStr = addPeriod(current);
+        const nextPeriodStr = addPeriod(current, timeGranularity);
         current = new Date(nextPeriodStr);
         if (current.getTime() >= next.getTime()) break;
         filledPeriods.push(nextPeriodStr);
@@ -326,7 +290,7 @@ export function transformFeedbackTimeseries(
           // No period subtraction for cumulative
           break;
       }
-      const normalized = normalizePeriod(period);
+      const normalized = normalizePeriod(period, timeGranularity);
       additionalPeriods.unshift(normalized.toISOString());
     }
 
@@ -343,8 +307,8 @@ export function transformFeedbackTimeseries(
   });
 
   // Create data for each period, forward-filling cumulative counts
-  const data: FeedbackTimeseriesData[] = periodsToShow.map((period) => {
-    const row: FeedbackTimeseriesData = { date: period };
+  const data: FeedbackTimeSeriesData[] = periodsToShow.map((period) => {
+    const row: FeedbackTimeSeriesData = { date: period };
 
     variantNames.forEach((variant) => {
       // Check if we have actual data for this period
