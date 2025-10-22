@@ -689,9 +689,9 @@ async fn wrap_provider_stream(
     // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
     // even if the top-level HTTP request is later dropped.
     let (send, recv) = tokio::sync::mpsc::unbounded_channel();
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(async move {
+    // Make sure that we finish processing the stream (so that we call `return_tickets` to update rate-limiting information)
+    // if the gateway shuts down.
+    clients.deferred_tasks.spawn(async move {
         futures::pin_mut!(base_stream);
         while let Some(chunk) = base_stream.next().await {
             // Intentionally ignore errors - the receiver might be dropped, but we want to keep polling
