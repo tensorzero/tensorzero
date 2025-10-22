@@ -143,7 +143,6 @@ pub struct ResolvedInput {
 /// Writes a file to the object store.
 /// Returns an error if the file already exists or if the file cannot be written.
 /// This is public because it's also used during datapoint updates, in addition to during inferences.
-#[must_use]
 pub async fn write_file(
     object_store: &Option<ObjectStoreInfo>,
     raw: Base64File,
