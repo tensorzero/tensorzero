@@ -24,6 +24,12 @@ import {
   PopoverTrigger,
 } from "~/components/ui/popover";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
+import {
   Command,
   CommandEmpty,
   CommandGroup,
@@ -32,6 +38,7 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
+import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
 
 // Helper type for individual filters
 type FilterItem =
@@ -50,8 +57,8 @@ function parseInferenceFilter(
 ): FilterItem[] {
   if (!filter) return [];
 
-  if (filter.type === "and") {
-    // Flatten AND children
+  if (filter.type === "and" || filter.type === "or") {
+    // Flatten AND/OR children
     return filter.children.map((child) => {
       if (child.type === "tag") {
         return {
@@ -76,7 +83,7 @@ function parseInferenceFilter(
           value: child.value,
         };
       }
-      throw new Error(`Unsupported filter type in AND: ${child.type}`);
+      throw new Error(`Unsupported filter type in AND/OR: ${child.type}`);
     });
   }
 
@@ -118,6 +125,7 @@ function parseInferenceFilter(
 // Build InferenceFilter from array of individual filters
 function buildInferenceFilter(
   filters: FilterItem[],
+  operator: "and" | "or" = "and",
 ): InferenceFilter | undefined {
   if (filters.length === 0) return undefined;
 
@@ -148,9 +156,9 @@ function buildInferenceFilter(
     }
   }
 
-  // Multiple filters - combine with AND
+  // Multiple filters - combine with the specified operator
   return {
-    type: "and",
+    type: operator,
     children: filters.map((filter): InferenceFilter => {
       if (filter.type === "tag") {
         return {
@@ -225,6 +233,17 @@ export const InferenceQueryBuilder = forwardRef<
     [inferenceFilter],
   );
 
+  // Determine the current operator (AND or OR)
+  const operator: "and" | "or" = useMemo(() => {
+    if (
+      inferenceFilter &&
+      (inferenceFilter.type === "and" || inferenceFilter.type === "or")
+    ) {
+      return inferenceFilter.type;
+    }
+    return "and"; // Default to AND
+  }, [inferenceFilter]);
+
   // Expose validation trigger method to parent via ref
   useImperativeHandle(ref, () => ({
     triggerValidation: async () => {
@@ -239,7 +258,7 @@ export const InferenceQueryBuilder = forwardRef<
       value: "",
       comparison_operator: "=",
     };
-    setInferenceFilter(buildInferenceFilter([...filters, newFilter]));
+    setInferenceFilter(buildInferenceFilter([...filters, newFilter], operator));
   };
 
   const handleAddMetric = (metricName: string, metricConfig: MetricConfig) => {
@@ -250,14 +269,18 @@ export const InferenceQueryBuilder = forwardRef<
         value: 0,
         comparison_operator: ">=",
       };
-      setInferenceFilter(buildInferenceFilter([...filters, newFilter]));
+      setInferenceFilter(
+        buildInferenceFilter([...filters, newFilter], operator),
+      );
     } else if (metricConfig.type === "boolean") {
       const newFilter: FilterItem = {
         type: "boolean_metric",
         metric_name: metricName,
         value: true,
       };
-      setInferenceFilter(buildInferenceFilter([...filters, newFilter]));
+      setInferenceFilter(
+        buildInferenceFilter([...filters, newFilter], operator),
+      );
     }
   };
 
@@ -271,26 +294,48 @@ export const InferenceQueryBuilder = forwardRef<
     // Type-safe update based on filter type
     newFilters[index] = { ...currentFilter, ...updates } as FilterItem;
 
-    setInferenceFilter(buildInferenceFilter(newFilters));
+    setInferenceFilter(buildInferenceFilter(newFilters, operator));
   };
 
   const handleRemoveFilter = (index: number) => {
     const newFilters = filters.filter((_, i) => i !== index);
-    setInferenceFilter(buildInferenceFilter(newFilters));
+    setInferenceFilter(buildInferenceFilter(newFilters, operator));
+  };
+
+  const handleToggleOperator = () => {
+    const newOperator = operator === "and" ? "or" : "and";
+    setInferenceFilter(buildInferenceFilter(filters, newOperator));
   };
 
   return (
     <Form {...form}>
       <form className="space-y-6">
         <FunctionFormField control={form.control} />
+        <FormLabel>Filter</FormLabel>
 
         {filters.length > 0 && (
-          <>
-            <div className="mb-4">
-              <FormLabel>Filters</FormLabel>
-            </div>
-
-            <div className="space-y-3">
+          <div className="relative space-y-3">
+            {filters.length > 1 && (
+              <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={handleToggleOperator}
+                      className="bg-background hover:text-fg-secondary absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer px-2 text-sm font-semibold transition-colors"
+                    >
+                      {operator.toUpperCase()}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <span className="text-xs">
+                      Toggle to {operator === "and" ? "OR" : "AND"}
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <div className="border-border space-y-3 border-l-2 pl-4">
               {filters.map((filter, index) => {
                 if (filter.type === "tag") {
                   return (
@@ -331,7 +376,7 @@ export const InferenceQueryBuilder = forwardRef<
                 return null;
               })}
             </div>
-          </>
+          </div>
         )}
 
         <div className="flex gap-2">
@@ -533,8 +578,10 @@ function FloatMetricFilterRow({
       <FormLabel>Metric</FormLabel>
       <div className="flex items-center gap-2">
         <div className="flex flex-1 items-center gap-2">
-          <span className="font-mono">{filter.metric_name}</span>
-          <FeedbackBadges metric={metricConfig} showLevel={false} />
+          <MetricNameWithTooltip
+            metricName={filter.metric_name}
+            metricConfig={metricConfig}
+          />
         </div>
 
         <div className="w-24">
@@ -616,8 +663,10 @@ function BooleanMetricFilterRow({
       <FormLabel>Metric</FormLabel>
       <div className="flex items-center gap-2">
         <div className="flex flex-1 items-center gap-2">
-          <span className="font-mono">{filter.metric_name}</span>
-          <FeedbackBadges metric={metricConfig} showLevel={false} />
+          <MetricNameWithTooltip
+            metricName={filter.metric_name}
+            metricConfig={metricConfig}
+          />
         </div>
 
         <span className="text-fg-secondary text-sm">is</span>
