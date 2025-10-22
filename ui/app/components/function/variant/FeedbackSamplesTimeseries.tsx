@@ -71,26 +71,13 @@ export function FeedbackSamplesTimeseries({
 
   // Filter to only include data points where at least one variant has a non-null value
   // This is necessary because Recharts won't render lines if the first point is null
-  const meanChartData = meanDataWithTimestamps
-    .filter((row) =>
-      variantNames.some(
-        (variant) =>
-          row[variant as keyof typeof row] !== null &&
-          row[variant as keyof typeof row] !== undefined,
-      ),
-    )
-    .map((row) => {
-      const newRow: FeedbackMeansTimeseriesData & { timestamp: number } = {
-        ...row,
-      };
-      variantNames.forEach((variant) => {
-        const key = variant as keyof typeof newRow;
-        if (newRow[key] === null || newRow[key] === undefined) {
-          newRow[key] = 0.54321 as never;
-        }
-      });
-      return newRow;
-    });
+  const meanChartData = meanDataWithTimestamps.filter((row) =>
+    variantNames.some(
+      (variant) =>
+        row[variant as keyof typeof row] !== null &&
+        row[variant as keyof typeof row] !== undefined,
+    ),
+  );
 
   console.log("variantNames:", variantNames);
   console.log("Full meanChartData:", meanChartData);
