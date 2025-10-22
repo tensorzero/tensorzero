@@ -43,6 +43,43 @@ import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
 // Constants
 const MAX_NESTING_DEPTH = 2;
 
+// Field-level validation (single source of truth)
+const FieldValidation = {
+  floatValue: z
+    .string()
+    .min(1, "Required")
+    .refine((val) => !isNaN(parseFloat(val)), "Must be a number")
+    .refine((val) => isFinite(parseFloat(val)), "Must be a number"),
+  tagKey: z.string().min(1, "Required"),
+  tagValue: z.string().min(1, "Required"),
+};
+
+// Validate current filter values (used on blur and submit)
+function validate(filter: InferenceFilter | undefined): boolean {
+  if (!filter) return true;
+
+  if (filter.type === "tag") {
+    const keyValid = FieldValidation.tagKey.safeParse(filter.key).success;
+    const valueValid = FieldValidation.tagValue.safeParse(filter.value).success;
+    return keyValid && valueValid;
+  }
+
+  if (filter.type === "float_metric") {
+    return FieldValidation.floatValue.safeParse(filter.value.toString())
+      .success;
+  }
+
+  if (filter.type === "boolean_metric") {
+    return true; // Always valid (dropdown)
+  }
+
+  if (filter.type === "and" || filter.type === "or") {
+    return filter.children.every((child) => validate(child));
+  }
+
+  return false; // Unknown filter type
+}
+
 // Filter Factory Functions
 function createTagFilter(): InferenceFilter {
   return {
@@ -357,11 +394,17 @@ export const InferenceQueryBuilder = forwardRef<
   });
 
   // Expose validation trigger method to parent via ref
-  useImperativeHandle(ref, () => ({
-    triggerValidation: async () => {
-      return await form.trigger();
-    },
-  }));
+  useImperativeHandle(
+    ref,
+    () => ({
+      triggerValidation: async () => {
+        const formValid = await form.trigger();
+        const filterValid = validate(inferenceFilter);
+        return formValid && filterValid;
+      },
+    }),
+    [inferenceFilter, form],
+  );
 
   const handleAddTag = () => {
     // Wrap in AND group
@@ -556,16 +599,33 @@ interface TagFilterRowProps {
 }
 
 function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
+  const [keyError, setKeyError] = useState<string>();
+  const [valueError, setValueError] = useState<string>();
+
   return (
     <div>
       <div className="flex items-center gap-2">
-        <div className="flex-1">
+        <div className="relative flex-1">
           <Input
-            className="font-mono"
+            className={`font-mono ${keyError ? "border-red-500" : ""}`}
             placeholder="tag"
             value={filter.key}
-            onChange={(e) => onUpdate({ key: e.target.value })}
+            onChange={(e) => {
+              onUpdate({ key: e.target.value });
+              setKeyError(undefined);
+            }}
+            onBlur={() => {
+              const result = FieldValidation.tagKey.safeParse(filter.key);
+              if (!result.success) {
+                setKeyError(result.error.errors[0].message);
+              }
+            }}
           />
+          {keyError && (
+            <p className="text-destructive absolute top-1 right-2 text-xs">
+              {keyError}
+            </p>
+          )}
         </div>
 
         <div className="w-14">
@@ -587,13 +647,27 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
           </Select>
         </div>
 
-        <div className="w-48">
+        <div className="relative w-48">
           <Input
-            className="font-mono"
+            className={`font-mono ${valueError ? "border-red-500" : ""}`}
             placeholder="value"
             value={filter.value}
-            onChange={(e) => onUpdate({ value: e.target.value })}
+            onChange={(e) => {
+              onUpdate({ value: e.target.value });
+              setValueError(undefined);
+            }}
+            onBlur={() => {
+              const result = FieldValidation.tagValue.safeParse(filter.value);
+              if (!result.success) {
+                setValueError(result.error.errors[0].message);
+              }
+            }}
           />
+          {valueError && (
+            <p className="text-destructive absolute top-1 right-2 text-xs">
+              {valueError}
+            </p>
+          )}
         </div>
 
         <DeleteRowButton onRemove={onRemove} />
@@ -618,10 +692,13 @@ function FloatMetricFilterRow({
   onUpdate,
   onRemove,
 }: FloatMetricFilterRowProps) {
+  const [inputValue, setInputValue] = useState(filter.value.toString());
+  const [error, setError] = useState<string>();
+
   return (
     <div>
       <div className="flex items-center gap-2">
-        <div className="flex flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <MetricNameWithTooltip
             metricName={filter.metric_name}
             metricConfig={metricConfig}
@@ -657,22 +734,36 @@ function FloatMetricFilterRow({
           </Select>
         </div>
 
-        <div className="w-48">
+        <div className="relative w-48">
           <Input
             type="number"
             step="any"
-            placeholder="0.0"
-            value={filter.value}
+            placeholder="0"
+            value={inputValue}
             onChange={(e) => {
               const val = e.target.value;
+              setInputValue(val);
+              setError(undefined);
+
               const parsed = parseFloat(val);
               if (!isNaN(parsed)) {
                 onUpdate({ value: parsed });
-              } else if (val === "" || val === "-") {
-                onUpdate({ value: 0 });
               }
             }}
+            onBlur={() => {
+              const result = FieldValidation.floatValue.safeParse(inputValue);
+
+              if (!result.success) {
+                setError(result.error.errors[0].message);
+              }
+            }}
+            className={error ? "border-red-500" : ""}
           />
+          {error && (
+            <p className="text-destructive absolute top-1 right-2 text-xs">
+              {error}
+            </p>
+          )}
         </div>
 
         <DeleteRowButton onRemove={onRemove} />
@@ -697,7 +788,7 @@ function BooleanMetricFilterRow({
   return (
     <div>
       <div className="flex items-center gap-2">
-        <div className="flex flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <MetricNameWithTooltip
             metricName={filter.metric_name}
             metricConfig={metricConfig}

@@ -190,11 +190,12 @@ const mockConfig: Config = {
       optimize: "max",
       level: "inference",
     },
-    confidence: {
-      type: "float",
-      optimize: "max",
-      level: "inference",
-    },
+    confidence_with_a_very_very_very_very_very_very_very_very_long_metric_name:
+      {
+        type: "float",
+        optimize: "max",
+        level: "inference",
+      },
     toxicity: {
       type: "float",
       optimize: "min",
