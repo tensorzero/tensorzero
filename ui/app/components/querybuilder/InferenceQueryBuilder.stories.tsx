@@ -15,7 +15,7 @@ const meta = {
   component: InferenceQueryBuilder,
   decorators: [
     (Story) => (
-      <div className="border-border w-[640px] rounded border p-4">
+      <div className="border-border w-2xl rounded border p-4">
         <Story />
       </div>
     ),

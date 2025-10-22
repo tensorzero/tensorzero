@@ -41,7 +41,7 @@ import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
 
 // Constants
-const MAX_NESTING_DEPTH = 3;
+const MAX_NESTING_DEPTH = 2;
 
 // Interfaces for recursive components
 interface FilterNodeProps {
@@ -141,6 +141,10 @@ function FilterGroup({
 
   const canAddGroup = depth < MAX_NESTING_DEPTH;
 
+  // Background shading based on depth
+  const backgroundClass =
+    depth === 0 ? "" : depth === 1 ? "bg-muted/40" : "bg-muted/80";
+
   return (
     <div className="relative">
       {filter.children.length > -1 && (
@@ -150,7 +154,7 @@ function FilterGroup({
               <button
                 type="button"
                 onClick={handleToggleOperator}
-                className="bg-background hover:text-fg-secondary absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer px-2 text-sm font-semibold transition-colors"
+                className="bg-muted hover:bg-muted/80 hover:text-fg-secondary absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer px-2 text-sm font-semibold transition-colors"
               >
                 {filter.type.toUpperCase()}
               </button>
@@ -163,25 +167,21 @@ function FilterGroup({
           </Tooltip>
         </TooltipProvider>
       )}
-      <div className="border-border space-y-3 border-l-2 pl-6">
-        {filter.children.length === 0 ? (
-          <div className="text-fg-tertiary py-2 text-sm italic">
-            This group is empty. Please add a filter below.
-          </div>
-        ) : (
-          filter.children.map((child, index) => (
-            <FilterNodeRenderer
-              key={index}
-              filter={child}
-              onUpdate={(newChild) => handleUpdateChild(index, newChild)}
-              onRemove={() => handleRemoveChild(index)}
-              depth={depth + 1}
-              config={config}
-            />
-          ))
-        )}
+      <div
+        className={`border-border space-y-3 border-l-2 py-4 pr-4 pl-6 ${backgroundClass}`}
+      >
+        {filter.children.map((child, index) => (
+          <FilterNodeRenderer
+            key={index}
+            filter={child}
+            onUpdate={(newChild) => handleUpdateChild(index, newChild)}
+            onRemove={() => handleRemoveChild(index)}
+            depth={depth + 1}
+            config={config}
+          />
+        ))}
 
-        <div className="flex items-center gap-2 pt-2">
+        <div className="flex items-center gap-2">
           <MetricSelectorPopover onSelect={handleAddMetric} config={config} />
           <AddButton label="Tag" onClick={handleAddTag} />
           {canAddGroup ? (
