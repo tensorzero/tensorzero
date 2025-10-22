@@ -1297,6 +1297,7 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         },
         &format!(
             r#"
+        gateway.fetch_and_encode_input_files_before_inference = true
         [object_storage]
         type = "filesystem"
         path = "{}"
