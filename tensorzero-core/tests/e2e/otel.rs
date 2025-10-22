@@ -14,8 +14,10 @@ use tensorzero::{
     Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     FeedbackParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Role,
 };
-use tensorzero_core::observability::setup_observability_with_exporter_override;
 use tensorzero_core::observability::LogFormat;
+use tensorzero_core::observability::{
+    enter_fake_http_request_otel, setup_observability_with_exporter_override,
+};
 use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -119,6 +121,8 @@ pub async fn test_reproduce_tracing_bug() {
     .to_string();
 
     let client = make_embedded_gateway_with_config(&config).await;
+
+    let _guard = enter_fake_http_request_otel();
 
     // Make an inference to initialize the tracing call-site cache
     client
@@ -311,6 +315,8 @@ pub async fn test_capture_simple_inference_spans(
     format = \"{config_mode}\"
     "
     );
+
+    let _guard = enter_fake_http_request_otel();
 
     let client = make_embedded_gateway_with_config(&config).await;
     let response_data = if streaming {
@@ -516,6 +522,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let (exporter, _err) = runtime.block_on(async {
         let exporter = install_capturing_otel_exporter().await;
+        let _guard = enter_fake_http_request_otel();
         let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
         let _err = client
             .inference(ClientInferenceParams {
@@ -682,8 +689,62 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+pub async fn test_suppress_otel_spans() {
+    let exporter = install_capturing_otel_exporter().await;
+
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    // We do *not* call `enter_fake_http_request_otel` before calling `inference`.
+    // As a result, otel reporting should get suppressed entirely.
+    // This is the behavior of an embedded client if we somehow turned on real otel exporting. (which we don't support at the moment)
+    // The main purpose of this test is to verify that otel span suppression works correctly - in a real gateway,
+    // we want to ensure that non-instrumented routes (e.g. ui routes) cannot cause otel spans to be reported,
+    // even if they call into instrumented code.
+    let res = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::NonStreaming(output) = res else {
+        panic!("Expected non-streaming output, got: {res:#?}");
+    };
+
+    let _feedback_res = client
+        .feedback(FeedbackParams {
+            inference_id: Some(output.inference_id()),
+            metric_name: "task_success".to_string(),
+            value: true.into(),
+            tags: HashMap::from([
+                ("my_tag".to_string(), "my_value".to_string()),
+                ("my_tag2".to_string(), "my_value2".to_string()),
+            ]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let all_spans = exporter.take_spans();
+    assert!(all_spans.is_empty(), "Should have suppressed all spans");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 pub async fn test_capture_feedback_spans() {
     let exporter = install_capturing_otel_exporter().await;
+    let _guard = enter_fake_http_request_otel();
 
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let res = client
