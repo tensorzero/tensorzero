@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use tensorzero::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilterTreeNode,
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
     InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagFilter,
     TimeComparisonOperator, TimeFilter,
 };
@@ -104,7 +104,7 @@ pub async fn test_simple_query_chat_function() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_with_float_filter() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+    let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
         metric_name: "jaccard_similarity".to_string(),
         value: 0.5,
         comparison_operator: FloatComparisonOperator::GreaterThan,
@@ -164,7 +164,7 @@ pub async fn test_demonstration_output_source() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_boolean_metric_filter() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+    let filter_node = InferenceFilter::BooleanMetric(BooleanMetricFilter {
         metric_name: "exact_match".to_string(),
         value: true,
     });
@@ -192,14 +192,14 @@ pub async fn test_boolean_metric_filter() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_and_filter_multiple_float_metrics() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::And {
+    let filter_node = InferenceFilter::And {
         children: vec![
-            InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+            InferenceFilter::FloatMetric(FloatMetricFilter {
                 metric_name: "jaccard_similarity".to_string(),
                 value: 0.5,
                 comparison_operator: FloatComparisonOperator::GreaterThan,
             }),
-            InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+            InferenceFilter::FloatMetric(FloatMetricFilter {
                 metric_name: "jaccard_similarity".to_string(),
                 value: 0.8,
                 comparison_operator: FloatComparisonOperator::LessThan,
@@ -230,18 +230,18 @@ pub async fn test_and_filter_multiple_float_metrics() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_or_filter_mixed_metrics() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::Or {
+    let filter_node = InferenceFilter::Or {
         children: vec![
-            InferenceFilterTreeNode::FloatMetric(FloatMetricFilter {
+            InferenceFilter::FloatMetric(FloatMetricFilter {
                 metric_name: "jaccard_similarity".to_string(),
                 value: 0.8,
                 comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
             }),
-            InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+            InferenceFilter::BooleanMetric(BooleanMetricFilter {
                 metric_name: "exact_match".to_string(),
                 value: true,
             }),
-            InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+            InferenceFilter::BooleanMetric(BooleanMetricFilter {
                 // Episode-level metric
                 metric_name: "goal_achieved".to_string(),
                 value: true,
@@ -272,14 +272,14 @@ async fn test_or_filter_mixed_metrics() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_not_filter() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::Not {
-        child: Box::new(InferenceFilterTreeNode::Or {
+    let filter_node = InferenceFilter::Not {
+        child: Box::new(InferenceFilter::Or {
             children: vec![
-                InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+                InferenceFilter::BooleanMetric(BooleanMetricFilter {
                     metric_name: "exact_match".to_string(),
                     value: true,
                 }),
-                InferenceFilterTreeNode::BooleanMetric(BooleanMetricFilter {
+                InferenceFilter::BooleanMetric(BooleanMetricFilter {
                     metric_name: "exact_match".to_string(),
                     value: false,
                 }),
@@ -303,7 +303,7 @@ async fn test_not_filter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_simple_time_filter() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::Time(TimeFilter {
+    let filter_node = InferenceFilter::Time(TimeFilter {
         time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
         comparison_operator: TimeComparisonOperator::GreaterThan,
     });
@@ -360,7 +360,7 @@ async fn test_simple_time_filter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_simple_tag_filter() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::Tag(TagFilter {
+    let filter_node = InferenceFilter::Tag(TagFilter {
         key: "tensorzero::evaluation_name".to_string(),
         value: "entity_extraction".to_string(),
         comparison_operator: TagComparisonOperator::Equal,
@@ -392,14 +392,14 @@ async fn test_simple_tag_filter() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_combined_time_and_tag_filter() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
-    let filter_node = InferenceFilterTreeNode::And {
+    let filter_node = InferenceFilter::And {
         children: vec![
-            InferenceFilterTreeNode::Time(TimeFilter {
+            InferenceFilter::Time(TimeFilter {
                 // 2025-04-14 23:30:00 UTC (should exclude some of these elements)
                 time: DateTime::from_timestamp(1744673400, 0).unwrap(),
                 comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
             }),
-            InferenceFilterTreeNode::Tag(TagFilter {
+            InferenceFilter::Tag(TagFilter {
                 key: "tensorzero::evaluation_name".to_string(),
                 value: "haiku".to_string(),
                 comparison_operator: TagComparisonOperator::Equal,

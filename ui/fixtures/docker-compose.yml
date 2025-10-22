@@ -1,3 +1,6 @@
+include:
+  - docker-compose-common.yml
+
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
@@ -27,7 +30,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero_ui_fixtures"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d tensorzero_ui_fixtures" ]
       start_period: 30s
       start_interval: 1s
       timeout: 1s
@@ -39,15 +42,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      [
-        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
-      ]
+    entrypoint: [ "/bin/sh", "-c" ]
+    command: [ "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity" ]
     extra_hosts:
       - "howdy.tensorzero.com:127.0.0.1"
     healthcheck:
-      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      test: [ "CMD", "test", "-f", "/tmp/migrations_complete.marker" ]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
@@ -77,32 +77,9 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-    command: ["--config-file", "/app/config/tensorzero.toml"]
+    command: [ "--config-file", "/app/config/tensorzero.toml" ]
     healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "http://localhost:3000/health",
-        ]
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
-  mock-inference-provider:
-    build:
-      context: ../../
-      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
-    environment:
-      RUST_LOG: debug
-    ports:
-      - "3030:3030"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3030/status
-      interval: 1s
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health" ]
       start_period: 30s
       start_interval: 1s
       timeout: 1s
@@ -128,9 +105,9 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
+    command: [ "bash", "-c", "cd /fixtures && ./load_fixtures.sh" ]
     healthcheck:
-      test: ["CMD", "test", "-f", "/load_complete.marker"]
+      test: [ "CMD", "test", "-f", "/load_complete.marker" ]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes

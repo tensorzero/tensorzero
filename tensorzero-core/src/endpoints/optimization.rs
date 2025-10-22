@@ -13,9 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::Config,
     db::clickhouse::{
-        query_builder::{
-            InferenceFilterTreeNode, InferenceOutputSource, ListInferencesParams, OrderBy,
-        },
+        query_builder::{InferenceFilter, InferenceOutputSource, ListInferencesParams, OrderBy},
         ClickHouseConnectionInfo, ClickhouseFormat,
     },
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
@@ -38,7 +36,7 @@ pub struct LaunchOptimizationWorkflowParams {
     pub function_name: String,
     pub template_variant_name: String,
     pub query_variant_name: Option<String>,
-    pub filters: Option<InferenceFilterTreeNode>,
+    pub filters: Option<InferenceFilter>,
     pub output_source: InferenceOutputSource,
     pub order_by: Option<Vec<OrderBy>>,
     #[serde(deserialize_with = "deserialize_option_u64")]

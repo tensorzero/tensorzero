@@ -654,6 +654,13 @@ async fn wrap_provider_stream(
                     Err(e) => {
                         tracing::warn!("Skipping cache write for stream response due to error in stream: {e}");
                         errored = true;
+                        // If we see a `FatalStreamError`, then yield it and stop processing the stream,
+                        // to avoid holding open a stream that might never produce more chunks.
+                        // We'll still compute rate-limiting usage using all of the chunks that we've seen so far.
+                        if let ErrorDetails::FatalStreamError { .. } = e.get_details() {
+                            yield chunk;
+                            break;
+                        }
                     }
                 }
             }
@@ -662,11 +669,20 @@ async fn wrap_provider_stream(
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, RateLimitResourceUsage {
+            let usage = if errored {
+                RateLimitResourceUsage::UnderEstimate {
                     model_inferences: 1,
                     tokens: total_usage.total_tokens() as u64,
-                })
+                }
+             } else {
+                RateLimitResourceUsage::Exact {
+                    model_inferences: 1,
+                    tokens: total_usage.total_tokens() as u64,
+                }
+            };
+
+            if let Err(e) = ticket_borrow
+                .return_tickets(&postgres_connection_info, usage)
                 .await
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
@@ -689,9 +705,9 @@ async fn wrap_provider_stream(
     // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
     // even if the top-level HTTP request is later dropped.
     let (send, recv) = tokio::sync::mpsc::unbounded_channel();
-    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
-    #[expect(clippy::disallowed_methods)]
-    tokio::spawn(async move {
+    // Make sure that we finish processing the stream (so that we call `return_tickets` to update rate-limiting information)
+    // if the gateway shuts down.
+    clients.deferred_tasks.spawn(async move {
         futures::pin_mut!(base_stream);
         while let Some(chunk) = base_stream.next().await {
             // Intentionally ignore errors - the receiver might be dropped, but we want to keep polling

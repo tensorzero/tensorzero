@@ -16,6 +16,7 @@ use tensorzero_core::observability::{self, LogFormat};
 use tensorzero_core::utils::gateway;
 
 mod routes;
+mod warn_early_drop;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;

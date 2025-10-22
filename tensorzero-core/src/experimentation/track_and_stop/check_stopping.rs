@@ -321,6 +321,11 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
         })
         .collect();
 
+    // Can't stop the experiment if any arms haven't been pulled up to the min pull count
+    if pull_counts.iter().any(|&x| x < min_pulls) {
+        return Ok(StoppingResult::NotStopped);
+    }
+
     // Validate and extract variances - all must be present
     let variances: Result<Vec<f64>, CheckStoppingError> = feedback
         .iter()
@@ -335,11 +340,7 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
     let variances = variances?;
     let num_arms: usize = pull_counts.len();
 
-    // Can't stop the experiment if any arms haven't been pulled up to the min pull count
-    if pull_counts.iter().any(|&x| x < min_pulls) {
-        return Ok(StoppingResult::NotStopped);
-    }
-
+    // Set leader arm
     let leader_arm: usize =
         choose_leader(&means, &variances, &pull_counts).ok_or(CheckStoppingError::StoppingError)?;
 
