@@ -614,6 +614,7 @@ pub async fn test_capture_simple_inference_spans(
     );
 
     let client = make_embedded_gateway_with_config(&config).await;
+    let _guard = enter_fake_http_request_otel();
     let response_data = if streaming {
         make_streaming_inference(&client).await
     } else {
