@@ -40,156 +40,13 @@ import {
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
 
-// Helper type for individual filters
-type FilterItem =
-  | { type: "tag"; key: string; value: string; comparison_operator: "=" | "!=" }
-  | {
-      type: "float_metric";
-      metric_name: string;
-      value: number;
-      comparison_operator: "<" | "<=" | "=" | ">" | ">=" | "!=";
-    }
-  | { type: "boolean_metric"; metric_name: string; value: boolean };
-
-// Parse InferenceFilter into an array of individual filters
-function parseInferenceFilter(
-  filter: InferenceFilter | undefined,
-): FilterItem[] {
+// Helper to extract child filters for rendering
+function getChildFilters(filter?: InferenceFilter): InferenceFilter[] {
   if (!filter) return [];
-
   if (filter.type === "and" || filter.type === "or") {
-    // Flatten AND/OR children
-    return filter.children.map((child) => {
-      if (child.type === "tag") {
-        return {
-          type: "tag" as const,
-          key: child.key,
-          value: child.value,
-          comparison_operator: child.comparison_operator,
-        };
-      }
-      if (child.type === "float_metric") {
-        return {
-          type: "float_metric" as const,
-          metric_name: child.metric_name,
-          value: child.value,
-          comparison_operator: child.comparison_operator,
-        };
-      }
-      if (child.type === "boolean_metric") {
-        return {
-          type: "boolean_metric" as const,
-          metric_name: child.metric_name,
-          value: child.value,
-        };
-      }
-      throw new Error(`Unsupported filter type in AND/OR: ${child.type}`);
-    });
+    return filter.children;
   }
-
-  if (filter.type === "tag") {
-    return [
-      {
-        type: "tag" as const,
-        key: filter.key,
-        value: filter.value,
-        comparison_operator: filter.comparison_operator,
-      },
-    ];
-  }
-
-  if (filter.type === "float_metric") {
-    return [
-      {
-        type: "float_metric" as const,
-        metric_name: filter.metric_name,
-        value: filter.value,
-        comparison_operator: filter.comparison_operator,
-      },
-    ];
-  }
-
-  if (filter.type === "boolean_metric") {
-    return [
-      {
-        type: "boolean_metric" as const,
-        metric_name: filter.metric_name,
-        value: filter.value,
-      },
-    ];
-  }
-
-  return [];
-}
-
-// Build InferenceFilter from array of individual filters
-function buildInferenceFilter(
-  filters: FilterItem[],
-  operator: "and" | "or" = "and",
-): InferenceFilter | undefined {
-  if (filters.length === 0) return undefined;
-
-  if (filters.length === 1) {
-    const filter = filters[0];
-    if (filter.type === "tag") {
-      return {
-        type: "tag",
-        key: filter.key,
-        value: filter.value,
-        comparison_operator: filter.comparison_operator,
-      };
-    }
-    if (filter.type === "float_metric") {
-      return {
-        type: "float_metric",
-        metric_name: filter.metric_name,
-        value: filter.value,
-        comparison_operator: filter.comparison_operator,
-      };
-    }
-    if (filter.type === "boolean_metric") {
-      return {
-        type: "boolean_metric",
-        metric_name: filter.metric_name,
-        value: filter.value,
-      };
-    }
-  }
-
-  // Multiple filters - combine with the specified operator
-  return {
-    type: operator,
-    children: filters.map((filter): InferenceFilter => {
-      if (filter.type === "tag") {
-        return {
-          type: "tag" as const,
-          key: filter.key,
-          value: filter.value,
-          comparison_operator: filter.comparison_operator,
-        };
-      }
-      if (filter.type === "float_metric") {
-        return {
-          type: "float_metric" as const,
-          metric_name: filter.metric_name,
-          value: filter.value,
-          comparison_operator: filter.comparison_operator,
-        };
-      }
-      if (filter.type === "boolean_metric") {
-        return {
-          type: "boolean_metric" as const,
-          metric_name: filter.metric_name,
-          value: filter.value,
-        };
-      }
-      // This should never happen due to type narrowing, but TypeScript needs it
-      const _exhaustiveCheck: never = filter;
-      throw new Error(
-        `Unsupported filter type: ${(_exhaustiveCheck as FilterItem).type}`,
-      );
-    }),
-  };
+  return [filter]; // Single filter, treat as array of one
 }
 
 const InferenceQueryBuilderSchema = z.object({
@@ -227,9 +84,9 @@ export const InferenceQueryBuilder = forwardRef<
     mode: "onChange",
   });
 
-  // Parse inferenceFilter into individual filters
-  const filters = useMemo(
-    () => parseInferenceFilter(inferenceFilter),
+  // Get child filters for rendering
+  const childFilters = useMemo(
+    () => getChildFilters(inferenceFilter),
     [inferenceFilter],
   );
 
@@ -252,35 +109,72 @@ export const InferenceQueryBuilder = forwardRef<
   }));
 
   const handleAddTag = () => {
-    const newFilter: FilterItem = {
+    const newFilter: InferenceFilter = {
       type: "tag",
       key: "",
       value: "",
       comparison_operator: "=",
     };
-    setInferenceFilter(buildInferenceFilter([...filters, newFilter], operator));
+
+    if (!inferenceFilter) {
+      // No filter exists yet, create single filter
+      setInferenceFilter(newFilter);
+    } else if (
+      inferenceFilter.type === "and" ||
+      inferenceFilter.type === "or"
+    ) {
+      // And/or exists, add to children
+      setInferenceFilter({
+        ...inferenceFilter,
+        children: [...inferenceFilter.children, newFilter],
+      });
+    } else {
+      // Single filter exists, wrap in and/or with new filter
+      setInferenceFilter({
+        type: operator,
+        children: [inferenceFilter, newFilter],
+      });
+    }
   };
 
   const handleAddMetric = (metricName: string, metricConfig: MetricConfig) => {
+    let newFilter: InferenceFilter;
+
     if (metricConfig.type === "float") {
-      const newFilter: FilterItem = {
+      newFilter = {
         type: "float_metric",
         metric_name: metricName,
         value: 0,
         comparison_operator: ">=",
       };
-      setInferenceFilter(
-        buildInferenceFilter([...filters, newFilter], operator),
-      );
     } else if (metricConfig.type === "boolean") {
-      const newFilter: FilterItem = {
+      newFilter = {
         type: "boolean_metric",
         metric_name: metricName,
         value: true,
       };
-      setInferenceFilter(
-        buildInferenceFilter([...filters, newFilter], operator),
-      );
+    } else {
+      return; // Unsupported metric type
+    }
+
+    if (!inferenceFilter) {
+      // No filter exists yet, create single filter
+      setInferenceFilter(newFilter);
+    } else if (
+      inferenceFilter.type === "and" ||
+      inferenceFilter.type === "or"
+    ) {
+      // And/or exists, add to children
+      setInferenceFilter({
+        ...inferenceFilter,
+        children: [...inferenceFilter.children, newFilter],
+      });
+    } else {
+      // Single filter exists, wrap in and/or with new filter
+      setInferenceFilter({
+        type: operator,
+        children: [inferenceFilter, newFilter],
+      });
     }
   };
 
@@ -288,23 +182,69 @@ export const InferenceQueryBuilder = forwardRef<
     index: number,
     updates: Record<string, unknown>,
   ) => {
-    const newFilters = [...filters];
-    const currentFilter = newFilters[index];
+    if (!inferenceFilter) return;
 
-    // Type-safe update based on filter type
-    newFilters[index] = { ...currentFilter, ...updates } as FilterItem;
+    const children = getChildFilters(inferenceFilter);
+    const currentFilter = children[index];
+    if (!currentFilter) return;
 
-    setInferenceFilter(buildInferenceFilter(newFilters, operator));
+    // Create updated filter by merging updates
+    const updatedFilter = { ...currentFilter, ...updates } as InferenceFilter;
+
+    // Update the tree
+    if (inferenceFilter.type === "and" || inferenceFilter.type === "or") {
+      const newChildren = [...inferenceFilter.children];
+      newChildren[index] = updatedFilter;
+      setInferenceFilter({
+        ...inferenceFilter,
+        children: newChildren,
+      });
+    } else {
+      // Single filter case
+      setInferenceFilter(updatedFilter);
+    }
   };
 
   const handleRemoveFilter = (index: number) => {
-    const newFilters = filters.filter((_, i) => i !== index);
-    setInferenceFilter(buildInferenceFilter(newFilters, operator));
+    if (!inferenceFilter) return;
+
+    if (inferenceFilter.type === "and" || inferenceFilter.type === "or") {
+      const newChildren = inferenceFilter.children.filter(
+        (_, i) => i !== index,
+      );
+
+      if (newChildren.length === 0) {
+        // No filters left, clear everything
+        setInferenceFilter(undefined);
+      } else if (newChildren.length === 1) {
+        // Only one filter left, unwrap it
+        setInferenceFilter(newChildren[0]);
+      } else {
+        // Multiple filters remain
+        setInferenceFilter({
+          ...inferenceFilter,
+          children: newChildren,
+        });
+      }
+    } else {
+      // Removing the only filter
+      setInferenceFilter(undefined);
+    }
   };
 
   const handleToggleOperator = () => {
+    if (
+      !inferenceFilter ||
+      (inferenceFilter.type !== "and" && inferenceFilter.type !== "or")
+    ) {
+      return;
+    }
+
     const newOperator = operator === "and" ? "or" : "and";
-    setInferenceFilter(buildInferenceFilter(filters, newOperator));
+    setInferenceFilter({
+      ...inferenceFilter,
+      type: newOperator,
+    });
   };
 
   return (
@@ -313,10 +253,10 @@ export const InferenceQueryBuilder = forwardRef<
         <FunctionFormField control={form.control} />
         <FormLabel>Filter</FormLabel>
 
-        {filters.length > 0 && (
+        {childFilters.length > 0 && (
           <div className="py-1">
             <div className="relative space-y-3">
-              {filters.length > 1 && (
+              {childFilters.length > 1 && (
                 <TooltipProvider delayDuration={300}>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -337,7 +277,7 @@ export const InferenceQueryBuilder = forwardRef<
                 </TooltipProvider>
               )}
               <div className="border-border space-y-3 border-l-2 pl-4">
-                {filters.map((filter, index) => {
+                {childFilters.map((filter, index) => {
                   if (filter.type === "tag") {
                     return (
                       <TagFilterRow
@@ -502,7 +442,7 @@ function AddButton({ label, onClick }: AddButtonProps) {
 }
 
 interface TagFilterRowProps {
-  filter: FilterItem & { type: "tag" };
+  filter: InferenceFilter & { type: "tag" };
   onUpdate: (updates: {
     key?: string;
     value?: string;
@@ -566,7 +506,7 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
 }
 
 interface FloatMetricFilterRowProps {
-  filter: FilterItem & { type: "float_metric" };
+  filter: InferenceFilter & { type: "float_metric" };
   metricConfig: MetricConfig;
   onUpdate: (updates: {
     value?: number;
@@ -654,7 +594,7 @@ function FloatMetricFilterRow({
 }
 
 interface BooleanMetricFilterRowProps {
-  filter: FilterItem & { type: "boolean_metric" };
+  filter: InferenceFilter & { type: "boolean_metric" };
   metricConfig: MetricConfig;
   onUpdate: (updates: { value?: boolean }) => void;
   onRemove: () => void;
