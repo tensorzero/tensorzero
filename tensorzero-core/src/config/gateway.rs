@@ -137,7 +137,7 @@ impl Default for GatewayConfig {
 }
 
 fn default_fetch_and_encode_input_files_before_inference() -> bool {
-    true
+    false
 }
 
 fn serialize_optional_socket_addr<S>(
