@@ -43,6 +43,44 @@ import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
 // Constants
 const MAX_NESTING_DEPTH = 2;
 
+// Filter Factory Functions
+function createTagFilter(): InferenceFilter {
+  return {
+    type: "tag",
+    key: "",
+    value: "",
+    comparison_operator: "=",
+  };
+}
+
+function createMetricFilter(
+  metricName: string,
+  metricConfig: MetricConfig,
+): InferenceFilter | null {
+  if (metricConfig.type === "float") {
+    return {
+      type: "float_metric",
+      metric_name: metricName,
+      value: 0,
+      comparison_operator: ">=",
+    };
+  } else if (metricConfig.type === "boolean") {
+    return {
+      type: "boolean_metric",
+      metric_name: metricName,
+      value: true,
+    };
+  }
+  return null;
+}
+
+function createGroupFilter(type: "and" | "or"): InferenceFilter {
+  return {
+    type,
+    children: [],
+  };
+}
+
 // Interfaces for recursive components
 interface FilterNodeProps {
   filter: InferenceFilter;
@@ -100,43 +138,22 @@ function FilterGroup({
   };
 
   const handleAddTag = () => {
-    handleAddChild({
-      type: "tag",
-      key: "",
-      value: "",
-      comparison_operator: "=",
-    });
+    handleAddChild(createTagFilter());
   };
 
   const handleAddMetric = (metricName: string, metricConfig: MetricConfig) => {
-    if (metricConfig.type === "float") {
-      handleAddChild({
-        type: "float_metric",
-        metric_name: metricName,
-        value: 0,
-        comparison_operator: ">=",
-      });
-    } else if (metricConfig.type === "boolean") {
-      handleAddChild({
-        type: "boolean_metric",
-        metric_name: metricName,
-        value: true,
-      });
+    const newFilter = createMetricFilter(metricName, metricConfig);
+    if (newFilter) {
+      handleAddChild(newFilter);
     }
   };
 
   const handleAddAndGroup = () => {
-    handleAddChild({
-      type: "and",
-      children: [],
-    });
+    handleAddChild(createGroupFilter("and"));
   };
 
   const handleAddOrGroup = () => {
-    handleAddChild({
-      type: "or",
-      children: [],
-    });
+    handleAddChild(createGroupFilter("or"));
   };
 
   const canAddGroup = depth < MAX_NESTING_DEPTH;
@@ -350,36 +367,13 @@ export const InferenceQueryBuilder = forwardRef<
     // Wrap in AND group
     setInferenceFilter({
       type: "and",
-      children: [
-        {
-          type: "tag",
-          key: "",
-          value: "",
-          comparison_operator: "=",
-        },
-      ],
+      children: [createTagFilter()],
     });
   };
 
   const handleAddMetric = (metricName: string, metricConfig: MetricConfig) => {
-    let newFilter: InferenceFilter;
-
-    if (metricConfig.type === "float") {
-      newFilter = {
-        type: "float_metric",
-        metric_name: metricName,
-        value: 0,
-        comparison_operator: ">=",
-      };
-    } else if (metricConfig.type === "boolean") {
-      newFilter = {
-        type: "boolean_metric",
-        metric_name: metricName,
-        value: true,
-      };
-    } else {
-      return; // Unsupported metric type
-    }
+    const newFilter = createMetricFilter(metricName, metricConfig);
+    if (!newFilter) return; // Unsupported metric type
 
     // Wrap in AND group
     setInferenceFilter({
@@ -389,17 +383,11 @@ export const InferenceQueryBuilder = forwardRef<
   };
 
   const handleAddAnd = () => {
-    setInferenceFilter({
-      type: "and",
-      children: [],
-    });
+    setInferenceFilter(createGroupFilter("and"));
   };
 
   const handleAddOr = () => {
-    setInferenceFilter({
-      type: "or",
-      children: [],
-    });
+    setInferenceFilter(createGroupFilter("or"));
   };
 
   return (
@@ -570,17 +558,17 @@ interface TagFilterRowProps {
 function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
   return (
     <div>
-      <FormLabel className="mt-[-1]">Tag</FormLabel>
       <div className="flex items-center gap-2">
         <div className="flex-1">
           <Input
             className="font-mono"
+            placeholder="tag"
             value={filter.key}
             onChange={(e) => onUpdate({ key: e.target.value })}
           />
         </div>
 
-        <div className="w-20">
+        <div className="w-14">
           <Select
             onValueChange={(value) =>
               onUpdate({
@@ -599,9 +587,10 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
           </Select>
         </div>
 
-        <div className="flex-1">
+        <div className="w-48">
           <Input
             className="font-mono"
+            placeholder="value"
             value={filter.value}
             onChange={(e) => onUpdate({ value: e.target.value })}
           />
@@ -631,7 +620,6 @@ function FloatMetricFilterRow({
 }: FloatMetricFilterRowProps) {
   return (
     <div>
-      <FormLabel className="mt-[-1]">Metric</FormLabel>
       <div className="flex items-center gap-2">
         <div className="flex flex-1 items-center gap-2">
           <MetricNameWithTooltip
@@ -640,7 +628,7 @@ function FloatMetricFilterRow({
           />
         </div>
 
-        <div className="w-24">
+        <div className="w-14">
           <Select
             onValueChange={(value) =>
               onUpdate({
@@ -669,7 +657,7 @@ function FloatMetricFilterRow({
           </Select>
         </div>
 
-        <div className="w-32">
+        <div className="w-48">
           <Input
             type="number"
             step="any"
@@ -708,7 +696,6 @@ function BooleanMetricFilterRow({
 }: BooleanMetricFilterRowProps) {
   return (
     <div>
-      <FormLabel className="mt-[-1]">Metric</FormLabel>
       <div className="flex items-center gap-2">
         <div className="flex flex-1 items-center gap-2">
           <MetricNameWithTooltip
@@ -717,9 +704,11 @@ function BooleanMetricFilterRow({
           />
         </div>
 
-        <span className="text-fg-secondary text-sm">is</span>
+        <div className="text-fg-secondary flex w-14 items-center justify-center text-sm">
+          is
+        </div>
 
-        <div className="w-32">
+        <div className="w-48">
           <Select
             onValueChange={(value) => onUpdate({ value: value === "true" })}
             value={filter.value.toString()}
