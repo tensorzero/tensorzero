@@ -946,7 +946,7 @@ mod tests {
             variant_name: variant_name.to_string(),
             count,
             mean,
-            variance,
+            variance: Some(variance),
         }
     }
 

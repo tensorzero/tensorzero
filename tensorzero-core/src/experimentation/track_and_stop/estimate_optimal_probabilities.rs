@@ -59,6 +59,8 @@ pub enum EstimateOptimalProbabilitiesError {
     CouldntComputeArgmax,
     #[error("Failed to build Clarabel solver")]
     CouldntBuildSolver,
+    #[error("Missing variance for variant '{variant_name}' - variance must be non-null")]
+    MissingVariance { variant_name: String },
 }
 /// Compute optimal sampling proportions for ε-best arm identification given sub-Gaussian rewards.
 ///
@@ -148,10 +150,18 @@ pub fn estimate_optimal_probabilities(
         })
         .collect();
 
-    let variances: Vec<f64> = feedback
+    // Validate and extract variances - all must be present
+    let variances: Result<Vec<f64>, EstimateOptimalProbabilitiesError> = feedback
         .iter()
-        .map(|x| (x.variance as f64).max(variance_floor))
+        .map(|x| {
+            x.variance
+                .map(|v| (v as f64).max(variance_floor))
+                .ok_or_else(|| EstimateOptimalProbabilitiesError::MissingVariance {
+                    variant_name: x.variant_name.clone(),
+                })
+        })
         .collect();
+    let variances = variances?;
     let variant_names: Vec<String> = feedback.into_iter().map(|x| x.variant_name).collect();
 
     // Gather the quantities required for the optimization
@@ -353,7 +363,7 @@ mod tests {
             .map(|(i, ((count, mean), variance))| FeedbackByVariant {
                 variant_name: format!("variant_{i}"),
                 mean: mean as f32,
-                variance: variance as f32,
+                variance: Some(variance as f32),
                 count,
             })
             .collect()

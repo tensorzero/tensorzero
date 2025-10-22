@@ -279,6 +279,14 @@ pub enum ErrorDetails {
     InferenceNotFound {
         inference_id: Uuid,
     },
+    FatalStreamError {
+        message: String,
+        provider_type: String,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_response: Option<String>,
+    },
     InferenceServer {
         message: String,
         provider_type: String,
@@ -593,6 +601,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::FatalStreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::ModelTimeout { .. } => tracing::Level::WARN,
@@ -717,6 +726,7 @@ impl ErrorDetails {
             ErrorDetails::BadFileFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::FatalStreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -1063,6 +1073,30 @@ impl std::fmt::Display for ErrorDetails {
                     )
                 } else {
                     write!(f, "Error from {provider_type} server: {message}")
+                }
+            }
+            ErrorDetails::FatalStreamError {
+                message,
+                provider_type,
+                raw_request,
+                raw_response,
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "Inference stream closed due to error from {} server: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
+                        raw_response
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
+                    )
+                } else {
+                    write!(f, "Inference stream closed due to error from {provider_type} server: {message}")
                 }
             }
             ErrorDetails::InferenceTimeout { variant_name } => {

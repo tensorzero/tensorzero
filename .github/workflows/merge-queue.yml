@@ -307,10 +307,23 @@ jobs:
         run: |
           uv run pytest
 
-      - name: Terminate the gateway
+      - name: Terminate the gateway and wait for it to exit
+        if: always()
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
+          # Wait for at most 30 seconds for the gateway to exit
+          for i in {1..30}; do
+            if ! kill -0 $GATEWAY_PID 2>/dev/null; then
+              echo "Gateway exited"
+              break
+            fi
+            sleep 1
+          done
+          if kill -0 $GATEWAY_PID 2>/dev/null; then
+            echo "Gateway did not exit after 30 seconds!"
+            exit 1
+          fi
 
       - name: Print e2e logs
         if: always()

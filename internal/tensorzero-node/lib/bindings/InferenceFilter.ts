@@ -4,11 +4,11 @@ import type { FloatMetricFilter } from "./FloatMetricFilter";
 import type { TagFilter } from "./TagFilter";
 import type { TimeFilter } from "./TimeFilter";
 
-export type InferenceFilterTreeNode =
+export type InferenceFilter =
   | ({ type: "float_metric" } & FloatMetricFilter)
   | ({ type: "boolean_metric" } & BooleanMetricFilter)
   | ({ type: "tag" } & TagFilter)
   | ({ type: "time" } & TimeFilter)
-  | { type: "and"; children: Array<InferenceFilterTreeNode> }
-  | { type: "or"; children: Array<InferenceFilterTreeNode> }
-  | { type: "not"; child: InferenceFilterTreeNode };
+  | { type: "and"; children: Array<InferenceFilter> }
+  | { type: "or"; children: Array<InferenceFilter> }
+  | { type: "not"; child: InferenceFilter };

@@ -22,7 +22,7 @@ async fn test_clickhouse_metrics_by_variant_singleton() {
     let metric = metrics_by_variant.first().unwrap();
     assert_eq!(metric.variant_name, "initial_prompt_gpt4o_mini");
     assert_float_eq(metric.mean, 0.12, None);
-    assert_float_eq(metric.variance, 0.10703, None);
+    assert_float_eq(metric.variance.unwrap(), 0.10703, None);
     assert_eq!(metric.count, 75);
 }
 
@@ -57,19 +57,19 @@ async fn test_clickhouse_metrics_by_variant_many_results() {
     assert_eq!(metric.variant_name, "dicl");
     assert_eq!(metric.count, 39);
     assert_float_eq(metric.mean, 0.33333333, None);
-    assert_float_eq(metric.variance, 0.22807, None);
+    assert_float_eq(metric.variance.unwrap(), 0.22807, None);
 
     let metric = metrics_by_variant.get(1).unwrap();
     assert_eq!(metric.variant_name, "turbo");
     assert_eq!(metric.count, 35);
     assert_float_eq(metric.mean, 0.65714, None);
-    assert_float_eq(metric.variance, 0.23193, None);
+    assert_float_eq(metric.variance.unwrap(), 0.23193, None);
 
     let metric = metrics_by_variant.get(2).unwrap();
     assert_eq!(metric.variant_name, "baseline");
     assert_eq!(metric.count, 25);
     assert_float_eq(metric.mean, 0.2, None);
-    assert_float_eq(metric.variance, 0.16666667, None);
+    assert_float_eq(metric.variance.unwrap(), 0.16666667, None);
 }
 
 #[tokio::test]
@@ -88,19 +88,19 @@ async fn test_clickhouse_metrics_by_variant_episode_boolean() {
     assert_eq!(metric.variant_name, "baseline");
     assert_eq!(metric.count, 72);
     assert_float_eq(metric.mean, 0.33333334, None);
-    assert_float_eq(metric.variance, 0.22535211, None);
+    assert_float_eq(metric.variance.unwrap(), 0.22535211, None);
 
     let metric = metrics_by_variant.get(1).unwrap();
     assert_eq!(metric.variant_name, "gpt-4.1-nano");
     assert_eq!(metric.count, 49);
     assert_float_eq(metric.mean, 0.4489796, None);
-    assert_float_eq(metric.variance, 0.25255102, None);
+    assert_float_eq(metric.variance.unwrap(), 0.25255102, None);
 
     let metric = metrics_by_variant.get(2).unwrap();
     assert_eq!(metric.variant_name, "gpt-4.1-mini");
     assert_eq!(metric.count, 3);
     assert_float_eq(metric.mean, 1.0, None);
-    assert_float_eq(metric.variance, 0.0, None);
+    assert_float_eq(metric.variance.unwrap(), 0.0, None);
 }
 
 #[tokio::test]
@@ -119,19 +119,19 @@ async fn test_clickhouse_metrics_by_variant_episode_float() {
     assert_eq!(metric.variant_name, "gpt-4.1-nano");
     assert_eq!(metric.count, 49);
     assert_float_eq(metric.mean, 91678.72, None);
-    assert_float_eq(metric.variance, 443305500.0, None);
+    assert_float_eq(metric.variance.unwrap(), 443305500.0, None);
 
     let metric = metrics_by_variant.get(1).unwrap();
     assert_eq!(metric.variant_name, "baseline");
     assert_eq!(metric.count, 48);
     assert_float_eq(metric.mean, 118620.79, None);
-    assert_float_eq(metric.variance, 885428200.0, None);
+    assert_float_eq(metric.variance.unwrap(), 885428200.0, None);
 
     let metric = metrics_by_variant.get(2).unwrap();
     assert_eq!(metric.variant_name, "gpt-4.1-mini");
     assert_eq!(metric.count, 3);
     assert_float_eq(metric.mean, 65755.3, None);
-    assert_float_eq(metric.variance, 22337140.0, None);
+    assert_float_eq(metric.variance.unwrap(), 22337140.0, None);
 }
 
 #[tokio::test]
@@ -181,8 +181,8 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_minute_level() {
         assert!(!point.variant_name.is_empty());
         assert!(point.count > 0);
         assert!(!point.mean.is_nan());
-        assert!(!point.variance.is_nan());
-        assert!(point.variance >= 0.0);
+        assert!(!point.variance.unwrap().is_nan());
+        assert!(point.variance.unwrap() >= 0.0);
     }
 
     // Verify final cumulative values for each variant (last period for each variant)
@@ -193,7 +193,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_minute_level() {
         .unwrap();
     assert_eq!(gpt4o_initial_prompt.count, 42);
     assert_float_eq(gpt4o_initial_prompt.mean, 0.523_809_5, Some(1e-6));
-    assert_float_eq(gpt4o_initial_prompt.variance, 0.255_516_84, Some(1e-6));
+    assert_float_eq(
+        gpt4o_initial_prompt.variance.unwrap(),
+        0.255_516_84,
+        Some(1e-6),
+    );
 
     let gpt4o_mini_initial_prompt = feedback_timeseries
         .iter()
@@ -202,7 +206,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_minute_level() {
         .unwrap();
     assert_eq!(gpt4o_mini_initial_prompt.count, 124);
     assert_float_eq(gpt4o_mini_initial_prompt.mean, 0.104_838_71, Some(1e-6));
-    assert_float_eq(gpt4o_mini_initial_prompt.variance, 0.094_610_54, Some(1e-6));
+    assert_float_eq(
+        gpt4o_mini_initial_prompt.variance.unwrap(),
+        0.094_610_54,
+        Some(1e-6),
+    );
 
     let llama_8b_initial_prompt = feedback_timeseries
         .iter()
@@ -211,7 +219,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_minute_level() {
         .unwrap();
     assert_eq!(llama_8b_initial_prompt.count, 38);
     assert_float_eq(llama_8b_initial_prompt.mean, 0.342_105_26, Some(1e-6));
-    assert_float_eq(llama_8b_initial_prompt.variance, 0.231_152_2, Some(1e-6));
+    assert_float_eq(
+        llama_8b_initial_prompt.variance.unwrap(),
+        0.231_152_2,
+        Some(1e-6),
+    );
 }
 
 #[tokio::test]
@@ -259,8 +271,8 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_hourly() {
         assert!(!point.variant_name.is_empty());
         assert!(point.count > 0);
         assert!(!point.mean.is_nan());
-        assert!(!point.variance.is_nan());
-        assert!(point.variance >= 0.0);
+        assert!(!point.variance.unwrap().is_nan());
+        assert!(point.variance.unwrap() >= 0.0);
     }
 
     // Verify final cumulative values for each variant
@@ -271,7 +283,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_hourly() {
         .unwrap();
     assert_eq!(gpt4o_initial_prompt.count, 42);
     assert_float_eq(gpt4o_initial_prompt.mean, 0.523_809_5, Some(1e-6));
-    assert_float_eq(gpt4o_initial_prompt.variance, 0.255_516_84, Some(1e-6));
+    assert_float_eq(
+        gpt4o_initial_prompt.variance.unwrap(),
+        0.255_516_84,
+        Some(1e-6),
+    );
 
     let gpt4o_mini_initial_prompt = feedback_timeseries
         .iter()
@@ -280,7 +296,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_hourly() {
         .unwrap();
     assert_eq!(gpt4o_mini_initial_prompt.count, 124);
     assert_float_eq(gpt4o_mini_initial_prompt.mean, 0.104_838_71, Some(1e-6));
-    assert_float_eq(gpt4o_mini_initial_prompt.variance, 0.094_610_54, Some(1e-6));
+    assert_float_eq(
+        gpt4o_mini_initial_prompt.variance.unwrap(),
+        0.094_610_54,
+        Some(1e-6),
+    );
 
     let llama_8b_initial_prompt = feedback_timeseries
         .iter()
@@ -289,7 +309,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_hourly() {
         .unwrap();
     assert_eq!(llama_8b_initial_prompt.count, 38);
     assert_float_eq(llama_8b_initial_prompt.mean, 0.342_105_26, Some(1e-6));
-    assert_float_eq(llama_8b_initial_prompt.variance, 0.231_152_2, Some(1e-6));
+    assert_float_eq(
+        llama_8b_initial_prompt.variance.unwrap(),
+        0.231_152_2,
+        Some(1e-6),
+    );
 }
 
 #[tokio::test]
@@ -336,8 +360,8 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_daily() {
         assert!(!point.variant_name.is_empty());
         assert!(point.count > 0);
         assert!(!point.mean.is_nan());
-        assert!(!point.variance.is_nan());
-        assert!(point.variance >= 0.0);
+        assert!(!point.variance.unwrap().is_nan());
+        assert!(point.variance.unwrap() >= 0.0);
     }
 
     // Verify final cumulative values for each variant
@@ -348,7 +372,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_daily() {
         .unwrap();
     assert_eq!(gpt4o_initial_prompt.count, 42);
     assert_float_eq(gpt4o_initial_prompt.mean, 0.523_809_5, Some(1e-6));
-    assert_float_eq(gpt4o_initial_prompt.variance, 0.255_516_84, Some(1e-6));
+    assert_float_eq(
+        gpt4o_initial_prompt.variance.unwrap(),
+        0.255_516_84,
+        Some(1e-6),
+    );
 
     let gpt4o_mini_initial_prompt = feedback_timeseries
         .iter()
@@ -357,7 +385,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_daily() {
         .unwrap();
     assert_eq!(gpt4o_mini_initial_prompt.count, 124);
     assert_float_eq(gpt4o_mini_initial_prompt.mean, 0.104_838_71, Some(1e-6));
-    assert_float_eq(gpt4o_mini_initial_prompt.variance, 0.094_610_54, Some(1e-6));
+    assert_float_eq(
+        gpt4o_mini_initial_prompt.variance.unwrap(),
+        0.094_610_54,
+        Some(1e-6),
+    );
 
     let llama_8b_initial_prompt = feedback_timeseries
         .iter()
@@ -366,7 +398,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_daily() {
         .unwrap();
     assert_eq!(llama_8b_initial_prompt.count, 38);
     assert_float_eq(llama_8b_initial_prompt.mean, 0.342_105_26, Some(1e-6));
-    assert_float_eq(llama_8b_initial_prompt.variance, 0.231_152_2, Some(1e-6));
+    assert_float_eq(
+        llama_8b_initial_prompt.variance.unwrap(),
+        0.231_152_2,
+        Some(1e-6),
+    );
 }
 
 #[tokio::test]
@@ -410,8 +446,8 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_weekly() {
         assert!(!point.variant_name.is_empty());
         assert!(point.count > 0);
         assert!(!point.mean.is_nan());
-        assert!(!point.variance.is_nan());
-        assert!(point.variance >= 0.0);
+        assert!(!point.variance.unwrap().is_nan());
+        assert!(point.variance.unwrap() >= 0.0);
     }
 
     // Verify final cumulative values for each variant
@@ -422,7 +458,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_weekly() {
         .unwrap();
     assert_eq!(gpt4o_initial_prompt.count, 42);
     assert_float_eq(gpt4o_initial_prompt.mean, 0.523_809_5, Some(1e-6));
-    assert_float_eq(gpt4o_initial_prompt.variance, 0.255_516_84, Some(1e-6));
+    assert_float_eq(
+        gpt4o_initial_prompt.variance.unwrap(),
+        0.255_516_84,
+        Some(1e-6),
+    );
 
     let gpt4o_mini_initial_prompt = feedback_timeseries
         .iter()
@@ -431,7 +471,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_weekly() {
         .unwrap();
     assert_eq!(gpt4o_mini_initial_prompt.count, 124);
     assert_float_eq(gpt4o_mini_initial_prompt.mean, 0.104_838_71, Some(1e-6));
-    assert_float_eq(gpt4o_mini_initial_prompt.variance, 0.094_610_54, Some(1e-6));
+    assert_float_eq(
+        gpt4o_mini_initial_prompt.variance.unwrap(),
+        0.094_610_54,
+        Some(1e-6),
+    );
 
     let llama_8b_initial_prompt = feedback_timeseries
         .iter()
@@ -440,7 +484,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_weekly() {
         .unwrap();
     assert_eq!(llama_8b_initial_prompt.count, 38);
     assert_float_eq(llama_8b_initial_prompt.mean, 0.342_105_26, Some(1e-6));
-    assert_float_eq(llama_8b_initial_prompt.variance, 0.231_152_2, Some(1e-6));
+    assert_float_eq(
+        llama_8b_initial_prompt.variance.unwrap(),
+        0.231_152_2,
+        Some(1e-6),
+    );
 }
 
 #[tokio::test]
@@ -484,8 +532,8 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_monthly() {
         assert!(!point.variant_name.is_empty());
         assert!(point.count > 0);
         assert!(!point.mean.is_nan());
-        assert!(!point.variance.is_nan());
-        assert!(point.variance >= 0.0);
+        assert!(!point.variance.unwrap().is_nan());
+        assert!(point.variance.unwrap() >= 0.0);
     }
 
     // Verify final cumulative values for each variant
@@ -496,7 +544,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_monthly() {
         .unwrap();
     assert_eq!(gpt4o_initial_prompt.count, 42);
     assert_float_eq(gpt4o_initial_prompt.mean, 0.523_809_5, Some(1e-6));
-    assert_float_eq(gpt4o_initial_prompt.variance, 0.255_516_84, Some(1e-6));
+    assert_float_eq(
+        gpt4o_initial_prompt.variance.unwrap(),
+        0.255_516_84,
+        Some(1e-6),
+    );
 
     let gpt4o_mini_initial_prompt = feedback_timeseries
         .iter()
@@ -505,7 +557,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_monthly() {
         .unwrap();
     assert_eq!(gpt4o_mini_initial_prompt.count, 124);
     assert_float_eq(gpt4o_mini_initial_prompt.mean, 0.104_838_71, Some(1e-6));
-    assert_float_eq(gpt4o_mini_initial_prompt.variance, 0.094_610_54, Some(1e-6));
+    assert_float_eq(
+        gpt4o_mini_initial_prompt.variance.unwrap(),
+        0.094_610_54,
+        Some(1e-6),
+    );
 
     let llama_8b_initial_prompt = feedback_timeseries
         .iter()
@@ -514,7 +570,11 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_monthly() {
         .unwrap();
     assert_eq!(llama_8b_initial_prompt.count, 38);
     assert_float_eq(llama_8b_initial_prompt.mean, 0.342_105_26, Some(1e-6));
-    assert_float_eq(llama_8b_initial_prompt.variance, 0.231_152_2, Some(1e-6));
+    assert_float_eq(
+        llama_8b_initial_prompt.variance.unwrap(),
+        0.231_152_2,
+        Some(1e-6),
+    );
 }
 
 #[tokio::test]
@@ -603,7 +663,7 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_with_variant_filter(
         .unwrap();
     assert_eq!(final_point.count, 124);
     assert_float_eq(final_point.mean, 0.104_838_71, Some(1e-6));
-    assert_float_eq(final_point.variance, 0.094_610_54, Some(1e-6));
+    assert_float_eq(final_point.variance.unwrap(), 0.094_610_54, Some(1e-6));
 
     // Test with empty variant list - should return empty result
     let empty_result = clickhouse

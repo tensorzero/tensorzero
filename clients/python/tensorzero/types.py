@@ -541,12 +541,16 @@ ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"],
 
 
 @dataclass
-class InferenceFilterTreeNode(ABC, HasTypeField):
+class InferenceFilter(ABC, HasTypeField):
     pass
 
 
+# DEPRECATED: Use InferenceFilter instead
+InferenceFilterTreeNode = InferenceFilter
+
+
 @dataclass
-class FloatMetricFilter(InferenceFilterTreeNode):
+class FloatMetricFilter(InferenceFilter):
     metric_name: str
     value: float
     comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
@@ -554,14 +558,14 @@ class FloatMetricFilter(InferenceFilterTreeNode):
 
 
 @dataclass
-class BooleanMetricFilter(InferenceFilterTreeNode):
+class BooleanMetricFilter(InferenceFilter):
     metric_name: str
     value: bool
     type: str = "boolean_metric"
 
 
 @dataclass
-class TagFilter(InferenceFilterTreeNode):
+class TagFilter(InferenceFilter):
     key: str
     value: str
     comparison_operator: Literal["=", "!="]
@@ -569,27 +573,27 @@ class TagFilter(InferenceFilterTreeNode):
 
 
 @dataclass
-class TimeFilter(InferenceFilterTreeNode):
+class TimeFilter(InferenceFilter):
     time: str  # RFC 3339 timestamp
     comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
     type: str = "time"
 
 
 @dataclass
-class AndFilter(InferenceFilterTreeNode):
-    children: List[InferenceFilterTreeNode]
+class AndFilter(InferenceFilter):
+    children: List[InferenceFilter]
     type: str = "and"
 
 
 @dataclass
-class OrFilter(InferenceFilterTreeNode):
-    children: List[InferenceFilterTreeNode]
+class OrFilter(InferenceFilter):
+    children: List[InferenceFilter]
     type: str = "or"
 
 
 @dataclass
-class NotFilter(InferenceFilterTreeNode):
-    child: InferenceFilterTreeNode
+class NotFilter(InferenceFilter):
+    child: InferenceFilter
     type: str = "not"
 
 
