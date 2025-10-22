@@ -2,7 +2,7 @@ nextest-version = { recommended = "0.9.87" }
 
 [profile.default]
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
-slow-timeout = { period = "10s", terminate-after = 3 }
+slow-timeout = { period = "10s", terminate-after = 1 }
 # We look for tests with names containing "no_aws_credentials"
 # These tests require that the surrounding environment has no AWS credentials
 # (including in places like `~/.aws`)
