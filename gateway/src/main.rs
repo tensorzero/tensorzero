@@ -282,7 +282,7 @@ async fn main() {
 
     // This is a purely informational logging task, so we don't need to wait for it to finish.
     #[expect(clippy::disallowed_methods)]
-    tokio::spawn(monitor_sever_shutdown(
+    tokio::spawn(monitor_server_shutdown(
         shutdown_signal,
         server_fut.clone(),
         in_flight_requests_counter,
@@ -301,7 +301,7 @@ async fn main() {
 
 /// A background task that waits for the server shutdown to initiate, and then logs status information every 5 seconds until
 /// the server completes its shutdown.
-async fn monitor_sever_shutdown(
+async fn monitor_server_shutdown(
     shutdown_signal: impl Future<Output = ()>,
     server_fut: impl Future<Output = ()>,
     in_flight_requests_counter: InFlightRequestsCounter,
