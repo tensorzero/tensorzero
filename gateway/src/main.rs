@@ -280,6 +280,8 @@ async fn main() {
         .map(|r| r.expect_pretty("Failed to start server"))
         .shared();
 
+    // This is a purely informational logging task, so we don't need to wait for it to finish.
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(monitor_sever_shutdown(
         shutdown_signal,
         server_fut.clone(),
