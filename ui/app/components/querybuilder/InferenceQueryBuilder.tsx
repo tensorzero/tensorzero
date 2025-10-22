@@ -1,13 +1,18 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { forwardRef, useImperativeHandle, useState } from "react";
+import { forwardRef, useImperativeHandle, useState, useId } from "react";
 import { Form } from "~/components/ui/form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useAllFunctionConfigs, useConfig } from "~/context/config";
 import type { Control } from "react-hook-form";
-import type { InferenceFilter, MetricConfig } from "tensorzero-node";
+import type {
+  InferenceFilter,
+  MetricConfig,
+  FloatComparisonOperator,
+  TagComparisonOperator,
+} from "tensorzero-node";
 import { Button } from "~/components/ui/button";
 import { Plus, X } from "lucide-react";
 import { Input } from "~/components/ui/input";
@@ -42,6 +47,79 @@ import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
 
 // Constants
 const MAX_NESTING_DEPTH = 2;
+
+// Type-safe operator definitions with bidirectional checking
+const TAG_OPERATORS = ["=", "!="] as const;
+const FLOAT_OPERATORS = ["<", "<=", "=", ">", ">=", "!="] as const;
+
+// Bidirectional type checking: Array ↔ Type
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _TagCheck1 = typeof TAG_OPERATORS extends readonly TagComparisonOperator[]
+  ? true
+  : false;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _TagCheck2 = TagComparisonOperator extends (typeof TAG_OPERATORS)[number]
+  ? true
+  : false;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _FloatCheck1 =
+  typeof FLOAT_OPERATORS extends readonly FloatComparisonOperator[]
+    ? true
+    : false;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _FloatCheck2 =
+  FloatComparisonOperator extends (typeof FLOAT_OPERATORS)[number]
+    ? true
+    : false;
+
+// Operator display labels with bidirectional exhaustiveness checking
+const TAG_OPERATOR_LABELS = {
+  "=": "=",
+  "!=": "≠",
+} as const satisfies Record<TagComparisonOperator, string>;
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _TagLabelKeysCheck =
+  keyof typeof TAG_OPERATOR_LABELS extends TagComparisonOperator ? true : false;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _TagLabelTypeCheck =
+  TagComparisonOperator extends keyof typeof TAG_OPERATOR_LABELS ? true : false;
+
+const FLOAT_OPERATOR_LABELS = {
+  "<": "<",
+  "<=": "≤",
+  "=": "=",
+  ">": ">",
+  ">=": "≥",
+  "!=": "≠",
+} as const satisfies Record<FloatComparisonOperator, string>;
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _FloatLabelKeysCheck =
+  keyof typeof FLOAT_OPERATOR_LABELS extends FloatComparisonOperator
+    ? true
+    : false;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _FloatLabelTypeCheck =
+  FloatComparisonOperator extends keyof typeof FLOAT_OPERATOR_LABELS
+    ? true
+    : false;
+
+// Type-safe filter update types
+type TagFilterUpdates = Partial<{
+  key: string;
+  value: string;
+  comparison_operator: TagComparisonOperator;
+}>;
+
+type FloatMetricFilterUpdates = Partial<{
+  value: number;
+  comparison_operator: FloatComparisonOperator;
+}>;
+
+type BooleanMetricFilterUpdates = Partial<{
+  value: boolean;
+}>;
 
 // Field-level validation (single source of truth)
 const FieldValidation = {
@@ -124,7 +202,6 @@ interface FilterNodeProps {
   onUpdate: (newFilter: InferenceFilter) => void;
   onRemove: () => void;
   depth: number;
-  config: ReturnType<typeof useConfig>;
 }
 
 // FilterGroup: Renders AND/OR groups
@@ -133,7 +210,6 @@ function FilterGroup({
   onUpdate,
   onRemove,
   depth,
-  config,
 }: FilterNodeProps & { filter: InferenceFilter & { type: "and" | "or" } }) {
   const handleToggleOperator = () => {
     const newOperator = filter.type === "and" ? "or" : "and";
@@ -237,14 +313,13 @@ function FilterGroup({
                 onUpdate={(newChild) => handleUpdateChild(index, newChild)}
                 onRemove={() => handleRemoveChild(index)}
                 depth={depth + 1}
-                config={config}
               />
             ))}
           </div>
         )}
 
         <div className="flex items-center gap-2">
-          <MetricSelectorPopover onSelect={handleAddMetric} config={config} />
+          <MetricSelectorPopover onSelect={handleAddMetric} />
           <AddButton label="Tag" onClick={handleAddTag} />
           {canAddGroup ? (
             <>
@@ -261,6 +336,7 @@ function FilterGroup({
                       variant="outline"
                       size="sm"
                       disabled
+                      aria-label={`Cannot add AND group: maximum nesting depth of ${MAX_NESTING_DEPTH} levels reached`}
                       className="cursor-not-allowed"
                     >
                       <Plus className="text-fg-tertiary h-4 w-4" />
@@ -271,6 +347,7 @@ function FilterGroup({
                       variant="outline"
                       size="sm"
                       disabled
+                      aria-label={`Cannot add OR group: maximum nesting depth of ${MAX_NESTING_DEPTH} levels reached`}
                       className="cursor-not-allowed"
                     >
                       <Plus className="text-fg-tertiary h-4 w-4" />
@@ -298,8 +375,9 @@ function FilterNodeRenderer({
   onUpdate,
   onRemove,
   depth,
-  config,
 }: FilterNodeProps) {
+  const config = useConfig();
+
   // Handle AND/OR groups
   if (filter.type === "and" || filter.type === "or") {
     return (
@@ -308,21 +386,19 @@ function FilterNodeRenderer({
         onUpdate={onUpdate}
         onRemove={onRemove}
         depth={depth}
-        config={config}
       />
     );
   }
 
-  // Handle leaf filters
-  const handleUpdateFilter = (updates: Record<string, unknown>) => {
-    onUpdate({ ...filter, ...updates } as InferenceFilter);
-  };
-
+  // Handle leaf filters with type-safe update functions
   if (filter.type === "tag") {
+    const handleUpdateTag = (updates: TagFilterUpdates) => {
+      onUpdate({ ...filter, ...updates });
+    };
     return (
       <TagFilterRow
         filter={filter}
-        onUpdate={handleUpdateFilter}
+        onUpdate={handleUpdateTag}
         onRemove={onRemove}
       />
     );
@@ -331,11 +407,14 @@ function FilterNodeRenderer({
   if (filter.type === "float_metric") {
     const metricConfig = config.metrics[filter.metric_name];
     if (!metricConfig) return null;
+    const handleUpdateFloatMetric = (updates: FloatMetricFilterUpdates) => {
+      onUpdate({ ...filter, ...updates });
+    };
     return (
       <FloatMetricFilterRow
         filter={filter}
         metricConfig={metricConfig}
-        onUpdate={handleUpdateFilter}
+        onUpdate={handleUpdateFloatMetric}
         onRemove={onRemove}
       />
     );
@@ -344,11 +423,14 @@ function FilterNodeRenderer({
   if (filter.type === "boolean_metric") {
     const metricConfig = config.metrics[filter.metric_name];
     if (!metricConfig) return null;
+    const handleUpdateBooleanMetric = (updates: BooleanMetricFilterUpdates) => {
+      onUpdate({ ...filter, ...updates });
+    };
     return (
       <BooleanMetricFilterRow
         filter={filter}
         metricConfig={metricConfig}
-        onUpdate={handleUpdateFilter}
+        onUpdate={handleUpdateBooleanMetric}
         onRemove={onRemove}
       />
     );
@@ -384,7 +466,6 @@ export const InferenceQueryBuilder = forwardRef<
   { inferenceFilter, setInferenceFilter }: InferenceQueryBuilderProps,
   ref,
 ) {
-  const config = useConfig();
   const form = useForm<InferenceQueryBuilderFormValues>({
     defaultValues: {
       function: "",
@@ -446,12 +527,11 @@ export const InferenceQueryBuilder = forwardRef<
               onUpdate={setInferenceFilter}
               onRemove={() => setInferenceFilter(undefined)}
               depth={0}
-              config={config}
             />
           </div>
         ) : (
           <div className="flex gap-2">
-            <MetricSelectorPopover onSelect={handleAddMetric} config={config} />
+            <MetricSelectorPopover onSelect={handleAddMetric} />
             <AddButton label="Tag" onClick={handleAddTag} />
             <AddButton label="And" onClick={handleAddAnd} />
             <AddButton label="Or" onClick={handleAddOr} />
@@ -491,13 +571,10 @@ function FunctionFormField({ control }: FunctionFormFieldProps) {
 
 interface MetricSelectorPopoverProps {
   onSelect: (metricName: string, metricConfig: MetricConfig) => void;
-  config: ReturnType<typeof useConfig>;
 }
 
-function MetricSelectorPopover({
-  onSelect,
-  config,
-}: MetricSelectorPopoverProps) {
+function MetricSelectorPopover({ onSelect }: MetricSelectorPopoverProps) {
+  const config = useConfig();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const metrics = config.metrics;
@@ -590,17 +667,15 @@ function DeleteRowButton({ onRemove }: DeleteRowButtonProps) {
 
 interface TagFilterRowProps {
   filter: InferenceFilter & { type: "tag" };
-  onUpdate: (updates: {
-    key?: string;
-    value?: string;
-    comparison_operator?: "=" | "!=";
-  }) => void;
+  onUpdate: (updates: TagFilterUpdates) => void;
   onRemove: () => void;
 }
 
 function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
   const [keyError, setKeyError] = useState<string>();
   const [valueError, setValueError] = useState<string>();
+  const keyErrorId = useId();
+  const valueErrorId = useId();
 
   return (
     <div>
@@ -609,6 +684,9 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
           <Input
             className={`font-mono ${keyError ? "border-red-500" : ""}`}
             placeholder="tag"
+            aria-label="Tag key"
+            aria-invalid={!!keyError}
+            aria-describedby={keyError ? keyErrorId : undefined}
             value={filter.key}
             onChange={(e) => {
               onUpdate({ key: e.target.value });
@@ -617,12 +695,16 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
             onBlur={() => {
               const result = FieldValidation.tagKey.safeParse(filter.key);
               if (!result.success) {
-                setKeyError(result.error.errors[0].message);
+                setKeyError(result.error.errors[0]?.message ?? "Invalid input");
               }
             }}
           />
           {keyError && (
-            <p className="text-destructive absolute top-1 right-2 text-xs">
+            <p
+              id={keyErrorId}
+              role="alert"
+              className="text-destructive absolute top-1 right-2 text-xs"
+            >
               {keyError}
             </p>
           )}
@@ -630,19 +712,24 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
 
         <div className="w-14">
           <Select
-            onValueChange={(value) =>
-              onUpdate({
-                comparison_operator: value as "=" | "!=",
-              })
-            }
+            onValueChange={(value) => {
+              if (TAG_OPERATORS.includes(value as TagComparisonOperator)) {
+                onUpdate({
+                  comparison_operator: value as TagComparisonOperator,
+                });
+              }
+            }}
             value={filter.comparison_operator}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Tag comparison operator">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="=">=</SelectItem>
-              <SelectItem value="!=">≠</SelectItem>
+              {TAG_OPERATORS.map((op) => (
+                <SelectItem key={op} value={op}>
+                  {TAG_OPERATOR_LABELS[op]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -651,6 +738,9 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
           <Input
             className={`font-mono ${valueError ? "border-red-500" : ""}`}
             placeholder="value"
+            aria-label="Tag value"
+            aria-invalid={!!valueError}
+            aria-describedby={valueError ? valueErrorId : undefined}
             value={filter.value}
             onChange={(e) => {
               onUpdate({ value: e.target.value });
@@ -659,12 +749,18 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
             onBlur={() => {
               const result = FieldValidation.tagValue.safeParse(filter.value);
               if (!result.success) {
-                setValueError(result.error.errors[0].message);
+                setValueError(
+                  result.error.errors[0]?.message ?? "Invalid input",
+                );
               }
             }}
           />
           {valueError && (
-            <p className="text-destructive absolute top-1 right-2 text-xs">
+            <p
+              id={valueErrorId}
+              role="alert"
+              className="text-destructive absolute top-1 right-2 text-xs"
+            >
               {valueError}
             </p>
           )}
@@ -679,10 +775,7 @@ function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
 interface FloatMetricFilterRowProps {
   filter: InferenceFilter & { type: "float_metric" };
   metricConfig: MetricConfig;
-  onUpdate: (updates: {
-    value?: number;
-    comparison_operator?: "<" | "<=" | "=" | ">" | ">=" | "!=";
-  }) => void;
+  onUpdate: (updates: FloatMetricFilterUpdates) => void;
   onRemove: () => void;
 }
 
@@ -694,6 +787,7 @@ function FloatMetricFilterRow({
 }: FloatMetricFilterRowProps) {
   const [inputValue, setInputValue] = useState(filter.value.toString());
   const [error, setError] = useState<string>();
+  const errorId = useId();
 
   return (
     <div>
@@ -707,29 +801,24 @@ function FloatMetricFilterRow({
 
         <div className="w-14">
           <Select
-            onValueChange={(value) =>
-              onUpdate({
-                comparison_operator: value as
-                  | "<"
-                  | "<="
-                  | "="
-                  | ">"
-                  | ">="
-                  | "!=",
-              })
-            }
+            onValueChange={(value) => {
+              if (FLOAT_OPERATORS.includes(value as FloatComparisonOperator)) {
+                onUpdate({
+                  comparison_operator: value as FloatComparisonOperator,
+                });
+              }
+            }}
             value={filter.comparison_operator}
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Metric comparison operator">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="<">&lt;</SelectItem>
-              <SelectItem value="<=">&le;</SelectItem>
-              <SelectItem value="=">=</SelectItem>
-              <SelectItem value=">">&gt;</SelectItem>
-              <SelectItem value=">=">&ge;</SelectItem>
-              <SelectItem value="!=">≠</SelectItem>
+              {FLOAT_OPERATORS.map((op) => (
+                <SelectItem key={op} value={op}>
+                  {FLOAT_OPERATOR_LABELS[op]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -739,6 +828,9 @@ function FloatMetricFilterRow({
             type="number"
             step="any"
             placeholder="0"
+            aria-label="Metric threshold value"
+            aria-invalid={!!error}
+            aria-describedby={error ? errorId : undefined}
             value={inputValue}
             onChange={(e) => {
               const val = e.target.value;
@@ -754,13 +846,17 @@ function FloatMetricFilterRow({
               const result = FieldValidation.floatValue.safeParse(inputValue);
 
               if (!result.success) {
-                setError(result.error.errors[0].message);
+                setError(result.error.errors[0]?.message ?? "Invalid input");
               }
             }}
             className={error ? "border-red-500" : ""}
           />
           {error && (
-            <p className="text-destructive absolute top-1 right-2 text-xs">
+            <p
+              id={errorId}
+              role="alert"
+              className="text-destructive absolute top-1 right-2 text-xs"
+            >
               {error}
             </p>
           )}
@@ -775,7 +871,7 @@ function FloatMetricFilterRow({
 interface BooleanMetricFilterRowProps {
   filter: InferenceFilter & { type: "boolean_metric" };
   metricConfig: MetricConfig;
-  onUpdate: (updates: { value?: boolean }) => void;
+  onUpdate: (updates: BooleanMetricFilterUpdates) => void;
   onRemove: () => void;
 }
 
