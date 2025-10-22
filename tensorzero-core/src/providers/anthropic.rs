@@ -37,8 +37,8 @@ use crate::providers::helpers::{
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
+use super::helpers::convert_stream_error;
 use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_type};
-use super::openai::convert_stream_error;
 
 lazy_static! {
     static ref ANTHROPIC_DEFAULT_BASE_URL: Url = {

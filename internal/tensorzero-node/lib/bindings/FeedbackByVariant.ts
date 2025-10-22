@@ -3,6 +3,6 @@
 export type FeedbackByVariant = {
   variant_name: string;
   mean: number;
-  variance: number;
+  variance: number | null;
   count: bigint;
 };

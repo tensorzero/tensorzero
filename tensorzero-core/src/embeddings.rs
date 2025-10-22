@@ -358,7 +358,7 @@ pub struct EmbeddingProviderResponse {
 
 impl RateLimitedResponse for EmbeddingProviderResponse {
     fn resource_usage(&self) -> RateLimitResourceUsage {
-        RateLimitResourceUsage {
+        RateLimitResourceUsage::Exact {
             model_inferences: 1,
             tokens: self.usage.total_tokens() as u64,
         }

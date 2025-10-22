@@ -654,6 +654,13 @@ async fn wrap_provider_stream(
                     Err(e) => {
                         tracing::warn!("Skipping cache write for stream response due to error in stream: {e}");
                         errored = true;
+                        // If we see a `FatalStreamError`, then yield it and stop processing the stream,
+                        // to avoid holding open a stream that might never produce more chunks.
+                        // We'll still compute rate-limiting usage using all of the chunks that we've seen so far.
+                        if let ErrorDetails::FatalStreamError { .. } = e.get_details() {
+                            yield chunk;
+                            break;
+                        }
                     }
                 }
             }
@@ -662,11 +669,20 @@ async fn wrap_provider_stream(
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, RateLimitResourceUsage {
+            let usage = if errored {
+                RateLimitResourceUsage::UnderEstimate {
                     model_inferences: 1,
                     tokens: total_usage.total_tokens() as u64,
-                })
+                }
+             } else {
+                RateLimitResourceUsage::Exact {
+                    model_inferences: 1,
+                    tokens: total_usage.total_tokens() as u64,
+                }
+            };
+
+            if let Err(e) = ticket_borrow
+                .return_tickets(&postgres_connection_info, usage)
                 .await
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);

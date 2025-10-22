@@ -60,7 +60,7 @@ pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageConten
 
 pub use tensorzero_core::cache::CacheParamsOptions;
 pub use tensorzero_core::db::clickhouse::query_builder::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilterTreeNode,
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
     InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagFilter,
     TimeComparisonOperator, TimeFilter,
 };

@@ -30,7 +30,8 @@ use crate::model::{Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use crate::providers::helpers::{
-    inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
+    convert_stream_error, inject_extra_request_data_and_send,
+    inject_extra_request_data_and_send_eventsource,
 };
 
 const PROVIDER_NAME: &str = "Groq";
@@ -287,20 +288,6 @@ impl InferenceProvider for GroqProvider {
         }
         .into())
     }
-}
-pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
-    let message = e.to_string();
-    let mut raw_response = None;
-    if let reqwest_eventsource::Error::InvalidStatusCode(_, resp) = e {
-        raw_response = resp.text().await.ok();
-    }
-    ErrorDetails::InferenceServer {
-        message,
-        raw_request: None,
-        raw_response,
-        provider_type,
-    }
-    .into()
 }
 
 pub fn stream_groq(

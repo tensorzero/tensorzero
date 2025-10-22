@@ -124,7 +124,7 @@ export * from "./HyperbolicProviderTypeConfig";
 export * from "./ImplicitToolConfig";
 export * from "./InferenceEvaluationConfig";
 export * from "./InferenceExtraHeader";
-export * from "./InferenceFilterTreeNode";
+export * from "./InferenceFilter";
 export * from "./InferenceOutputSource";
 export * from "./InferenceParams";
 export * from "./InferenceResponse";
