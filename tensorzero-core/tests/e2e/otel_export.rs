@@ -301,7 +301,6 @@ async fn test_otel_export_custom_attribute_override() {
             "tensorzero-otlp-traces-extra-attribute-function_name",
             "\"my-overridden-function-name\"",
         )
-        .json(&payload)
         .send()
         .await
         .unwrap();
