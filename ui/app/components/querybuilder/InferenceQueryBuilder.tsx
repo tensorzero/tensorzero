@@ -1,25 +1,18 @@
-import { useForm } from "react-hook-form";
+import { useForm, useController } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form } from "~/components/ui/form";
-import type { InferenceFilter } from "tensorzero-node";
-import InferenceFilterBuilder, {
-  validateInferenceFilter,
-} from "./InferenceFilterBuilder";
+import InferenceFilterBuilder from "./InferenceFilterBuilder";
 import FunctionFormField from "./FunctionFormField";
+import { inferenceFilterSchema } from "./inference-filter-schema";
 
-const InferenceQueryBuilderSchema = z
-  .object({
-    function: z.string(),
-    inferenceFilter: z.custom<InferenceFilter | undefined>().optional(),
-  })
-  .refine(
-    (data) => validateInferenceFilter(data.inferenceFilter),
-    "Invalid filter configuration",
-  );
+const InferenceQueryBuilderFormValuesSchema = z.object({
+  function: z.string().min(1, "Function is required"),
+  inferenceFilter: inferenceFilterSchema.optional(),
+});
 
 export type InferenceQueryBuilderFormValues = z.infer<
-  typeof InferenceQueryBuilderSchema
+  typeof InferenceQueryBuilderFormValuesSchema
 >;
 
 interface InferenceQueryBuilderProps {
@@ -37,7 +30,7 @@ export default function InferenceQueryBuilder({
       inferenceFilter: undefined,
       ...defaultValues,
     },
-    resolver: zodResolver(InferenceQueryBuilderSchema),
+    resolver: zodResolver(InferenceQueryBuilderFormValuesSchema),
     mode: "onChange",
   });
 
@@ -45,18 +38,20 @@ export default function InferenceQueryBuilder({
     onSubmit?.(values);
   };
 
+  const {
+    field: { value: inferenceFilter, onChange: setInferenceFilter },
+  } = useController({
+    name: "inferenceFilter",
+    control: form.control,
+  });
+
   return (
     <Form {...form}>
       <form className="space-y-6" onSubmit={form.handleSubmit(handleSubmit)}>
         <FunctionFormField control={form.control} />
         <InferenceFilterBuilder
-          inferenceFilter={form.watch("inferenceFilter")}
-          setInferenceFilter={(filter) =>
-            form.setValue("inferenceFilter", filter, {
-              shouldValidate: true,
-              shouldDirty: true,
-            })
-          }
+          inferenceFilter={inferenceFilter}
+          setInferenceFilter={setInferenceFilter}
         />
       </form>
     </Form>
