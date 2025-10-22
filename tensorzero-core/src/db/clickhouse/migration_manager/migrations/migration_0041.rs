@@ -33,6 +33,7 @@ impl Migration for Migration0041<'_> {
         let tables_to_check = ["ChatInferenceDatapoint", "ChatInference"];
         let columns_to_add = [
             "dynamic_tools",
+            "dynamic_provider_tools",
             "allowed_tools",
             "tool_choice",
             "parallel_tool_calls",
@@ -50,7 +51,13 @@ impl Migration for Migration0041<'_> {
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS dynamic_tools Nullable(Array(String))"
+                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS dynamic_tools Array(String)"
+                    .to_string(),
+            )
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(
+                r"ALTER TABLE ChatInference ADD COLUMN IF NOT EXISTS dynamic_provider_tools Array(String)"
                     .to_string(),
             )
             .await?;
@@ -74,7 +81,13 @@ impl Migration for Migration0041<'_> {
             .await?;
         self.clickhouse
             .run_query_synchronous_no_params(
-                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS dynamic_tools Nullable(Array(String))"
+                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS dynamic_tools Array(String)"
+                    .to_string(),
+            )
+            .await?;
+        self.clickhouse
+            .run_query_synchronous_no_params(
+                r"ALTER TABLE ChatInferenceDatapoint ADD COLUMN IF NOT EXISTS dynamic_provider_tools Array(String)"
                     .to_string(),
             )
             .await?;
