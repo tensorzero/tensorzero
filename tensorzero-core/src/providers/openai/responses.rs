@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use crate::inference::types::{ProviderInferenceResponseStreamInner, ThoughtSummaryBlock};
-use crate::providers::openai::convert_stream_error;
+use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
 use futures::{future::try_join_all, Stream};

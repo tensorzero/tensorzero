@@ -1103,7 +1103,7 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        Ok(RateLimitResourceUsage {
+        Ok(RateLimitResourceUsage::Exact {
             model_inferences: 1,
             tokens: self.usage.total_tokens() as u64,
         })
