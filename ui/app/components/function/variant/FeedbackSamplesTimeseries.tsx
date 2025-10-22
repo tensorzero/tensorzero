@@ -6,7 +6,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  LineChart,
+  ComposedChart,
   Line,
   XAxis,
   YAxis,
@@ -56,12 +56,40 @@ export function FeedbackSamplesTimeseries({
     timestamp: new Date(row.date).getTime(),
   }));
 
-  // Filter to only include data points where at least one variant has a non-null value
-  const meanChartData = meanDataWithTimestamps.filter((row) =>
-    variantNames.some(
-      (variant) =>
-        row[variant as keyof typeof row] !== null &&
-        row[variant as keyof typeof row] !== undefined,
+  const getMeanValue = (
+    row: (typeof meanDataWithTimestamps)[number],
+    variant: string,
+  ): number | null | undefined =>
+    row[variant as keyof typeof row] as number | null | undefined;
+
+  const getLowerValue = (
+    row: (typeof meanDataWithTimestamps)[number],
+    variant: string,
+  ): number | null | undefined =>
+    row[`${variant}_cs_lower` as keyof typeof row] as number | null | undefined;
+
+  const getUpperValue = (
+    row: (typeof meanDataWithTimestamps)[number],
+    variant: string,
+  ): number | null | undefined =>
+    row[`${variant}_cs_upper` as keyof typeof row] as number | null | undefined;
+
+  const meanDataWithValues = meanDataWithTimestamps.filter((row) =>
+    variantNames.some((variant) => getMeanValue(row, variant) !== null),
+  );
+
+  const meanChartData =
+    meanDataWithValues.length > 0 ? meanDataWithValues : meanDataWithTimestamps;
+
+  const variantsWithMeanData = variantNames.filter((variant) =>
+    meanChartData.some((row) => getMeanValue(row, variant) !== null),
+  );
+
+  const variantsWithConfidence = variantsWithMeanData.filter((variant) =>
+    meanChartData.some(
+      (row) =>
+        getLowerValue(row, variant) !== null &&
+        getUpperValue(row, variant) !== null,
     ),
   );
 
@@ -76,6 +104,33 @@ export function FeedbackSamplesTimeseries({
       }),
       {},
     );
+
+  const meanChartConfig: Record<string, { label: string; color: string }> =
+    variantsWithMeanData.reduce(
+      (config, variantName) => ({
+        ...config,
+        [variantName]: chartConfig[variantName],
+      }),
+      {},
+    );
+
+  const meanContainerConfig =
+    Object.keys(meanChartConfig).length > 0 ? meanChartConfig : chartConfig;
+
+  const meanLegendPayload =
+    variantsWithMeanData.length > 0
+      ? variantsWithMeanData.map((variantName) => ({
+          value: variantName,
+          type: "line" as const,
+          color: chartConfig[variantName].color,
+          dataKey: variantName,
+        }))
+      : variantNames.map((variantName) => ({
+          value: variantName,
+          type: "line" as const,
+          color: chartConfig[variantName].color,
+          dataKey: variantName,
+        }));
 
   // Format x-axis labels based on time granularity
   const formatXAxisTick = (value: number) => {
@@ -219,14 +274,14 @@ export function FeedbackSamplesTimeseries({
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>Mean Reward Confidence Sequences</CardTitle>
+          <CardTitle>Mean Reward Over Time</CardTitle>
           <CardDescription>
-            Showing per-variant mean reward estimates with confidence sequences.
+            Per-variant mean rewards, with confidence sequences when available.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="h-80 w-full">
-            <LineChart accessibilityLayer data={meanChartData}>
+          <ChartContainer config={meanContainerConfig} className="h-80 w-full">
+            <ComposedChart accessibilityLayer data={meanChartData}>
               <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="timestamp"
@@ -263,11 +318,25 @@ export function FeedbackSamplesTimeseries({
 
                   const rows: ReactNode[] = [];
 
-                  variantNames.forEach((variantName) => {
+                  variantsWithMeanData.forEach((variantName) => {
                     const mean = dataPoint[variantName];
                     if (mean === null || mean === undefined) {
                       return;
                     }
+
+                    const lower = dataPoint[`${variantName}_cs_lower`] as
+                      | number
+                      | null
+                      | undefined;
+                    const upper = dataPoint[`${variantName}_cs_upper`] as
+                      | number
+                      | null
+                      | undefined;
+                    const hasBounds =
+                      lower !== null &&
+                      lower !== undefined &&
+                      upper !== null &&
+                      upper !== undefined;
 
                     rows.push(
                       <div
@@ -284,13 +353,17 @@ export function FeedbackSamplesTimeseries({
                           <span className="text-muted-foreground font-mono text-xs">
                             {variantName}
                           </span>
-                          {mean !== null ? (
-                            <span className="text-foreground font-mono font-medium tabular-nums">
-                              {formatDetailedNumber(mean)}
+                          <span className="text-foreground font-mono font-medium tabular-nums">
+                            {formatDetailedNumber(mean)}
+                          </span>
+                          {hasBounds ? (
+                            <span className="text-muted-foreground font-mono text-[10px] tabular-nums">
+                              {formatDetailedNumber(lower as number)} –{" "}
+                              {formatDetailedNumber(upper as number)}
                             </span>
                           ) : (
                             <span className="text-muted-foreground text-[10px]">
-                              Mean pending
+                              Confidence pending
                             </span>
                           )}
                         </div>
@@ -311,21 +384,64 @@ export function FeedbackSamplesTimeseries({
                 }}
               />
               <ChartLegend
+                payload={meanLegendPayload}
                 content={<ChartLegendContent className="font-mono text-xs" />}
               />
-              {variantNames.map((variantName) => (
-                <Line
-                  key={variantName}
-                  type="monotone"
-                  dataKey={variantName}
-                  name={variantName}
-                  stroke={chartConfig[variantName].color}
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              ))}
-            </LineChart>
+              {variantsWithMeanData.flatMap((variantName) => {
+                const color = chartConfig[variantName].color;
+                const meanKey = variantName;
+                const lowerKey = `${variantName}_cs_lower`;
+                const widthKey = `${variantName}_cs_width`;
+                const hasConfidence =
+                  variantsWithConfidence.includes(variantName);
+
+                const elements: ReactNode[] = [];
+
+                if (hasConfidence) {
+                  elements.push(
+                    <Area
+                      key={`${variantName}-cs-lower`}
+                      type="monotone"
+                      dataKey={lowerKey}
+                      stackId={variantName}
+                      stroke="transparent"
+                      fill="transparent"
+                      isAnimationActive={false}
+                      connectNulls
+                    />,
+                    <Area
+                      key={`${variantName}-cs-band`}
+                      type="monotone"
+                      dataKey={widthKey}
+                      stackId={variantName}
+                      stroke="transparent"
+                      fill={color}
+                      fillOpacity={0.25}
+                      isAnimationActive={false}
+                      connectNulls
+                      legendType="none"
+                    />,
+                  );
+                }
+
+                elements.push(
+                  <Line
+                    key={`${variantName}-mean`}
+                    type="monotone"
+                    dataKey={meanKey}
+                    name={variantName}
+                    stroke={color}
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 4 }}
+                    isAnimationActive={false}
+                    connectNulls
+                  />,
+                );
+
+                return elements;
+              })}
+            </ComposedChart>
           </ChartContainer>
         </CardContent>
       </Card>
@@ -336,6 +452,8 @@ export function FeedbackSamplesTimeseries({
 type FeedbackTimeseriesPointByVariant = {
   count: number;
   mean: number | null;
+  cs_lower: number | null;
+  cs_upper: number | null;
 };
 
 export type FeedbackCountsTimeseriesData = {
@@ -367,7 +485,7 @@ export function transformFeedbackTimeseries(
   const groupedByDate = parsedRows.reduce<
     Record<string, Record<string, FeedbackTimeseriesPointByVariant>>
   >((acc, row) => {
-    const { period_end, variant_name, count, mean } = row;
+    const { period_end, variant_name, count, mean, cs_lower, cs_upper } = row;
 
     if (!acc[period_end]) {
       acc[period_end] = {};
@@ -376,12 +494,24 @@ export function transformFeedbackTimeseries(
     const sanitizedCount = Number(count);
     const sanitizedMean =
       mean === null || mean === undefined ? null : Number(mean);
+    const sanitizedLower =
+      cs_lower === null || cs_lower === undefined ? null : Number(cs_lower);
+    const sanitizedUpper =
+      cs_upper === null || cs_upper === undefined ? null : Number(cs_upper);
 
     acc[period_end][variant_name] = {
       count: Number.isFinite(sanitizedCount) ? sanitizedCount : 0,
       mean:
         sanitizedMean !== null && Number.isFinite(sanitizedMean)
           ? sanitizedMean
+          : null,
+      cs_lower:
+        sanitizedLower !== null && Number.isFinite(sanitizedLower)
+          ? sanitizedLower
+          : null,
+      cs_upper:
+        sanitizedUpper !== null && Number.isFinite(sanitizedUpper)
+          ? sanitizedUpper
           : null,
     };
     return acc;
@@ -510,9 +640,13 @@ export function transformFeedbackTimeseries(
   // Initialize forward-filled stats
   const lastKnownCounts: Record<string, number> = {};
   const lastKnownMeans: Record<string, number | null> = {};
+  const lastKnownLower: Record<string, number | null> = {};
+  const lastKnownUpper: Record<string, number | null> = {};
   variantNames.forEach((variant) => {
     lastKnownCounts[variant] = 0;
     lastKnownMeans[variant] = null;
+    lastKnownLower[variant] = null;
+    lastKnownUpper[variant] = null;
   });
 
   const countsData: FeedbackCountsTimeseriesData[] = [];
@@ -533,13 +667,32 @@ export function transformFeedbackTimeseries(
         if (periodData.mean !== null) {
           lastKnownMeans[variant] = periodData.mean;
         }
+
+        if (
+          periodData.cs_lower !== null &&
+          periodData.cs_upper !== null &&
+          Number.isFinite(periodData.cs_lower) &&
+          Number.isFinite(periodData.cs_upper)
+        ) {
+          lastKnownLower[variant] = periodData.cs_lower;
+          lastKnownUpper[variant] = periodData.cs_upper;
+        } else {
+          lastKnownLower[variant] = null;
+          lastKnownUpper[variant] = null;
+        }
       }
 
       countsRow[variant] = lastKnownCounts[variant];
 
       const mean = lastKnownMeans[variant];
+      const lower = lastKnownLower[variant];
+      const upper = lastKnownUpper[variant];
+      const width = lower !== null && upper !== null ? upper - lower : null;
 
       meansRow[variant] = mean ?? null;
+      meansRow[`${variant}_cs_lower`] = lower ?? null;
+      meansRow[`${variant}_cs_upper`] = upper ?? null;
+      meansRow[`${variant}_cs_width`] = width ?? null;
     });
 
     countsData.push(countsRow);
