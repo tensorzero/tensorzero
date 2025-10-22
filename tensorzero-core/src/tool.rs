@@ -176,9 +176,13 @@ pub struct AllowedTools {
 #[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
 pub enum AllowedToolsChoice {
+    // If `allowed_tools` is not explicitly passed, we set the function tools
+    // by default and add any dynamic tools
     #[default]
     FunctionDefault,
+    // If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools
     DynamicAllowedTools,
+    // We may add a third behavior if we deprecate the current default.
 }
 
 /// Contains all information required to tell an LLM what tools it can call
