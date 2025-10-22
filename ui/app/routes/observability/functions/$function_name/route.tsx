@@ -184,7 +184,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             Number(experimentationConfig.min_samples_per_variant),
         );
 
-        const B = banditVariants.length;
+        const num_bandit_variants = banditVariants.length;
 
         // Initialize probabilities
         optimal_probabilities = {};
@@ -195,7 +195,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         }
 
         // Compute and scale optimal probabilities for bandit variants
-        if (B > 0) {
+        if (num_bandit_variants > 0) {
           const banditFeedback = feedback.filter((f) =>
             banditVariants.includes(f.variant_name),
           );
@@ -210,7 +210,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             );
 
             // Scale bandit probabilities by B/K
-            const scale = B / K;
+            const scale = num_bandit_variants / K;
             for (const [variant, prob] of Object.entries(banditOptimalProbs)) {
               optimal_probabilities[variant] = prob * scale;
             }
