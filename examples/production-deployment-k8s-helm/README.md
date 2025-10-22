@@ -79,7 +79,7 @@ The following table lists the configurable parameters of the chart and their def
 | `gateway.ingress.enabled`             | Enable gateway ingress                                       | `true`                          |
 | `gateway.ingress.className`           | Gateway ingress class                                        | `traefik-ingress-controller-v3` |
 | `gateway.ingress.hosts`               | Gateway ingress hosts                                        | `tensorzero-gateway.local`      |
-| `gateway.ingress.createLegacyIngress` | Create legacy ingress for zero-downtime upgrades (see below) | `false`                         |
+| `gateway.ingress.createLegacyIngress` | Override automatic legacy ingress detection (see below)      | auto-detect                     |
 
 ### UI Configuration
 
@@ -194,15 +194,23 @@ helm install tensorzero ./tensorzero -n tensorzero -f custom-values.yaml
 
 ### Legacy Ingress Migration
 
-The `gateway.ingress.createLegacyIngress` setting enables zero-downtime upgrades for users migrating from older chart versions that used a different ingress naming convention.
+The chart **automatically detects** if a legacy gateway ingress exists in your cluster and maintains it for backward compatibility. This enables zero-downtime upgrades without manual configuration.
 
-- **New installations**: Leave `createLegacyIngress: false` (default) to avoid ingress conflicts
-- **Upgrading from older versions**: If you previously had a gateway ingress, temporarily set `createLegacyIngress: true` to create both the legacy and new ingress. Then:
-  1. Migrate your DNS/load balancers to point to the new ingress name (`<release-name>-gateway`)
-  2. Set `createLegacyIngress: false` and upgrade again
-  3. Manually delete the legacy ingress: `kubectl delete ingress <release-name> -n <namespace>`
+**How it works:**
+- **New installations**: No legacy ingress is created (nothing to detect) → no conflicts
+- **Existing installations**: Legacy ingress is automatically detected and maintained → zero-downtime upgrades
+- **After migration**: Once you manually delete the legacy ingress, it won't be recreated
 
-Note: The legacy ingress includes `helm.sh/resource-policy: keep` to prevent accidental deletion during upgrades.
+**Migration steps:**
+1. Deploy the chart (legacy ingress is automatically maintained if it exists)
+2. Migrate your DNS/load balancers to point to the new ingress: `<release-name>-gateway`
+3. Manually delete the legacy ingress: `kubectl delete ingress <release-name> -n <namespace>`
+4. Future upgrades will no longer create the legacy ingress
+
+**Manual override (optional):**
+If you need to override the automatic behavior, set `gateway.ingress.createLegacyIngress` to `true` or `false` explicitly in your values file.
+
+**Note:** The `lookup` function used for auto-detection only works during `helm upgrade`. During `helm template` or initial `helm install`, the legacy ingress won't be created (which is the correct behavior for new installations).
 
 ## Calling the Gateway Endpoint
 

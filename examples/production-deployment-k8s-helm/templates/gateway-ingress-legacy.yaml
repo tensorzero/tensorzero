@@ -1,9 +1,17 @@
-{{- if and .Values.gateway.ingress.enabled .Values.gateway.ingress.createLegacyIngress -}}
+{{- if .Values.gateway.ingress.enabled -}}
 {{- $fullName := include "tensorzero.fullname" . -}}
 {{- $svcPort := .Values.gateway.service.port -}}
-# ⚠️  DEPRECATION WARNING: Legacy gateway ingress is enabled and will be removed in a future version
+{{- $legacyIngress := lookup "networking.k8s.io/v1" "Ingress" .Release.Namespace $fullName -}}
+{{- $shouldCreateLegacy := false -}}
+{{- if hasKey .Values.gateway.ingress "createLegacyIngress" -}}
+  {{- $shouldCreateLegacy = .Values.gateway.ingress.createLegacyIngress -}}
+{{- else -}}
+  {{- $shouldCreateLegacy = not (empty $legacyIngress) -}}
+{{- end -}}
+{{- if $shouldCreateLegacy -}}
+# ⚠️  DEPRECATION WARNING: Legacy gateway ingress detected and maintained for backward compatibility
 # Please migrate to the new ingress name: {{ $fullName }}-gateway
-# Then set gateway.ingress.createLegacyIngress=false
+# After migration, manually delete this ingress: kubectl delete ingress {{ $fullName }} -n {{ .Release.Namespace }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -49,4 +57,5 @@ spec:
                   number: {{ $svcPort }}
           {{- end }}
     {{- end }}
+{{- end }}
 {{- end }}
