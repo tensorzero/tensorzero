@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import InferenceQueryBuilder from "./InferenceQueryBuilder";
+import InferenceQueryBuilder, {
+  type InferenceQueryBuilderFormValues,
+} from "./InferenceQueryBuilder";
 import { ConfigProvider } from "~/context/config";
-import type { FunctionConfig, Config, InferenceFilter } from "tensorzero-node";
+import type { FunctionConfig, Config } from "tensorzero-node";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { useArgs } from "storybook/preview-api";
 
@@ -10,36 +12,34 @@ const meta = {
   component: InferenceQueryBuilder,
   decorators: [
     (Story, context) => {
-      const { inferenceFilter } = context.args;
+      const { lastSubmittedValues } = context.args as {
+        lastSubmittedValues?: InferenceQueryBuilderFormValues;
+      };
       return (
         <>
           <div className="border-border w-2xl rounded border p-4">
             <Story />
           </div>
-          <div className="mt-4 w-2xl rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: InferenceFilter State
-              </h3>
+          {lastSubmittedValues && (
+            <div className="mt-4 w-2xl rounded border border-green-300 bg-green-50 p-4">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="font-semibold text-green-900">
+                  Last Submitted Form Values
+                </h3>
+              </div>
+              <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
+                {JSON.stringify(lastSubmittedValues, null, 2)}
+              </pre>
             </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter === undefined
-                ? "undefined"
-                : JSON.stringify(inferenceFilter, null, 2)}
-            </pre>
-          </div>
+          )}
         </>
       );
     },
   ],
-  args: {
-    // Dummy setInferenceFilter to satisfy TypeScript - will be overridden in render
-    setInferenceFilter: () => {},
-  },
   parameters: {
     layout: "padded",
     controls: {
-      exclude: ["inferenceFilter", "setInferenceFilter"],
+      exclude: ["onSubmit", "defaultValues"],
     },
   },
 } satisfies Meta<typeof InferenceQueryBuilder>;
@@ -210,19 +210,75 @@ const mockConfig: Config = {
 export const Default: Story = {
   args: {},
   render: function DefaultStory(args) {
-    const [{ inferenceFilter }, updateArgs] = useArgs<{
-      inferenceFilter?: InferenceFilter;
+    const [, updateArgs] = useArgs<{
+      lastSubmittedValues?: InferenceQueryBuilderFormValues;
     }>();
 
     return (
       <ConfigProvider value={mockConfig}>
         <InferenceQueryBuilder
           {...args}
-          inferenceFilter={inferenceFilter}
-          setInferenceFilter={(filter) => {
-            const newFilter =
-              typeof filter === "function" ? filter(inferenceFilter) : filter;
-            updateArgs({ inferenceFilter: newFilter });
+          onSubmit={(values) => {
+            console.log("Form submitted:", values);
+            updateArgs({ lastSubmittedValues: values });
+          }}
+        />
+      </ConfigProvider>
+    );
+  },
+};
+
+export const Filled: Story = {
+  args: {
+    defaultValues: {
+      function: "chat-function",
+      inferenceFilter: {
+        type: "and",
+        children: [
+          {
+            type: "float_metric",
+            metric_name: "toxicity",
+            comparison_operator: ">",
+            value: 0.8,
+          },
+          {
+            type: "or",
+            children: [
+              {
+                type: "boolean_metric",
+                metric_name: "episode_success",
+                value: true,
+              },
+              {
+                type: "tag",
+                key: "user_id",
+                value: "12345",
+                comparison_operator: "=",
+              },
+            ],
+          },
+          {
+            type: "tag",
+            key: "device",
+            value: "mobile",
+            comparison_operator: "!=",
+          },
+        ],
+      },
+    },
+  },
+  render: function DefaultStory(args) {
+    const [, updateArgs] = useArgs<{
+      lastSubmittedValues?: InferenceQueryBuilderFormValues;
+    }>();
+
+    return (
+      <ConfigProvider value={mockConfig}>
+        <InferenceQueryBuilder
+          {...args}
+          onSubmit={(values) => {
+            console.log("Form submitted:", values);
+            updateArgs({ lastSubmittedValues: values });
           }}
         />
       </ConfigProvider>
@@ -233,8 +289,8 @@ export const Default: Story = {
 export const EmptyFunctions: Story = {
   args: {},
   render: function EmptyFunctionsStory(args) {
-    const [{ inferenceFilter }, updateArgs] = useArgs<{
-      inferenceFilter?: InferenceFilter;
+    const [, updateArgs] = useArgs<{
+      lastSubmittedValues?: InferenceQueryBuilderFormValues;
     }>();
 
     const emptyConfig: Config = {
@@ -246,11 +302,9 @@ export const EmptyFunctions: Story = {
       <ConfigProvider value={emptyConfig}>
         <InferenceQueryBuilder
           {...args}
-          inferenceFilter={inferenceFilter}
-          setInferenceFilter={(filter) => {
-            const newFilter =
-              typeof filter === "function" ? filter(inferenceFilter) : filter;
-            updateArgs({ inferenceFilter: newFilter });
+          onSubmit={(values) => {
+            console.log("Form submitted:", values);
+            updateArgs({ lastSubmittedValues: values });
           }}
         />
       </ConfigProvider>
