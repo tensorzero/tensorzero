@@ -428,6 +428,8 @@ pub async fn test_capture_simple_inference_spans(
             assert!(!model_provider_attr_map.contains_key("llm.token_count.total"));
         }
         OtlpTracesFormat::OpenInference => {
+            assert_eq!(root_attr_map["openinference.span.kind"], "CHAIN".into());
+            assert_eq!(variant_attr_map["openinference.span.kind"], "CHAIN".into());
             assert_eq!(
                 model_provider_attr_map["openinference.span.kind"],
                 "LLM".into()
