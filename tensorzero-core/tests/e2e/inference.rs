@@ -16,12 +16,12 @@ use opentelemetry_sdk::trace::SpanData;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
-use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::inference::types::StoredInput;
+use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
     db::clickhouse::test_helpers::{
