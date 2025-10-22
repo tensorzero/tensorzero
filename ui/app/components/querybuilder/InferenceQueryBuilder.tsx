@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 import { Form } from "~/components/ui/form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
@@ -40,13 +40,272 @@ import {
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
 import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
 
-// Helper to extract child filters for rendering
-function getChildFilters(filter?: InferenceFilter): InferenceFilter[] {
-  if (!filter) return [];
+// Constants
+const MAX_NESTING_DEPTH = 3;
+
+// Interfaces for recursive components
+interface FilterNodeProps {
+  filter: InferenceFilter;
+  onUpdate: (newFilter: InferenceFilter) => void;
+  onRemove: () => void;
+  depth: number;
+  config: ReturnType<typeof useConfig>;
+}
+
+// FilterGroup: Renders AND/OR groups
+function FilterGroup({
+  filter,
+  onUpdate,
+  onRemove,
+  depth,
+  config,
+}: FilterNodeProps & { filter: InferenceFilter & { type: "and" | "or" } }) {
+  const handleToggleOperator = () => {
+    const newOperator = filter.type === "and" ? "or" : "and";
+    onUpdate({
+      ...filter,
+      type: newOperator,
+    });
+  };
+
+  const handleAddChild = (newChild: InferenceFilter) => {
+    onUpdate({
+      ...filter,
+      children: [...filter.children, newChild],
+    });
+  };
+
+  const handleUpdateChild = (index: number, newChild: InferenceFilter) => {
+    const newChildren = [...filter.children];
+    newChildren[index] = newChild;
+    onUpdate({
+      ...filter,
+      children: newChildren,
+    });
+  };
+
+  const handleRemoveChild = (index: number) => {
+    const newChildren = filter.children.filter((_, i) => i !== index);
+
+    if (newChildren.length === 0) {
+      // Empty group - remove it
+      onRemove();
+    } else {
+      // Keep as group, even with single child
+      onUpdate({
+        ...filter,
+        children: newChildren,
+      });
+    }
+  };
+
+  const handleAddTag = () => {
+    handleAddChild({
+      type: "tag",
+      key: "",
+      value: "",
+      comparison_operator: "=",
+    });
+  };
+
+  const handleAddMetric = (metricName: string, metricConfig: MetricConfig) => {
+    if (metricConfig.type === "float") {
+      handleAddChild({
+        type: "float_metric",
+        metric_name: metricName,
+        value: 0,
+        comparison_operator: ">=",
+      });
+    } else if (metricConfig.type === "boolean") {
+      handleAddChild({
+        type: "boolean_metric",
+        metric_name: metricName,
+        value: true,
+      });
+    }
+  };
+
+  const handleAddAndGroup = () => {
+    handleAddChild({
+      type: "and",
+      children: [],
+    });
+  };
+
+  const handleAddOrGroup = () => {
+    handleAddChild({
+      type: "or",
+      children: [],
+    });
+  };
+
+  const canAddGroup = depth < MAX_NESTING_DEPTH;
+
+  return (
+    <div className="relative">
+      {filter.children.length > -1 && (
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleToggleOperator}
+                className="bg-background hover:text-fg-secondary absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer px-2 text-sm font-semibold transition-colors"
+              >
+                {filter.type.toUpperCase()}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              <span className="text-xs">
+                Toggle to {filter.type === "and" ? "OR" : "AND"}
+              </span>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+      <div className="border-border space-y-3 border-l-2 pl-6">
+        {filter.children.length === 0 ? (
+          <div className="text-fg-tertiary py-2 text-sm italic">
+            This group is empty. Please add a filter below.
+          </div>
+        ) : (
+          filter.children.map((child, index) => (
+            <FilterNodeRenderer
+              key={index}
+              filter={child}
+              onUpdate={(newChild) => handleUpdateChild(index, newChild)}
+              onRemove={() => handleRemoveChild(index)}
+              depth={depth + 1}
+              config={config}
+            />
+          ))
+        )}
+
+        <div className="flex items-center gap-2 pt-2">
+          <MetricSelectorPopover onSelect={handleAddMetric} config={config} />
+          <AddButton label="Tag" onClick={handleAddTag} />
+          {canAddGroup ? (
+            <>
+              <AddButton label="And" onClick={handleAddAndGroup} />
+              <AddButton label="Or" onClick={handleAddOrGroup} />
+            </>
+          ) : (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled
+                      className="cursor-not-allowed"
+                    >
+                      <Plus className="text-fg-tertiary h-4 w-4" />
+                      And
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled
+                      className="cursor-not-allowed"
+                    >
+                      <Plus className="text-fg-tertiary h-4 w-4" />
+                      Or
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <span className="text-xs">
+                    Maximum nesting depth reached ({MAX_NESTING_DEPTH} levels)
+                  </span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+
+          {depth > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRemove}
+            >
+              <X className="text-fg-tertiary h-4 w-4" />
+              Remove Group
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// FilterNodeRenderer: Recursive renderer for any InferenceFilter
+function FilterNodeRenderer({
+  filter,
+  onUpdate,
+  onRemove,
+  depth,
+  config,
+}: FilterNodeProps) {
+  // Handle AND/OR groups
   if (filter.type === "and" || filter.type === "or") {
-    return filter.children;
+    return (
+      <FilterGroup
+        filter={filter}
+        onUpdate={onUpdate}
+        onRemove={onRemove}
+        depth={depth}
+        config={config}
+      />
+    );
   }
-  return [filter]; // Single filter, treat as array of one
+
+  // Handle leaf filters
+  const handleUpdateFilter = (updates: Record<string, unknown>) => {
+    onUpdate({ ...filter, ...updates } as InferenceFilter);
+  };
+
+  if (filter.type === "tag") {
+    return (
+      <TagFilterRow
+        filter={filter}
+        onUpdate={handleUpdateFilter}
+        onRemove={onRemove}
+      />
+    );
+  }
+
+  if (filter.type === "float_metric") {
+    const metricConfig = config.metrics[filter.metric_name];
+    if (!metricConfig) return null;
+    return (
+      <FloatMetricFilterRow
+        filter={filter}
+        metricConfig={metricConfig}
+        onUpdate={handleUpdateFilter}
+        onRemove={onRemove}
+      />
+    );
+  }
+
+  if (filter.type === "boolean_metric") {
+    const metricConfig = config.metrics[filter.metric_name];
+    if (!metricConfig) return null;
+    return (
+      <BooleanMetricFilterRow
+        filter={filter}
+        metricConfig={metricConfig}
+        onUpdate={handleUpdateFilter}
+        onRemove={onRemove}
+      />
+    );
+  }
+
+  // Unsupported filter type
+  return null;
 }
 
 const InferenceQueryBuilderSchema = z.object({
@@ -84,23 +343,6 @@ export const InferenceQueryBuilder = forwardRef<
     mode: "onChange",
   });
 
-  // Get child filters for rendering
-  const childFilters = useMemo(
-    () => getChildFilters(inferenceFilter),
-    [inferenceFilter],
-  );
-
-  // Determine the current operator (AND or OR)
-  const operator: "and" | "or" = useMemo(() => {
-    if (
-      inferenceFilter &&
-      (inferenceFilter.type === "and" || inferenceFilter.type === "or")
-    ) {
-      return inferenceFilter.type;
-    }
-    return "and"; // Default to AND
-  }, [inferenceFilter]);
-
   // Expose validation trigger method to parent via ref
   useImperativeHandle(ref, () => ({
     triggerValidation: async () => {
@@ -109,32 +351,18 @@ export const InferenceQueryBuilder = forwardRef<
   }));
 
   const handleAddTag = () => {
-    const newFilter: InferenceFilter = {
-      type: "tag",
-      key: "",
-      value: "",
-      comparison_operator: "=",
-    };
-
-    if (!inferenceFilter) {
-      // No filter exists yet, create single filter
-      setInferenceFilter(newFilter);
-    } else if (
-      inferenceFilter.type === "and" ||
-      inferenceFilter.type === "or"
-    ) {
-      // And/or exists, add to children
-      setInferenceFilter({
-        ...inferenceFilter,
-        children: [...inferenceFilter.children, newFilter],
-      });
-    } else {
-      // Single filter exists, wrap in and/or with new filter
-      setInferenceFilter({
-        type: operator,
-        children: [inferenceFilter, newFilter],
-      });
-    }
+    // Wrap in AND group
+    setInferenceFilter({
+      type: "and",
+      children: [
+        {
+          type: "tag",
+          key: "",
+          value: "",
+          comparison_operator: "=",
+        },
+      ],
+    });
   };
 
   const handleAddMetric = (metricName: string, metricConfig: MetricConfig) => {
@@ -157,93 +385,24 @@ export const InferenceQueryBuilder = forwardRef<
       return; // Unsupported metric type
     }
 
-    if (!inferenceFilter) {
-      // No filter exists yet, create single filter
-      setInferenceFilter(newFilter);
-    } else if (
-      inferenceFilter.type === "and" ||
-      inferenceFilter.type === "or"
-    ) {
-      // And/or exists, add to children
-      setInferenceFilter({
-        ...inferenceFilter,
-        children: [...inferenceFilter.children, newFilter],
-      });
-    } else {
-      // Single filter exists, wrap in and/or with new filter
-      setInferenceFilter({
-        type: operator,
-        children: [inferenceFilter, newFilter],
-      });
-    }
-  };
-
-  const handleUpdateFilter = (
-    index: number,
-    updates: Record<string, unknown>,
-  ) => {
-    if (!inferenceFilter) return;
-
-    const children = getChildFilters(inferenceFilter);
-    const currentFilter = children[index];
-    if (!currentFilter) return;
-
-    // Create updated filter by merging updates
-    const updatedFilter = { ...currentFilter, ...updates } as InferenceFilter;
-
-    // Update the tree
-    if (inferenceFilter.type === "and" || inferenceFilter.type === "or") {
-      const newChildren = [...inferenceFilter.children];
-      newChildren[index] = updatedFilter;
-      setInferenceFilter({
-        ...inferenceFilter,
-        children: newChildren,
-      });
-    } else {
-      // Single filter case
-      setInferenceFilter(updatedFilter);
-    }
-  };
-
-  const handleRemoveFilter = (index: number) => {
-    if (!inferenceFilter) return;
-
-    if (inferenceFilter.type === "and" || inferenceFilter.type === "or") {
-      const newChildren = inferenceFilter.children.filter(
-        (_, i) => i !== index,
-      );
-
-      if (newChildren.length === 0) {
-        // No filters left, clear everything
-        setInferenceFilter(undefined);
-      } else if (newChildren.length === 1) {
-        // Only one filter left, unwrap it
-        setInferenceFilter(newChildren[0]);
-      } else {
-        // Multiple filters remain
-        setInferenceFilter({
-          ...inferenceFilter,
-          children: newChildren,
-        });
-      }
-    } else {
-      // Removing the only filter
-      setInferenceFilter(undefined);
-    }
-  };
-
-  const handleToggleOperator = () => {
-    if (
-      !inferenceFilter ||
-      (inferenceFilter.type !== "and" && inferenceFilter.type !== "or")
-    ) {
-      return;
-    }
-
-    const newOperator = operator === "and" ? "or" : "and";
+    // Wrap in AND group
     setInferenceFilter({
-      ...inferenceFilter,
-      type: newOperator,
+      type: "and",
+      children: [newFilter],
+    });
+  };
+
+  const handleAddAnd = () => {
+    setInferenceFilter({
+      type: "and",
+      children: [],
+    });
+  };
+
+  const handleAddOr = () => {
+    setInferenceFilter({
+      type: "or",
+      children: [],
     });
   };
 
@@ -253,84 +412,24 @@ export const InferenceQueryBuilder = forwardRef<
         <FunctionFormField control={form.control} />
         <FormLabel>Filter</FormLabel>
 
-        {childFilters.length > 0 && (
+        {inferenceFilter ? (
           <div className="py-1">
-            <div className="relative space-y-3">
-              {childFilters.length > 1 && (
-                <TooltipProvider delayDuration={300}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={handleToggleOperator}
-                        className="bg-background hover:text-fg-secondary absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 -rotate-90 cursor-pointer px-2 text-sm font-semibold transition-colors"
-                      >
-                        {operator.toUpperCase()}
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      <span className="text-xs">
-                        Toggle to {operator === "and" ? "OR" : "AND"}
-                      </span>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              <div className="border-border space-y-3 border-l-2 pl-4">
-                {childFilters.map((filter, index) => {
-                  if (filter.type === "tag") {
-                    return (
-                      <TagFilterRow
-                        key={index}
-                        filter={filter}
-                        onUpdate={(updates) =>
-                          handleUpdateFilter(index, updates)
-                        }
-                        onRemove={() => handleRemoveFilter(index)}
-                      />
-                    );
-                  }
-                  if (filter.type === "float_metric") {
-                    const metricConfig = config.metrics[filter.metric_name];
-                    if (!metricConfig) return null;
-                    return (
-                      <FloatMetricFilterRow
-                        key={index}
-                        filter={filter}
-                        metricConfig={metricConfig}
-                        onUpdate={(updates) =>
-                          handleUpdateFilter(index, updates)
-                        }
-                        onRemove={() => handleRemoveFilter(index)}
-                      />
-                    );
-                  }
-                  if (filter.type === "boolean_metric") {
-                    const metricConfig = config.metrics[filter.metric_name];
-                    if (!metricConfig) return null;
-                    return (
-                      <BooleanMetricFilterRow
-                        key={index}
-                        filter={filter}
-                        metricConfig={metricConfig}
-                        onUpdate={(updates) =>
-                          handleUpdateFilter(index, updates)
-                        }
-                        onRemove={() => handleRemoveFilter(index)}
-                      />
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-            </div>
+            <FilterNodeRenderer
+              filter={inferenceFilter}
+              onUpdate={setInferenceFilter}
+              onRemove={() => setInferenceFilter(undefined)}
+              depth={0}
+              config={config}
+            />
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <MetricSelectorPopover onSelect={handleAddMetric} config={config} />
+            <AddButton label="Tag" onClick={handleAddTag} />
+            <AddButton label="And" onClick={handleAddAnd} />
+            <AddButton label="Or" onClick={handleAddOr} />
           </div>
         )}
-
-        <div className="flex gap-2">
-          <MetricSelectorPopover onSelect={handleAddMetric} />
-          <AddButton label="Tag" onClick={handleAddTag} />
-        </div>
       </form>
     </Form>
   );
@@ -365,12 +464,15 @@ function FunctionFormField({ control }: FunctionFormFieldProps) {
 
 interface MetricSelectorPopoverProps {
   onSelect: (metricName: string, metricConfig: MetricConfig) => void;
+  config: ReturnType<typeof useConfig>;
 }
 
-function MetricSelectorPopover({ onSelect }: MetricSelectorPopoverProps) {
+function MetricSelectorPopover({
+  onSelect,
+  config,
+}: MetricSelectorPopoverProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
-  const config = useConfig();
   const metrics = config.metrics;
 
   return (
