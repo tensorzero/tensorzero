@@ -868,7 +868,7 @@ async fn test_clickhouse_migration_manager() {
     assert_eq!(feedback_by_variant.variant_name, "dummy");
     assert_eq!(feedback_by_variant.count, 2500000);
     assert_eq!(feedback_by_variant.mean, 1.0);
-    assert_eq!(feedback_by_variant.variance, 0.0);
+    assert_eq!(feedback_by_variant.variance, Some(0.0));
 
     // Since we've already ran all of the migrations, we shouldn't have written any new records
     // except for Migration0029 (which runs every time)

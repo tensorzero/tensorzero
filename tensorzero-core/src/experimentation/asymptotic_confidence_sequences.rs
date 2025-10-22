@@ -90,12 +90,20 @@ pub fn asymp_cs(
     Ok(feedback
         .into_iter()
         .map(|f| {
-            let count_f32 = f.count as f32;
-            let cv_rho2 = count_f32 * f.variance * rho2;
-            // Compute margin: sqrt(((n*v*rho^2 + 1) / (n^2 * rho^2)) * ln((n*v*rho^2 + 1) / alpha^2))
-            let margin = ((cv_rho2 + 1.0) / (count_f32 * count_f32 * rho2)
-                * ((cv_rho2 + 1.0) / alpha2).ln())
-            .sqrt();
+            // If variance is None, we can't compute confidence sequences
+            let (cs_lower, cs_upper) = match (f.mean, f.variance) {
+                (mean, Some(variance)) => {
+                    let count_f32 = f.count as f32;
+                    let cv_rho2 = count_f32 * variance * rho2;
+                    // Compute margin: sqrt(((n*v*rho^2 + 1) / (n^2 * rho^2)) * ln((n*v*rho^2 + 1) / alpha^2))
+                    let margin = ((cv_rho2 + 1.0) / (count_f32 * count_f32 * rho2)
+                        * ((cv_rho2 + 1.0) / alpha2).ln())
+                    .sqrt();
+                    (Some(mean - margin), Some(mean + margin))
+                }
+                _ => (None, None),
+            };
+
             CumulativeFeedbackTimeSeriesPoint {
                 period_end: f.period_end,
                 variant_name: f.variant_name,
@@ -103,8 +111,8 @@ pub fn asymp_cs(
                 variance: f.variance,
                 count: f.count,
                 alpha,
-                cs_lower: f.mean - margin,
-                cs_upper: f.mean + margin,
+                cs_lower,
+                cs_upper,
             }
         })
         .collect())
@@ -124,7 +132,7 @@ mod tests {
             period_end: Utc::now(),
             variant_name: "test_variant".to_string(),
             mean,
-            variance,
+            variance: Some(variance),
             count,
         }
     }
@@ -136,11 +144,11 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].mean, 0.5);
-        assert_eq!(result[0].variance, 0.25);
+        assert_eq!(result[0].variance, Some(0.25));
         assert_eq!(result[0].count, 100);
         assert_eq!(result[0].alpha, 0.05);
-        assert!(result[0].cs_lower < result[0].mean);
-        assert!(result[0].cs_upper > result[0].mean);
+        assert!(result[0].cs_lower.unwrap() < result[0].mean);
+        assert!(result[0].cs_upper.unwrap() > result[0].mean);
     }
 
     #[test]
@@ -157,8 +165,11 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         // Verify bounds are symmetric
-        let margin = result[0].cs_upper - result[0].mean;
-        assert!((result[0].mean - result[0].cs_lower - margin).abs() < 1e-6);
+        let mean = result[0].mean;
+        let cs_lower = result[0].cs_lower.unwrap();
+        let cs_upper = result[0].cs_upper.unwrap();
+        let margin = cs_upper - mean;
+        assert!((mean - cs_lower - margin).abs() < 1e-6);
     }
 
     #[test]
@@ -173,8 +184,8 @@ mod tests {
         assert_eq!(result.len(), 3);
         // Verify all points have confidence sequences
         for point in result {
-            assert!(point.cs_lower < point.mean);
-            assert!(point.cs_upper > point.mean);
+            assert!(point.cs_lower.unwrap() < point.mean);
+            assert!(point.cs_upper.unwrap() > point.mean);
             assert_eq!(point.alpha, 0.05);
         }
     }
@@ -188,9 +199,9 @@ mod tests {
         ];
         let result = asymp_cs(feedback, 0.05, None).unwrap();
 
-        let width_10 = result[0].cs_upper - result[0].cs_lower;
-        let width_100 = result[1].cs_upper - result[1].cs_lower;
-        let width_1000 = result[2].cs_upper - result[2].cs_lower;
+        let width_10 = result[0].cs_upper.unwrap() - result[0].cs_lower.unwrap();
+        let width_100 = result[1].cs_upper.unwrap() - result[1].cs_lower.unwrap();
+        let width_1000 = result[2].cs_upper.unwrap() - result[2].cs_lower.unwrap();
 
         // Widths should decrease with more data
         assert!(width_10 > width_100);
@@ -206,9 +217,9 @@ mod tests {
         ];
         let result = asymp_cs(feedback, 0.05, None).unwrap();
 
-        let width_low_var = result[0].cs_upper - result[0].cs_lower;
-        let width_med_var = result[1].cs_upper - result[1].cs_lower;
-        let width_high_var = result[2].cs_upper - result[2].cs_lower;
+        let width_low_var = result[0].cs_upper.unwrap() - result[0].cs_lower.unwrap();
+        let width_med_var = result[1].cs_upper.unwrap() - result[1].cs_lower.unwrap();
+        let width_high_var = result[2].cs_upper.unwrap() - result[2].cs_lower.unwrap();
 
         // Widths should increase with variance
         assert!(width_low_var < width_med_var);
@@ -222,8 +233,8 @@ mod tests {
         let result_95 = asymp_cs(feedback.clone(), 0.05, None).unwrap();
         let result_99 = asymp_cs(feedback, 0.01, None).unwrap();
 
-        let width_95 = result_95[0].cs_upper - result_95[0].cs_lower;
-        let width_99 = result_99[0].cs_upper - result_99[0].cs_lower;
+        let width_95 = result_95[0].cs_upper.unwrap() - result_95[0].cs_lower.unwrap();
+        let width_99 = result_99[0].cs_upper.unwrap() - result_99[0].cs_lower.unwrap();
 
         // 99% confidence should be wider than 95%
         assert!(width_99 > width_95);
@@ -237,8 +248,14 @@ mod tests {
         let result_custom = asymp_cs(feedback, 0.05, Some(0.5)).unwrap();
 
         // Different rho values should give different bounds
-        assert_ne!(result_default[0].cs_lower, result_custom[0].cs_lower);
-        assert_ne!(result_default[0].cs_upper, result_custom[0].cs_upper);
+        assert_ne!(
+            result_default[0].cs_lower.unwrap(),
+            result_custom[0].cs_lower.unwrap()
+        );
+        assert_ne!(
+            result_default[0].cs_upper.unwrap(),
+            result_custom[0].cs_upper.unwrap()
+        );
     }
 
     #[test]
@@ -252,8 +269,11 @@ mod tests {
 
         // Verify bounds are symmetric around the mean
         for point in result {
-            let lower_margin = point.mean - point.cs_lower;
-            let upper_margin = point.cs_upper - point.mean;
+            let mean = point.mean;
+            let cs_lower = point.cs_lower.unwrap();
+            let cs_upper = point.cs_upper.unwrap();
+            let lower_margin = mean - cs_lower;
+            let upper_margin = cs_upper - mean;
             assert!((lower_margin - upper_margin).abs() < 1e-5);
         }
     }
@@ -264,10 +284,10 @@ mod tests {
         let result = asymp_cs(feedback, 0.05, None).unwrap();
 
         // Should still produce valid (narrow) bounds
-        assert!(result[0].cs_lower < result[0].mean);
-        assert!(result[0].cs_upper > result[0].mean);
+        assert!(result[0].cs_lower.unwrap() < result[0].mean);
+        assert!(result[0].cs_upper.unwrap() > result[0].mean);
         // With zero variance, bounds should be very tight
-        let width = result[0].cs_upper - result[0].cs_lower;
+        let width = result[0].cs_upper.unwrap() - result[0].cs_lower.unwrap();
         assert!(width < 0.1);
     }
 
@@ -277,14 +297,14 @@ mod tests {
             period_end: Utc::now(),
             variant_name: "variant_a".to_string(),
             mean: 0.42,
-            variance: 0.24,
+            variance: Some(0.24),
             count: 123,
         }];
         let result = asymp_cs(feedback, 0.05, None).unwrap();
 
         assert_eq!(result[0].variant_name, "variant_a");
         assert_eq!(result[0].mean, 0.42);
-        assert_eq!(result[0].variance, 0.24);
+        assert_eq!(result[0].variance, Some(0.24));
         assert_eq!(result[0].count, 123);
     }
 
@@ -376,7 +396,7 @@ mod tests {
             * ((cv_rho2 + 1.0) / alpha2).ln())
         .sqrt();
 
-        let actual_margin = result[0].cs_upper - result[0].mean;
+        let actual_margin = result[0].cs_upper.unwrap() - result[0].mean;
         assert!((actual_margin - expected_margin).abs() < 1e-5);
     }
 
@@ -386,7 +406,7 @@ mod tests {
         let result = asymp_cs(feedback, 0.05, None).unwrap();
 
         // With very large count, bounds should be very tight
-        let width = result[0].cs_upper - result[0].cs_lower;
+        let width = result[0].cs_upper.unwrap() - result[0].cs_lower.unwrap();
         assert!(width < 0.01);
     }
 
@@ -396,7 +416,7 @@ mod tests {
         let result = asymp_cs(feedback, 0.05, None).unwrap();
 
         // With small count, bounds should be wide
-        let width = result[0].cs_upper - result[0].cs_lower;
+        let width = result[0].cs_upper.unwrap() - result[0].cs_lower.unwrap();
         assert!(width > 0.1);
     }
 }
