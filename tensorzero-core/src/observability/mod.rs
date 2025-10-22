@@ -636,7 +636,7 @@ pub struct InFlightSpan {
     token: TaskTrackerToken,
 }
 
-/// Enters into a fake HTTP request context fortesting purposes, which will allow OTEL spans to be reported
+/// Enters into a fake HTTP request context for testing purposes, which will allow OTEL spans to be reported
 /// This is used by OTEL tests that use an embedded client - since they don't go through our axum router,
 /// we would normally (correctly) suppress any nested OTEL spans (e.g. `function_inference`)
 /// This method simulates the relevant parts of our axum otel logic
