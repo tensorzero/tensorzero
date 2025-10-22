@@ -895,8 +895,8 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
                 .collect(),
             tool_choice: db_insert.tool_choice,
             parallel_tool_calls: db_insert.parallel_tool_calls,
-            provider_tools: None, // TODO(Viraj): address this once we start storing
-            // provider tools
+            // TODO(Viraj): address this once we start storing provider tools
+            provider_tools: None,
             allowed_tools: AllowedTools::default(),
         }
     }
