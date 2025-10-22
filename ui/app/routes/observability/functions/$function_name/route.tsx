@@ -15,7 +15,7 @@ import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
-import FunctionExperimentation from "./FunctionExperimentation";
+import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
 import {
   getVariantCounts,
@@ -111,30 +111,25 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Get feedback timeseries
   // For now, we only fetch this for track_and_stop experimentation
   // but the underlying query is general and could be used for other experimentation types
-  let feedbackTimeseriesPromise: Promise<
-    | Awaited<
-        ReturnType<
-          Awaited<
-            ReturnType<typeof getNativeDatabaseClient>
-          >["getCumulativeFeedbackTimeseries"]
-        >
-      >
-    | undefined
-  > = Promise.resolve(undefined);
+  const feedbackParams =
+    function_config.experimentation.type === "track_and_stop"
+      ? {
+          metric_name: function_config.experimentation.metric,
+          variant_names: function_config.experimentation.candidate_variants,
+        }
+      : null;
 
-  if (function_config.experimentation.type === "track_and_stop") {
-    const experimentationConfig = function_config.experimentation;
-    feedbackTimeseriesPromise = (async () => {
-      const dbClient = await getNativeDatabaseClient();
-      return dbClient.getCumulativeFeedbackTimeseries({
-        function_name,
-        metric_name: experimentationConfig.metric,
-        variant_names: experimentationConfig.candidate_variants,
-        time_window: feedback_time_granularity as TimeWindow,
-        max_periods: 10,
-      });
-    })();
-  }
+  const feedbackTimeseriesPromise = feedbackParams
+    ? (async () => {
+        const dbClient = await getNativeDatabaseClient();
+        return dbClient.getCumulativeFeedbackTimeseries({
+          function_name,
+          ...feedbackParams,
+          time_window: feedback_time_granularity as TimeWindow,
+          max_periods: 10,
+        });
+      })()
+    : Promise.resolve(undefined);
 
   const [
     inferences,
@@ -162,9 +157,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     try {
       const dbClient = await getNativeDatabaseClient();
       const experimentationConfig = function_config.experimentation;
-      if (experimentationConfig.type !== "track_and_stop") {
-        throw new Error("Expected track_and_stop experimentation type");
-      }
       const metric_config = config.metrics[experimentationConfig.metric];
 
       if (metric_config) {

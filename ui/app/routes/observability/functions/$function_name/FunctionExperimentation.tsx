@@ -67,7 +67,7 @@ function extractVariantWeights(
   );
 }
 
-const FunctionExperimentation = memo(function FunctionExperimentation({
+export const FunctionExperimentation = memo(function FunctionExperimentation({
   functionConfig,
   functionName,
   optimalProbabilities,
@@ -89,5 +89,3 @@ const FunctionExperimentation = memo(function FunctionExperimentation({
 
   return <ExperimentationPieChart variantWeights={variantWeights} />;
 });
-
-export default FunctionExperimentation;
