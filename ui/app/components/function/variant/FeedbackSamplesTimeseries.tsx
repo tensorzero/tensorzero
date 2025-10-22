@@ -2,10 +2,26 @@ import type {
   CumulativeFeedbackTimeSeriesPoint,
   TimeWindow,
 } from "tensorzero-node";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { CHART_COLORS } from "~/utils/chart";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { Props as LegendContentProps } from "recharts/types/component/DefaultLegendContent";
+import { Fragment, type ReactNode } from "react";
+import { CHART_COLORS, formatDetailedNumber } from "~/utils/chart";
 
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card";
 import {
   ChartContainer,
   ChartLegend,
@@ -23,16 +39,54 @@ export function FeedbackSamplesTimeseries({
   time_granularity: TimeWindow;
   onTimeGranularityChange: (time_granularity: TimeWindow) => void;
 }) {
-  const { data, variantNames } = transformFeedbackTimeseries(
+  const { countsData, meansData, variantNames } = transformFeedbackTimeseries(
     feedbackTimeseries,
     time_granularity,
   );
 
   // Convert date strings to timestamps for proper spacing
-  const dataWithTimestamps = data.map((row) => ({
+  const countsDataWithTimestamps = countsData.map((row) => ({
     ...row,
     timestamp: new Date(row.date).getTime(),
   }));
+
+  const meanDataWithTimestamps = meansData.map((row) => ({
+    ...row,
+    timestamp: new Date(row.date).getTime(),
+  }));
+
+  const getMeanValue = (
+    row: (typeof meanDataWithTimestamps)[number],
+    variant: string,
+  ): number | null | undefined =>
+    row[`${variant}_mean` as keyof typeof row] as number | null | undefined;
+
+  const getLowerValue = (
+    row: (typeof meanDataWithTimestamps)[number],
+    variant: string,
+  ): number | null | undefined =>
+    row[`${variant}_cs_lower` as keyof typeof row] as number | null | undefined;
+
+  const getUpperValue = (
+    row: (typeof meanDataWithTimestamps)[number],
+    variant: string,
+  ): number | null | undefined =>
+    row[`${variant}_cs_upper` as keyof typeof row] as number | null | undefined;
+
+  const meanDataWithValues = meanDataWithTimestamps.filter((row) =>
+    variantNames.some((variant) => getMeanValue(row, variant) !== null),
+  );
+
+  const meanChartData =
+    meanDataWithValues.length > 0 ? meanDataWithValues : meanDataWithTimestamps;
+
+  const hasConfidenceIntervals = meanChartData.some((row) =>
+    variantNames.some(
+      (variant) =>
+        getLowerValue(row, variant) !== null &&
+        getUpperValue(row, variant) !== null,
+    ),
+  );
 
   const chartConfig: Record<string, { label: string; color: string }> =
     variantNames.reduce(
@@ -66,6 +120,25 @@ export function FeedbackSamplesTimeseries({
     return date.toISOString().slice(0, 10);
   };
 
+  const renderConfidenceLegend = ({
+    payload,
+    verticalAlign,
+  }: LegendContentProps) => {
+    const filteredPayload = payload?.filter(
+      (item) =>
+        typeof item.dataKey === "string" &&
+        (item.dataKey as string).endsWith("_mean"),
+    );
+
+    return (
+      <ChartLegendContent
+        payload={filteredPayload}
+        verticalAlign={verticalAlign}
+        className="font-mono text-xs"
+      />
+    );
+  };
+
   return (
     <div className="space-y-8">
       <Card>
@@ -81,7 +154,7 @@ export function FeedbackSamplesTimeseries({
         </CardHeader>
         <CardContent>
           <ChartContainer config={chartConfig} className="h-80 w-full">
-            <AreaChart accessibilityLayer data={dataWithTimestamps}>
+            <AreaChart accessibilityLayer data={countsDataWithTimestamps}>
               <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="timestamp"
@@ -186,41 +259,232 @@ export function FeedbackSamplesTimeseries({
           </ChartContainer>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Mean Reward Confidence Sequences</CardTitle>
+          <CardDescription>
+            Showing per-variant mean reward estimates with confidence sequences.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChartContainer config={chartConfig} className="h-80 w-full">
+            <ComposedChart accessibilityLayer data={meanChartData}>
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="timestamp"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                tickLine={false}
+                tickMargin={10}
+                axisLine={true}
+                tickFormatter={formatXAxisTick}
+                scale="linear"
+              />
+              <YAxis
+                tickLine={false}
+                tickMargin={10}
+                axisLine={true}
+                label={{
+                  value: "Mean Reward",
+                  angle: -90,
+                  position: "insideLeft",
+                  style: { textAnchor: "middle" },
+                  offset: 10,
+                }}
+                tickFormatter={(value) => {
+                  const num = Number(value);
+                  return formatDetailedNumber(Number.isFinite(num) ? num : 0);
+                }}
+              />
+              <ChartTooltip
+                content={({ active, label, payload }) => {
+                  if (!active || !payload?.length) return null;
+
+                  const dataPoint = payload[0]?.payload;
+                  if (!dataPoint) return null;
+
+                  const rows: ReactNode[] = [];
+
+                  variantNames.forEach((variantName) => {
+                    const mean = dataPoint[`${variantName}_mean`];
+                    const lower = dataPoint[`${variantName}_cs_lower`];
+                    const upper = dataPoint[`${variantName}_cs_upper`];
+
+                    if (mean === null && lower === null && upper === null) {
+                      return;
+                    }
+
+                    rows.push(
+                      <div
+                        key={variantName}
+                        className="flex w-full flex-wrap items-start gap-2"
+                      >
+                        <div
+                          className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                          style={{
+                            backgroundColor: chartConfig[variantName].color,
+                          }}
+                        />
+                        <div className="flex flex-1 flex-col gap-0.5">
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {variantName}
+                          </span>
+                          {mean !== null ? (
+                            <span className="text-foreground font-mono font-medium tabular-nums">
+                              {formatDetailedNumber(mean)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-[10px]">
+                              Mean pending
+                            </span>
+                          )}
+                          {lower !== null && upper !== null ? (
+                            <span className="text-muted-foreground font-mono text-[10px] tabular-nums">
+                              {formatDetailedNumber(lower)} –{" "}
+                              {formatDetailedNumber(upper)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-[10px]">
+                              Confidence pending
+                            </span>
+                          )}
+                        </div>
+                      </div>,
+                    );
+                  });
+
+                  if (!rows.length) return null;
+
+                  return (
+                    <div className="border-border/50 bg-background grid min-w-[8rem] items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
+                      <div className="font-medium">
+                        {formatTooltipLabel(label)}
+                      </div>
+                      <div className="grid gap-1.5">{rows}</div>
+                    </div>
+                  );
+                }}
+              />
+              <ChartLegend content={renderConfidenceLegend} />
+              {variantNames.map((variantName) => {
+                const color = chartConfig[variantName].color;
+                const lowerKey = `${variantName}_cs_lower`;
+                const widthKey = `${variantName}_cs_width`;
+                const meanKey = `${variantName}_mean`;
+
+                return (
+                  <Fragment key={variantName}>
+                    {hasConfidenceIntervals && (
+                      <>
+                        <Area
+                          type="monotone"
+                          dataKey={lowerKey}
+                          stackId={variantName}
+                          stroke="transparent"
+                          fill="transparent"
+                          isAnimationActive={false}
+                          connectNulls
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey={widthKey}
+                          stackId={variantName}
+                          stroke="transparent"
+                          fill={color}
+                          fillOpacity={0.25}
+                          isAnimationActive={false}
+                          connectNulls
+                          legendType="none"
+                        />
+                      </>
+                    )}
+                    <Line
+                      type="monotone"
+                      dataKey={meanKey}
+                      name={variantName}
+                      stroke={color}
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      activeDot={{ r: 4 }}
+                      isAnimationActive={false}
+                      connectNulls
+                    />
+                  </Fragment>
+                );
+              })}
+            </ComposedChart>
+          </ChartContainer>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-export type FeedbackTimeseriesData = {
+type FeedbackTimeseriesPointByVariant = {
+  count: number;
+  mean: number | null;
+  cs_lower: number | null;
+  cs_upper: number | null;
+};
+
+export type FeedbackCountsTimeseriesData = {
   date: string;
   [key: string]: string | number;
+};
+
+export type FeedbackMeansTimeseriesData = {
+  date: string;
+  [key: string]: string | number | null;
 };
 
 export function transformFeedbackTimeseries(
   parsedRows: CumulativeFeedbackTimeSeriesPoint[],
   timeGranularity: TimeWindow,
 ): {
-  data: FeedbackTimeseriesData[];
+  countsData: FeedbackCountsTimeseriesData[];
+  meansData: FeedbackMeansTimeseriesData[];
   variantNames: string[];
 } {
   const variantNames = [...new Set(parsedRows.map((row) => row.variant_name))];
 
   // If no data, return empty
   if (parsedRows.length === 0) {
-    return { data: [], variantNames: [] };
+    return { countsData: [], meansData: [], variantNames: [] };
   }
 
   // Group by date
   const groupedByDate = parsedRows.reduce<
-    Record<string, Record<string, number>>
+    Record<string, Record<string, FeedbackTimeseriesPointByVariant>>
   >((acc, row) => {
-    const { period_end, variant_name, count } = row;
+    const { period_end, variant_name, count, mean, cs_lower, cs_upper } = row;
 
     if (!acc[period_end]) {
       acc[period_end] = {};
     }
 
-    // Convert bigint to number
-    acc[period_end][variant_name] = Number(count);
+    const sanitizedCount = Number(count);
+    const sanitizedMean =
+      mean === null || mean === undefined ? null : Number(mean);
+    const sanitizedLower =
+      cs_lower === null || cs_lower === undefined ? null : Number(cs_lower);
+    const sanitizedUpper =
+      cs_upper === null || cs_upper === undefined ? null : Number(cs_upper);
+
+    acc[period_end][variant_name] = {
+      count: Number.isFinite(sanitizedCount) ? sanitizedCount : 0,
+      mean:
+        sanitizedMean !== null && Number.isFinite(sanitizedMean)
+          ? sanitizedMean
+          : null,
+      cs_lower:
+        sanitizedLower !== null && Number.isFinite(sanitizedLower)
+          ? sanitizedLower
+          : null,
+      cs_upper:
+        sanitizedUpper !== null && Number.isFinite(sanitizedUpper)
+          ? sanitizedUpper
+          : null,
+    };
     return acc;
   }, {});
 
@@ -344,32 +608,63 @@ export function transformFeedbackTimeseries(
   // Take only the last 10 periods
   const periodsToShow = filledPeriods.slice(-10);
 
-  // Initialize cumulative counts for forward-filling
+  // Initialize forward-filled stats
   const lastKnownCounts: Record<string, number> = {};
+  const lastKnownMeans: Record<string, number | null> = {};
+  const lastKnownLower: Record<string, number | null> = {};
+  const lastKnownUpper: Record<string, number | null> = {};
   variantNames.forEach((variant) => {
     lastKnownCounts[variant] = 0;
+    lastKnownMeans[variant] = null;
+    lastKnownLower[variant] = null;
+    lastKnownUpper[variant] = null;
   });
 
-  // Create data for each period, forward-filling cumulative counts
-  const data: FeedbackTimeseriesData[] = periodsToShow.map((period) => {
-    const row: FeedbackTimeseriesData = { date: period };
+  const countsData: FeedbackCountsTimeseriesData[] = [];
+  const meansData: FeedbackMeansTimeseriesData[] = [];
+
+  periodsToShow.forEach((period) => {
+    const countsRow: FeedbackCountsTimeseriesData = { date: period };
+    const meansRow: FeedbackMeansTimeseriesData = { date: period };
 
     variantNames.forEach((variant) => {
-      // Check if we have actual data for this period
-      const periodData = groupedByDate[period];
-      if (periodData && periodData[variant] !== undefined) {
-        // Update with actual cumulative count from ClickHouse
-        lastKnownCounts[variant] = periodData[variant];
+      const periodData = groupedByDate[period]?.[variant];
+
+      if (periodData) {
+        if (Number.isFinite(periodData.count)) {
+          lastKnownCounts[variant] = periodData.count;
+        }
+
+        if (periodData.mean !== null) {
+          lastKnownMeans[variant] = periodData.mean;
+        }
+
+        if (periodData.cs_lower !== null && periodData.cs_upper !== null) {
+          lastKnownLower[variant] = periodData.cs_lower;
+          lastKnownUpper[variant] = periodData.cs_upper;
+        }
       }
-      // Use the last known cumulative count (forward-fill)
-      row[variant] = lastKnownCounts[variant];
+
+      countsRow[variant] = lastKnownCounts[variant];
+
+      const mean = lastKnownMeans[variant];
+      const lower = lastKnownLower[variant];
+      const upper = lastKnownUpper[variant];
+
+      meansRow[`${variant}_mean`] = mean ?? null;
+      meansRow[`${variant}_cs_lower`] = lower ?? null;
+      meansRow[`${variant}_cs_upper`] = upper ?? null;
+      meansRow[`${variant}_cs_width`] =
+        lower !== null && upper !== null ? upper - lower : null;
     });
 
-    return row;
+    countsData.push(countsRow);
+    meansData.push(meansRow);
   });
 
   return {
-    data,
+    countsData,
+    meansData,
     variantNames,
   };
 }
