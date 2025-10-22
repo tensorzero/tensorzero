@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: tensorzero_ui_fixtures
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tensorzero_ui_fixtures"]
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  gateway-postgres-migrations:
+    image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
+    environment:
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
+    depends_on:
+      postgres:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      [
+        "gateway --run-postgres-migrations && touch /tmp/migrations_complete.marker && sleep infinity",
+      ]
+    extra_hosts:
+      - "howdy.tensorzero.com:127.0.0.1"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/migrations_complete.marker"]
+      interval: 5s
+      timeout: 1s
+      retries: 48 # Retry for up to 4 minutes
+      start_period: 5s
+
+  mock-inference-provider:
+    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-${TENSORZERO_COMMIT_TAG:-latest}}
+    build:
+      context: ../../
+      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
+    environment:
+      RUST_LOG: debug
+    ports:
+      - "3030:3030"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3030/status
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
