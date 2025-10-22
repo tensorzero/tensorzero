@@ -1,34 +1,15 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import {
-  forwardRef,
-  useImperativeHandle,
-  useState,
-  useId,
-  useEffect,
-} from "react";
+import { forwardRef, useImperativeHandle, useState } from "react";
 import { Form } from "~/components/ui/form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { FunctionSelector } from "~/components/function/FunctionSelector";
 import { useAllFunctionConfigs, useConfig } from "~/context/config";
 import type { Control } from "react-hook-form";
-import type {
-  InferenceFilter,
-  MetricConfig,
-  FloatComparisonOperator,
-  TagComparisonOperator,
-} from "tensorzero-node";
+import type { InferenceFilter, MetricConfig } from "tensorzero-node";
 import { Button } from "~/components/ui/button";
-import { Plus, X } from "lucide-react";
-import { Input } from "~/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
+import { Plus } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -49,95 +30,17 @@ import {
   CommandList,
 } from "~/components/ui/command";
 import FeedbackBadges from "~/components/feedback/FeedbackBadges";
-import { MetricNameWithTooltip } from "./MetricNameWithTooltip";
 import { cn } from "~/utils/common";
+import {
+  TagFilterRow,
+  FloatMetricFilterRow,
+  BooleanMetricFilterRow,
+  FieldValidation,
+} from "./FilterRows";
+import DeleteButton from "./DeleteButton";
 
 // Constants
 const MAX_NESTING_DEPTH = 2;
-
-// Type-safe operator definitions with bidirectional checking
-const TAG_OPERATORS = ["=", "!="] as const;
-const FLOAT_OPERATORS = ["<", "<=", "=", ">", ">=", "!="] as const;
-
-// Bidirectional type checking: Array ↔ Type
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _TagCheck1 = typeof TAG_OPERATORS extends readonly TagComparisonOperator[]
-  ? true
-  : false;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _TagCheck2 = TagComparisonOperator extends (typeof TAG_OPERATORS)[number]
-  ? true
-  : false;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _FloatCheck1 =
-  typeof FLOAT_OPERATORS extends readonly FloatComparisonOperator[]
-    ? true
-    : false;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _FloatCheck2 =
-  FloatComparisonOperator extends (typeof FLOAT_OPERATORS)[number]
-    ? true
-    : false;
-
-// Operator display labels with bidirectional exhaustiveness checking
-const TAG_OPERATOR_LABELS = {
-  "=": "=",
-  "!=": "≠",
-} as const satisfies Record<TagComparisonOperator, string>;
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _TagLabelKeysCheck =
-  keyof typeof TAG_OPERATOR_LABELS extends TagComparisonOperator ? true : false;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _TagLabelTypeCheck =
-  TagComparisonOperator extends keyof typeof TAG_OPERATOR_LABELS ? true : false;
-
-const FLOAT_OPERATOR_LABELS = {
-  "<": "<",
-  "<=": "≤",
-  "=": "=",
-  ">": ">",
-  ">=": "≥",
-  "!=": "≠",
-} as const satisfies Record<FloatComparisonOperator, string>;
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _FloatLabelKeysCheck =
-  keyof typeof FLOAT_OPERATOR_LABELS extends FloatComparisonOperator
-    ? true
-    : false;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-type _FloatLabelTypeCheck =
-  FloatComparisonOperator extends keyof typeof FLOAT_OPERATOR_LABELS
-    ? true
-    : false;
-
-// Type-safe filter update types
-type TagFilterUpdates = Partial<{
-  key: string;
-  value: string;
-  comparison_operator: TagComparisonOperator;
-}>;
-
-type FloatMetricFilterUpdates = Partial<{
-  value: number;
-  comparison_operator: FloatComparisonOperator;
-}>;
-
-type BooleanMetricFilterUpdates = Partial<{
-  value: boolean;
-}>;
-
-// Field-level validation (single source of truth)
-const FieldValidation = {
-  floatValue: z
-    .string()
-    .min(1, "Required")
-    .refine((val) => !isNaN(parseFloat(val)), "Must be a number")
-    .refine((val) => isFinite(parseFloat(val)), "Must be a number"),
-  tagKey: z.string().min(1, "Required"),
-  tagValue: z.string().min(1, "Required"),
-};
 
 // Validate current filter values (used on blur and submit)
 function validate(filter: InferenceFilter | undefined): boolean {
@@ -194,13 +97,6 @@ function createMetricFilter(
     };
   }
   return null;
-}
-
-function createGroupFilter(type: "and" | "or"): InferenceFilter {
-  return {
-    type,
-    children: [],
-  };
 }
 
 // Interfaces for recursive components
@@ -294,7 +190,7 @@ function FilterGroup({
           </Tooltip>
         </TooltipProvider>
 
-        <DeleteRowButton onRemove={onRemove} />
+        <DeleteButton onRemove={onRemove} />
       </div>
       <div
         className={cn(
@@ -324,11 +220,21 @@ function FilterGroup({
             <>
               <AddButton
                 label="And"
-                onClick={() => handleAddChild(createGroupFilter("and"))}
+                onClick={() =>
+                  handleAddChild({
+                    type: "and",
+                    children: [],
+                  })
+                }
               />
               <AddButton
                 label="Or"
-                onClick={() => handleAddChild(createGroupFilter("or"))}
+                onClick={() =>
+                  handleAddChild({
+                    type: "or",
+                    children: [],
+                  })
+                }
               />
             </>
           ) : (
@@ -397,7 +303,7 @@ function FilterNodeRenderer({
 
   // Handle leaf filters with type-safe update functions
   if (filter.type === "tag") {
-    const handleUpdateTag = (updates: TagFilterUpdates) => {
+    const handleUpdateTag = (updates: Partial<typeof filter>) => {
       onUpdate({ ...filter, ...updates });
     };
     return (
@@ -412,7 +318,7 @@ function FilterNodeRenderer({
   if (filter.type === "float_metric") {
     const metricConfig = config.metrics[filter.metric_name];
     if (!metricConfig) return null;
-    const handleUpdateFloatMetric = (updates: FloatMetricFilterUpdates) => {
+    const handleUpdateFloatMetric = (updates: Partial<typeof filter>) => {
       onUpdate({ ...filter, ...updates });
     };
     return (
@@ -428,7 +334,7 @@ function FilterNodeRenderer({
   if (filter.type === "boolean_metric") {
     const metricConfig = config.metrics[filter.metric_name];
     if (!metricConfig) return null;
-    const handleUpdateBooleanMetric = (updates: BooleanMetricFilterUpdates) => {
+    const handleUpdateBooleanMetric = (updates: Partial<typeof filter>) => {
       onUpdate({ ...filter, ...updates });
     };
     return (
@@ -512,11 +418,17 @@ export const InferenceQueryBuilder = forwardRef<
   };
 
   const handleAddAnd = () => {
-    setInferenceFilter(createGroupFilter("and"));
+    setInferenceFilter({
+      type: "and",
+      children: [],
+    });
   };
 
   const handleAddOr = () => {
-    setInferenceFilter(createGroupFilter("or"));
+    setInferenceFilter({
+      type: "or",
+      children: [],
+    });
   };
 
   return (
@@ -649,279 +561,5 @@ function AddButton({ label, onClick }: AddButtonProps) {
       <Plus className="text-fg-tertiary h-4 w-4" />
       {label}
     </Button>
-  );
-}
-
-interface DeleteRowButtonProps {
-  onRemove: () => void;
-}
-
-function DeleteRowButton({ onRemove }: DeleteRowButtonProps) {
-  return (
-    <Button
-      type="button"
-      variant="destructiveOutline"
-      size="icon"
-      onClick={onRemove}
-      className="text-fg-tertiary h-5 w-5"
-    >
-      <X />
-    </Button>
-  );
-}
-
-interface TagFilterRowProps {
-  filter: InferenceFilter & { type: "tag" };
-  onUpdate: (updates: TagFilterUpdates) => void;
-  onRemove: () => void;
-}
-
-function TagFilterRow({ filter, onUpdate, onRemove }: TagFilterRowProps) {
-  const [keyError, setKeyError] = useState<string>();
-  const [valueError, setValueError] = useState<string>();
-  const keyErrorId = useId();
-  const valueErrorId = useId();
-
-  return (
-    <div>
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Input
-            className={cn("font-mono", keyError && "border-red-500")}
-            placeholder="tag"
-            aria-label="Tag key"
-            aria-invalid={!!keyError}
-            aria-describedby={keyError ? keyErrorId : undefined}
-            value={filter.key}
-            onChange={(e) => {
-              onUpdate({ key: e.target.value });
-              setKeyError(undefined);
-            }}
-            onBlur={() => {
-              const result = FieldValidation.tagKey.safeParse(filter.key);
-              if (!result.success) {
-                setKeyError(result.error.errors[0]?.message ?? "Invalid input");
-              }
-            }}
-          />
-          {keyError && (
-            <p
-              id={keyErrorId}
-              role="alert"
-              className="text-destructive absolute top-1 right-2 text-xs"
-            >
-              {keyError}
-            </p>
-          )}
-        </div>
-
-        <div className="w-14">
-          <Select
-            onValueChange={(value) => {
-              if (TAG_OPERATORS.includes(value as TagComparisonOperator)) {
-                onUpdate({
-                  comparison_operator: value as TagComparisonOperator,
-                });
-              }
-            }}
-            value={filter.comparison_operator}
-          >
-            <SelectTrigger aria-label="Tag comparison operator">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TAG_OPERATORS.map((op) => (
-                <SelectItem key={op} value={op}>
-                  {TAG_OPERATOR_LABELS[op]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="relative w-48">
-          <Input
-            className={cn("font-mono", valueError && "border-red-500")}
-            placeholder="value"
-            aria-label="Tag value"
-            aria-invalid={!!valueError}
-            aria-describedby={valueError ? valueErrorId : undefined}
-            value={filter.value}
-            onChange={(e) => {
-              onUpdate({ value: e.target.value });
-              setValueError(undefined);
-            }}
-            onBlur={() => {
-              const result = FieldValidation.tagValue.safeParse(filter.value);
-              if (!result.success) {
-                setValueError(
-                  result.error.errors[0]?.message ?? "Invalid input",
-                );
-              }
-            }}
-          />
-          {valueError && (
-            <p
-              id={valueErrorId}
-              role="alert"
-              className="text-destructive absolute top-1 right-2 text-xs"
-            >
-              {valueError}
-            </p>
-          )}
-        </div>
-
-        <DeleteRowButton onRemove={onRemove} />
-      </div>
-    </div>
-  );
-}
-
-interface FloatMetricFilterRowProps {
-  filter: InferenceFilter & { type: "float_metric" };
-  metricConfig: MetricConfig;
-  onUpdate: (updates: FloatMetricFilterUpdates) => void;
-  onRemove: () => void;
-}
-
-function FloatMetricFilterRow({
-  filter,
-  metricConfig,
-  onUpdate,
-  onRemove,
-}: FloatMetricFilterRowProps) {
-  const [inputValue, setInputValue] = useState(filter.value.toString());
-  const [error, setError] = useState<string>();
-  const errorId = useId();
-
-  // Sync with external changes to filter.value
-  useEffect(() => {
-    setInputValue(filter.value.toString());
-  }, [filter.value]);
-
-  return (
-    <div>
-      <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <MetricNameWithTooltip
-            metricName={filter.metric_name}
-            metricConfig={metricConfig}
-          />
-        </div>
-
-        <div className="w-14">
-          <Select
-            onValueChange={(value) => {
-              if (FLOAT_OPERATORS.includes(value as FloatComparisonOperator)) {
-                onUpdate({
-                  comparison_operator: value as FloatComparisonOperator,
-                });
-              }
-            }}
-            value={filter.comparison_operator}
-          >
-            <SelectTrigger aria-label="Metric comparison operator">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {FLOAT_OPERATORS.map((op) => (
-                <SelectItem key={op} value={op}>
-                  {FLOAT_OPERATOR_LABELS[op]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="relative w-48">
-          <Input
-            type="number"
-            step="any"
-            placeholder="0"
-            aria-label="Metric threshold value"
-            aria-invalid={!!error}
-            aria-describedby={error ? errorId : undefined}
-            value={inputValue}
-            onChange={(e) => {
-              const val = e.target.value;
-              setInputValue(val);
-              setError(undefined);
-
-              const parsed = parseFloat(val);
-              if (!isNaN(parsed)) {
-                onUpdate({ value: parsed });
-              }
-            }}
-            onBlur={() => {
-              const result = FieldValidation.floatValue.safeParse(inputValue);
-
-              if (!result.success) {
-                setError(result.error.errors[0]?.message ?? "Invalid input");
-              }
-            }}
-            className={cn(error && "border-red-500")}
-          />
-          {error && (
-            <p
-              id={errorId}
-              role="alert"
-              className="text-destructive absolute top-1 right-2 text-xs"
-            >
-              {error}
-            </p>
-          )}
-        </div>
-
-        <DeleteRowButton onRemove={onRemove} />
-      </div>
-    </div>
-  );
-}
-
-interface BooleanMetricFilterRowProps {
-  filter: InferenceFilter & { type: "boolean_metric" };
-  metricConfig: MetricConfig;
-  onUpdate: (updates: BooleanMetricFilterUpdates) => void;
-  onRemove: () => void;
-}
-
-function BooleanMetricFilterRow({
-  filter,
-  metricConfig,
-  onUpdate,
-  onRemove,
-}: BooleanMetricFilterRowProps) {
-  return (
-    <div>
-      <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <MetricNameWithTooltip
-            metricName={filter.metric_name}
-            metricConfig={metricConfig}
-          />
-        </div>
-
-        <div className="text-fg-secondary flex w-14 items-center justify-center text-sm">
-          is
-        </div>
-
-        <div className="w-48">
-          <Select
-            onValueChange={(value) => onUpdate({ value: value === "true" })}
-            value={filter.value.toString()}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="true">true</SelectItem>
-              <SelectItem value="false">false</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <DeleteRowButton onRemove={onRemove} />
-      </div>
-    </div>
   );
 }
