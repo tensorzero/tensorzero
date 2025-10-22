@@ -202,7 +202,7 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "updated_at < {p0:DateTime}");
+        assert_eq!(sql, "updated_at < parseDateTimeBestEffort({p0:String})");
         assert_eq!(params.len(), 1);
         assert_eq!(
             params[0],
@@ -223,7 +223,7 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "updated_at > {p0:DateTime}");
+        assert_eq!(sql, "updated_at > parseDateTimeBestEffort({p0:String})");
         assert_eq!(params.len(), 1);
         assert_eq!(
             params[0],
@@ -244,7 +244,7 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "updated_at = {p0:DateTime}");
+        assert_eq!(sql, "updated_at = parseDateTimeBestEffort({p0:String})");
         assert_eq!(params.len(), 1);
         assert_eq!(
             params[0],
@@ -265,7 +265,7 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("i");
 
-        assert_eq!(sql, "i.updated_at = {p0:DateTime}");
+        assert_eq!(sql, "i.updated_at = parseDateTimeBestEffort({p0:String})");
         assert_eq!(params.len(), 1);
         assert_eq!(
             params[0],
@@ -295,7 +295,8 @@ mod tests {
             });
 
             let (sql, _) = filter.to_clickhouse_sql("");
-            let expected_sql = format!("updated_at {expected_op_str} {{p0:DateTime}}");
+            let expected_sql =
+                format!("updated_at {expected_op_str} parseDateTimeBestEffort({{p0:String}})");
             assert_eq!(sql, expected_sql, "Failed for operator: {expected_op_str}");
         }
     }
@@ -328,9 +329,9 @@ mod tests {
         assert_eq!(params[0].value, "environment");
         assert_eq!(params[1].name, "p1");
         assert_eq!(params[1].value, "production");
-        assert_eq!(params[2].name, "key2");
+        assert_eq!(params[2].name, "p2");
         assert_eq!(params[2].value, "region");
-        assert_eq!(params[3].name, "value3");
+        assert_eq!(params[3].name, "p3");
         assert_eq!(params[3].value, "us-west");
     }
 
@@ -392,7 +393,10 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "NOT (updated_at > {p0:DateTime})");
+        assert_eq!(
+            sql,
+            "NOT (updated_at > parseDateTimeBestEffort({p0:String}))"
+        );
         assert_eq!(params.len(), 1);
         assert_eq!(params[0].name, "p0");
         assert_eq!(params[0].value, "2023-01-01 00:00:00");
@@ -449,7 +453,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "((tags[{p0:String}] = {p1:String} OR tags[{p2:String}] = {p3:String}) AND updated_at > {p4:DateTime})"
+            "((tags[{p0:String}] = {p1:String} OR tags[{p2:String}] = {p3:String}) AND updated_at > parseDateTimeBestEffort({p4:String}))"
         );
         assert_eq!(params.len(), 5);
     }
@@ -485,7 +489,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "((tags[{p0:String}] = {p1:String} AND updated_at < {p2:DateTime}) OR tags[{p3:String}] = {p4:String})"
+            "((tags[{p0:String}] = {p1:String} AND updated_at < parseDateTimeBestEffort({p2:String})) OR tags[{p3:String}] = {p4:String})"
         );
         assert_eq!(params.len(), 5);
     }
@@ -528,7 +532,7 @@ mod tests {
 
         let (sql, params) = filter.to_clickhouse_sql("");
 
-        assert_eq!(sql, "(((tags[{p0:String}] = {p1:String} AND tags[{p2:String}] = {p3:String}) OR tags[{p4:String}] = {p5:String}) AND updated_at >= {p6:DateTime})");
+        assert_eq!(sql, "(((tags[{p0:String}] = {p1:String} AND tags[{p2:String}] = {p3:String}) OR tags[{p4:String}] = {p5:String}) AND updated_at >= parseDateTimeBestEffort({p6:String}))");
         assert_eq!(params.len(), 7);
     }
 
@@ -588,10 +592,10 @@ mod tests {
         assert_eq!(params.len(), 6);
         assert_eq!(params[0].name, "p0");
         assert_eq!(params[1].name, "p1");
-        assert_eq!(params[2].name, "key2");
-        assert_eq!(params[3].name, "value3");
-        assert_eq!(params[4].name, "key4");
-        assert_eq!(params[5].name, "value5");
+        assert_eq!(params[2].name, "p2");
+        assert_eq!(params[3].name, "p3");
+        assert_eq!(params[4].name, "p4");
+        assert_eq!(params[5].name, "p5");
     }
 
     #[test]
@@ -672,7 +676,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "(updated_at >= {p0:DateTime} AND updated_at < {p1:DateTime})"
+            "(updated_at >= parseDateTimeBestEffort({p0:String}) AND updated_at < parseDateTimeBestEffort({p1:String}))"
         );
         assert_eq!(params.len(), 2);
         assert_eq!(params[0].name, "p0");
