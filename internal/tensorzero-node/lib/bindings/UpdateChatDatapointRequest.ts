@@ -19,11 +19,11 @@ export type UpdateChatDatapointRequest = {
    */
   id: string;
   /**
-   * Datapoint input. If omitted or `null`, it will be left unchanged.
+   * Datapoint input. If omitted, it will be left unchanged.
    */
   input?: Input;
   /**
-   * Chat datapoint output. If omitted or `null`, it will be left unchanged. If empty, it will be cleared. Otherwise,
+   * Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
    * it will overwrite the existing output.
    */
   output?: Array<ContentBlockChatOutput>;
@@ -32,7 +32,7 @@ export type UpdateChatDatapointRequest = {
    */
   tool_params?: ToolCallConfigDatabaseInsert | null;
   /**
-   * Datapoint tags. If omitted or `null`, it will be left unchanged. If empty, it will be cleared. Otherwise,
+   * Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
    * it will be overwrite the existing tags.
    */
   tags?: { [key in string]?: string };

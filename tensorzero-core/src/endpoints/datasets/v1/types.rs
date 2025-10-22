@@ -43,11 +43,11 @@ pub struct UpdateChatDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
 
-    /// Datapoint input. If omitted or `null`, it will be left unchanged.
+    /// Datapoint input. If omitted, it will be left unchanged.
     #[serde(default)]
     pub input: Option<Input>,
 
-    /// Chat datapoint output. If omitted or `null`, it will be left unchanged. If empty, it will be cleared. Otherwise,
+    /// Chat datapoint output. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will overwrite the existing output.
     #[serde(default)]
     pub output: Option<Vec<ContentBlockChatOutput>>,
@@ -56,7 +56,7 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default, deserialize_with = "deserialize_double_option")]
     pub tool_params: Option<Option<ToolCallConfigDatabaseInsert>>,
 
-    /// Datapoint tags. If omitted or `null`, it will be left unchanged. If empty, it will be cleared. Otherwise,
+    /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will be overwrite the existing tags.
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
@@ -80,7 +80,7 @@ pub struct UpdateJsonDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
 
-    /// Datapoint input. If omitted or `null`, it will be left unchanged.
+    /// Datapoint input. If omitted, it will be left unchanged.
     #[serde(default)]
     pub input: Option<Input>,
 
@@ -94,7 +94,7 @@ pub struct UpdateJsonDatapointRequest {
     #[serde(default)]
     pub output_schema: Option<Value>,
 
-    /// Datapoint tags. If omitted or `null`, it will be left unchanged. If empty, it will be cleared. Otherwise,
+    /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will be overwrite the existing tags.
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,

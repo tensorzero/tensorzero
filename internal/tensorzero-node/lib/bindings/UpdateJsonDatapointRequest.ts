@@ -18,7 +18,7 @@ export type UpdateJsonDatapointRequest = {
    */
   id: string;
   /**
-   * Datapoint input. If omitted or `null`, it will be left unchanged.
+   * Datapoint input. If omitted, it will be left unchanged.
    */
   input?: Input;
   /**
@@ -32,7 +32,7 @@ export type UpdateJsonDatapointRequest = {
    */
   output_schema?: JsonValue;
   /**
-   * Datapoint tags. If omitted or `null`, it will be left unchanged. If empty, it will be cleared. Otherwise,
+   * Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
    * it will be overwrite the existing tags.
    */
   tags?: { [key in string]?: string };

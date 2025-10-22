@@ -2,6 +2,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+use object_store::path::Path as ObjectStorePath;
 use tensorzero::{
     Datapoint, DatasetQueryParams, FloatComparisonOperator, GetDatapointParams,
     GetDatasetMetadataParams, Role,
@@ -14,6 +15,9 @@ use tensorzero_core::db::datasets::{
     GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter, StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
+use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
+use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
     StoredInputMessageContent, Text,
@@ -2074,11 +2078,6 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
 
 #[tokio::test]
 async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
-    use tensorzero_core::inference::types::file::Base64FileMetadata;
-    use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
-    use tensorzero_core::inference::types::stored_input::StoredFile;
-    use object_store::path::Path as ObjectStorePath;
-
     let clickhouse = get_clickhouse().await;
     let datapoint_id = Uuid::now_v7();
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
@@ -2161,11 +2160,6 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
 
 #[tokio::test]
 async fn test_json_datapoint_with_file_object_storage_roundtrip() {
-    use tensorzero_core::inference::types::file::Base64FileMetadata;
-    use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
-    use tensorzero_core::inference::types::stored_input::StoredFile;
-    use object_store::path::Path as ObjectStorePath;
-
     let clickhouse = get_clickhouse().await;
     let datapoint_id = Uuid::now_v7();
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
@@ -2210,10 +2204,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     });
 
     // Insert the datapoint
-    clickhouse
-        .insert_datapoint(&json_datapoint)
-        .await
-        .unwrap();
+    clickhouse.insert_datapoint(&json_datapoint).await.unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -2252,11 +2243,6 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
 
 #[tokio::test]
 async fn test_datapoint_with_mixed_file_types() {
-    use tensorzero_core::inference::types::file::Base64FileMetadata;
-    use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
-    use tensorzero_core::inference::types::stored_input::StoredFile;
-    use object_store::path::Path as ObjectStorePath;
-
     let clickhouse = get_clickhouse().await;
     let datapoint_id = Uuid::now_v7();
     let dataset_name = format!("test_mixed_files_{}", Uuid::now_v7());

@@ -577,8 +577,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 
     /// Inserts a batch of datapoints into the database. Internally, separate chat and JSON datapoints and write them to the appropriate tables. Note that this is not very atomic: the Chat table and Json table updates are not rolled back if one fails.
     ///
-    /// Requires us to take ownership of each datapoint in `datapoints` since we split them into two Vecs internally.
-    ///
     /// Returns the number of rows written.
     async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {
         // Separate chat and JSON datapoints

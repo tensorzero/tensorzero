@@ -55,6 +55,8 @@ pub async fn update_datapoints_handler(
 /// Business logic for updating datapoints in a dataset.
 /// This function validates the request, fetches existing datapoints, prepares updates,
 /// and inserts the updated datapoints into ClickHouse.
+///
+/// Returns an error if there are no datapoints, or if there are duplicate datapoint IDs.
 async fn update_datapoints(
     app_state: &AppStateData,
     dataset_name: &str,
@@ -164,6 +166,7 @@ async fn update_datapoints(
     Ok(UpdateDatapointsResponse { ids: new_ids })
 }
 
+#[derive(Debug)]
 struct PreparedUpdate {
     stale: DatapointInsert,
     updated: DatapointInsert,
@@ -371,220 +374,1181 @@ async fn convert_input_to_stored_input(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ObjectStoreInfo, SchemaData};
+    use crate::config::{Config, ObjectStoreInfo, SchemaData};
+    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::endpoints::datasets::v1::types::DatapointMetadataUpdate;
+    use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
     use crate::experimentation::ExperimentationConfig;
-    use crate::function::FunctionConfigChat;
+    use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::storage::{StorageKind, StoragePath};
-    use crate::inference::types::StoredInputMessageContent;
-    use crate::inference::types::{File, Input, InputMessage, InputMessageContent, Role};
-    use crate::tool::ToolChoice;
+    use crate::inference::types::{
+        ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
+        JsonInferenceOutput, Role, StoredInputMessageContent, Text,
+    };
+    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+    use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
+    use serde_json::json;
     use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
 
-    #[tokio::test]
-    async fn test_convert_input_with_object_storage_does_not_refetch() {
-        // This test verifies that File::ObjectStorage inputs bypass object storage access entirely.
-        // We use StorageKind::Disabled with object_store: None to ensure that if the code
-        // tried to access object storage, it would fail. The fact that this test passes
-        // proves that File::ObjectStorage is handled specially and never triggers storage access.
+    mod file_conversion_tests {
+        use super::*;
 
-        // TODO(shuyangli): Provide proper object storage mocks for tests. This requires a mock for
-        // `ObjectStore` which we don't own, so it's a little complicated.
+        #[tokio::test]
+        async fn test_convert_input_with_object_storage_does_not_refetch() {
+            // This test verifies that File::ObjectStorage inputs bypass object storage access entirely.
+            // We use StorageKind::Disabled with object_store: None to ensure that if the code
+            // tried to access object storage, it would fail. The fact that this test passes
+            // proves that File::ObjectStorage is handled specially and never triggers storage access.
 
-        // Create a File::ObjectStorage that should NOT be fetched
-        let storage_path = StoragePath {
-            kind: StorageKind::Disabled,
-            path: ObjectStorePath::parse("test/path/image.png").unwrap(),
-        };
+            // TODO(shuyangli): Provide proper object storage mocks for tests. This requires a mock for
+            // `ObjectStore` which we don't own, so it's a little complicated.
 
-        let file = File::ObjectStorage {
-            source_url: Some("https://example.com/original.png".parse().unwrap()),
-            mime_type: mime::IMAGE_PNG,
-            storage_path: storage_path.clone(),
-        };
+            // Create a File::ObjectStorage that should NOT be fetched
+            let storage_path = StoragePath {
+                kind: StorageKind::Disabled,
+                path: ObjectStorePath::parse("test/path/image.png").unwrap(),
+            };
 
-        let input = Input {
-            system: None,
-            messages: vec![InputMessage {
-                role: Role::User,
-                content: vec![InputMessageContent::File(file.clone())],
-            }],
-        };
+            let file = File::ObjectStorage {
+                source_url: Some("https://example.com/original.png".parse().unwrap()),
+                mime_type: mime::IMAGE_PNG,
+                storage_path: storage_path.clone(),
+            };
 
-        // Create minimal function config
-        let function_config = FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            schemas: SchemaData::default(),
-            tools: vec![],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
-            description: None,
-            experimentation: ExperimentationConfig::Uniform,
-            all_explicit_templates_names: HashSet::new(),
-        });
+            let input = Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::File(file.clone())],
+                }],
+            };
 
-        // Create fetch context with NO actual object storage info.
-        // If the code tries to access object storage, it will fail with an error.
-        let http_client = TensorzeroHttpClient::new().unwrap();
-        let object_store_info: Option<ObjectStoreInfo> = None;
-        let fetch_context = FetchContext {
-            client: &http_client,
-            object_store_info: &object_store_info,
-        };
+            // Create minimal function config
+            let function_config = FunctionConfig::Chat(FunctionConfigChat {
+                variants: HashMap::new(),
+                schemas: SchemaData::default(),
+                tools: vec![],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: Some(true),
+                description: None,
+                experimentation: ExperimentationConfig::Uniform,
+                all_explicit_templates_names: HashSet::new(),
+            });
 
-        // Convert input to stored input
-        // This succeeds ONLY because File::ObjectStorage bypasses storage access
-        let result = convert_input_to_stored_input(Some(input), &fetch_context, &function_config)
-            .await
-            .unwrap();
+            // Create fetch context with NO actual object storage info.
+            // If the code tries to access object storage, it will fail with an error.
+            let http_client = TensorzeroHttpClient::new().unwrap();
+            let object_store_info: Option<ObjectStoreInfo> = None;
+            let fetch_context = FetchContext {
+                client: &http_client,
+                object_store_info: &object_store_info,
+            };
 
-        // Verify the result
-        assert!(result.is_some());
-        let stored_input = result.unwrap();
-        assert_eq!(stored_input.messages.len(), 1);
-        assert_eq!(stored_input.messages[0].content.len(), 1);
+            // Convert input to stored input
+            // This succeeds ONLY because File::ObjectStorage bypasses storage access
+            let result =
+                convert_input_to_stored_input(Some(input), &fetch_context, &function_config)
+                    .await
+                    .unwrap();
 
-        // Verify that the File::ObjectStorage was passed through without fetching
-        match &stored_input.messages[0].content[0] {
-            StoredInputMessageContent::File(stored_file) => {
-                assert_eq!(stored_file.storage_path.path, storage_path.path);
-                assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
-                assert_eq!(
-                    stored_file.file.url,
-                    Some("https://example.com/original.png".parse().unwrap())
-                );
+            // Verify the result
+            assert!(result.is_some());
+            let stored_input = result.unwrap();
+            assert_eq!(stored_input.messages.len(), 1);
+            assert_eq!(stored_input.messages[0].content.len(), 1);
+
+            // Verify that the File::ObjectStorage was passed through without fetching
+            match &stored_input.messages[0].content[0] {
+                StoredInputMessageContent::File(stored_file) => {
+                    assert_eq!(stored_file.storage_path.path, storage_path.path);
+                    assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
+                    assert_eq!(
+                        stored_file.file.url,
+                        Some("https://example.com/original.png".parse().unwrap())
+                    );
+                }
+                _ => panic!("Expected File content"),
             }
-            _ => panic!("Expected File content"),
         }
-    }
 
-    #[tokio::test]
-    async fn test_convert_input_with_base64_processes_without_actual_storage() {
-        // This test verifies that File::Base64 goes through the write_file() code path,
-        // but gracefully handles disabled storage (for testing). In contrast,
-        // File::ObjectStorage completely bypasses the write_file() path.
-        //
-        // The key difference tested here vs test_convert_input_with_object_storage_does_not_refetch:
-        // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
-        // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
+        #[tokio::test]
+        async fn test_convert_input_with_base64_processes_without_actual_storage() {
+            // This test verifies that File::Base64 goes through the write_file() code path,
+            // but gracefully handles disabled storage (for testing). In contrast,
+            // File::ObjectStorage completely bypasses the write_file() path.
+            //
+            // The key difference tested here vs test_convert_input_with_object_storage_does_not_refetch:
+            // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
+            // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
 
-        let file = File::Base64 {
+            let file = File::Base64 {
             mime_type: mime::IMAGE_PNG,
             data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
         };
 
-        let input = Input {
-            system: None,
-            messages: vec![InputMessage {
-                role: Role::User,
-                content: vec![InputMessageContent::File(file.clone())],
-            }],
-        };
+            let input = Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::File(file.clone())],
+                }],
+            };
 
-        // Create minimal function config
-        let function_config = FunctionConfig::Chat(FunctionConfigChat {
-            variants: HashMap::new(),
-            schemas: SchemaData::default(),
-            tools: vec![],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
-            description: None,
-            experimentation: ExperimentationConfig::Uniform,
-            all_explicit_templates_names: HashSet::new(),
-        });
+            // Create minimal function config
+            let function_config = FunctionConfig::Chat(FunctionConfigChat {
+                variants: HashMap::new(),
+                schemas: SchemaData::default(),
+                tools: vec![],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: Some(true),
+                description: None,
+                experimentation: ExperimentationConfig::Uniform,
+                all_explicit_templates_names: HashSet::new(),
+            });
 
-        // Create fetch context with disabled storage
-        // File::Base64 will call write_file() but it no-ops with disabled storage
-        let http_client = TensorzeroHttpClient::new().unwrap();
-        let object_store_info = Some(ObjectStoreInfo {
-            object_store: None, // Disabled storage - write_file() returns Ok(()) without writing
-            kind: StorageKind::Disabled,
-        });
-        let fetch_context = FetchContext {
-            client: &http_client,
-            object_store_info: &object_store_info,
-        };
+            // Create fetch context with disabled storage
+            // File::Base64 will call write_file() but it no-ops with disabled storage
+            let http_client = TensorzeroHttpClient::new().unwrap();
+            let object_store_info = Some(ObjectStoreInfo {
+                object_store: None, // Disabled storage - write_file() returns Ok(()) without writing
+                kind: StorageKind::Disabled,
+            });
+            let fetch_context = FetchContext {
+                client: &http_client,
+                object_store_info: &object_store_info,
+            };
 
-        // Convert input to stored input
-        // This succeeds because write_file() gracefully handles disabled storage
-        let result = convert_input_to_stored_input(Some(input), &fetch_context, &function_config)
+            // Convert input to stored input
+            // This succeeds because write_file() gracefully handles disabled storage
+            let result =
+                convert_input_to_stored_input(Some(input), &fetch_context, &function_config)
+                    .await
+                    .unwrap();
+
+            // Verify the result
+            assert!(result.is_some());
+            let stored_input = result.unwrap();
+            assert_eq!(stored_input.messages.len(), 1);
+            assert_eq!(stored_input.messages[0].content.len(), 1);
+
+            // Verify that the File::Base64 was converted to StoredFile
+            match &stored_input.messages[0].content[0] {
+                StoredInputMessageContent::File(stored_file) => {
+                    // Should have been processed into a stored file
+                    assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
+                    // With disabled storage, path should still be generated
+                    assert!(!stored_file.storage_path.path.as_ref().is_empty());
+                    // URL should be None since this came from Base64
+                    assert_eq!(stored_file.file.url, None);
+                }
+                _ => panic!("Expected File content"),
+            }
+        }
+    }
+    // ============================================================================
+    // Test helpers for prepare_chat_update and prepare_json_update
+    // ============================================================================
+
+    mod prepare_update_tests {
+        use super::*;
+
+        /// Helper to create a minimal AppStateData for testing
+        fn create_test_app_state() -> AppStateData {
+            let mut mock_client = MockClickHouseClient::new();
+            mock_client.expect_batcher_join_handle().returning(|| None);
+
+            let mut config = Config::default();
+
+            // Add a chat function
+            config.functions.insert(
+                "test_chat_function".to_string(),
+                Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+                    variants: HashMap::new(),
+                    schemas: SchemaData::default(),
+                    tools: vec![],
+                    tool_choice: ToolChoice::Auto,
+                    parallel_tool_calls: Some(true),
+                    description: None,
+                    experimentation: ExperimentationConfig::Uniform,
+                    all_explicit_templates_names: HashSet::new(),
+                })),
+            );
+
+            // Add a JSON function
+            config.functions.insert(
+                "test_json_function".to_string(),
+                Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                    variants: HashMap::new(),
+                    schemas: SchemaData::default(),
+                    output_schema: StaticJSONSchema::from_value(json!({
+                        "type": "object",
+                        "properties": {"value": {"type": "string"}},
+                        "required": ["value"],
+                        "additionalProperties": false
+                    }))
+                    .unwrap(),
+                    implicit_tool_call_config: crate::tool::ToolCallConfig::default(),
+                    description: None,
+                    experimentation: ExperimentationConfig::Uniform,
+                    all_explicit_template_names: HashSet::new(),
+                })),
+            );
+
+            let gateway_handle = GatewayHandle::new_unit_test_data(
+                Arc::new(config),
+                GatewayHandleTestOptions {
+                    clickhouse_client: Arc::new(mock_client),
+                    postgres_healthy: true,
+                },
+            );
+            gateway_handle.app_state.clone()
+        }
+
+        /// Helper to create a sample ChatInferenceDatapoint
+        fn create_sample_chat_datapoint(dataset_name: &str) -> ChatInferenceDatapoint {
+            ChatInferenceDatapoint {
+                id: Uuid::now_v7(),
+                dataset_name: dataset_name.to_string(),
+                function_name: "test_chat_function".to_string(),
+                name: Some("test_datapoint".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![crate::inference::types::StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text {
+                            value: json!("original input"),
+                        }],
+                    }],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "original output".to_string(),
+                })]),
+                tool_params: Some(ToolCallConfigDatabaseInsert {
+                    tools_available: vec![],
+                    tool_choice: ToolChoice::Auto,
+                    parallel_tool_calls: Some(true),
+                }),
+                tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
+                auxiliary: "{}".to_string(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: chrono::Utc::now()
+                    .format(CLICKHOUSE_DATETIME_FORMAT)
+                    .to_string(),
+            }
+        }
+
+        /// Helper to create a sample JsonInferenceDatapoint
+        fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
+            JsonInferenceDatapoint {
+                id: Uuid::now_v7(),
+                dataset_name: dataset_name.to_string(),
+                function_name: "test_json_function".to_string(),
+                name: Some("test_datapoint".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![crate::inference::types::StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text {
+                            value: json!("original input"),
+                        }],
+                    }],
+                },
+                output: Some(JsonInferenceOutput {
+                    raw: Some(r#"{"value":"original"}"#.to_string()),
+                    parsed: Some(json!({"value": "original"})),
+                }),
+                output_schema: json!({
+                    "type": "object",
+                    "properties": {"value": {"type": "string"}},
+                    "required": ["value"],
+                    "additionalProperties": false
+                }),
+                tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
+                auxiliary: "{}".to_string(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: chrono::Utc::now()
+                    .format(CLICKHOUSE_DATETIME_FORMAT)
+                    .to_string(),
+            }
+        }
+
+        fn create_fetch_context(http_client: &'_ TensorzeroHttpClient) -> FetchContext<'_> {
+            FetchContext {
+                client: http_client,
+                object_store_info: &None,
+            }
+        }
+
+        // ============================================================================
+        // Tests for prepare_chat_update
+        // ============================================================================
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_no_updates() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
+            let original_id = existing.id;
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: None,
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing.clone(),
+                "2025-01-01 00:00:00",
+            )
             .await
             .unwrap();
 
-        // Verify the result
-        assert!(result.is_some());
-        let stored_input = result.unwrap();
-        assert_eq!(stored_input.messages.len(), 1);
-        assert_eq!(stored_input.messages[0].content.len(), 1);
+            // Verify stale datapoint
+            let DatapointInsert::Chat(stale) = result.stale else {
+                panic!("Expected Chat insert");
+            };
+            assert_eq!(stale.id, original_id);
+            assert_eq!(stale.staled_at, Some("2025-01-01 00:00:00".to_string()));
 
-        // Verify that the File::Base64 was converted to StoredFile
-        match &stored_input.messages[0].content[0] {
-            StoredInputMessageContent::File(stored_file) => {
-                // Should have been processed into a stored file
-                assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
-                // With disabled storage, path should still be generated
-                assert!(!stored_file.storage_path.path.as_ref().is_empty());
-                // URL should be None since this came from Base64
-                assert_eq!(stored_file.file.url, None);
-            }
-            _ => panic!("Expected File content"),
+            // Verify updated datapoint - should have new ID but all fields unchanged
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+            assert_ne!(updated.id, original_id);
+            assert_eq!(updated.id, result.new_id);
+            assert_eq!(updated.name, existing.name);
+            assert_eq!(
+                updated.output.as_ref().unwrap()[0],
+                existing.output.unwrap()[0]
+            );
+            assert!(updated.tool_params.is_some());
+            assert!(updated.tags.is_some());
         }
-    }
 
-    #[test]
-    fn test_file_object_storage_serializes_with_tagged_format() {
-        // Test that File::ObjectStorage uses the new tagged format with flattened structure
-        let storage_path = StoragePath {
-            kind: StorageKind::Disabled,
-            path: ObjectStorePath::parse("test/path/image.png").unwrap(),
-        };
+        #[tokio::test]
+        async fn test_prepare_chat_update_input_only() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
 
-        let file = File::ObjectStorage {
-            source_url: Some("https://example.com/original.png".parse().unwrap()),
-            mime_type: mime::IMAGE_PNG,
-            storage_path: storage_path.clone(),
-        };
+            let new_input = Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(
+                        crate::inference::types::TextKind::Text {
+                            text: "new input text".into(),
+                        },
+                    )],
+                }],
+            };
 
-        let serialized = serde_json::to_value(&file).unwrap();
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: Some(new_input),
+                output: None,
+                tool_params: None,
+                tags: None,
+                metadata: None,
+            };
 
-        // Verify tagged format
-        assert_eq!(serialized["file_type"], "object_storage");
-        assert_eq!(serialized["source_url"], "https://example.com/original.png");
-        assert_eq!(serialized["mime_type"], "image/png");
-        assert!(serialized.get("storage_path").is_some());
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing.clone(),
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
 
-        // Verify flattened structure (no "metadata" field)
-        assert!(serialized.get("metadata").is_none());
-    }
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
 
-    #[test]
-    fn test_file_url_serializes_with_tagged_format() {
-        let file = File::Url {
-            url: "https://example.com/image.png".parse().unwrap(),
-            mime_type: Some(mime::IMAGE_PNG),
-        };
+            // Input should be updated
+            assert_eq!(updated.input.messages.len(), 1);
+            match &updated.input.messages[0].content[0] {
+                StoredInputMessageContent::Text { value } => {
+                    let text: String = serde_json::from_value(value.clone()).unwrap();
+                    assert_eq!(text, "new input text");
+                }
+                _ => panic!("Expected text content"),
+            }
 
-        let serialized = serde_json::to_value(&file).unwrap();
+            // Other fields unchanged
+            assert_eq!(
+                updated.output.as_ref().unwrap()[0],
+                existing.output.unwrap()[0]
+            );
+        }
 
-        // Verify tagged format
-        assert_eq!(serialized["file_type"], "url");
-        assert_eq!(serialized["url"], "https://example.com/image.png");
-        assert_eq!(serialized["mime_type"], "image/png");
-    }
+        #[tokio::test]
+        async fn test_prepare_chat_update_output_only() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
 
-    #[test]
-    fn test_file_base64_serializes_with_tagged_format() {
-        let file = File::Base64 {
-            mime_type: mime::IMAGE_PNG,
-            data: "base64data".to_string(),
-        };
+            let new_output = vec![ContentBlockChatOutput::Text(Text {
+                text: "new output".to_string(),
+            })];
 
-        let serialized = serde_json::to_value(&file).unwrap();
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(new_output.clone()),
+                tool_params: None,
+                tags: None,
+                metadata: None,
+            };
 
-        // Verify tagged format
-        assert_eq!(serialized["file_type"], "base64");
-        assert_eq!(serialized["mime_type"], "image/png");
-        assert_eq!(serialized["data"], "base64data");
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing.clone(),
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            // Output should be updated
+            assert_eq!(updated.output, Some(new_output));
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_tool_params_omitted() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
+            let original_tool_params = existing.tool_params.clone();
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: None, // Omitted - should remain unchanged
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            assert_eq!(updated.tool_params, original_tool_params);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_tool_params_set_to_null() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: Some(None), // Explicitly set to null
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            assert_eq!(updated.tool_params, None);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_tool_params_set_to_value() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
+
+            let new_tool_params = ToolCallConfigDatabaseInsert {
+                tools_available: vec![],
+                tool_choice: ToolChoice::None,
+                parallel_tool_calls: Some(false),
+            };
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: Some(Some(new_tool_params.clone())),
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            assert_eq!(updated.tool_params, Some(new_tool_params));
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_tags_cases() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Case 1: Omitted - should remain unchanged
+            let existing = create_sample_chat_datapoint(dataset_name);
+            let original_tags = existing.tags.clone();
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: None,
+                tags: None,
+                metadata: None,
+            };
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+            assert_eq!(updated.tags, original_tags);
+
+            // Case 2: Set to empty HashMap (will clear tags)
+            let existing = create_sample_chat_datapoint(dataset_name);
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: None,
+                tags: Some(HashMap::new()),
+                metadata: None,
+            };
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+            assert_eq!(updated.tags, Some(HashMap::new()));
+
+            // Case 3: Set to value
+            let existing = create_sample_chat_datapoint(dataset_name);
+            let new_tags = HashMap::from([("new_key".to_string(), "new_value".to_string())]);
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: None,
+                tags: Some(new_tags.clone()),
+                metadata: None,
+            };
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+            assert_eq!(updated.tags, Some(new_tags));
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_metadata_name_cases() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Case 1: Metadata omitted - name unchanged
+            let existing = create_sample_chat_datapoint(dataset_name);
+            let original_name = existing.name.clone();
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: None,
+                tags: None,
+                metadata: None,
+            };
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+            assert_eq!(updated.name, original_name);
+
+            // Case 2: Metadata.name set to null
+            let existing = create_sample_chat_datapoint(dataset_name);
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: None,
+                tags: None,
+                metadata: Some(DatapointMetadataUpdate { name: Some(None) }),
+            };
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+            assert_eq!(updated.name, None);
+
+            // Case 3: Metadata.name set to value
+            let existing = create_sample_chat_datapoint(dataset_name);
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                tool_params: None,
+                tags: None,
+                metadata: Some(DatapointMetadataUpdate {
+                    name: Some(Some("new_name".to_string())),
+                }),
+            };
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+            assert_eq!(updated.name, Some("new_name".to_string()));
+        }
+
+        #[tokio::test]
+        async fn test_prepare_chat_update_all_fields() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_chat_datapoint(dataset_name);
+
+            let new_input = Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(
+                        crate::inference::types::TextKind::Text {
+                            text: "new input".into(),
+                        },
+                    )],
+                }],
+            };
+            let new_output = vec![ContentBlockChatOutput::Text(Text {
+                text: "new output".to_string(),
+            })];
+            let new_tool_params = ToolCallConfigDatabaseInsert {
+                tools_available: vec![],
+                tool_choice: ToolChoice::None,
+                parallel_tool_calls: Some(false),
+            };
+            let new_tags = HashMap::from([("new".to_string(), "tag".to_string())]);
+
+            let update = UpdateChatDatapointRequest {
+                id: existing.id,
+                input: Some(new_input),
+                output: Some(new_output.clone()),
+                tool_params: Some(Some(new_tool_params.clone())),
+                tags: Some(new_tags.clone()),
+                metadata: Some(DatapointMetadataUpdate {
+                    name: Some(Some("updated_name".to_string())),
+                }),
+            };
+
+            let result = prepare_chat_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Chat(updated) = result.updated else {
+                panic!("Expected Chat insert");
+            };
+
+            // Verify all fields were updated
+            assert_eq!(updated.output, Some(new_output));
+            assert_eq!(updated.tool_params, Some(new_tool_params));
+            assert_eq!(updated.tags, Some(new_tags));
+            assert_eq!(updated.name, Some("updated_name".to_string()));
+        }
+
+        // ============================================================================
+        // Tests for prepare_json_update
+        // ============================================================================
+
+        #[tokio::test]
+        async fn test_prepare_json_update_no_updates() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+            let original_id = existing.id;
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                output_schema: None,
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing.clone(),
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            // Verify stale datapoint
+            let DatapointInsert::Json(stale) = result.stale else {
+                panic!("Expected Json insert");
+            };
+            assert_eq!(stale.id, original_id);
+            assert_eq!(stale.staled_at, Some("2025-01-01 00:00:00".to_string()));
+
+            // Verify updated datapoint
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+            assert_ne!(updated.id, original_id);
+            assert_eq!(updated.name, existing.name);
+            assert_eq!(
+                updated.output.as_ref().unwrap().parsed,
+                existing.output.unwrap().parsed
+            );
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_output_omitted() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+            let original_output = existing.output.clone();
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None, // Omitted
+                output_schema: None,
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(updated.output, original_output);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_output_set_to_null() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(None), // Set to null
+                output_schema: None,
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(updated.output, None);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_output_set_to_value() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+
+            let new_output_value = json!({"value": "new"});
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(new_output_value.clone())),
+                output_schema: None,
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(
+                updated.output.as_ref().unwrap().parsed,
+                Some(new_output_value)
+            );
+            assert_eq!(
+                updated.output.as_ref().unwrap().raw,
+                Some(r#"{"value":"new"}"#.to_string())
+            );
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_output_schema_only() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+            let original_output = existing.output.clone();
+
+            let new_schema =
+                json!({"type": "object", "properties": {"newField": {"type": "number"}}});
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                output_schema: Some(new_schema.clone()),
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(updated.output_schema, new_schema);
+            assert_eq!(updated.output, original_output);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_output_schema_and_output() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+
+            let new_schema = json!({"type": "object", "properties": {"count": {"type": "number"}}});
+            let new_output = json!({"count": 42});
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(new_output.clone())),
+                output_schema: Some(new_schema.clone()),
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(updated.output_schema, new_schema);
+            assert_eq!(updated.output.as_ref().unwrap().parsed, Some(new_output));
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_output_validation_failure() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+
+            // Output doesn't match the schema (expects {value: string}, providing {count: number})
+            let bad_output = json!({"count": 123});
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(bad_output)),
+                output_schema: None, // Will use existing schema which expects {value: string}
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await;
+
+            assert!(result.is_err(), "Expected validation error");
+            let err = result.unwrap_err();
+            let err_msg = format!("{err:?}");
+            assert!(
+                err_msg.contains("does not match") || err_msg.contains("schema"),
+                "Expected schema validation error, got: {err_msg}"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_tags_cases() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+
+            // Similar to chat tests - omitted, null, value
+            let existing = create_sample_json_datapoint(dataset_name);
+            let original_tags = existing.tags.clone();
+
+            // Omitted
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                output_schema: None,
+                tags: None,
+                metadata: None,
+            };
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+            assert_eq!(updated.tags, original_tags);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_all_fields() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+
+            let new_input = Input {
+                system: None,
+                messages: vec![InputMessage {
+                    role: Role::User,
+                    content: vec![InputMessageContent::Text(
+                        crate::inference::types::TextKind::Text {
+                            text: "new json input".into(),
+                        },
+                    )],
+                }],
+            };
+            let new_schema =
+                json!({"type": "object", "properties": {"result": {"type": "boolean"}}});
+            let new_output = json!({"result": true});
+            let new_tags = HashMap::from([("json_tag".to_string(), "value".to_string())]);
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: Some(new_input),
+                output: Some(Some(new_output.clone())),
+                output_schema: Some(new_schema.clone()),
+                tags: Some(new_tags.clone()),
+                metadata: Some(DatapointMetadataUpdate {
+                    name: Some(Some("json_updated".to_string())),
+                }),
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(updated.output_schema, new_schema);
+            assert_eq!(updated.output.as_ref().unwrap().parsed, Some(new_output));
+            assert_eq!(updated.tags, Some(new_tags));
+            assert_eq!(updated.name, Some("json_updated".to_string()));
+        }
     }
 }
