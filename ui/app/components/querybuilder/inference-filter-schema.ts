@@ -42,7 +42,7 @@ const booleanMetricFilterSchema = z.object({
 });
 
 // Recursive inference filter schema
-export const inferenceFilterSchema: z.ZodTypeAny = z.lazy(() =>
+export const InferenceFilterSchema: z.ZodTypeAny = z.lazy(() =>
   z.union([
     z.discriminatedUnion("type", [
       tagFilterSchema,
@@ -51,12 +51,12 @@ export const inferenceFilterSchema: z.ZodTypeAny = z.lazy(() =>
     ]),
     z.object({
       type: z.enum(["and", "or"]),
-      children: z.array(inferenceFilterSchema),
+      children: z.array(InferenceFilterSchema),
     }),
   ]),
 );
 
-export type inferenceFilterSchema = z.infer<typeof inferenceFilterSchema>;
+export type InferenceFilterSchemaType = z.infer<typeof InferenceFilterSchema>;
 
 // ===== BIDIRECTIONAL TYPECHECKING =====
 

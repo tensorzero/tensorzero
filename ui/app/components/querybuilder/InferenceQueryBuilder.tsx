@@ -4,15 +4,15 @@ import { z } from "zod";
 import { Form } from "~/components/ui/form";
 import InferenceFilterBuilder from "./InferenceFilterBuilder";
 import FunctionFormField from "./FunctionFormField";
-import { inferenceFilterSchema } from "./inference-filter-schema";
+import { InferenceFilterSchema } from "./inference-filter-schema";
 
-const InferenceQueryBuilderFormValuesSchema = z.object({
+const InferenceQueryBuilderSchema = z.object({
   function: z.string().min(1, "Function is required"),
-  inferenceFilter: inferenceFilterSchema.optional(),
+  inferenceFilter: InferenceFilterSchema.optional(),
 });
 
 export type InferenceQueryBuilderFormValues = z.infer<
-  typeof InferenceQueryBuilderFormValuesSchema
+  typeof InferenceQueryBuilderSchema
 >;
 
 interface InferenceQueryBuilderProps {
@@ -30,7 +30,7 @@ export default function InferenceQueryBuilder({
       inferenceFilter: undefined,
       ...defaultValues,
     },
-    resolver: zodResolver(InferenceQueryBuilderFormValuesSchema),
+    resolver: zodResolver(InferenceQueryBuilderSchema),
     mode: "onChange",
   });
 

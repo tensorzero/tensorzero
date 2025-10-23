@@ -57,7 +57,7 @@ interface ValidatedInputProps {
   step?: string;
 }
 
-function ValidatedInput({
+const ValidatedInput = memo(function ValidatedInput({
   value,
   onChange,
   onBlur,
@@ -95,7 +95,7 @@ function ValidatedInput({
       )}
     </div>
   );
-}
+});
 
 // Row Components
 

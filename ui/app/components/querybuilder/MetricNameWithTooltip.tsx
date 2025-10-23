@@ -1,3 +1,4 @@
+import { memo } from "react";
 import {
   Tooltip,
   TooltipContent,
@@ -11,7 +12,7 @@ interface MetricNameWithTooltipProps {
   metricConfig: MetricConfig;
 }
 
-export function MetricNameWithTooltip({
+export const MetricNameWithTooltip = memo(function MetricNameWithTooltip({
   metricName,
   metricConfig,
 }: MetricNameWithTooltipProps) {
@@ -52,4 +53,4 @@ export function MetricNameWithTooltip({
       </Tooltip>
     </TooltipProvider>
   );
-}
+});

@@ -12,8 +12,8 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
+  TooltipProvider,
 } from "~/components/ui/tooltip";
 import {
   Command,
@@ -29,46 +29,12 @@ import {
   TagFilterRow,
   FloatMetricFilterRow,
   BooleanMetricFilterRow,
-  InferenceFilterFieldValidation,
 } from "./FilterRows";
 import DeleteButton from "./DeleteButton";
 import AddButton from "./AddButton";
 
 // Constants
 const MAX_NESTING_DEPTH = 2;
-
-// Validate current filter values (used on blur and submit)
-export function validateInferenceFilter(
-  filter: InferenceFilter | undefined,
-): boolean {
-  if (!filter) return true;
-
-  if (filter.type === "tag") {
-    const keyValid = InferenceFilterFieldValidation.tagKey.safeParse(
-      filter.key,
-    ).success;
-    const valueValid = InferenceFilterFieldValidation.tagValue.safeParse(
-      filter.value,
-    ).success;
-    return keyValid && valueValid;
-  }
-
-  if (filter.type === "float_metric") {
-    return InferenceFilterFieldValidation.floatValue.safeParse(
-      filter.value.toString(),
-    ).success;
-  }
-
-  if (filter.type === "boolean_metric") {
-    return true; // Always valid (dropdown)
-  }
-
-  if (filter.type === "and" || filter.type === "or") {
-    return filter.children.every((child) => validateInferenceFilter(child));
-  }
-
-  return false; // Unknown filter type
-}
 
 interface InferenceFilterBuilder {
   inferenceFilter?: InferenceFilter;
@@ -335,7 +301,17 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
 
   if (filter.type === "float_metric") {
     const metricConfig = config.metrics[filter.metric_name];
-    if (!metricConfig) return null;
+    if (!metricConfig) {
+      return (
+        <div className="flex items-center gap-2 rounded border border-red-300 bg-red-50 px-3 py-2">
+          <span className="text-destructive text-sm">
+            Unknown Metric:{" "}
+            <span className="font-mono">{filter.metric_name}</span>
+          </span>
+          <DeleteButton onDelete={() => onChange(undefined)} />
+        </div>
+      );
+    }
     return (
       <FloatMetricFilterRow
         filter={filter}
@@ -347,7 +323,16 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
 
   if (filter.type === "boolean_metric") {
     const metricConfig = config.metrics[filter.metric_name];
-    if (!metricConfig) return null;
+    if (!metricConfig) {
+      return (
+        <div className="flex items-center gap-2 rounded border border-red-300 bg-red-50 px-3 py-2">
+          <span className="text-destructive text-sm">
+            Metric "{filter.metric_name}" not found in configuration
+          </span>
+          <DeleteButton onDelete={() => onChange(undefined)} />
+        </div>
+      );
+    }
     return (
       <BooleanMetricFilterRow
         filter={filter}
@@ -365,7 +350,9 @@ interface AddMetricPopoverProps {
   onSelect: (metricName: string, metricConfig: MetricConfig) => void;
 }
 
-function AddMetricPopover({ onSelect }: AddMetricPopoverProps) {
+const AddMetricPopover = memo(function AddMetricPopover({
+  onSelect,
+}: AddMetricPopoverProps) {
   const config = useConfig();
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -423,7 +410,7 @@ function AddMetricPopover({ onSelect }: AddMetricPopoverProps) {
       </PopoverContent>
     </Popover>
   );
-}
+});
 
 // Filter Factory Functions
 function createTagFilter(): InferenceFilter {
