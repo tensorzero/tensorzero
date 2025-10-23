@@ -54,8 +54,24 @@ use super::inference::{
     InferenceStream,
 };
 use crate::embeddings::EmbeddingEncodingFormat;
+use crate::endpoints::RouteHandlers;
 use axum::routing::post;
 use axum::Router;
+
+/// Constructs (but does not register) all of our OpenAI-compatible endpoints.
+/// The `RouterExit::register_openai_compatible_routes` is a convenience method
+/// to register all of the routes on a router.
+///
+/// Alternatively, the returned `RouteHandlers` can be inspected (e.g. to allow middleware to see the route paths)
+/// and then manually registered on a router.
+pub fn build_openai_compatible_routes() -> RouteHandlers {
+    RouteHandlers {
+        routes: vec![
+            ("/openai/v1/chat/completions", post(inference_handler)),
+            ("/openai/v1/embeddings", post(embeddings_handler)),
+        ],
+    }
+}
 
 pub trait RouterExt {
     /// Applies our OpenAI-compatible endpoints to the router.
@@ -65,9 +81,11 @@ pub trait RouterExt {
 }
 
 impl RouterExt for Router<AppStateData> {
-    fn register_openai_compatible_routes(self) -> Self {
-        self.route("/openai/v1/chat/completions", post(inference_handler))
-            .route("/openai/v1/embeddings", post(embeddings_handler))
+    fn register_openai_compatible_routes(mut self) -> Self {
+        for (path, handler) in build_openai_compatible_routes().routes {
+            self = self.route(path, handler);
+        }
+        self
     }
 }
 
