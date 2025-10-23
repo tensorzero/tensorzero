@@ -97,6 +97,65 @@ const ValidatedInput = memo(function ValidatedInput({
   );
 });
 
+// Selector Components
+
+interface ComparisonOperatorSelectProps<T extends string> {
+  value: T;
+  onChange: (value: T) => void;
+  operators: Record<T, string>;
+  ariaLabel: string;
+}
+
+const ComparisonOperatorSelect = memo(function ComparisonOperatorSelect<
+  T extends string,
+>({ value, onChange, operators, ariaLabel }: ComparisonOperatorSelectProps<T>) {
+  return (
+    <div className="w-14">
+      <Select onValueChange={(val) => onChange(val as T)} value={value}>
+        <SelectTrigger aria-label={ariaLabel}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(Object.keys(operators) as T[]).map((op) => (
+            <SelectItem key={op} value={op}>
+              {operators[op]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}) as <T extends string>(
+  props: ComparisonOperatorSelectProps<T>,
+) => React.ReactElement;
+
+interface BooleanValueSelectProps {
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+const BooleanValueSelect = memo(function BooleanValueSelect({
+  value,
+  onChange,
+}: BooleanValueSelectProps) {
+  return (
+    <div className="w-48">
+      <Select
+        onValueChange={(val) => onChange(val === "true")}
+        value={value.toString()}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="true">true</SelectItem>
+          <SelectItem value="false">false</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+});
+
 // Row Components
 
 export interface TagFilterRowProps {
@@ -136,30 +195,12 @@ export const TagFilterRow = memo(function TagFilterRow({
           />
         </div>
 
-        <div className="w-14">
-          <Select
-            onValueChange={(value) => {
-              onChange({
-                ...filter,
-                comparison_operator: value as TagComparisonOperator,
-              });
-            }}
-            value={filter.comparison_operator}
-          >
-            <SelectTrigger aria-label="Tag comparison operator">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(
-                Object.keys(TAG_OPERATOR_LABELS) as TagComparisonOperator[]
-              ).map((op) => (
-                <SelectItem key={op} value={op}>
-                  {TAG_OPERATOR_LABELS[op]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <ComparisonOperatorSelect
+          value={filter.comparison_operator}
+          onChange={(op) => onChange({ ...filter, comparison_operator: op })}
+          operators={TAG_OPERATOR_LABELS}
+          ariaLabel="Tag comparison operator"
+        />
 
         <div className="relative w-48">
           <ValidatedInput
@@ -223,30 +264,12 @@ export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
           />
         </div>
 
-        <div className="w-14">
-          <Select
-            onValueChange={(value) => {
-              onChange({
-                ...filter,
-                comparison_operator: value as FloatComparisonOperator,
-              });
-            }}
-            value={filter.comparison_operator}
-          >
-            <SelectTrigger aria-label="Metric comparison operator">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(
-                Object.keys(FLOAT_OPERATOR_LABELS) as FloatComparisonOperator[]
-              ).map((op) => (
-                <SelectItem key={op} value={op}>
-                  {FLOAT_OPERATOR_LABELS[op]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <ComparisonOperatorSelect
+          value={filter.comparison_operator}
+          onChange={(op) => onChange({ ...filter, comparison_operator: op })}
+          operators={FLOAT_OPERATOR_LABELS}
+          ariaLabel="Metric comparison operator"
+        />
 
         <div className="relative w-48">
           <ValidatedInput
@@ -309,22 +332,10 @@ export const BooleanMetricFilterRow = memo(function BooleanMetricFilterRow({
           is
         </div>
 
-        <div className="w-48">
-          <Select
-            onValueChange={(value) =>
-              onChange({ ...filter, value: value === "true" })
-            }
-            value={filter.value.toString()}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="true">true</SelectItem>
-              <SelectItem value="false">false</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <BooleanValueSelect
+          value={filter.value}
+          onChange={(val) => onChange({ ...filter, value: val })}
+        />
 
         <DeleteButton
           onDelete={() => onChange(undefined)}
