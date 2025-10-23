@@ -907,7 +907,7 @@ impl std::fmt::Display for ErrorDetails {
                 write!(f, "Invalid inference target: {message}")
             }
             ErrorDetails::BadFileFetch { url, message } => {
-                write!(f, "Error fetching image from {url}: {message}")
+                write!(f, "Error fetching file from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
                 write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration.")
