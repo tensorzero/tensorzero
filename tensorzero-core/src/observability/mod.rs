@@ -45,8 +45,8 @@ use std::time::Duration;
 use once_cell::sync::OnceCell;
 #[cfg(feature = "e2e_tests")]
 use opentelemetry::ContextGuard;
-use tracing::field::Empty;
 use tokio_stream::wrappers::IntervalStream;
+use tracing::field::Empty;
 
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
 use axum::extract::MatchedPath;
