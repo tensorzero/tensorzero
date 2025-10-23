@@ -38,6 +38,7 @@ test("countInferencesForFunction returns correct counts", async () => {
       provider_tools: null,
       tool_choice: "none",
       parallel_tool_calls: false,
+      allowed_tools: { tools: [], choice: "function_default" },
     },
     experimentation: { type: "uniform" },
   });
@@ -71,6 +72,10 @@ test("countInferencesForVariant returns correct counts", async () => {
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
+        allowed_tools: {
+          tools: [],
+          choice: "function_default",
+        },
       },
       experimentation: { type: "uniform" },
     },

@@ -1436,7 +1436,7 @@ mod tests {
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
-    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use crate::tool::{AllowedTools, DynamicToolConfig, ToolConfig, ToolResult};
     use serde_json::json;
     use tracing_test::traced_test;
     use uuid::Uuid;
@@ -1449,6 +1449,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
@@ -1463,6 +1464,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1478,6 +1480,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1493,6 +1496,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
