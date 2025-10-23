@@ -1,3 +1,6 @@
+include:
+  - docker-compose-common.yml
+
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
@@ -30,6 +33,7 @@ services:
       - ./config:/app/config:ro
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
     env_file:
       - .env
       - .env-gateway
@@ -41,16 +45,10 @@ services:
     depends_on:
       clickhouse:
         condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
     healthcheck:
-      test:
-        [
-          "CMD",
-          "wget",
-          "--no-verbose",
-          "--tries=1",
-          "--spider",
-          "${TENSORZERO_GATEWAY_URL:-http://localhost:3000}/health",
-        ]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "${TENSORZERO_GATEWAY_URL:-http://localhost:3000}/health" ]
       start_period: 30s
       start_interval: 1s
       timeout: 1s
@@ -71,30 +69,19 @@ services:
     depends_on:
       gateway:
         condition: service_healthy
-    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
+        condition: service_healthy
+    command: [ "bash", "-c", "cd /fixtures && ./load_fixtures.sh" ]
     # Added healthcheck to wait for the marker file created by the script
     healthcheck:
-      test: ["CMD", "test", "-f", "/load_complete.marker"]
+      test: [ "CMD", "test", "-f", "/load_complete.marker" ]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes
       start_interval: 1s
       start_period: 300s # Give the script time to start
-
-  mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG}
-    build:
-      context: ../../
-      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
-    environment:
-      RUST_LOG: debug
-    ports:
-      - "3030:3030"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3030/status
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
 
   node-unit-tests:
     image: tensorzero/node-unit-tests:${TENSORZERO_COMMIT_TAG}
@@ -108,6 +95,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-notused}
       FIREWORKS_API_KEY: ${FIREWORKS_API_KEY:-notused}
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
       TENSORZERO_GATEWAY_URL: http://gateway:3000
       TENSORZERO_UI_CONFIG_PATH: /app/ui/fixtures/config/tensorzero.toml
       BUILDKITE_ANALYTICS_TOKEN: ${BUILDKITE_ANALYTICS_TOKEN:-}
@@ -126,6 +114,10 @@ services:
       gateway:
         condition: service_healthy
       clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
         condition: service_healthy
       mock-inference-provider:
         condition: service_healthy

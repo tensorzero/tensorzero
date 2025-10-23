@@ -15,11 +15,14 @@ concurrency:
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
+  SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
   check-version-consistency:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -37,6 +40,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+      # Permission to download artifacts
+      actions: read
 
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
@@ -120,9 +125,15 @@ jobs:
         run: ./ci/check-all-docker-compose.sh
 
   check-python-client-build:
+    permissions:
+      contents: read
     uses: ./.github/workflows/python-client-build.yml
 
   check-node-bindings:
+    permissions:
+      contents: read
+      # Permission to upload artifacts
+      actions: write
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -171,6 +182,10 @@ jobs:
         run: pnpm --filter=tensorzero-node run check-exports
 
   build-windows:
+    permissions:
+      contents: read
+      # Permission for rust-cache to read/write cache
+      actions: read
     runs-on: windows-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -196,6 +211,8 @@ jobs:
         run: cargo build --workspace
 
   lint-rust:
+    permissions:
+      contents: read
     runs-on: namespace-profile-tensorzero-8x16
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -227,7 +244,9 @@ jobs:
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
   validate:
-    runs-on: namespace-profile-tensorzero-8x16
+    permissions:
+      contents: read
+    runs-on: namespace-profile-tensorzero-8x32
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
@@ -443,6 +462,10 @@ jobs:
 
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
+    permissions:
+      contents: read
+      # Permission to download artifacts and for rust-cache
+      actions: read
     needs: [build-gateway-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
@@ -635,6 +658,10 @@ jobs:
 
   # Run 'cargo test-optimization' against mock-inference-provider
   mock-optimization-tests:
+    permissions:
+      contents: read
+      # Permission for rust-cache
+      actions: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     env:
@@ -716,10 +743,16 @@ jobs:
       id-token: write
 
   ui-tests:
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ui-tests.yml
     needs: build-gateway-container
 
   ui-tests-e2e:
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ui-tests-e2e.yml
     needs: [build-gateway-container, build-ui-container]
     secrets:
@@ -733,6 +766,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
+    permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [

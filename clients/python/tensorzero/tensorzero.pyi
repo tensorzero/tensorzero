@@ -20,8 +20,8 @@ from tensorzero import (
     ChatDatapointInsert,
     ChatInferenceOutput,
     ContentBlock,
-    DynamicEvaluationRunEpisodeResponse,
-    DynamicEvaluationRunResponse,
+    DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
+    DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
     FeedbackResponse,
     InferenceChunk,
@@ -29,10 +29,12 @@ from tensorzero import (
     InferenceResponse,
     JsonDatapointInsert,
     OptimizationConfig,
+    WorkflowEvaluationRunEpisodeResponse,
+    WorkflowEvaluationRunResponse,
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
-    InferenceFilterTreeNode,
+    InferenceFilter,
     JsonInferenceOutput,
     OrderBy,
 )
@@ -527,6 +529,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
+        provider_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]] = None,
         parallel_tool_calls: Optional[bool] = None,
         internal: Optional[bool] = None,
@@ -561,6 +564,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
                               The list of names should be a subset of the tools configured for the function.
                               Tools provided at inference time in `additional_tools` (if any) are always available.
         :param additional_tools: A list of additional tools to use for the request. Each element should look like {"name": str, "parameters": valid JSON Schema, "description": str}
+        :param provider_tools: A list of provider-specific tools to use for the request. Structure matches provider requirements.
         :param tool_choice: If set, overrides the tool choice strategy for the request.
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
@@ -609,6 +613,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         display_name: Optional[str] = None,
     ) -> DynamicEvaluationRunResponse:
         """
+        DEPRECATED: Use `workflow_evaluation_run` instead.
         Make a POST request to the /dynamic_evaluation_run endpoint.
 
         :param variants: A dictionary of variant names to variant values.
@@ -626,12 +631,48 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
         """
-        Make a POST request to the /dynamic_evaluation_run_episode endpoint.
+        DEPRECATED: Use `workflow_evaluation_run_episode` instead.
+
+        Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
 
         :param run_id: The run ID to use for the dynamic evaluation run.
         :param task_name: The name of the task to use for the dynamic evaluation run.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
+        """
+
+    def workflow_evaluation_run(
+        self,
+        *,
+        variants: Dict[str, str],
+        tags: Optional[Dict[str, str]] = None,
+        project_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+    ) -> WorkflowEvaluationRunResponse:
+        """
+        Make a POST request to the /workflow_evaluation_run endpoint.
+
+        :param variants: A dictionary of variant names to variant values.
+        :param tags: A dictionary of tags to add to the workflow evaluation run.
+        :param project_name: The name of the project to use for the workflow evaluation run.
+        :param display_name: The display name of the workflow evaluation run.
+        :return: A `WorkflowEvaluationRunResponse` instance ({"run_id": str}).
+        """
+
+    def workflow_evaluation_run_episode(
+        self,
+        *,
+        run_id: str | UUID | uuid_utils.UUID,
+        task_name: Optional[str] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> WorkflowEvaluationRunEpisodeResponse:
+        """
+        Make a POST request to the /workflow_evaluation_run/{run_id}/episode endpoint.
+
+        :param run_id: The run ID to use for the workflow evaluation run.
+        :param task_name: The name of the task to use for the workflow evaluation run.
+        :param tags: A dictionary of tags to add to the workflow evaluation run.
+        :return: A `WorkflowEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
     def create_datapoints(
@@ -712,7 +753,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         *,
         function_name: str,
         variant_name: Optional[str] = None,
-        filters: Optional[InferenceFilterTreeNode] = None,
+        filters: Optional[InferenceFilter] = None,
         output_source: str = "inference",
         order_by: Optional[List[OrderBy]] = None,
         limit: Optional[int] = None,
@@ -905,6 +946,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         output_schema: Optional[Dict[str, Any]] = None,
         allowed_tools: Optional[List[str]] = None,
         additional_tools: Optional[List[Dict[str, Any]]] = None,
+        provider_tools: Optional[List[Dict[str, Any]]] = None,
         tool_choice: Optional[Union[Literal["auto", "required", "off"], Dict[Literal["specific"], str]]] = None,
         parallel_tool_calls: Optional[bool] = None,
         internal: Optional[bool] = None,
@@ -939,6 +981,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
                               The list of names should be a subset of the tools configured for the function.
                               Tools provided at inference time in `additional_tools` (if any) are always available.
         :param additional_tools: A list of additional tools to use for the request. Each element should look like {"name": str, "parameters": valid JSON Schema, "description": str}
+        :param provider_tools: A list of provider-specific tools to use for the request. Structure matches provider requirements.
         :param tool_choice: If set, overrides the tool choice strategy for the request.
                             It should be one of: "auto", "required", "off", or {"specific": str}. The last option pins the request to a specific tool name.
         :param parallel_tool_calls: If true, the request will allow for multiple tool calls in a single inference request.
@@ -987,6 +1030,8 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         display_name: Optional[str] = None,
     ) -> DynamicEvaluationRunResponse:
         """
+        DEPRECATED: Use `workflow_evaluation_run` instead.
+
         Make a POST request to the /dynamic_evaluation_run endpoint.
 
         :param variants: A dictionary of variant names to variant values.
@@ -1004,12 +1049,48 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         tags: Optional[Dict[str, str]] = None,
     ) -> DynamicEvaluationRunEpisodeResponse:
         """
-        Make a POST request to the /dynamic_evaluation_run_episode endpoint.
+        DEPRECATED: Use `workflow_evaluation_run_episode` instead.
+
+        Make a POST request to the /dynamic_evaluation_run/{run_id}/episode endpoint.
 
         :param run_id: The run ID to use for the dynamic evaluation run.
         :param task_name: The name of the task to use for the dynamic evaluation run.
         :param tags: A dictionary of tags to add to the dynamic evaluation run.
         :return: A `DynamicEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
+        """
+
+    async def workflow_evaluation_run(  # type: ignore[override]
+        self,
+        *,
+        variants: Dict[str, str],
+        tags: Optional[Dict[str, str]] = None,
+        project_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+    ) -> WorkflowEvaluationRunResponse:
+        """
+        Make a POST request to the /workflow_evaluation_run endpoint.
+
+        :param variants: A dictionary of variant names to variant values.
+        :param tags: A dictionary of tags to add to the workflow evaluation run.
+        :param project_name: The name of the project to use for the workflow evaluation run.
+        :param display_name: The display name of the workflow evaluation run.
+        :return: A `WorkflowEvaluationRunResponse` instance ({"run_id": str}).
+        """
+
+    async def workflow_evaluation_run_episode(  # type: ignore[override]
+        self,
+        *,
+        run_id: str | UUID | uuid_utils.UUID,
+        task_name: Optional[str] = None,
+        tags: Optional[Dict[str, str]] = None,
+    ) -> WorkflowEvaluationRunEpisodeResponse:
+        """
+        Make a POST request to the /workflow_evaluation_run/{run_id}/episode endpoint.
+
+        :param run_id: The run ID to use for the workflow evaluation run.
+        :param task_name: The name of the task to use for the workflow evaluation run.
+        :param tags: A dictionary of tags to add to the workflow evaluation run.
+        :return: A `WorkflowEvaluationRunEpisodeResponse` instance ({"episode_id": str}).
         """
 
     async def create_datapoints(
@@ -1090,7 +1171,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         *,
         function_name: str,
         variant_name: Optional[str] = None,
-        filters: Optional[InferenceFilterTreeNode] = None,
+        filters: Optional[InferenceFilter] = None,
         output_source: str = "inference",
         order_by: Optional[List[OrderBy]] = None,
         limit: Optional[int] = None,

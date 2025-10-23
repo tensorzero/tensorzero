@@ -14,9 +14,8 @@ use super::{storage::StoragePath, Base64File, Role, Thought};
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
-use crate::inference::types::stored_input::StoredFile;
 use crate::inference::types::stored_input::{
-    StoredInput, StoredInputMessage, StoredInputMessageContent,
+    StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
 use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput};
 use crate::rate_limiting::RateLimitedInputContent;
@@ -24,7 +23,7 @@ use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
-    resolved_input_message_content_to_python, serialize_to_dict,
+    resolved_content_block_to_python, resolved_input_message_content_to_python, serialize_to_dict,
 };
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
@@ -42,7 +41,7 @@ pub struct LazyResolvedInputMessage {
 }
 
 // This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
-// TODO - decide on the precise caching behavior that we want for file URLs
+// TODO - decide on the precise caching behavior that we want for file URLs and object storage paths.
 #[derive(Clone, Debug, Serialize)]
 pub enum LazyFile {
     Url {
@@ -51,6 +50,12 @@ pub enum LazyFile {
         future: FileFuture,
     },
     FileWithPath(FileWithPath),
+    ObjectStorage {
+        metadata: Base64FileMetadata,
+        storage_path: StoragePath,
+        #[serde(skip)]
+        future: FileFuture,
+    },
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -70,6 +75,7 @@ impl LazyFile {
                 file_url: _,
             } => Ok(Cow::Owned(future.clone().await?)),
             LazyFile::FileWithPath(file) => Ok(Cow::Borrowed(file)),
+            LazyFile::ObjectStorage { future, .. } => Ok(Cow::Owned(future.clone().await?)),
         }
     }
 }
@@ -134,47 +140,50 @@ pub struct ResolvedInput {
     pub messages: Vec<ResolvedInputMessage>,
 }
 
-async fn write_file(
+/// Writes a file to the object store.
+/// Returns an error if the file already exists or if the file cannot be written.
+/// This is public because it's also used during datapoint updates, in addition to during inferences.
+pub async fn write_file(
     object_store: &Option<ObjectStoreInfo>,
     raw: Base64File,
     storage_path: StoragePath,
 ) -> Result<(), Error> {
-    if let Some(object_store) = object_store {
-        // The store might be explicitly disabled
-        if let Some(store) = object_store.object_store.as_ref() {
-            let data = raw.data()?;
-            let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
-                Error::new(ErrorDetails::ObjectStoreWrite {
-                    message: format!("Failed to decode file as base64: {e:?}"),
-                    path: storage_path.clone(),
-                })
-            })?;
-            let res = store
-                .put_opts(
-                    &storage_path.path,
-                    bytes.into(),
-                    PutOptions {
-                        mode: PutMode::Create,
-                        ..Default::default()
-                    },
-                )
-                .await;
-            match res {
-                Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
-                Err(e) => {
-                    return Err(ErrorDetails::ObjectStoreWrite {
-                        message: format!("Failed to write file to object store: {e:?}"),
-                        path: storage_path.clone(),
-                    }
-                    .into());
-                }
-            }
-        }
-    } else {
+    let Some(object_store) = object_store else {
         return Err(ErrorDetails::InternalError {
             message: "Called `write_file` with no object store configured".to_string(),
         }
         .into());
+    };
+
+    // The store might be explicitly disabled
+    if let Some(store) = object_store.object_store.as_ref() {
+        let data = raw.data()?;
+        let bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
+            Error::new(ErrorDetails::ObjectStoreWrite {
+                message: format!("Failed to decode file as base64: {e:?}"),
+                path: storage_path.clone(),
+            })
+        })?;
+        let res = store
+            .put_opts(
+                &storage_path.path,
+                bytes.into(),
+                PutOptions {
+                    mode: PutMode::Create,
+                    ..Default::default()
+                },
+            )
+            .await;
+        match res {
+            Ok(_) | Err(object_store::Error::AlreadyExists { .. }) => {}
+            Err(e) => {
+                return Err(ErrorDetails::ObjectStoreWrite {
+                    message: format!("Failed to write file to object store: {e:?}"),
+                    path: storage_path.clone(),
+                }
+                .into());
+            }
+        }
     }
     Ok(())
 }
@@ -475,6 +484,7 @@ impl RateLimitedInputContent for LazyFile {
                 file: _,
                 storage_path: _,
             }) => {}
+            LazyFile::ObjectStorage { .. } => {}
             // Forwarding a url is inherently incompatible with input token estimation,
             // so we'll need to continue using a hardcoded value here, even if we start
             // estimating tokens LazyFile::FileWithPath
@@ -524,8 +534,6 @@ impl ResolvedRequestMessage {
     #[getter]
     fn get_content<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         use pyo3::types::PyList;
-
-        use crate::inference::types::pyo3_helpers::resolved_content_block_to_python;
 
         let content = self
             .content

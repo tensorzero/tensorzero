@@ -21,6 +21,7 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::inference::types::StoredInput;
+use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
     db::clickhouse::test_helpers::{
@@ -1935,6 +1936,8 @@ model = "dummy::flaky_model"
     )
     .await;
 
+    let _guard = enter_fake_http_request_otel();
+
     let params = ClientInferenceParams {
         function_name: Some("mixture_of_n".to_string()),
         input: ClientInput {
@@ -3472,10 +3475,9 @@ async fn test_client_adjust_tool_call() {
         },
         ..Default::default()
     };
-
     bad_gateway.inference(params.clone()).await.unwrap_err();
-    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
-    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
+    let stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":"{\"location\":\"Brooklyn\",\"units\":\"celsius\"}","id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"provider_tools":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
+    let non_stringified_tool_call_args = r#"{"function_name":"basic_test","model_name":null,"episode_id":null,"input":{"messages":[{"role":"user","content":[{"type":"tool_call","name":"my_tool_call","arguments":{"location":"Brooklyn","units":"celsius"},"id":"my_id"}]}]},"stream":null,"params":{"chat_completion":{}},"variant_name":null,"dryrun":null,"internal":false,"tags":{},"allowed_tools":null,"additional_tools":null,"tool_choice":null,"parallel_tool_calls":null,"provider_tools":null,"output_schema":null,"credentials":{},"cache_options":{"max_age_s":null,"enabled":"write_only"},"include_original_response":false,"extra_body":[],"extra_headers":[],"internal_dynamic_variant_config":null}"#;
 
     // With an invalid gateway url, we shouldn't get a version
     assert_eq!(bad_gateway.get_gateway_version().await, None);

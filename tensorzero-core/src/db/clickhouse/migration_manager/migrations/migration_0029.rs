@@ -5,8 +5,19 @@ use async_trait::async_trait;
 
 use super::check_table_exists;
 
+/// ============================================================================
+/// TERMINOLOGY NOTE:
+/// "Static Evaluations" are now called "Inference Evaluations" in the project,
+/// configuration, and user-facing documentation. However, the database table
+/// names and view names referenced by this migration still use the "StaticEvaluation"
+/// prefix (e.g., StaticEvaluationHumanFeedbackFloatView, StaticEvaluationHumanFeedbackBooleanView)
+/// for backwards compatibility. This naming mismatch is intentional and should
+/// not be changed in existing database objects to avoid breaking deployments.
+/// ============================================================================
+///
 /// This migration completes the process started by migration_0028 of migrating away from 0023. We drop the old view
 /// StaticEvaluationHumanFeedbackFloatView and StaticEvaluationHumanFeedbackBooleanView, which were subsumed in 0028.
+/// Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
 pub struct Migration0029<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
 }
@@ -37,6 +48,7 @@ impl Migration for Migration0029<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         self.clickhouse
             .run_query_synchronous_no_params(
                 r"DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackFloatView;".to_string(),
@@ -57,6 +69,7 @@ impl Migration for Migration0029<'_> {
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let float_materialized_view_exists = check_table_exists(
             self.clickhouse,
             "StaticEvaluationHumanFeedbackFloatView",

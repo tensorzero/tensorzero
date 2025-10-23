@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use secrecy::SecretString;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::fmt::Display;
 
 use crate::config::Config;
 use crate::db::clickhouse::BatchWriterHandle;
@@ -32,16 +31,6 @@ pub enum ClickHouseClientType {
     Production,
     Fake,
     Disabled,
-}
-
-impl Display for ClickHouseClientType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ClickHouseClientType::Production => write!(f, "Production"),
-            ClickHouseClientType::Fake => write!(f, "Fake"),
-            ClickHouseClientType::Disabled => write!(f, "Disabled"),
-        }
-    }
 }
 
 /// Trait defining the interface for ClickHouse database operations.

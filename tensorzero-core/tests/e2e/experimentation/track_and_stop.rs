@@ -1555,7 +1555,7 @@ async fn test_remove_winner_variant_after_stopping() {
         candidate_variants: &["variant_a", "variant_c"], // Removed variant_b
         fallback_variants: &[],
         min_samples_per_variant: 20,
-        delta: 0.05,
+        delta: 0.01,
         epsilon: 0.05,
         update_period_s: 1,
         min_prob: Some(0.48),
@@ -1616,7 +1616,7 @@ async fn test_remove_winner_variant_after_stopping() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_remove_non_winner_variant_after_stopping() {
     let initial_bandit_distribution = vec![
-        ("variant_a", 0.50), // Clear winner
+        ("variant_a", 0.05), // Clear winner
         ("variant_b", 0.90),
         ("variant_c", 0.95),
     ];
@@ -1683,17 +1683,16 @@ async fn test_remove_non_winner_variant_after_stopping() {
     );
 
     // Phase 2: Remove variant_b (a non-winner) and verify winner (variant_a) still selected
-
     drop(client);
     drop(bandit);
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
-    // Create new config without variant_a
+    // Create new config without variant_b
     let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "boolean",
         optimize: "min",
-        candidate_variants: &["variant_a", "variant_c"], // Removed variant_a
+        candidate_variants: &["variant_a", "variant_c"], // Removed variant_b
         fallback_variants: &[],
         min_samples_per_variant: 20,
         delta: 0.05,
@@ -1708,7 +1707,7 @@ async fn test_remove_non_winner_variant_after_stopping() {
 
     tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
-    // Run a batch and verify variant_b (winner) is still heavily sampled
+    // Run a batch and verify variant_a (winner) is still heavily sampled
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
     let variant_names: Vec<String> = inference_results
         .into_iter()
@@ -1720,14 +1719,14 @@ async fn test_remove_non_winner_variant_after_stopping() {
         *variant_counts.entry(name.clone()).or_insert(0) += 1;
     }
 
-    let variant_b_count = *variant_counts.get("variant_a").unwrap_or(&0);
-    let variant_b_fraction = variant_b_count as f64 / variant_names.len() as f64;
+    let variant_a_count = *variant_counts.get("variant_a").unwrap_or(&0);
+    let variant_a_fraction = variant_a_count as f64 / variant_names.len() as f64;
 
-    // variant_b should still dominate (at least 80% of pulls)
+    // variant_a should still be the winner (100% of pulls)
     assert!(
-        variant_b_fraction == 1.0,
+        variant_a_fraction == 1.0,
         "Expected variant_a (winner) to dominate after non-winner removal, got {:.2}%",
-        variant_b_fraction * 100.0
+        variant_a_fraction * 100.0
     );
 
     clickhouse_flush_async_insert(&new_clickhouse).await;

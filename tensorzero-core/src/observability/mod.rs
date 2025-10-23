@@ -35,6 +35,7 @@
 //!    If present, we use the wrapped `CustomTracer`, which will cause the span to get exported using the correct
 //!    custom HTTP headers and OpenTelemetry resources. Otherwise, we our default `SdkTracer`, which doesn't attach any custom headers
 //!    or extra OpenTelemetry resources.
+use futures::StreamExt;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -42,8 +43,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use once_cell::sync::OnceCell;
+#[cfg(feature = "e2e_tests")]
+use opentelemetry::ContextGuard;
+use tokio_stream::wrappers::IntervalStream;
+use tracing::field::Empty;
 
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
 use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
@@ -68,9 +73,12 @@ use tokio_util::task::TaskTracker;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
 use tracing::level_filters::LevelFilter;
-use tracing::Span;
+use tracing::{Metadata, Span};
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing_opentelemetry_instrumentation_sdk::http::{
+    http_flavor, http_host, url_scheme, user_agent,
+};
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -79,6 +87,7 @@ use uuid::Uuid;
 use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
+mod exporter_wrapper;
 pub mod tracing_bug;
 
 #[derive(Clone, Debug, Default, ValueEnum)]
@@ -97,6 +106,7 @@ struct CustomTracerKey {
     // These will be set as attributes on *all* spans (not just top-level spans)
     // exported by a `CustomTracer`
     extra_resources: Vec<KeyValue>,
+    extra_attributes: Vec<KeyValue>,
 }
 
 impl Hash for CustomTracerKey {
@@ -104,6 +114,7 @@ impl Hash for CustomTracerKey {
         let CustomTracerKey {
             extra_headers,
             extra_resources,
+            extra_attributes,
         } = self;
         // We add null byte separators to keep the data prefix-free: https://doc.rust-lang.org/std/hash/trait.Hash.html#prefix-collisions
         extra_headers.as_ref().iter().for_each(|(key, value)| {
@@ -114,6 +125,7 @@ impl Hash for CustomTracerKey {
         });
         state.write_u8(0);
         extra_resources.hash(state);
+        extra_attributes.hash(state);
     }
 }
 
@@ -122,9 +134,11 @@ impl PartialEq for CustomTracerKey {
         let CustomTracerKey {
             extra_headers,
             extra_resources,
+            extra_attributes,
         } = self;
         extra_headers.as_ref() == other.extra_headers.as_ref()
             && extra_resources == &other.extra_resources
+            && extra_attributes == &other.extra_attributes
     }
 }
 
@@ -189,6 +203,7 @@ pub struct TracerWrapper {
     // memory is freed immediately when a shutdown tasks exists. We wait on all remaining tasks
     // in `TracerWrapper::shutdown`
     shutdown_tasks: TaskTracker,
+    // See `InFlightSpan` for more information.
     in_flight_spans: TaskTracker,
 }
 
@@ -218,11 +233,8 @@ impl TracerWrapper {
         //    lookup and nested `build_with_context` inside the closure.
         let tracer = self.custom_tracers.try_get_with_by_ref(key, || {
             // We need to provide a dummy generic parameter to satisfy the compiler
-            let (provider, tracer) = build_tracer::<opentelemetry_otlp::SpanExporter>(
-                key.extra_headers.clone(),
-                key.extra_resources.clone(),
-                None,
-            )?;
+            let (provider, tracer) =
+                build_tracer::<opentelemetry_otlp::SpanExporter>(key.clone(), None)?;
             Ok::<_, Error>(Arc::new(CustomTracer {
                 inner: tracer,
                 provider: Some(provider),
@@ -242,8 +254,7 @@ impl TracerWrapper {
 /// Builds a new `SdkTracerProvider`, which will attach the extra headers from `metadata`
 /// to outgoing OTLP export requests.
 fn build_tracer<T: SpanExporter + 'static>(
-    metadata: MetadataMap,
-    resources: Vec<KeyValue>,
+    key: CustomTracerKey,
     override_exporter: Option<T>,
 ) -> Result<(SdkTracerProvider, SdkTracer), Error> {
     let tls_config = tonic::transport::ClientTlsConfig::new().with_enabled_roots();
@@ -252,7 +263,7 @@ fn build_tracer<T: SpanExporter + 'static>(
 
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
-        .with_metadata(metadata)
+        .with_metadata(key.extra_headers)
         .with_tls_config(tls_config)
         .build()
         .map_err(|e| {
@@ -267,14 +278,20 @@ fn build_tracer<T: SpanExporter + 'static>(
                 opentelemetry_semantic_conventions::resource::SERVICE_NAME,
                 "tensorzero-gateway",
             ))
-            .with_attributes(resources)
+            .with_attributes(key.extra_resources)
             .build(),
     );
 
-    if let Some(exporter) = override_exporter {
-        builder = builder.with_simple_exporter(exporter);
+    if let Some(override_exporter) = override_exporter {
+        builder = builder.with_simple_exporter(TensorZeroExporterWrapper::new(
+            override_exporter,
+            key.extra_attributes,
+        ));
     } else {
-        builder = builder.with_batch_exporter(exporter);
+        builder = builder.with_batch_exporter(TensorZeroExporterWrapper::new(
+            exporter,
+            key.extra_attributes,
+        ));
     }
     let provider = builder.build();
 
@@ -314,7 +331,14 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<OtelLayerData<impl Layer<Registry>>, Error> {
     // Default tracer always has empty headers and no extra resources
-    let (provider, tracer) = build_tracer(MetadataMap::new(), vec![], override_exporter)?;
+    let (provider, tracer) = build_tracer(
+        CustomTracerKey {
+            extra_headers: MetadataMap::new(),
+            extra_resources: vec![],
+            extra_attributes: vec![],
+        },
+        override_exporter,
+    )?;
     opentelemetry::global::set_tracer_provider(provider.clone());
     let shutdown_tasks = TaskTracker::new();
     // Initialize empty - will be set once later via set_static_otlp_traces_extra_headers
@@ -409,18 +433,53 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
                     message: format!("Failed to initialize OTLP propagator: {e}"),
                 })
             })?;
+
             // Avoid exposing all of our internal spans, as we don't want customers to start depending on them.
-            // We only expose spans that explicitly contain field prefixed with "http." or "otel."
+            // We only expose spans that explicitly contain field prefixed with "otel."
             // For example, `#[instrument(fields(otel.name = "my_otel_name"))]` will be exported
-            let filter = filter::filter_fn(|metadata| {
+            fn accept_errors_and_otel(metadata: &Metadata<'_>) -> bool {
                 if metadata.is_event() {
                     matches!(metadata.level(), &tracing::Level::ERROR)
                 } else {
-                    metadata.fields().iter().any(|field| {
-                        field.name().starts_with("http.") || field.name().starts_with("otel.")
-                    })
+                    // We only expose spans that explicitly contain field prefixed with "otel.",
+                    // *and* that are a descendant of a top-level HTTP span (as determined by the presence of an `InFlightSpan` in the context).
+                    // This ensures that we can call into instrumented code (e.g. `Variant::infer`, or any authorization middleware)
+                    // from a non-OTEL http route (e.g. a ui route that internally makes some inferences) without causing
+                    // parent-less OTEL spans to get emitted by the instrumented code.
+                    metadata
+                        .fields()
+                        .iter()
+                        .any(|field| field.name().starts_with("otel."))
+                        && Context::map_current(|c| c.get::<InFlightSpan>().is_some())
                 }
-            });
+            }
+
+            // We mark this as a dynamic filter so that `tracing` doesn't cache the result
+            // (it depends on the current call stack via the opentelemetry `Context`),
+            // not just the static call site of the immediate span/event being filtered.
+            #[allow(unused_mut, clippy::allow_attributes)]
+            let mut filter =
+                filter::dynamic_filter_fn(|metadata, _context| accept_errors_and_otel(metadata));
+
+            #[cfg(any(test, feature = "e2e_tests"))]
+            {
+                if tracing_bug::DISABLE_TRACING_BUG_WORKAROUND
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    // When we're attempting to reproduce the tracing bug, we turn *on* callsite caching.
+                    // This is effectively the same behavior as when 'filter::filter_fn' is used instead of
+                    // 'filter::dynamic_filter_fn'.
+                    // We do this to avoid needing to do anything weird in the main production code
+                    // (this entire block is only compiled in test code)
+                    filter = filter.with_callsite_filter(|metadata| {
+                        if accept_errors_and_otel(metadata) {
+                            tracing::subscriber::Interest::always()
+                        } else {
+                            tracing::subscriber::Interest::never()
+                        }
+                    });
+                }
+            }
 
             reload_handle
                 .modify(|l| {
@@ -495,6 +554,7 @@ pub trait RouterExt<S> {
 /// 5. The custom `SdkTracer` is preserved in a `moka::Cache` for subsequent requests.
 const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
 const TENSORZERO_OTLP_RESOURCE_PREFIX: &str = "tensorzero-otlp-traces-extra-resource-";
+const TENSORZERO_OTLP_ATTRIBUTE_PREFIX: &str = "tensorzero-otlp-traces-extra-attribute-";
 
 /// Converts a HashMap of config headers to a MetadataMap
 fn config_headers_to_metadata(
@@ -521,6 +581,26 @@ fn config_headers_to_metadata(
     Ok(metadata)
 }
 
+fn json_to_otel_value(value: serde_json::Value) -> Result<opentelemetry::Value, Error> {
+    match value {
+        serde_json::Value::Null => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Null is not a valid OpenTelemetry attribute value".to_string(),
+        })),
+        serde_json::Value::Bool(value) => Ok(opentelemetry::Value::Bool(value)),
+        serde_json::Value::Number(_) => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Numbers are not yet supported for OpenTelemetry attributes values"
+                .to_string(),
+        })),
+        serde_json::Value::String(value) => Ok(opentelemetry::Value::String(value.into())),
+        serde_json::Value::Array(_) => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Arrays are not yet supported for OpenTelemetry attribute values".to_string(),
+        })),
+        serde_json::Value::Object(_) => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "JSON objects are not valid OpenTelemetry attribute values".to_string(),
+        })),
+    }
+}
+
 // Removes all of the headers prefixed with `TENSORZERO_OTLP_HEADERS_PREFIX`.
 // If any are present (or we have static config headers), constructs a `CustomTracerKey` with all of the  matching header/value pairs
 // (with `TENSORZERO_OTLP_HEADERS_PREFIX` removed from the header name).
@@ -536,6 +616,7 @@ fn extract_tensorzero_headers(
         .cloned()
         .unwrap_or_default();
     let mut extra_resources = vec![];
+    let mut extra_attributes = vec![];
     for (name, value) in headers {
         if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_HEADERS_PREFIX) {
             let key: AsciiMetadataKey = suffix.parse().map_err(|e| {
@@ -557,22 +638,43 @@ fn extract_tensorzero_headers(
         if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_RESOURCE_PREFIX) {
             let key = suffix.to_string();
             let value = value.to_str().map_err(|e| {
-                Error::new(ErrorDetails::Observability {
+                Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Failed to parse `{TENSORZERO_OTLP_RESOURCE_PREFIX}` header `{suffix}` value as valid string: {e}"),
                 })
             })?.to_string();
             extra_resources.push(KeyValue::new(key, value));
         }
+        if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_ATTRIBUTE_PREFIX) {
+            let key = suffix.to_string();
+            let value = value.to_str().map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Failed to parse `{TENSORZERO_OTLP_ATTRIBUTE_PREFIX}` header `{suffix}` value as valid string: {e}"),
+                })
+            })?;
+            let value_json = serde_json::from_str::<serde_json::Value>(value).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Failed to parse `{TENSORZERO_OTLP_ATTRIBUTE_PREFIX}` header `{suffix}` value as valid JSON: {e}"),
+                })
+            })?;
+            let value_otel = json_to_otel_value(value_json).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Failed to convert `{TENSORZERO_OTLP_ATTRIBUTE_PREFIX}` header `{suffix}` value to OpenTelemetry attribute value: {e}"),
+                })
+            })?;
+            extra_attributes.push(KeyValue::new(key, value_otel));
+        }
     }
-    if !metadata.is_empty() || !extra_resources.is_empty() {
+    if !metadata.is_empty() || !extra_resources.is_empty() || !extra_attributes.is_empty() {
         tracing::debug!(
-            "Using custom OTLP configuration: metadata={:?}, extra_resources={:?}",
+            "Using custom OTLP configuration: metadata={:?}, extra_resources={:?}, extra_attributes={:?}",
             metadata,
-            extra_resources
+            extra_resources,
+            extra_attributes
         );
         return Ok(Some(CustomTracerKey {
             extra_headers: metadata,
             extra_resources,
+            extra_attributes,
         }));
     }
     Ok(None)
@@ -593,6 +695,21 @@ pub struct InFlightSpan {
     // This field just holds on to the token until the `InFlightSpan` is dropped.
     #[expect(dead_code)]
     token: TaskTrackerToken,
+}
+
+/// Enters into a fake HTTP request context for testing purposes, which will allow OTEL spans to be reported
+/// This is used by OTEL tests that use an embedded client - since they don't go through our axum router,
+/// we would normally (correctly) suppress any nested OTEL spans (e.g. `function_inference`)
+/// This method simulates the relevant parts of our axum otel logic
+/// We also have fully end-to-end tests that use a live gateway, so this is just to allow us to write
+/// in-memory tests
+#[cfg(feature = "e2e_tests")]
+pub fn enter_fake_http_request_otel() -> ContextGuard {
+    Context::current()
+        .with_value(InFlightSpan {
+            token: TaskTracker::new().token(),
+        })
+        .attach()
 }
 
 /// Creates the top-level span for an incoming HTTP request, with the correct
@@ -621,28 +738,43 @@ fn make_otel_http_span<B>(
     if let Some(custom_tracer_key) = key {
         context = tracer_wrapper.get_or_create_custom_tracer(&custom_tracer_key, context);
     }
-
-    let span =
-        tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(req);
-    match span.set_parent(context) {
-        Ok(()) => (),
-        Err(e) => {
-            tracing::error!("Failed to set parent context: {e}. {IMPOSSIBLE_ERROR_MESSAGE}");
-        }
-    }
+    let _guard = context.attach();
 
     let route = req
         .extensions()
         .get::<MatchedPath>()
         .map(MatchedPath::as_str);
+
+    let http_method = req.method();
+
+    // Copied from `tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request` (https://github.com/davidB/tracing-opentelemetry-instrumentation-sdk/blob/5a64c55228645be87f21c628093dbd044104a10a/tracing-opentelemetry-instrumentation-sdk/src/http/http_server.rs#L10)
+    // with `otel.name` added (so that it can be detected by our filtering layer)
+    let span = tracing::info_span!(
+        "HTTP request",
+        http.request.method = %http_method,
+        http.route = Empty, // to set by router of "webframework" after
+        network.protocol.version = %http_flavor(req.version()),
+        server.address = http_host(req),
+        // server.port = req.uri().port(),
+        http.client.address = Empty, //%$request.connection_info().realip_remote_addr().unwrap_or(""),
+        user_agent.original = user_agent(req),
+        http.response.status_code = Empty, // to set on response
+        url.path = req.uri().path(),
+        url.query = req.uri().query(),
+        url.scheme = url_scheme(req.uri()),
+        otel.kind = ?opentelemetry::trace::SpanKind::Server,
+        otel.status_code = Empty, // to set on response
+        trace_id = Empty, // to set on response
+        request_id = Empty, // to set
+        exception.message = Empty, // to set on response
+        "span.type" = "web", // non-official open-telemetry key, only supported by Datadog
+        otel.name = format!("{} {}", req.method(), route.unwrap_or_default()).trim(),
+    );
+
     if let Some(route) = route {
         span.record("http.route", route);
     }
 
-    span.record(
-        "otel.name",
-        format!("{} {}", req.method(), route.unwrap_or_default()).trim(),
-    );
     span
 }
 
@@ -789,8 +921,7 @@ impl TracerWrapper {
     /// (e.g. rate-limiting `return_tickets` calls) to finish before shutting down the exporters.
     pub async fn shutdown(&self) {
         // See the docs on `InFlightSpan` for more information.
-        self.in_flight_spans.close();
-        self.in_flight_spans.wait().await;
+        wait_for_tasks_with_logging(&self.in_flight_spans, "request processing").await;
         // Now that all of our OpenTelemetry spans have closed (including spans in background tasks),
         // shut down all of our custom tracers.
         // This might happen in parallel for the same custom tracer (if moka evicts its cache entry), but opentelemetry
@@ -804,9 +935,23 @@ impl TracerWrapper {
         self.shutdown_tasks
             .spawn(shutdown_otel(self.default_provider.clone()));
         // Then, wait for all all of the shutdown tasks to finish.
-        self.shutdown_tasks.close();
-        self.shutdown_tasks.wait().await;
+        wait_for_tasks_with_logging(&self.shutdown_tasks, "trace exporter shutdown").await;
     }
+}
+
+// Helper function that waits for a TaskTracker to finish, logging the current task count every 5 seconds.
+async fn wait_for_tasks_with_logging(tasks: &TaskTracker, name: &str) {
+    tasks.close();
+    IntervalStream::new(tokio::time::interval(Duration::from_secs(5)))
+        .take_until(tasks.wait())
+        .for_each(|_| async {
+            tracing::info!(
+                "Waiting for {name} tasks to finish: {} tasks remaining",
+                tasks.len()
+            );
+        })
+        .await;
+    tracing::info!("{name} tasks finished");
 }
 
 /// This is used when `gateway.debug` is `false` and `RUST_LOG` is not set

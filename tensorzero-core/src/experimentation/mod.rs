@@ -11,6 +11,7 @@ use crate::db::postgres::PostgresConnectionInfo;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::variant::VariantInfo;
 
+pub mod asymptotic_confidence_sequences;
 mod static_weights;
 pub mod track_and_stop;
 

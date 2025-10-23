@@ -106,6 +106,20 @@ system_template = "functions/extract_entities/baseline/system_template.minijinja
 json_mode = "strict"
 temperature = 0
 
+[functions.extract_entities.experimentation]
+type = "track_and_stop"
+metric = "jaro_winkler_similarity"
+candidate_variants = [
+    "gpt4o_mini_initial_prompt",
+    "gpt4o_initial_prompt",
+    "llama_8b_initial_prompt",
+]
+fallback_variants = []
+min_samples_per_variant = 10
+delta = 0.05
+epsilon = 0.1
+update_period_s = 60
+
 [functions.write_haiku]
 type = "chat"
 user_schema = "functions/write_haiku/user_schema.json"
@@ -366,15 +380,19 @@ type = "float"
 level = "episode"
 optimize = "min"
 
+[metrics.jaro_winkler_similarity]
+type = "float"
+level = "inference"
+optimize = "max"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                                  EVALUATIONS                               │
 # └────────────────────────────────────────────────────────────────────────────┘
 
 [evaluations.entity_extraction]
-type = "static"
+type = "inference"
 function_name = "extract_entities"
-dataset_name = "foo"
 
 [evaluations.entity_extraction.evaluators.exact_match]
 type = "exact_match"
@@ -396,9 +414,8 @@ json_mode = "strict"
 temperature = 0.1
 
 [evaluations.haiku]
-type = "static"
+type = "inference"
 function_name = "write_haiku"
-dataset_name = "foo"
 
 [evaluations.haiku.evaluators.exact_match]
 type = "exact_match"
@@ -419,7 +436,7 @@ json_mode = "strict"
 temperature = 0
 
 [evaluations.images]
-type = "static"
+type = "inference"
 function_name = "image_judger"
 
 [evaluations.images.evaluators.exact_match]
