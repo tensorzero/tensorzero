@@ -3792,7 +3792,7 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
-                assert_query_contains(query, "AND tags[{p0:String}] = {p1:String}");
+                assert_query_contains(query, "AND i.tags[{p0:String}] = {p1:String}");
 
                 assert_eq!(parameters.get("p0"), Some(&"environment"));
                 assert_eq!(parameters.get("p1"), Some(&"production"));
