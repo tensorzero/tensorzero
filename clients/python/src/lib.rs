@@ -241,6 +241,24 @@ impl AsyncStreamWrapper {
     }
 }
 
+fn check_stream_terminated(stream: Arc<Mutex<InferenceStream>>) {
+    // This is purely informational, so we don't need to wait for it when the 'gateway'
+    // shuts down.
+    #[expect(clippy::disallowed_methods)]
+    pyo3_async_runtimes::tokio::get_runtime().spawn(async move {
+        let stream = stream.lock().await;
+        if !stream.is_terminated() {
+            tracing::warn!("Stream was garbage-collected without being iterated to completion");
+        }
+    });
+}
+
+impl Drop for AsyncStreamWrapper {
+    fn drop(&mut self) {
+        check_stream_terminated(self.stream.clone());
+    }
+}
+
 #[pyclass(frozen)]
 struct StreamWrapper {
     stream: Arc<Mutex<InferenceStream>>,
@@ -268,6 +286,12 @@ impl StreamWrapper {
         };
         let chunk = chunk.map_err(|e| convert_error(py, err_to_http(e)))?;
         parse_inference_chunk(py, chunk)
+    }
+}
+
+impl Drop for StreamWrapper {
+    fn drop(&mut self) {
+        check_stream_terminated(self.stream.clone());
     }
 }
 
