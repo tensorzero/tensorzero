@@ -130,6 +130,7 @@ class TensorZeroExperimentRunner:
             feedback_tasks = []
             batch_regrets = []
             batch_arms = []  # Track which arms were selected in this batch
+            batch_rewards = []  # Track rewards for empirical mean calculation
 
             for response in responses:
                 t += 1
@@ -155,6 +156,7 @@ class TensorZeroExperimentRunner:
 
                 # Sample reward from environment
                 reward = self.env.sample_reward(arm)
+                batch_rewards.append(reward)
 
                 # Submit feedback (don't await yet)
                 feedback_task = self.client.feedback(
@@ -212,6 +214,79 @@ class TensorZeroExperimentRunner:
             print(f"      Arm distribution: {arm_dist}")
             print(f"      True means: {self.env.true_means}")
             print(f"      Best arm: {self.env.best_arm} (mean={self.env.best_mean:.3f})")
+
+            # Query ClickHouse FeedbackByVariantStatistics to get empirical stats
+            import subprocess
+
+            # Parse ClickHouse URL
+            ch_parts = self.clickhouse_url.replace("http://", "").split("@")
+            ch_creds = ch_parts[0].split(":")
+            ch_host_db = ch_parts[1].split("/")
+            ch_user = ch_creds[0]
+            ch_password = ch_creds[1]
+            ch_database = ch_host_db[1] if len(ch_host_db) > 1 else "default"
+
+            # Query FeedbackByVariantStatistics table (same query as get_feedback_by_variant)
+            query = f"""
+            SELECT
+                variant_name,
+                avgMerge(feedback_mean) as mean,
+                varSampStableMerge(feedback_variance) as variance,
+                sum(count) as count
+            FROM {ch_database}.FeedbackByVariantStatistics
+            WHERE function_name = '{self.function_name}' AND metric_name = '{self.metric_name}'
+            GROUP BY variant_name
+            ORDER BY variant_name
+            FORMAT TabSeparated
+            """
+
+            cmd = [
+                "docker",
+                "exec",
+                "bandits-testing-clickhouse-1",
+                "clickhouse-client",
+                "--user",
+                ch_user,
+                "--password",
+                ch_password,
+                "--query",
+                query.strip(),
+            ]
+
+            try:
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                stats_lines = result.stdout.strip().split("\n") if result.stdout.strip() else []
+
+                empirical_means = {}
+                sample_counts = {}
+                variances = {}
+
+                for line in stats_lines:
+                    if line:
+                        parts = line.split("\t")
+                        variant_name = parts[0]
+                        mean = float(parts[1])
+                        variance = float(parts[2])
+                        count = int(parts[3])
+
+                        # Parse variant_N to get arm index
+                        arm_idx = int(variant_name.split("_")[1])
+                        sample_counts[arm_idx] = count
+                        empirical_means[arm_idx] = mean
+                        variances[arm_idx] = variance
+
+                # Fill in zeros for arms with no samples
+                for i in range(self.env.K):
+                    if i not in sample_counts:
+                        sample_counts[i] = 0
+                        empirical_means[i] = 0.0
+                        variances[i] = 0.0
+
+                print(f"      Empirical means (ClickHouse): {empirical_means}")
+                print(f"      Sample counts: {sample_counts}")
+                print(f"      Variances: {variances}")
+            except Exception as e:
+                print(f"      Warning: Could not query ClickHouse stats: {e}")
 
             # Wait for track-and-stop background task to update probabilities
             # The update_period_s in config is 1, so we wait a bit longer to ensure it runs
@@ -278,6 +353,9 @@ async def clear_databases(clickhouse_url: str, postgres_url: str):
         "CommentFeedback",
         "DemonstrationFeedback",
         "ModelInferenceCache",
+        "FeedbackByVariantStatistics",
+        "FloatMetricFeedbackByVariantStatisticsView",
+        "BooleanMetricFeedbackByVariantStatisticsView",
     ]
 
     for table in ch_tables:
@@ -300,8 +378,8 @@ async def clear_databases(clickhouse_url: str, postgres_url: str):
 
     # Clear Postgres tables
     pg_tables = [
-        "ExperimentalEpisodeVariantAssignment",
-        "TrackAndStopExperimentState",
+        "variant_by_episode",
+        "resource_bucket",
     ]
 
     for table in pg_tables:
@@ -387,17 +465,20 @@ async def run_tensorzero_experiment_batch(
         for run_idx in range(n_runs):
             seed = base_seed + run_idx
 
+            # Cleanup previous gateway if not first run
+            if run_idx > 0:
+                print(f"  Run {run_idx + 1}/{n_runs}: Shutting down previous gateway...")
+                await runner.cleanup()
+                # Give the gateway time to fully shut down (including background tasks)
+                await asyncio.sleep(2.0)
+
             # Clear databases before each independent run for fresh start
             print(f"  Run {run_idx + 1}/{n_runs}: Clearing databases...")
             await clear_databases(clickhouse_url, postgres_url)
 
-            # Setup gateway for this run (after clearing databases)
-            if run_idx == 0:
-                await runner.setup()
-            else:
-                # Reinitialize gateway to pick up cleared state
-                await runner.cleanup()
-                await runner.setup()
+            # Setup fresh gateway for this run (after clearing databases)
+            print(f"  Run {run_idx + 1}/{n_runs}: Initializing fresh gateway...")
+            await runner.setup()
 
             # Create fresh environment for this run
             env = create_environment(env_type, K, difficulty, seed, **env_kwargs)
