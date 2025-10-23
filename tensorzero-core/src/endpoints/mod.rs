@@ -19,8 +19,8 @@ use axum::routing::MethodRouter;
 use std::convert::Infallible;
 
 /// Helper struct to hold the data needed for a call to `Router.route`
-/// We ues this to pass the route names to middleware before the register the routes
-/// (since axum doens't let you list the registered routes in a `Router`)
+/// We use this to pass the route names to middleware before they register the routes
+/// (since axum doesn't let you list the registered routes in a `Router`)
 pub struct RouteHandlers {
     pub routes: Vec<(&'static str, MethodRouter<AppStateData, Infallible>)>,
 }
