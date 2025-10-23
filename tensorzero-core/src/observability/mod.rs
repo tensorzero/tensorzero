@@ -35,6 +35,7 @@
 //!    If present, we use the wrapped `CustomTracer`, which will cause the span to get exported using the correct
 //!    custom HTTP headers and OpenTelemetry resources. Otherwise, we our default `SdkTracer`, which doesn't attach any custom headers
 //!    or extra OpenTelemetry resources.
+use futures::StreamExt;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -42,6 +43,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use once_cell::sync::OnceCell;
+use tokio_stream::wrappers::IntervalStream;
 
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
@@ -196,6 +198,7 @@ pub struct TracerWrapper {
     // memory is freed immediately when a shutdown tasks exists. We wait on all remaining tasks
     // in `TracerWrapper::shutdown`
     shutdown_tasks: TaskTracker,
+    // See `InFlightSpan` for more information.
     in_flight_spans: TaskTracker,
 }
 
@@ -848,8 +851,7 @@ impl TracerWrapper {
     /// (e.g. rate-limiting `return_tickets` calls) to finish before shutting down the exporters.
     pub async fn shutdown(&self) {
         // See the docs on `InFlightSpan` for more information.
-        self.in_flight_spans.close();
-        self.in_flight_spans.wait().await;
+        wait_for_tasks_with_logging(&self.in_flight_spans, "request processing").await;
         // Now that all of our OpenTelemetry spans have closed (including spans in background tasks),
         // shut down all of our custom tracers.
         // This might happen in parallel for the same custom tracer (if moka evicts its cache entry), but opentelemetry
@@ -863,9 +865,23 @@ impl TracerWrapper {
         self.shutdown_tasks
             .spawn(shutdown_otel(self.default_provider.clone()));
         // Then, wait for all all of the shutdown tasks to finish.
-        self.shutdown_tasks.close();
-        self.shutdown_tasks.wait().await;
+        wait_for_tasks_with_logging(&self.shutdown_tasks, "trace exporter shutdown").await;
     }
+}
+
+// Helper function that waits for a TaskTracker to finish, logging the current task count every 5 seconds.
+async fn wait_for_tasks_with_logging(tasks: &TaskTracker, name: &str) {
+    tasks.close();
+    IntervalStream::new(tokio::time::interval(Duration::from_secs(5)))
+        .take_until(tasks.wait())
+        .for_each(|_| async {
+            tracing::info!(
+                "Waiting for {name} tasks to finish: {} tasks remaining",
+                tasks.len()
+            );
+        })
+        .await;
+    tracing::info!("{name} tasks finished");
 }
 
 /// This is used when `gateway.debug` is `false` and `RUST_LOG` is not set
