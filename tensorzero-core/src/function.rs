@@ -7,7 +7,7 @@ use crate::inference::types::pyo3_helpers::serialize_to_dict;
 #[cfg(feature = "pyo3")]
 use crate::variant::{
     BestOfNSamplingConfigPyClass, ChainOfThoughtConfigPyClass, ChatCompletionConfigPyClass,
-    DiclConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
+    DiclConfigPyClass, FirstOfNConfigPyClass, MixtureOfNConfigPyClass, VariantConfig,
 };
 #[cfg(feature = "pyo3")]
 use pyo3::exceptions::{PyKeyError, PyValueError};
@@ -215,6 +215,7 @@ impl VariantsConfigPyClass {
             VariantConfig::ChainOfThought(_) => {
                 ChainOfThoughtConfigPyClass { inner: v }.into_bound_py_any(py)
             }
+            VariantConfig::FirstOfN(_) => FirstOfNConfigPyClass { inner: v }.into_bound_py_any(py),
         }
     }
 }

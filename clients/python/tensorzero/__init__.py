@@ -13,6 +13,7 @@ from .client import (
 from .tensorzero import (
     BestOfNSamplingConfig,
     ChainOfThoughtConfig,
+    FirstOfNConfig,
     ChatCompletionConfig,
     Config,
     Datapoint,
@@ -155,6 +156,7 @@ __all__ = [
     "DICLConfig",
     "MixtureOfNConfig",
     "ChainOfThoughtConfig",
+    "FirstOfNConfig",
     "ImageBase64",
     "ImageUrl",
     "InferenceChunk",

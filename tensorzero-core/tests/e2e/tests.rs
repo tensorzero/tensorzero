@@ -18,6 +18,7 @@ mod endpoints;
 mod experimentation;
 mod fallback;
 mod feedback;
+mod first_of_n;
 mod health;
 mod howdy;
 mod human_feedback;
