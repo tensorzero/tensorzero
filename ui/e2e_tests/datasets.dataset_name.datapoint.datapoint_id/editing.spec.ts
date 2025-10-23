@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { v7 } from "uuid";
 import { createDatapointFromInference } from "../helpers/datapoint-helpers";
+import { saveAndWaitForRedirect, expandShowMoreIfPresent } from "./helpers";
 
 /**
  * Comprehensive tests for dataset datapoint editing functionality
@@ -38,14 +39,7 @@ test.describe("System Message - Text", () => {
     );
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify system message was added
     await expect(page.getByText(systemMessageText1)).toBeVisible();
@@ -65,14 +59,7 @@ test.describe("System Message - Text", () => {
     );
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify system message was edited
     await expect(page.getByText(systemMessageText2)).toBeVisible();
@@ -98,14 +85,7 @@ test.describe("System Message - Text", () => {
     ).toBeVisible();
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify system message was deleted
     await expect(page.getByText("system", { exact: true })).not.toBeVisible();
@@ -113,6 +93,9 @@ test.describe("System Message - Text", () => {
     // Reload and verify persistence
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText("system", { exact: true })).not.toBeVisible();
   });
 });
@@ -158,14 +141,7 @@ test.describe("System Message - Template", () => {
     await templateEditor.fill(templateJson1);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify template was added
     const templateSection = page
@@ -191,14 +167,7 @@ test.describe("System Message - Template", () => {
     const templateJson2 = JSON.stringify({ secret: templateValue2 }, null, 2);
     await templateEditor.fill(templateJson2);
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify template was edited
     await expect(templateSection).toBeVisible();
@@ -209,6 +178,10 @@ test.describe("System Message - Template", () => {
     // Reload and verify persistence
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     codeContent = await templateSection.locator(".cm-content").textContent();
     expect(codeContent).toContain(templateValue2);
   });
@@ -234,13 +207,7 @@ test.describe("User Message - Text Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons if they exist (content might be collapsed)
-    // Click the first button repeatedly until all are gone
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Find a user message section and add text block
     const userSection = page.getByTestId("message-user").first();
@@ -262,14 +229,7 @@ test.describe("User Message - Text Blocks", () => {
     await textEditor.fill(`User text content: ${textContent}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 1: Verify text block was added
     await expect(page.getByText(textContent)).toBeVisible();
@@ -279,12 +239,7 @@ test.describe("User Message - Text Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Find the text editor again
     const textEditor2 = userSection
@@ -296,14 +251,7 @@ test.describe("User Message - Text Blocks", () => {
     await textEditor2.fill(`Edited user text: ${textContent2}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(textContent2)).toBeVisible();
@@ -314,12 +262,7 @@ test.describe("User Message - Text Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Find delete button for the newly added content block (last one)
     const deleteButton = userSection
@@ -328,14 +271,7 @@ test.describe("User Message - Text Blocks", () => {
     await deleteButton.click();
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify text block was deleted
     await expect(page.getByText(textContent2)).not.toBeVisible();
@@ -344,6 +280,10 @@ test.describe("User Message - Text Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(textContent2)).not.toBeVisible();
   });
 });
@@ -394,14 +334,7 @@ test.describe("User Message - Tool Call Blocks", () => {
     await argsEditor.fill('{"param": "value"}');
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify tool call visible (check for tool name and ID)
     await expect(page.getByText(toolName)).toBeVisible();
@@ -425,14 +358,7 @@ test.describe("User Message - Tool Call Blocks", () => {
     await argsEditorEdit.fill('{"param": "updated_value"}');
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // CRITICAL: Verify ID is still there after edit
     await expect(page.getByText(toolId)).toBeVisible();
@@ -447,14 +373,7 @@ test.describe("User Message - Tool Call Blocks", () => {
       .last();
     await deleteButton.click();
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify tool call removed
     await expect(page.getByText(toolId)).not.toBeVisible();
@@ -505,14 +424,7 @@ test.describe("User Message - Tool Result Blocks", () => {
     await resultEditor.fill(resultValue);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 1: Verify tool result was added
     await expect(page.getByText(resultName)).toBeVisible();
@@ -532,14 +444,7 @@ test.describe("User Message - Tool Result Blocks", () => {
     await resultEditor2.fill(resultValue2);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify edited content
     await expect(page.getByText(resultValue2)).toBeVisible();
@@ -554,14 +459,7 @@ test.describe("User Message - Tool Result Blocks", () => {
       .last();
     await deleteButton.click();
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify tool result was deleted
     await expect(page.getByText(resultValue2)).not.toBeVisible();
@@ -570,6 +468,10 @@ test.describe("User Message - Tool Result Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(resultValue2)).not.toBeVisible();
   });
 });
@@ -588,12 +490,7 @@ test.describe("User Message - Template Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const userSection = page.getByTestId("message-user").first();
 
@@ -627,14 +524,7 @@ test.describe("User Message - Template Blocks", () => {
     await templateEditor.fill(templateJson1);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 2: Verify template was added
     await expect(page.getByText(templateValue1)).toBeVisible();
@@ -657,14 +547,7 @@ test.describe("User Message - Template Blocks", () => {
     await templateEditor2.fill(templateJson2);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify template was edited
     await expect(page.getByText(templateValue2)).toBeVisible();
@@ -693,13 +576,7 @@ test.describe("User Message - Thought Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons if they exist (content might be collapsed)
-    // Click the first button repeatedly until all are gone
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Find a user message section and add thought block
     const userSection = page.getByTestId("message-user").first();
@@ -721,14 +598,7 @@ test.describe("User Message - Thought Blocks", () => {
     await thoughtEditor.fill(`User thought content: ${thoughtContent}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 1: Verify thought block was added
     await expect(page.getByText(thoughtContent)).toBeVisible();
@@ -738,12 +608,7 @@ test.describe("User Message - Thought Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Find the thought editor again
     const thoughtEditor2 = userSection
@@ -755,14 +620,7 @@ test.describe("User Message - Thought Blocks", () => {
     await thoughtEditor2.fill(`Edited user thought: ${thoughtContent2}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(thoughtContent2)).toBeVisible();
@@ -773,12 +631,7 @@ test.describe("User Message - Thought Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Find delete button for the newly added content block (last one)
     const deleteButton = userSection
@@ -787,14 +640,7 @@ test.describe("User Message - Thought Blocks", () => {
     await deleteButton.click();
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify thought block was deleted
     await expect(page.getByText(thoughtContent2)).not.toBeVisible();
@@ -803,6 +649,10 @@ test.describe("User Message - Thought Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(thoughtContent2)).not.toBeVisible();
   });
 });
@@ -836,14 +686,14 @@ test.describe("Assistant Message - Text Blocks", () => {
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
-    // Expand all "Show more" buttons if they exist (content might be collapsed)
-    // Click the first button repeatedly until all are gone
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    // Wait for the assistant section to be fully rendered
+    await assistantSection
+      .getByRole("button", { name: "Text" })
+      .first()
+      .waitFor({ state: "visible" });
+
+    // Expand all "Show more"
+    await expandShowMoreIfPresent(page);
 
     // Now add text to the assistant message
     const addTextButton = assistantSection
@@ -863,14 +713,7 @@ test.describe("Assistant Message - Text Blocks", () => {
     await textEditor.fill(`Assistant text: ${textContent}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 1: Verify text block was added
     await expect(page.getByText(textContent)).toBeVisible();
@@ -880,12 +723,7 @@ test.describe("Assistant Message - Text Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const textEditor2 = assistantSection
       .locator("div[contenteditable='true']")
@@ -896,14 +734,7 @@ test.describe("Assistant Message - Text Blocks", () => {
     await textEditor2.fill(`Edited assistant text: ${textContent2}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(textContent2)).toBeVisible();
@@ -914,26 +745,14 @@ test.describe("Assistant Message - Text Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const deleteButton = assistantSection
       .getByRole("button", { name: "Delete content block" })
       .last();
     await deleteButton.click();
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify text block was deleted
     await expect(page.getByText(textContent2)).not.toBeVisible();
@@ -942,6 +761,10 @@ test.describe("Assistant Message - Text Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(textContent2)).not.toBeVisible();
   });
 });
@@ -971,13 +794,14 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
+    // Wait for the assistant section to be fully rendered
+    await assistantSection
+      .getByRole("button", { name: "Tool Call" })
+      .first()
+      .waitFor({ state: "visible" });
+
     // Expand all "Show more" buttons if they exist (content might be collapsed)
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Add tool call to assistant message
     const addToolCallButton = assistantSection
@@ -1008,14 +832,7 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
     await argsEditor.fill('{"param": "value"}');
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify tool call visible (check for tool name and ID)
     await expect(page.getByText(toolName)).toBeVisible();
@@ -1032,12 +849,7 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Modify the arguments
     const argsEditorEdit = assistantSection
@@ -1047,14 +859,7 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
     await argsEditorEdit.fill('{"param": "updated_value"}');
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // CRITICAL: Verify ID is still there after edit
     await expect(page.getByText(toolId)).toBeVisible();
@@ -1065,26 +870,14 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const deleteButton = assistantSection
       .getByRole("button", { name: "Delete content block" })
       .last();
     await deleteButton.click();
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify tool call removed
     await expect(page.getByText(toolId)).not.toBeVisible();
@@ -1092,6 +885,10 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(toolId)).not.toBeVisible();
   });
 });
@@ -1121,13 +918,14 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
+    // Wait for the assistant section to be fully rendered
+    await assistantSection
+      .getByRole("button", { name: "Tool Result" })
+      .first()
+      .waitFor({ state: "visible" });
+
     // Expand all "Show more" buttons if they exist (content might be collapsed)
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Add tool result to assistant message
     const addToolResultButton = assistantSection
@@ -1156,14 +954,7 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
     await resultEditor.fill(resultValue);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 1: Verify tool result was added
     await expect(page.getByText(resultName)).toBeVisible();
@@ -1175,12 +966,7 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const resultEditor2 = assistantSection
       .locator("div[contenteditable='true']")
@@ -1191,14 +977,7 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
     await resultEditor2.fill(resultValue2);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify edited content
     await expect(page.getByText(resultValue2)).toBeVisible();
@@ -1209,26 +988,14 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const deleteButton = assistantSection
       .getByRole("button", { name: "Delete content block" })
       .last();
     await deleteButton.click();
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify tool result was deleted
     await expect(page.getByText(resultValue2)).not.toBeVisible();
@@ -1237,6 +1004,10 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(resultValue2)).not.toBeVisible();
   });
 });
@@ -1264,13 +1035,14 @@ test.describe("Assistant Message - Template Blocks", () => {
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
+    // Wait for the assistant section to be fully rendered
+    await assistantSection
+      .getByRole("button", { name: "Template" })
+      .first()
+      .waitFor({ state: "visible" });
+
     // Expand all "Show more" buttons if they exist (content might be collapsed)
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Add a template (greeting_template is defined in custom_template_test)
     const addTemplateButton = assistantSection
@@ -1298,14 +1070,7 @@ test.describe("Assistant Message - Template Blocks", () => {
     await templateEditor.fill(templateJson1);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 1: Verify template was added
     await expect(page.getByText(templateValue1)).toBeVisible();
@@ -1315,12 +1080,7 @@ test.describe("Assistant Message - Template Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const templateEditor2 = assistantSection
       .locator("div[contenteditable='true']")
@@ -1336,14 +1096,7 @@ test.describe("Assistant Message - Template Blocks", () => {
     await templateEditor2.fill(templateJson2);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify template was edited
     await expect(page.getByText(templateValue2)).toBeVisible();
@@ -1354,12 +1107,7 @@ test.describe("Assistant Message - Template Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const deleteButton = assistantSection
       .getByRole("button", { name: "Delete content block" })
@@ -1367,14 +1115,7 @@ test.describe("Assistant Message - Template Blocks", () => {
     await deleteButton.click();
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify template was deleted
     await expect(page.getByText(templateValue2)).not.toBeVisible();
@@ -1382,6 +1123,10 @@ test.describe("Assistant Message - Template Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(templateValue2)).not.toBeVisible();
   });
 });
@@ -1411,14 +1156,14 @@ test.describe("Assistant Message - Thought Blocks", () => {
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
+    // Wait for the assistant section to be fully rendered
+    await assistantSection
+      .getByRole("button", { name: "Thought" })
+      .first()
+      .waitFor({ state: "visible" });
+
     // Expand all "Show more" buttons if they exist (content might be collapsed)
-    // Click the first button repeatedly until all are gone
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Now add thought to the assistant message
     const addThoughtButton = assistantSection
@@ -1438,14 +1183,7 @@ test.describe("Assistant Message - Thought Blocks", () => {
     await thoughtEditor.fill(`Assistant thought: ${thoughtContent}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 1: Verify thought block was added
     await expect(page.getByText(thoughtContent)).toBeVisible();
@@ -1455,12 +1193,7 @@ test.describe("Assistant Message - Thought Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const thoughtEditor2 = assistantSection
       .locator("div[contenteditable='true']")
@@ -1471,14 +1204,7 @@ test.describe("Assistant Message - Thought Blocks", () => {
     await thoughtEditor2.fill(`Edited assistant thought: ${thoughtContent2}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(thoughtContent2)).toBeVisible();
@@ -1489,26 +1215,14 @@ test.describe("Assistant Message - Thought Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const deleteButton = assistantSection
       .getByRole("button", { name: "Delete content block" })
       .last();
     await deleteButton.click();
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify thought block was deleted
     await expect(page.getByText(thoughtContent2)).not.toBeVisible();
@@ -1517,6 +1231,10 @@ test.describe("Assistant Message - Thought Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(thoughtContent2)).not.toBeVisible();
   });
 });
@@ -1539,12 +1257,7 @@ test.describe("Output - Text Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Find Output section
     const outputSection = page
@@ -1567,14 +1280,7 @@ test.describe("Output - Text Blocks", () => {
     await textEditor.fill(`Output text: ${textContent}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Step 1: Verify text block was added
     await expect(page.getByText(textContent)).toBeVisible();
@@ -1584,12 +1290,7 @@ test.describe("Output - Text Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const textEditor2 = outputSection
       .locator("div[contenteditable='true']")
@@ -1600,14 +1301,7 @@ test.describe("Output - Text Blocks", () => {
     await textEditor2.fill(`Edited output text: ${textContent2}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(textContent2)).toBeVisible();
@@ -1618,12 +1312,7 @@ test.describe("Output - Text Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const deleteButton = outputSection
       .getByRole("button", { name: "Delete content block" })
@@ -1631,14 +1320,7 @@ test.describe("Output - Text Blocks", () => {
     await deleteButton.click();
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify text block was deleted
     await expect(page.getByText(textContent2)).not.toBeVisible();
@@ -1647,6 +1329,10 @@ test.describe("Output - Text Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(textContent2)).not.toBeVisible();
   });
 });
@@ -1665,12 +1351,7 @@ test.describe("Output - Tool Call Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Find Output section
     const outputSection = page
@@ -1685,12 +1366,7 @@ test.describe("Output - Tool Call Blocks", () => {
     await addToolCallButton.click();
 
     // Expand all "Show more" buttons again (tool call might be collapsed)
-    const showMoreButtonAfterAdd = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButtonAfterAdd.count()) > 0) {
-      await showMoreButtonAfterAdd.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Fill in tool call details
     const toolId = "tool_" + v7();
@@ -1710,14 +1386,7 @@ test.describe("Output - Tool Call Blocks", () => {
     await argsEditor.fill('{"thought": "test thought"}');
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify tool call visible (check for unique content and ID)
     await expect(page.getByText("test thought")).toBeVisible();
@@ -1736,12 +1405,7 @@ test.describe("Output - Tool Call Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Modify the arguments
     const argsEditorEdit = outputSection
@@ -1751,14 +1415,7 @@ test.describe("Output - Tool Call Blocks", () => {
     await argsEditorEdit.fill('{"thought": "updated thought"}');
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // TODO (#4058): we are not roundtripping IDs
     // await expect(page.getByText(toolId)).toBeVisible();
@@ -1769,12 +1426,7 @@ test.describe("Output - Tool Call Blocks", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons again
-    const showMoreButton3 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton3.count()) > 0) {
-      await showMoreButton3.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     const deleteButton = outputSection
       .getByRole("button", { name: "Delete content block" })
@@ -1782,14 +1434,7 @@ test.describe("Output - Tool Call Blocks", () => {
     await deleteButton.click();
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify tool call removed
     await expect(page.getByText(toolId)).not.toBeVisible();
@@ -1797,6 +1442,10 @@ test.describe("Output - Tool Call Blocks", () => {
     // Reload and verify deletion persists
     await page.reload();
     await page.waitForLoadState("networkidle", { timeout: 5000 });
+    // Wait for Edit button to ensure page is fully loaded before checking negative assertion
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
     await expect(page.getByText(toolId)).not.toBeVisible();
   });
 });
@@ -1819,12 +1468,7 @@ test.describe("Message Operations", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons to avoid gradient overlay blocking clicks
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Count existing user messages
     const userMessagesInitial = await page.getByTestId("message-user").count();
@@ -1840,12 +1484,7 @@ test.describe("Message Operations", () => {
     );
 
     // Expand "Show more" again as content might have grown
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Add content to new message
     const newUserSection = page.getByTestId("message-user").last();
@@ -1862,14 +1501,7 @@ test.describe("Message Operations", () => {
     await textEditor.fill(`New user message: ${newMessageContent}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify
     await expect(page.getByText(newMessageContent)).toBeVisible();
@@ -1884,14 +1516,7 @@ test.describe("Message Operations", () => {
       .last();
     await deleteMessageButton.click();
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify message removed
     await expect(page.getByText(newMessageContent)).not.toBeVisible();
@@ -1910,12 +1535,7 @@ test.describe("Message Operations", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons to avoid gradient overlay blocking clicks
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Count existing assistant messages
     const assistantMessagesInitial = await page
@@ -1935,12 +1555,7 @@ test.describe("Message Operations", () => {
     );
 
     // Expand "Show more" again as content might have grown
-    const showMoreButton2 = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton2.count()) > 0) {
-      await showMoreButton2.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Add content to assistant message
     const assistantSection = page.getByTestId("message-assistant").last();
@@ -1959,14 +1574,7 @@ test.describe("Message Operations", () => {
     await textEditor.fill(`New assistant message: ${assistantContent}`);
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify
     await expect(page.getByText(assistantContent)).toBeVisible();
@@ -1980,14 +1588,7 @@ test.describe("Message Operations", () => {
       .last();
     await deleteMessageButton.click();
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify removed
     await expect(page.getByText(assistantContent)).not.toBeVisible();
@@ -2022,12 +1623,7 @@ test.describe("Delete Action Buttons", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons to avoid gradient overlay blocking clicks
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // In edit mode, delete buttons should be visible
     // (There should be at least one delete message button for existing messages)
@@ -2078,12 +1674,7 @@ test.describe("Edge Cases", () => {
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 
     // Expand all "Show more" buttons to avoid gradient overlay blocking clicks
-    const showMoreButton = page
-      .getByRole("button", { name: "Show more" })
-      .first();
-    while ((await showMoreButton.count()) > 0) {
-      await showMoreButton.click();
-    }
+    await expandShowMoreIfPresent(page);
 
     // Add multiple content blocks to one message
     const userSection = page.getByTestId("message-user").first();
@@ -2119,14 +1710,7 @@ test.describe("Edge Cases", () => {
     await toolArgsEditor.fill('{"key": "value"}');
 
     // Save
-    await page.getByRole("button", { name: "Save" }).click();
-    await page.waitForURL(/\/datasets\/.*\/datapoint\/[^/]+$/, {
-      timeout: 10000,
-    });
-    await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page
-      .getByRole("button", { name: "Edit" })
-      .waitFor({ state: "visible" });
+    await saveAndWaitForRedirect(page);
 
     // Verify both content blocks are visible
     await expect(page.getByText(textContent)).toBeVisible();
