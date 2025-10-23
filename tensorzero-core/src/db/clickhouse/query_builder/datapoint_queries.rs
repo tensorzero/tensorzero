@@ -17,22 +17,13 @@ pub enum DatapointFilter {
     Time(TimeFilter),
 
     /// Logical AND of multiple filters
-    And {
-        /// Child filters that must all be true
-        children: Vec<DatapointFilter>,
-    },
+    And { children: Vec<DatapointFilter> },
 
     /// Logical OR of multiple filters
-    Or {
-        /// Child filters where at least one must be true
-        children: Vec<DatapointFilter>,
-    },
+    Or { children: Vec<DatapointFilter> },
 
     /// Logical NOT of a filter
-    Not {
-        /// Child filter to negate
-        child: Box<DatapointFilter>,
-    },
+    Not { child: Box<DatapointFilter> },
 }
 
 impl DatapointFilter {
@@ -193,6 +184,19 @@ mod tests {
     }
 
     #[test]
+    fn test_tag_filter_writes_table_prefix() {
+        let filter = DatapointFilter::Tag(TagFilter {
+            key: "tag_key".to_string(),
+            value: "tag_value".to_string(),
+            comparison_operator: TagComparisonOperator::Equal,
+        });
+
+        let (sql, _) = filter.to_clickhouse_sql("original");
+
+        assert_eq!(sql, "original.tags[{p0:String}] = {p1:String}");
+    }
+
+    #[test]
     fn test_time_filter_less_than() {
         let test_time = DateTime::from_timestamp(1672531200, 0).unwrap(); // 2023-01-01 00:00:00 UTC
         let filter = DatapointFilter::Time(TimeFilter {
@@ -208,7 +212,7 @@ mod tests {
             params[0],
             QueryParameter {
                 name: "p0".to_string(),
-                value: "2023-01-01 00:00:00".to_string()
+                value: "2023-01-01 00:00:00 UTC".to_string()
             }
         );
     }
@@ -229,7 +233,7 @@ mod tests {
             params[0],
             QueryParameter {
                 name: "p0".to_string(),
-                value: "2021-01-01 00:00:00".to_string()
+                value: "2021-01-01 00:00:00 UTC".to_string()
             }
         );
     }
@@ -250,7 +254,7 @@ mod tests {
             params[0],
             QueryParameter {
                 name: "p0".to_string(),
-                value: "2022-01-01 00:00:00".to_string()
+                value: "2022-01-01 00:00:00 UTC".to_string()
             }
         );
     }
@@ -271,7 +275,7 @@ mod tests {
             params[0],
             QueryParameter {
                 name: "p0".to_string(),
-                value: "2022-01-01 00:00:00".to_string()
+                value: "2022-01-01 00:00:00 UTC".to_string()
             }
         );
     }
@@ -399,7 +403,7 @@ mod tests {
         );
         assert_eq!(params.len(), 1);
         assert_eq!(params[0].name, "p0");
-        assert_eq!(params[0].value, "2023-01-01 00:00:00");
+        assert_eq!(params[0].value, "2023-01-01 00:00:00 UTC");
     }
 
     #[test]
@@ -680,9 +684,9 @@ mod tests {
         );
         assert_eq!(params.len(), 2);
         assert_eq!(params[0].name, "p0");
-        assert_eq!(params[0].value, "2022-01-01 00:00:00");
-        assert_eq!(params[1].name, "time1");
-        assert_eq!(params[1].value, "2023-01-01 00:00:00");
+        assert_eq!(params[0].value, "2022-01-01 00:00:00 UTC");
+        assert_eq!(params[1].name, "p1");
+        assert_eq!(params[1].value, "2023-01-01 00:00:00 UTC");
     }
 
     #[test]

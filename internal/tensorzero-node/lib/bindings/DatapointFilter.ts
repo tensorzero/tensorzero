@@ -9,24 +9,6 @@ import type { TimeFilter } from "./TimeFilter";
 export type DatapointFilter =
   | ({ type: "tag" } & TagFilter)
   | ({ type: "time" } & TimeFilter)
-  | {
-      type: "and";
-      /**
-       * Child filters that must all be true
-       */
-      children: Array<DatapointFilter>;
-    }
-  | {
-      type: "or";
-      /**
-       * Child filters where at least one must be true
-       */
-      children: Array<DatapointFilter>;
-    }
-  | {
-      type: "not";
-      /**
-       * Child filter to negate
-       */
-      child: DatapointFilter;
-    };
+  | { type: "and"; children: Array<DatapointFilter> }
+  | { type: "or"; children: Array<DatapointFilter> }
+  | { type: "not"; child: DatapointFilter };
