@@ -748,7 +748,7 @@ jobs:
       actions: read
     uses: ./.github/workflows/ui-tests.yml
     with:
-      is_merge_group: github.event_name == 'merge_group'
+      is_merge_group: ${{ github.event_name == 'merge_group' }}
     needs: build-gateway-container
 
   ui-tests-e2e:
@@ -757,7 +757,7 @@ jobs:
       actions: read
     uses: ./.github/workflows/ui-tests-e2e.yml
     with:
-      is_merge_group: github.event_name == 'merge_group'
+      is_merge_group: ${{ github.event_name == 'merge_group' }}
     needs: [build-gateway-container, build-ui-container]
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
