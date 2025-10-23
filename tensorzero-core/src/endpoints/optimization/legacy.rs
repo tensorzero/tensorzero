@@ -49,6 +49,7 @@ pub struct LaunchOptimizationWorkflowParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
+/// TODO: We should deprecate this method/endpoint once the new `launch_optimization_workflow` is more stable and exposed externally.
 pub async fn launch_optimization_workflow_handler(
     State(AppStateData {
         config,
