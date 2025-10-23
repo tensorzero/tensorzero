@@ -2580,16 +2580,7 @@ mod tests {
             schemas: SchemaData::load(None, None, None, UninitializedSchemas::default(), "test")
                 .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema_value.clone()).unwrap(),
-            implicit_tool_call_config: ToolCallConfig {
-                tools_available: vec![],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-                provider_tools: None,
-                allowed_tools: AllowedTools::default(),
-            },
-            description: None,
-            all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            ..Default::default()
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {

@@ -1910,7 +1910,7 @@ fn prepare_tools<'a>(
 ) {
     match &request.tool_config {
         Some(tool_config) => {
-            if tool_config.tools_available.is_empty() {
+            if !tool_config.any_tools_available() {
                 return (None, None);
             }
             let tools = Some(vec![(&tool_config.tools_available).into()]);
@@ -2772,13 +2772,7 @@ mod tests {
     #[tokio::test]
     async fn test_gcp_vertex_request_try_from() {
         // Test Case 1: Empty message list
-        let tool_config = ToolCallConfig {
-            tools_available: vec![],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        };
+        let tool_config = ToolCallConfig::default();
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![],

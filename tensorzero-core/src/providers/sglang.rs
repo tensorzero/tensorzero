@@ -989,11 +989,9 @@ mod tests {
         let parallel_tool_calls = sglang_request.parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
         let tool_config = ToolCallConfig {
-            tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

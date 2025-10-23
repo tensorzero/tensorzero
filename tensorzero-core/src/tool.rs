@@ -344,6 +344,10 @@ impl ToolCallConfig {
             .chain(self.dynamic_tools_available.iter())
     }
 
+    pub fn any_tools_available(&self) -> bool {
+        !(self.static_tools_available.is_empty() && self.dynamic_tools_available.is_empty())
+    }
+
     pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
         self.tools_available().find(|tool_cfg| match tool_cfg {
             ToolConfig::Static(config) => config.name == name,
