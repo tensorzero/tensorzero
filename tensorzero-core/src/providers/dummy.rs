@@ -663,6 +663,7 @@ impl InferenceProvider for DummyProvider {
         }
 
         let err_in_stream = self.model_name == "err_in_stream";
+        let fatal_stream_error = self.model_name == "fatal_stream_error";
 
         let created = current_timestamp();
 
@@ -680,55 +681,68 @@ impl InferenceProvider for DummyProvider {
         };
         let split_tool_name = self.model_name == "tool_split_name";
         let slow_second_chunk = self.model_name == "slow_second_chunk";
-        let stream: ProviderInferenceResponseStreamInner = Box::pin(
-            tokio_stream::iter(content_chunks.into_iter().enumerate())
-                .then(move |(i, chunk)| async move {
-                    if slow_second_chunk && i == 1 {
-                        tokio::time::sleep(Duration::from_secs(2)).await;
-                    }
-                    if err_in_stream && i == 3 {
-                        return Err(Error::new(ErrorDetails::InferenceClient {
-                            message: "Dummy error in stream".to_string(),
-                            raw_request: Some("raw request".to_string()),
-                            raw_response: None,
-                            status_code: None,
-                            provider_type: PROVIDER_TYPE.to_string(),
-                        }));
-                    }
-                    // We want to simulate the tool name being in the first chunk, but not in the subsequent chunks.
-                    let tool_name = if i == 0 && !split_tool_name {
-                        Some("get_temperature".to_string())
-                    } else if split_tool_name {
-                        if i == 0 {
-                            Some("get_temp".to_string())
-                        } else if i == 1 {
-                            Some("erature".to_string())
-                        } else {
-                            None
-                        }
+        let stream = async_stream::stream! {
+            for (i, chunk) in content_chunks.into_iter().enumerate() {
+                if slow_second_chunk && i == 1 {
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+                if fatal_stream_error && i == 2 {
+                    yield Err(Error::new(ErrorDetails::FatalStreamError {
+                        message: "Dummy fatal error".to_string(),
+                        provider_type: PROVIDER_TYPE.to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
+                    }));
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+                if err_in_stream && i == 3 {
+                    yield Err(Error::new(ErrorDetails::InferenceClient {
+                        message: "Dummy error in stream".to_string(),
+                        raw_request: Some("raw request".to_string()),
+                        raw_response: None,
+                        status_code: None,
+                        provider_type: PROVIDER_TYPE.to_string(),
+                    }));
+                    continue;
+                }
+                // We want to simulate the tool name being in the first chunk, but not in the subsequent chunks.
+                let tool_name = if i == 0 && !split_tool_name {
+                    Some("get_temperature".to_string())
+                } else if split_tool_name {
+                    if i == 0 {
+                        Some("get_temp".to_string())
+                    } else if i == 1 {
+                        Some("erature".to_string())
                     } else {
                         None
-                    };
-                    Ok(ProviderInferenceResponseChunk {
-                        created,
-                        content: vec![if is_tool_call {
-                            ContentBlockChunk::ToolCall(ToolCallChunk {
-                                id: "0".to_string(),
-                                raw_name: tool_name,
-                                raw_arguments: chunk.to_string(),
-                            })
-                        } else {
-                            ContentBlockChunk::Text(crate::inference::types::TextChunk {
-                                text: chunk.to_string(),
-                                id: "0".to_string(),
-                            })
-                        }],
-                        usage: None,
-                        finish_reason: None,
-                        raw_response: chunk.to_string(),
-                        latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
-                    })
-                })
+                    }
+                } else {
+                    None
+                };
+                yield Ok(ProviderInferenceResponseChunk {
+                    created,
+                    content: vec![if is_tool_call {
+                        ContentBlockChunk::ToolCall(ToolCallChunk {
+                            id: "0".to_string(),
+                            raw_name: tool_name,
+                            raw_arguments: chunk.to_string(),
+                        })
+                    } else {
+                        ContentBlockChunk::Text(crate::inference::types::TextChunk {
+                            text: chunk.to_string(),
+                            id: "0".to_string(),
+                        })
+                    }],
+                    usage: None,
+                    finish_reason: None,
+                    raw_response: chunk.to_string(),
+                    latency: Duration::from_millis(50 + 10 * (i as u64 + 1)),
+                });
+            }
+        };
+        let stream: ProviderInferenceResponseStreamInner = Box::pin(
+            stream
                 .chain(tokio_stream::once(Ok(ProviderInferenceResponseChunk {
                     created,
                     content: vec![],

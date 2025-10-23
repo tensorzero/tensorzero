@@ -50,7 +50,9 @@ pub trait StoragePathResolver {
 
 impl StoragePathResolver for Config {
     async fn resolve(&self, storage_path: StoragePath) -> Result<String, Error> {
-        Ok(get_object(self, storage_path).await?.data)
+        Ok(get_object(self.object_store_info.as_ref(), storage_path)
+            .await?
+            .data)
     }
 }
 

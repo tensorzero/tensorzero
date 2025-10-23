@@ -7,3 +7,7 @@ model_name = "gpt-5-mini"
 api_type = "responses"
 include_encrypted_reasoning = true
 provider_tools = [{type = "web_search"}]  # built-in OpenAI web search tool
+# Enable plain-text summaries of encrypted reasoning
+extra_body = [
+    { pointer = "/reasoning", value = { effort = "low", summary = "auto" } }
+]

@@ -3,4 +3,4 @@ name: tensorzero
 description: A Helm chart for Kubernetes with deployment, secret, configmap, service, and ingress
 type: application
 version: 0.0.0 # updated by CI
-appVersion: "2025.10.6"
+appVersion: "2025.10.7"

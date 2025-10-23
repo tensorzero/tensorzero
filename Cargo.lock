@@ -1798,7 +1798,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.10.6"
+version = "2025.10.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.10.6"
+version = "2025.10.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2149,17 +2149,25 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.10.6"
+version = "2025.10.7"
 dependencies = [
  "axum",
  "clap",
+ "futures",
+ "http 1.3.1",
+ "http-body 1.0.1",
+ "metrics-exporter-prometheus",
  "mimalloc",
+ "pin-project",
  "reqwest",
+ "reqwest-eventsource",
  "serde",
+ "serde_json",
  "tempfile",
  "tensorzero",
  "tensorzero-core",
  "tokio",
+ "tokio-stream",
  "tokio-util",
  "tower-http",
  "tracing",
@@ -4506,7 +4514,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.10.6"
+version = "2025.10.7"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6035,7 +6043,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.10.6"
+version = "2025.10.7"
 dependencies = [
  "chrono",
  "hex",
@@ -6048,7 +6056,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.10.6"
+version = "2025.10.7"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6160,7 +6168,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.10.6"
+version = "2025.10.7"
 dependencies = [
  "evaluations",
  "napi",
@@ -6177,7 +6185,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.10.6"
+version = "2025.10.7"
 dependencies = [
  "evaluations",
  "futures",
@@ -6555,6 +6563,7 @@ dependencies = [
  "http-body 1.0.1",
  "iri-string",
  "pin-project-lite",
+ "tokio",
  "tower",
  "tower-layer",
  "tower-service",

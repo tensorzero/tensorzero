@@ -241,6 +241,12 @@ pub async fn inference(
         span.record("episode_id", episode_id.to_string());
     }
 
+    config
+        .gateway
+        .export
+        .otlp
+        .mark_openinference_chain_span(&span);
+
     // Automatically add internal tag when internal=true
     if params.internal {
         params
@@ -1447,11 +1453,13 @@ fn prepare_candidate_variants(
 mod tests {
     use super::*;
 
+    use object_store::path::Path;
     use serde_json::json;
     use std::time::Duration;
     use uuid::Uuid;
 
     use crate::inference::types::{
+        storage::{StorageKind, StoragePath},
         ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, Role, TextChunk,
     };
@@ -1663,7 +1671,8 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_file_content() {
+    fn test_deserialize_file_content_untagged_url() {
+        // Test backwards compatibility: untagged URL should still deserialize
         let input_with_url = json!({
             "messages": [
                 {
@@ -1672,6 +1681,7 @@ mod tests {
                         {
                             "type": "file",
                             "url": "https://example.com/file.txt",
+                            "mime_type": "image/png"
                         }
                     ]
                 }
@@ -1686,10 +1696,14 @@ mod tests {
             input_with_url.messages[0].content[0],
             InputMessageContent::File(File::Url {
                 url: "https://example.com/file.txt".parse().unwrap(),
-                mime_type: None,
+                mime_type: Some(mime::IMAGE_PNG),
             })
         );
+    }
 
+    #[test]
+    fn test_deserialize_file_content_untagged_base64() {
+        // Test backwards compatibility: untagged Base64 should still deserialize
         let input_with_base64 = json!({
             "messages": [
                 {
@@ -1716,5 +1730,158 @@ mod tests {
                 data: "fake_base64_data".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn test_serialize_file_content_always_tagged() {
+        // Test that serialization always produces tagged format
+        let file_url = File::Url {
+            url: "https://example.com/file.txt".parse().unwrap(),
+            mime_type: Some(mime::IMAGE_PNG),
+        };
+        let serialized = serde_json::to_value(&file_url).unwrap();
+        assert_eq!(serialized["file_type"], "url");
+        assert_eq!(serialized["url"], "https://example.com/file.txt");
+        assert_eq!(serialized["mime_type"], "image/png");
+
+        let file_base64 = File::Base64 {
+            mime_type: mime::IMAGE_PNG,
+            data: "fake_base64_data".to_string(),
+        };
+        let serialized = serde_json::to_value(&file_base64).unwrap();
+        assert_eq!(serialized["file_type"], "base64");
+        assert_eq!(serialized["mime_type"], "image/png");
+        assert_eq!(serialized["data"], "fake_base64_data");
+    }
+
+    #[test]
+    fn test_deserialize_file_content_for_url() {
+        let input_with_url = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "file_type": "url",
+                            "url": "https://example.com/file.txt",
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_url: Input = serde_json::from_value(input_with_url).unwrap();
+        assert_eq!(input_with_url.messages.len(), 1);
+        assert_eq!(input_with_url.messages[0].role, Role::User);
+        assert_eq!(input_with_url.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_url.messages[0].content[0],
+            InputMessageContent::File(File::Url {
+                url: "https://example.com/file.txt".parse().unwrap(),
+                mime_type: None,
+            })
+        );
+    }
+
+    #[test]
+    fn test_deserialize_file_content_for_base64() {
+        let input_with_base64 = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "file_type": "base64",
+                            "data": "fake_base64_data",
+                            "mime_type": "image/png"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_base64: Input = serde_json::from_value(input_with_base64).unwrap();
+        assert_eq!(input_with_base64.messages.len(), 1);
+        assert_eq!(input_with_base64.messages[0].role, Role::User);
+        assert_eq!(input_with_base64.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_base64.messages[0].content[0],
+            InputMessageContent::File(File::Base64 {
+                mime_type: mime::IMAGE_PNG,
+                data: "fake_base64_data".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn test_deserialize_file_content_for_object_storage() {
+        let input_with_object_storage = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "file_type": "object_storage",
+                            "mime_type": "image/png",
+                            "storage_path": {
+                                "kind": {
+                                    "type": "s3_compatible",
+                                    "bucket_name": "test-bucket",
+                                    "region": "test-region",
+                                    "endpoint": "test-endpoint",
+                                    "allow_http": false,
+                                    "prefix": ""
+                                },
+                                "path": "test-path"
+                            }
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_object_storage: Input =
+            serde_json::from_value(input_with_object_storage).unwrap();
+        assert_eq!(input_with_object_storage.messages.len(), 1);
+        assert_eq!(input_with_object_storage.messages[0].role, Role::User);
+        assert_eq!(input_with_object_storage.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_object_storage.messages[0].content[0],
+            InputMessageContent::File(File::ObjectStorage {
+                source_url: None,
+                mime_type: mime::IMAGE_PNG,
+                storage_path: StoragePath {
+                    kind: StorageKind::S3Compatible {
+                        bucket_name: Some("test-bucket".to_string()),
+                        region: Some("test-region".to_string()),
+                        endpoint: Some("test-endpoint".to_string()),
+                        allow_http: Some(false),
+                        prefix: String::new(),
+                    },
+                    path: Path::from("test-path"),
+                },
+            })
+        );
+    }
+
+    #[test]
+    fn test_file_roundtrip_serialization() {
+        // Test that serialize -> deserialize maintains data integrity
+        let original = File::Base64 {
+            mime_type: mime::IMAGE_JPEG,
+            data: "base64data".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&original).unwrap();
+        let deserialized: File = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(original, deserialized);
+
+        // Verify serialized format is tagged
+        let serialized_value: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(serialized_value["file_type"], "base64");
     }
 }

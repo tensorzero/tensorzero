@@ -378,6 +378,20 @@ impl OtlpConfig {
             }
         }
     }
+
+    /// Marks a span as being an OpenInference 'CHAIN' span.
+    /// We use this for function/variant/model spans (but not model provider spans).
+    /// At the moment, there doesn't seem to be a similar concept in the OpenTelemetry GenAI semantic conventions.
+    pub fn mark_openinference_chain_span(&self, span: &Span) {
+        if self.traces.enabled {
+            match self.traces.format {
+                OtlpTracesFormat::OpenInference => {
+                    span.set_attribute("openinference.span.kind", "CHAIN");
+                }
+                OtlpTracesFormat::OpenTelemetry => {}
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -770,7 +784,9 @@ impl Config {
             )?;
 
         let mut config = Config {
-            gateway: uninitialized_config.gateway.load()?,
+            gateway: uninitialized_config
+                .gateway
+                .load(object_store_info.as_ref())?,
             models: Arc::new(models),
             embedding_models: Arc::new(embedding_models),
             functions,
