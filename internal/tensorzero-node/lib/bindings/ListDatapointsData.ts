@@ -4,7 +4,7 @@ import type { DatapointFilter } from "./DatapointFilter";
 /**
  * Data source for launch_optimization_workflow: list_datapoints
  */
-export type ListDatapointsSource = {
+export type ListDatapointsData = {
   dataset_name: string;
   /**
    * Optional function name to filter datapoints by.
