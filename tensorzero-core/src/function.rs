@@ -319,12 +319,14 @@ impl FunctionConfig {
         &self,
         dynamic_tool_params: DynamicToolParams,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+        variant_parallel_tool_calls: Option<bool>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
             FunctionConfig::Chat(params) => Ok(ToolCallConfig::new(
                 &params.tools,
                 &params.tool_choice,
                 params.parallel_tool_calls,
+                variant_parallel_tool_calls,
                 static_tools,
                 dynamic_tool_params,
             )?),

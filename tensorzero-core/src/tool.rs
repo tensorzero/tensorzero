@@ -181,6 +181,7 @@ impl ToolCallConfig {
         function_tools: &[String],
         function_tool_choice: &ToolChoice,
         function_parallel_tool_calls: Option<bool>,
+        variant_parallel_tool_calls: Option<bool>,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         dynamic_tool_params: DynamicToolParams,
     ) -> Result<Option<Self>, Error> {
@@ -277,8 +278,20 @@ impl ToolCallConfig {
             }
         }
 
+        // Priority order: dynamic > variant > function
+        // If both function and variant are set, log a deprecation warning
+        if function_parallel_tool_calls.is_some() && variant_parallel_tool_calls.is_some() {
+            tracing::warn!(
+                function_parallel_tool_calls = ?function_parallel_tool_calls,
+                variant_parallel_tool_calls = ?variant_parallel_tool_calls,
+                "Deprecation Warning: The property `parallel_tool_calls` is migrating from functions to variants. \
+                 The variant-level value will take precedence. Please remove `parallel_tool_calls` from the function configuration."
+            );
+        }
+
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
+            .or(variant_parallel_tool_calls)
             .or(function_parallel_tool_calls);
 
         let tool_call_config_option =
@@ -945,6 +958,7 @@ mod tests {
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -957,6 +971,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -977,6 +992,7 @@ mod tests {
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &EMPTY_TOOLS,
             dynamic_tool_params,
         )
@@ -998,6 +1014,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1019,6 +1036,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1047,6 +1065,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1074,6 +1093,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1109,6 +1129,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1138,6 +1159,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -1197,6 +1219,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             DynamicToolParams {
                 additional_tools: Some(vec![Tool {
@@ -1357,6 +1380,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1457,6 +1481,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1501,6 +1526,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1534,6 +1560,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )

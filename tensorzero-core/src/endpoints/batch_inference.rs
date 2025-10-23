@@ -144,7 +144,7 @@ pub async fn start_batch_inference(
 
     let tool_configs = batch_dynamic_tool_params
         .into_iter()
-        .map(|dynamic_tool_params| function.prepare_tool_config(dynamic_tool_params, &config.tools))
+        .map(|dynamic_tool_params| function.prepare_tool_config(dynamic_tool_params, &config.tools, None))
         .collect::<Result<Vec<_>, _>>()?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
