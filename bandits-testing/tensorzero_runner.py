@@ -91,12 +91,6 @@ class TensorZeroExperimentRunner:
 
         np.random.seed(seed)
 
-        # Use episode_id for consistency across inferences
-        if episode_id is None:
-            from uuid_utils import uuid7
-
-            episode_id = uuid7()
-
         # Track metrics over time
         total_pulls = []
         cumulative_regrets = []
@@ -115,6 +109,7 @@ class TensorZeroExperimentRunner:
             current_batch_size = min(self.batch_size, self.max_time_steps - t)
 
             # Run inference calls in parallel for the batch
+            # Don't pass episode_id so each inference gets a fresh variant assignment
             inference_tasks = []
             for _ in range(current_batch_size):
                 task = self.client.inference(
@@ -122,7 +117,6 @@ class TensorZeroExperimentRunner:
                     input={
                         "messages": [{"role": "user", "content": [Text(type="text", text="test")]}]
                     },
-                    episode_id=episode_id,
                     cache_options={"enabled": "on"},
                 )
                 inference_tasks.append(task)
