@@ -1,4 +1,5 @@
 import gc
+import inspect
 import typing as t
 
 import pytest
@@ -10,7 +11,8 @@ from tensorzero import (
 from tensorzero.types import ChatChunk, TextChunk
 
 
-def test_drop_sync_stream_with_completion(embedded_sync_client: TensorZeroGateway, capfd: CaptureFixture[str]):
+def test_drop_sync_stream_with_completion(capfd: CaptureFixture[str]):
+    embedded_sync_client = TensorZeroGateway.build_embedded()
     stream = embedded_sync_client.inference(
         model_name="dummy::good",
         input={
@@ -18,6 +20,7 @@ def test_drop_sync_stream_with_completion(embedded_sync_client: TensorZeroGatewa
                 {"role": "user", "content": "Hello, world!"},
             ],
         },
+        dryrun=True,
         stream=True,
     )
     # Consume the stream to completion,
@@ -33,7 +36,8 @@ def test_drop_sync_stream_with_completion(embedded_sync_client: TensorZeroGatewa
     assert captured.err == ""
 
 
-def test_drop_sync_stream_without_completion(embedded_sync_client: TensorZeroGateway, capfd: CaptureFixture[str]):
+def test_drop_sync_stream_without_completion(capfd: CaptureFixture[str]):
+    embedded_sync_client = TensorZeroGateway.build_embedded()
     stream = embedded_sync_client.inference(
         model_name="dummy::good",
         input={
@@ -56,9 +60,10 @@ def test_drop_sync_stream_without_completion(embedded_sync_client: TensorZeroGat
 
 
 @pytest.mark.asyncio
-async def test_drop_async_stream_without_completion(
-    embedded_async_client: AsyncTensorZeroGateway, capfd: CaptureFixture[str]
-):
+async def test_drop_async_stream_without_completion(capfd: CaptureFixture[str]):
+    client_fut = AsyncTensorZeroGateway.build_embedded()
+    assert inspect.isawaitable(client_fut)
+    embedded_async_client = await client_fut
     stream = await embedded_async_client.inference(
         model_name="dummy::good",
         input={
@@ -81,9 +86,10 @@ async def test_drop_async_stream_without_completion(
 
 
 @pytest.mark.asyncio
-async def test_drop_async_stream_with_completion(
-    embedded_async_client: AsyncTensorZeroGateway, capfd: CaptureFixture[str]
-):
+async def test_drop_async_stream_with_completion(capfd: CaptureFixture[str]):
+    client_fut = AsyncTensorZeroGateway.build_embedded()
+    assert inspect.isawaitable(client_fut)
+    embedded_async_client = await client_fut
     stream = await embedded_async_client.inference(
         model_name="dummy::good",
         input={
