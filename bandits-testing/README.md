@@ -42,49 +42,45 @@ This will automatically run the PostgreSQL migrations needed for track-and-stop 
 
 ## Running Experiments
 
-### Basic Usage
+### Recommended: Config-Based Experiments
 
-Run experiments with default settings:
-
-```bash
-python run_experiments.py
-```
-
-This will:
-1. Run 10 independent trials for each configuration
-2. Test Bernoulli, Beta, and Gaussian environments at easy/medium/hard difficulty
-3. Use K=5 arms
-4. Generate cumulative regret trajectory plots
-5. Save results to `results/run_<timestamp>/`
-
-### Custom Configuration
+The recommended way to run experiments is using predefined configurations in `experiment_config.py`:
 
 ```bash
-python run_experiments.py \
-  --env-types bernoulli gaussian \
-  --difficulties medium hard \
-  --K 6 \
-  --n-runs 20 \
-  --max-time-steps 15000 \
-  --delta 0.05 \
-  --epsilon 0.0 \
-  --output-dir results/my_experiment
+# Quick test with single environment (naive baselines only)
+python run_experiment.py quick_test
+
+# Compare naive baselines across all environments
+python run_experiment.py naive_only
+
+# Full comparison including TensorZero track-and-stop
+python run_experiment.py full_comparison
+
+# Test only TensorZero track-and-stop
+python run_experiment.py tensorzero_only
 ```
 
-### Arguments
+**Advantages of config-based approach:**
+- Reproducible experiments with version-controlled parameters
+- Easy to define new experiment sets in `experiment_config.py`
+- Cleaner command-line interface
+- Matches the pattern used in `../research/bandits3`
 
-- `--env-types`: Environment types to test (choices: bernoulli, beta, gaussian)
-- `--difficulties`: Difficulty levels (choices: easy, medium, hard)
-- `--K`: Number of arms (default: 5)
-- `--n-runs`: Number of independent runs per configuration (default: 10)
-- `--max-time-steps`: Maximum time steps per run (default: 10000)
-- `--delta`: Confidence level for stopping (default: 0.05)
-- `--epsilon`: Best arm tolerance (default: 0.0)
-- `--min-pulls-per-arm`: Minimum pulls per arm before stopping (default: 10)
-- `--output-dir`: Output directory for results (default: results)
-- `--max-plot-time`: Maximum time to show in plots (truncates trajectories)
-- `--bandit-types`: Which bandit types to test (default: both naive baselines)
-- `--base-seed`: Base random seed (default: 42)
+To create custom experiments, edit `experiment_config.py` and add new entries to `EXPERIMENT_SETS`.
+
+### Alternative: Legacy Command-Line Scripts
+
+The older command-line scripts are still available but less recommended:
+
+```bash
+# Run only naive baselines (no TensorZero)
+python run_experiments.py --env-types bernoulli --difficulties medium
+
+# Run full comparison with TensorZero
+python run_full_comparison.py --env-types bernoulli --difficulties medium
+```
+
+These scripts accept many command-line arguments. See `python run_experiments.py --help` for details.
 
 ## Output
 
@@ -110,13 +106,15 @@ Plots compare the naive uniform baselines (and eventually the track-and-stop imp
 
 ## Code Structure
 
+- `experiment_config.py`: **Experiment configuration** - define experiment sets here
+- `run_experiment.py`: **Main runner script** - uses configurations from experiment_config.py
 - `environments.py`: Data generating processes (Bernoulli, Beta, Gaussian)
 - `naive_bandits.py`: Naive uniform baseline implementations
-- `naive_bandits_runner.py`: Orchestrates experiments and tracks cumulative regret for naive bandits
+- `naive_bandits_runner.py`: Orchestrates experiments for naive bandits
 - `tensorzero_runner.py`: TensorZero integration for track-and-stop experiments
 - `plotting.py`: Creates cumulative regret trajectory plots
-- `run_experiments.py`: Script for running naive baseline experiments only
-- `run_full_comparison.py`: Main script for running all bandit types including TensorZero
+- `run_experiments.py`: Legacy script for naive baselines (command-line args)
+- `run_full_comparison.py`: Legacy script for full comparison (command-line args)
 - `quick_test.py`: Quick verification script for naive baselines
 - `config/tensorzero.toml`: TensorZero config with track-and-stop experimentation
 
