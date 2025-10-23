@@ -1,46 +1,54 @@
-# TensorZero Configuration for Bandits Testing
-# Uses dummy provider to avoid making real LLM API calls
+# TensorZero Configuration for Track-and-Stop Bandits Testing
+# This config enables track-and-stop experimentation for comparing with naive baselines
 
-[models.dummy_model]
-routing = ["dummy"]
+[models.test_model]
+routing = ["openai"]
 
-[models.dummy_model.providers.dummy]
-type = "dummy"
-model_name = "dummy-model"
+[models.test_model.providers.openai]
+type = "openai"
+model_name = "gpt-4o-mini"
 
 [functions.test_function]
 type = "chat"
 
+# Track-and-stop experimentation configuration
+[functions.test_function.experimentation]
+type = "track_and_stop"
+metric = "test_metric"
+candidate_variants = ["variant_0", "variant_1", "variant_2", "variant_3", "variant_4", "variant_5"]
+fallback_variants = []
+min_samples_per_variant = 10
+delta = 0.05
+epsilon = 0.0
+update_period_s = 1
+min_prob = 0.001
+
+# Define variants (arms)
 [functions.test_function.variants.variant_0]
 type = "chat_completion"
-model = "dummy_model"
-weight = 1.0
+model = "test_model"
 
 [functions.test_function.variants.variant_1]
 type = "chat_completion"
-model = "dummy_model"
-weight = 1.0
+model = "test_model"
 
 [functions.test_function.variants.variant_2]
 type = "chat_completion"
-model = "dummy_model"
-weight = 1.0
+model = "test_model"
 
 [functions.test_function.variants.variant_3]
 type = "chat_completion"
-model = "dummy_model"
-weight = 1.0
+model = "test_model"
 
 [functions.test_function.variants.variant_4]
 type = "chat_completion"
-model = "dummy_model"
-weight = 1.0
+model = "test_model"
 
 [functions.test_function.variants.variant_5]
 type = "chat_completion"
-model = "dummy_model"
-weight = 1.0
+model = "test_model"
 
+# Metric for feedback
 [metrics.test_metric]
 type = "float"
 optimize = "max"
