@@ -1,11 +1,47 @@
+use std::collections::HashSet;
+
 use chrono::{DateTime, Utc};
+use futures::TryStreamExt;
 use secrecy::{ExposeSecret, SecretString};
 use sqlx::PgPool;
+use sqlx::Row;
 
 use crate::key::{TensorZeroApiKey, TensorZeroAuthError, secure_fresh_api_key};
 
 pub fn make_migrator() -> sqlx::migrate::Migrator {
     sqlx::migrate!("src/postgres/migrations")
+}
+
+pub struct MigrationsData {
+    pub applied: HashSet<i64>,
+    pub expected: HashSet<i64>,
+}
+
+/// Helper function to retrieve the set of applied migrations from the database.
+/// We pull this out so that the error can be mapped in one place.
+/// This is almost the same as the corresponding function in 'tensorzero_core', but with a different table name,
+/// and using sqlx_alpha
+async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Error> {
+    let mut applied_migrations: HashSet<i64> = HashSet::new();
+    let mut rows =
+        sqlx::query("SELECT version FROM tensorzero_auth__sqlx_migrations WHERE success = true ORDER BY version")
+            .fetch(pool);
+    while let Some(row) = rows.try_next().await? {
+        let id: i64 = row.try_get("version")?;
+        applied_migrations.insert(id);
+    }
+    Ok(applied_migrations)
+}
+
+pub async fn get_migrations_data(pool: &PgPool) -> Result<MigrationsData, sqlx::Error> {
+    let migrator = make_migrator();
+    let expected_migrations: HashSet<i64> = migrator.iter().map(|m| m.version).collect();
+    // Query the database for all successfully applied migration versions.
+    let applied_migrations = get_applied_migrations(pool).await?;
+    Ok(MigrationsData {
+        applied: applied_migrations,
+        expected: expected_migrations,
+    })
 }
 
 /// Create a new API key, and store in the database.
