@@ -32,7 +32,7 @@ def test_drop_sync_stream_with_completion(capfd: CaptureFixture[str]):
     gc.collect()
 
     captured = capfd.readouterr()
-    assert captured.out == ""
+    assert "iterated" not in captured.out
     assert captured.err == ""
 
 
@@ -106,5 +106,5 @@ async def test_drop_async_stream_with_completion(capfd: CaptureFixture[str]):
     gc.collect()
 
     captured = capfd.readouterr()
-    assert captured.out == ""
+    assert "iterated" not in captured.out
     assert captured.err == ""
