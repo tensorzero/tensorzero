@@ -776,11 +776,14 @@ mod tests {
         );
         let parallel_tool_calls = vllm_request.parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        let tool_config = ToolCallConfig {
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: Some(true),
-            ..Default::default()
-        };
+        let tool_config = ToolCallConfig::new_for_test(
+            vec![],
+            vec![],
+            ToolChoice::Required,
+            Some(true),
+            None,
+            AllowedTools::default(),
+        );
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {

@@ -2467,8 +2467,9 @@ mod tests {
 
         // Case 6: Additional tools
         let inference_id = Uuid::now_v7();
-        let additional_tool_config = ToolCallConfig {
-            tools_available: vec![ToolConfig::Dynamic(DynamicToolConfig {
+        let additional_tool_config = ToolCallConfig::new_for_test(
+            vec![],
+            vec![ToolConfig::Dynamic(DynamicToolConfig {
                 name: "custom_tool".to_string(),
                 description: "A custom tool".to_string(),
                 parameters: DynamicJSONSchema::new(
@@ -2485,11 +2486,11 @@ mod tests {
                 ),
                 strict: true,
             })],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        };
+            ToolChoice::None,
+            None,
+            None,
+            AllowedTools::default(),
+        );
 
         // Test valid arguments for additional tool
         let content = vec![ContentBlockOutput::ToolCall(ToolCall {
@@ -2590,8 +2591,9 @@ mod tests {
 
         // Case 7: Allowed tools restriction
         let inference_id = Uuid::now_v7();
-        let restricted_tool_config = ToolCallConfig {
-            tools_available: vec![ToolConfig::Dynamic(DynamicToolConfig {
+        let restricted_tool_config = ToolCallConfig::new_for_test(
+            vec![],
+            vec![ToolConfig::Dynamic(DynamicToolConfig {
                 name: "weather_tool".to_string(),
                 description: "Get weather information".to_string(),
                 parameters: DynamicJSONSchema::new(
@@ -2609,11 +2611,11 @@ mod tests {
                 ),
                 strict: true,
             })],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        };
+            ToolChoice::None,
+            None,
+            None,
+            AllowedTools::default(),
+        );
 
         // Test allowed tool call
         let content = vec![ContentBlockOutput::ToolCall(ToolCall {

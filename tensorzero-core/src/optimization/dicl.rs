@@ -819,7 +819,6 @@ mod tests {
         },
         endpoints::inference::InferenceCredentials,
         experimentation::ExperimentationConfig,
-        tool::AllowedTools,
     };
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
@@ -1311,10 +1310,8 @@ mod tests {
 
     fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
         use crate::{
-            config::SchemaData,
-            function::FunctionConfigJson,
-            jsonschema_util::StaticJSONSchema,
-            tool::{ToolCallConfig, ToolChoice},
+            config::SchemaData, function::FunctionConfigJson, jsonschema_util::StaticJSONSchema,
+            tool::ToolCallConfig,
         };
         use serde_json::json;
         use std::collections::HashMap;

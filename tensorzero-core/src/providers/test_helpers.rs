@@ -22,13 +22,14 @@ lazy_static! {
     });
     pub static ref WEATHER_TOOL: ToolConfig = ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
     pub static ref WEATHER_TOOL_CHOICE: ToolChoice = ToolChoice::Specific("get_temperature".to_string());
-    pub static ref WEATHER_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
-        tools_available: vec![ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone())],
-        tool_choice: ToolChoice::Specific("get_temperature".to_string()),
-        parallel_tool_calls: None,
-        provider_tools: None,
-        allowed_tools: AllowedTools::default(),
-    };
+    pub static ref WEATHER_TOOL_CONFIG: ToolCallConfig = ToolCallConfig::new_for_test(
+        vec![ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone())],
+        vec![],
+        ToolChoice::Specific("get_temperature".to_string()),
+        None,
+        None,
+        AllowedTools::default(),
+    );
     pub static ref QUERY_TOOL_CONFIG_STATIC: Arc<StaticToolConfig> = Arc::new(StaticToolConfig {
         name: "query_articles".to_string(),
         description: "Query articles from Wikipedia".to_string(),
@@ -44,28 +45,28 @@ lazy_static! {
     });
     pub static ref QUERY_TOOL: ToolConfig = ToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone());
     pub static ref ANY_TOOL_CHOICE: ToolChoice = ToolChoice::Required;
-    pub static ref MULTI_TOOL_CONFIG: ToolCallConfig = ToolCallConfig {
-        static_tools_available: vec![
+    pub static ref MULTI_TOOL_CONFIG: ToolCallConfig = ToolCallConfig::new_for_test(
+        vec![
             ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone()),
             ToolConfig::Static(QUERY_TOOL_CONFIG_STATIC.clone())
         ],
-        dynamic_tools_available: vec![],
-        tool_choice: ToolChoice::Required,
-        parallel_tool_calls: Some(true),
-        provider_tools: None,
-        allowed_tools: AllowedTools::default(),
-    };
+        vec![],
+        ToolChoice::Required,
+        Some(true),
+        None,
+        AllowedTools::default(),
+    );
 }
 
 // For use in tests which need a mutable tool config.
 pub fn get_temperature_tool_config() -> ToolCallConfig {
     let weather_tool = ToolConfig::Static(WEATHER_TOOL_CONFIG_STATIC.clone());
-    ToolCallConfig {
-        static_tools_available: vec![weather_tool],
-        dynamic_tools_available: vec![],
-        tool_choice: ToolChoice::Specific("get_temperature".to_string()),
-        parallel_tool_calls: Some(false),
-        provider_tools: None,
-        allowed_tools: AllowedTools::default(),
-    }
+    ToolCallConfig::new_for_test(
+        vec![weather_tool],
+        vec![],
+        ToolChoice::Specific("get_temperature".to_string()),
+        Some(false),
+        None,
+        AllowedTools::default(),
+    )
 }

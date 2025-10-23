@@ -797,7 +797,7 @@ mod tests {
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{AllowedTools, ToolCallConfig, ToolChoice};
+    use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
         inference::types::{ContentBlockChunk, Role, TextChunk},

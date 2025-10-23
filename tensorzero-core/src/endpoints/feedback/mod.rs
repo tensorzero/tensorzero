@@ -1326,13 +1326,15 @@ mod tests {
 
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+                ToolChoice::Auto,
+                None,
+                None,
+                AllowedTools::default(),
+            ));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
                 function_config_chat_tools,
@@ -1352,13 +1354,15 @@ mod tests {
         // Case 2: a tool call to get_temperature, which exists
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+                ToolChoice::Auto,
+                None,
+                None,
+                AllowedTools::default(),
+            ));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
                 function_config_chat_tools,
@@ -1386,13 +1390,15 @@ mod tests {
         // Case 3: a tool call to get_humidity, which does not exist
         let value = json!([{"type": "tool_call", "id": "get_humidity_123", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+                ToolChoice::Auto,
+                None,
+                None,
+                AllowedTools::default(),
+            ));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
             &value,
@@ -1411,13 +1417,15 @@ mod tests {
         // Case 4: a tool call to get_temperature, which exists but has bad arguments (place instead of location)
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+                ToolChoice::Auto,
+                None,
+                None,
+                AllowedTools::default(),
+            ));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
             &value,
@@ -1511,13 +1519,15 @@ mod tests {
             "name": "John",
             "age": 30
         });
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+                ToolChoice::Auto,
+                None,
+                None,
+                AllowedTools::default(),
+            ));
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();

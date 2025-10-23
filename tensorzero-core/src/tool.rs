@@ -231,7 +231,7 @@ impl ToolCallConfig {
         // Get each tool from the static tool config.
         // If a tool name is in allowed_tools but not in static_tools, check if it's a dynamic tool.
         // If it's neither static nor dynamic, throw an error.
-        let static_tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
+        let static_tools_available: Vec<ToolConfig> = allowed_tools
             .tools
             .iter()
             .filter_map(|tool_name| {
@@ -248,7 +248,7 @@ impl ToolCallConfig {
                     })))
                 }
             })
-            .collect()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         let mut dynamic_tools_available = vec![];
         if let Some(additional_tools) = dynamic_tool_params.additional_tools {
@@ -371,6 +371,26 @@ impl ToolCallConfig {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Test-only constructor for creating ToolCallConfig with specific tool lists
+    #[cfg(test)]
+    pub fn new_for_test(
+        static_tools_available: Vec<ToolConfig>,
+        dynamic_tools_available: Vec<ToolConfig>,
+        tool_choice: ToolChoice,
+        parallel_tool_calls: Option<bool>,
+        provider_tools: Option<Vec<ProviderTool>>,
+        allowed_tools: AllowedTools,
+    ) -> Self {
+        Self {
+            static_tools_available,
+            dynamic_tools_available,
+            provider_tools,
+            tool_choice,
+            parallel_tool_calls,
+            allowed_tools,
+        }
     }
 }
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
@@ -931,6 +951,13 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
 pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
+    create_implicit_tool_call_config_with_allowed_tools(schema, AllowedTools::default())
+}
+
+pub fn create_implicit_tool_call_config_with_allowed_tools(
+    schema: StaticJSONSchema,
+    allowed_tools: AllowedTools,
+) -> ToolCallConfig {
     let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
     ToolCallConfig {
         static_tools_available: vec![implicit_tool],
@@ -938,7 +965,7 @@ pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallCon
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
         provider_tools: None,
-        allowed_tools: AllowedTools::default(),
+        allowed_tools,
     }
 }
 
@@ -1451,13 +1478,14 @@ mod tests {
             },
         ];
 
-        let config = ToolCallConfig {
-            tools_available: vec![],
-            provider_tools: Some(provider_tools),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            allowed_tools: AllowedTools::default(),
-        };
+        let config = ToolCallConfig::new_for_test(
+            vec![],
+            vec![],
+            ToolChoice::Auto,
+            None,
+            Some(provider_tools),
+            AllowedTools::default(),
+        );
 
         // Test matching gpt-4/openai: should return unscoped + gpt4_tool
         let result = config.get_scoped_provider_tools("gpt-4", "openai");
@@ -1482,13 +1510,14 @@ mod tests {
         assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
 
         // Test with None provider_tools
-        let config_no_tools = ToolCallConfig {
-            tools_available: vec![],
-            provider_tools: None,
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            allowed_tools: AllowedTools::default(),
-        };
+        let config_no_tools = ToolCallConfig::new_for_test(
+            vec![],
+            vec![],
+            ToolChoice::Auto,
+            None,
+            None,
+            AllowedTools::default(),
+        );
         let result = config_no_tools.get_scoped_provider_tools("gpt-4", "openai");
         assert_eq!(result.len(), 0);
     }

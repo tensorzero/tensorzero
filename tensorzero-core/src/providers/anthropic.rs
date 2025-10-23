@@ -1444,11 +1444,14 @@ mod tests {
     #[test]
     fn test_try_from_tool_call_config() {
         // Need to cover all 4 cases
-        let tool_call_config = ToolCallConfig {
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(false),
-            ..Default::default()
-        };
+        let tool_call_config = ToolCallConfig::new_for_test(
+            vec![],
+            vec![],
+            ToolChoice::Auto,
+            Some(false),
+            None,
+            AllowedTools::default(),
+        );
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
             anthropic_tool_choice.unwrap(),
@@ -1457,11 +1460,14 @@ mod tests {
             }
         ));
 
-        let tool_call_config = ToolCallConfig {
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
-            ..Default::default()
-        };
+        let tool_call_config = ToolCallConfig::new_for_test(
+            vec![],
+            vec![],
+            ToolChoice::Auto,
+            Some(true),
+            None,
+            AllowedTools::default(),
+        );
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
@@ -1471,11 +1477,14 @@ mod tests {
             }
         );
 
-        let tool_call_config = ToolCallConfig {
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: Some(true),
-            ..Default::default()
-        };
+        let tool_call_config = ToolCallConfig::new_for_test(
+            vec![],
+            vec![],
+            ToolChoice::Required,
+            Some(true),
+            None,
+            AllowedTools::default(),
+        );
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(
@@ -1485,11 +1494,14 @@ mod tests {
             }
         );
 
-        let tool_call_config = ToolCallConfig {
-            tool_choice: ToolChoice::Specific("test".to_string()),
-            parallel_tool_calls: Some(false),
-            ..Default::default()
-        };
+        let tool_call_config = ToolCallConfig::new_for_test(
+            vec![],
+            vec![],
+            ToolChoice::Specific("test".to_string()),
+            Some(false),
+            None,
+            AllowedTools::default(),
+        );
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
         assert_eq!(

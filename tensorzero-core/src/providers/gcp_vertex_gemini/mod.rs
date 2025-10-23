@@ -1913,7 +1913,12 @@ fn prepare_tools<'a>(
             if !tool_config.any_tools_available() {
                 return (None, None);
             }
-            let tools = Some(vec![(&tool_config.tools_available).into()]);
+            let tools = Some(vec![GCPVertexGeminiTool::FunctionDeclarations(
+                tool_config
+                    .tools_available()
+                    .map(GCPVertexGeminiFunctionDeclaration::from)
+                    .collect(),
+            )]);
             let tool_config = Some((&tool_config.tool_choice, model_name).into());
             (tools, tool_config)
         }
@@ -2600,7 +2605,7 @@ mod tests {
     use super::*;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{AllowedTools, ToolCallConfig, ToolResult};
+    use crate::tool::{ToolCallConfig, ToolResult};
 
     #[tokio::test]
     async fn test_gcp_vertex_content_try_from() {
@@ -2697,19 +2702,21 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tool = GCPVertexGeminiTool::from(&MULTI_TOOL_CONFIG.tools_available);
+        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tools_vec_owned: Vec<ToolConfig> = tools_vec.iter().map(|&t| t.clone()).collect();
+        let tool = GCPVertexGeminiTool::from(&tools_vec_owned);
         assert_eq!(
             tool,
             GCPVertexGeminiTool::FunctionDeclarations(vec![
                 GCPVertexGeminiFunctionDeclaration {
                     name: "get_temperature",
                     description: Some("Get the current temperature in a given location"),
-                    parameters: Some(MULTI_TOOL_CONFIG.tools_available[0].parameters().clone()),
+                    parameters: Some(tools_vec[0].parameters().clone()),
                 },
                 GCPVertexGeminiFunctionDeclaration {
                     name: "query_articles",
                     description: Some("Query articles from Wikipedia"),
-                    parameters: Some(MULTI_TOOL_CONFIG.tools_available[1].parameters().clone()),
+                    parameters: Some(tools_vec[1].parameters().clone()),
                 }
             ])
         );

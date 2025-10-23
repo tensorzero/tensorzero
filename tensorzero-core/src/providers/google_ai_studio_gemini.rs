@@ -1310,7 +1310,7 @@ mod tests {
     use super::*;
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{AllowedTools, ToolCallConfig, ToolResult};
+    use crate::tool::{ToolCallConfig, ToolResult};
 
     #[test]
     #[traced_test]
@@ -1465,7 +1465,13 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tool = GeminiTool::from(&MULTI_TOOL_CONFIG.tools_available);
+        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tool = GeminiTool {
+            function_declarations: tools_vec
+                .iter()
+                .map(|&t| GeminiFunctionDeclaration::from(t))
+                .collect(),
+        };
         assert_eq!(
             tool,
             GeminiTool {
@@ -1473,12 +1479,12 @@ mod tests {
                     GeminiFunctionDeclaration {
                         name: "get_temperature",
                         description: "Get the current temperature in a given location",
-                        parameters: MULTI_TOOL_CONFIG.tools_available[0].parameters().clone(),
+                        parameters: tools_vec[0].parameters().clone(),
                     },
                     GeminiFunctionDeclaration {
                         name: "query_articles",
                         description: "Query articles from Wikipedia",
-                        parameters: MULTI_TOOL_CONFIG.tools_available[1].parameters().clone(),
+                        parameters: tools_vec[1].parameters().clone(),
                     }
                 ]
             }
