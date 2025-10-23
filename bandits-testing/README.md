@@ -42,9 +42,7 @@ This will automatically run the PostgreSQL migrations needed for track-and-stop 
 
 ## Running Experiments
 
-### Recommended: Config-Based Experiments
-
-The recommended way to run experiments is using predefined configurations in `experiment_config.py`:
+All experiments use predefined configurations in `experiment_config.py`:
 
 ```bash
 # Quick test with single environment (naive baselines only)
@@ -60,27 +58,13 @@ python run_experiment.py full_comparison
 python run_experiment.py tensorzero_only
 ```
 
-**Advantages of config-based approach:**
+**Advantages of this approach:**
 - Reproducible experiments with version-controlled parameters
 - Easy to define new experiment sets in `experiment_config.py`
 - Cleaner command-line interface
 - Matches the pattern used in `../research/bandits3`
 
 To create custom experiments, edit `experiment_config.py` and add new entries to `EXPERIMENT_SETS`.
-
-### Alternative: Legacy Command-Line Scripts
-
-The older command-line scripts are still available but less recommended:
-
-```bash
-# Run only naive baselines (no TensorZero)
-python run_experiments.py --env-types bernoulli --difficulties medium
-
-# Run full comparison with TensorZero
-python run_full_comparison.py --env-types bernoulli --difficulties medium
-```
-
-These scripts accept many command-line arguments. See `python run_experiments.py --help` for details.
 
 ## Output
 
@@ -113,18 +97,13 @@ Plots compare the naive uniform baselines (and eventually the track-and-stop imp
 - `naive_bandits_runner.py`: Orchestrates experiments for naive bandits
 - `tensorzero_runner.py`: TensorZero integration for track-and-stop experiments
 - `plotting.py`: Creates cumulative regret trajectory plots
-- `run_experiments.py`: Legacy script for naive baselines (command-line args)
-- `run_full_comparison.py`: Legacy script for full comparison (command-line args)
-- `quick_test.py`: Quick verification script for naive baselines
 - `config/tensorzero.toml`: TensorZero config with track-and-stop experimentation
 
-## Running Full Comparison with TensorZero
-
-To compare all three bandit types (including TensorZero's track-and-stop):
+## TensorZero Integration Details
 
 **Note on costs**: The framework uses `gpt-4o-mini` with caching enabled. Since all variants use the same model/provider and we send the same message for every inference, only the **very first inference** will actually hit the OpenAI API. All subsequent inferences (regardless of which variant is selected) are cache hits and cost nothing. Total cost per experiment run is negligible (~$0.0001 for a single API call).
 
-### Run Full Comparison
+### Running with TensorZero
 
 First, ensure your environment variables are loaded. You can use [direnv](https://direnv.net/) to automatically load the `.env` file, or manually export them:
 
@@ -132,28 +111,21 @@ First, ensure your environment variables are loaded. You can use [direnv](https:
 export $(cat .env | xargs)
 ```
 
-Then run the comparison:
+Then run the experiment:
 
 ```bash
-# Run all three bandit types
-python run_full_comparison.py \
-  --env-types bernoulli \
-  --difficulties medium \
-  --K 6 \
-  --n-runs 10
+# Run full comparison (naive baselines + TensorZero track-and-stop)
+python run_experiment.py full_comparison
 
-# Run only naive baselines (skip TensorZero)
-python run_full_comparison.py --skip-tensorzero
-
-# Run only TensorZero (skip naive baselines)
-python run_full_comparison.py --only-tensorzero
+# Run only TensorZero track-and-stop
+python run_experiment.py tensorzero_only
 ```
 
 The script will:
-1. Run naive baseline experiments (pure Python)
+1. Run naive baseline experiments (if configured, pure Python)
 2. Start embedded TensorZero gateway with track-and-stop config
 3. Run track-and-stop experiments via TensorZero Python client
-4. Generate comparison plots showing all three approaches
+4. Generate comparison plots showing all approaches
 
 ### How TensorZero Integration Works
 
