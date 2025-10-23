@@ -1,32 +1,39 @@
 use std::time::Duration;
 
-use opentelemetry::trace::Status;
+use opentelemetry::{trace::Status, KeyValue};
 use opentelemetry_sdk::{
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
     Resource,
 };
 
-/// Wraps a `SpanExporter`, and changes `Status::Unset` to `Status::Ok` on all spans.
+/// Wraps a `SpanExporter`, and applies some TensorZero-specific adjustments:
+/// * Changes `Status::Unset` to `Status::Ok` on all spans.
+/// * Attaches extra attributes to all spans.
+///
 /// From https://opentelemetry.io/docs/concepts/signals/traces/#span-status :
 /// "What Ok does is represent an unambiguous “final call” on the status of a span that has been explicitly set by a user."
 /// We set the status just before it gets exported, so we know that no more errors can occur within the (already finished) span.
 ///
 /// This produces nicer traces on platforms like Arize
 #[derive(Debug)]
-pub struct ExporterWrapperUnsetToOk<T: SpanExporter> {
+pub struct TensorZeroExporterWrapper<T: SpanExporter> {
     inner: T,
+    extra_attributes: Vec<KeyValue>,
 }
 
-impl<T: SpanExporter> ExporterWrapperUnsetToOk<T> {
-    pub fn new(inner: T) -> Self {
-        Self { inner }
+impl<T: SpanExporter> TensorZeroExporterWrapper<T> {
+    pub fn new(inner: T, extra_attributes: Vec<KeyValue>) -> Self {
+        Self {
+            inner,
+            extra_attributes,
+        }
     }
 }
 
 // We need to forward all methods to the underlying exporter
 #[deny(clippy::missing_trait_methods)]
-impl<T: SpanExporter> SpanExporter for ExporterWrapperUnsetToOk<T> {
+impl<T: SpanExporter> SpanExporter for TensorZeroExporterWrapper<T> {
     async fn export(&self, mut batch: Vec<SpanData>) -> OTelSdkResult {
         for span in &mut batch {
             match span.status {
@@ -35,6 +42,7 @@ impl<T: SpanExporter> SpanExporter for ExporterWrapperUnsetToOk<T> {
                 }
                 Status::Ok | Status::Error { .. } => {}
             }
+            span.attributes.extend(self.extra_attributes.clone());
         }
         self.inner.export(batch).await
     }
