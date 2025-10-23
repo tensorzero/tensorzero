@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use chrono::Utc;
 use http::StatusCode;
 use serde_json::{json, Value};
+use tensorzero_core::observability::enter_fake_http_request_otel;
 use uuid::Uuid;
 
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
@@ -29,6 +30,8 @@ extra_headers."X-Static-Header-2" = "static-value-2"
 "#;
 
     let client = make_embedded_gateway_with_config(config).await;
+
+    let _guard = enter_fake_http_request_otel();
 
     // Make an inference request - if this succeeds without panicking, config headers work
     client
@@ -72,6 +75,8 @@ extra_headers."X-Config-Header" = "config-value"
 
     let client = make_embedded_gateway_with_config(config).await;
 
+    let _guard = enter_fake_http_request_otel();
+
     // Make an inference request with config headers enabled
     client
         .inference(ClientInferenceParams {
@@ -110,6 +115,8 @@ extra_headers."X-Empty-Header" = ""
 
     let client = make_embedded_gateway_with_config(config).await;
 
+    let _guard = enter_fake_http_request_otel();
+
     client
         .inference(ClientInferenceParams {
             model_name: Some("dummy::good".to_string()),
@@ -142,6 +149,7 @@ enabled = true
 ";
 
     let client = make_embedded_gateway_with_config(config).await;
+    let _guard = enter_fake_http_request_otel();
 
     client
         .inference(ClientInferenceParams {
@@ -179,6 +187,7 @@ extra_headers."X-Multi-Header" = "multi-value"
 "#;
 
     let client = make_embedded_gateway_with_config(config).await;
+    let _guard = enter_fake_http_request_otel();
 
     // Make multiple requests
     for i in 0..3 {
@@ -222,6 +231,7 @@ extra_headers."x-lowercase" = "lowercase-value"
 "#;
 
     let client = make_embedded_gateway_with_config(config).await;
+    let _guard = enter_fake_http_request_otel();
 
     client
         .inference(ClientInferenceParams {
