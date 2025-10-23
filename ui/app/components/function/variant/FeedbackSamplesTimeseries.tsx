@@ -202,7 +202,7 @@ type FeedbackTimeSeriesData = {
  * The function ensures that cumulative counts are preserved across periods where
  * no new feedback was recorded, which is essential for displaying cumulative metrics.
  *
- * @param parsedRows - Array of cumulative feedback data points from ClickHousr
+ * @param parsedRows - Array of cumulative feedback data points from ClickHouse
  * @param timeGranularity - The time window unit (minute, hour, day, week, month, cumulative)
  * @returns Object containing:
  *   - data: Array of chart-ready data points with period dates and variant counts
