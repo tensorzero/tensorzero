@@ -13,6 +13,7 @@ import {
 } from "~/components/ui/alert-dialog";
 import { useToast } from "~/hooks/use-toast";
 import { ToastAction } from "~/components/ui/toast";
+import { useReadOnly } from "~/context/read-only";
 
 export interface AddToDatasetButtonProps {
   // Required fields for creating a datapoint
@@ -28,8 +29,6 @@ export interface AddToDatasetButtonProps {
     dataset: string,
     output: "inherit" | "demonstration" | "none",
   ) => void;
-  // Whether the button should be disabled
-  disabled?: boolean;
 }
 
 export function AddToDatasetButton({
@@ -40,12 +39,12 @@ export function AddToDatasetButton({
   hasDemonstration,
   alwaysUseInherit = false,
   onDatasetSelect,
-  disabled = false,
 }: AddToDatasetButtonProps) {
   const [selectedDataset, setSelectedDataset] = useState("");
   const [outputDialogOpen, setOutputDialogOpen] = useState(false);
   const fetcher = useFetcher();
   const { toast } = useToast();
+  const isReadOnly = useReadOnly();
 
   // Handle success/error states from the fetcher
   useEffect(() => {
@@ -112,7 +111,7 @@ export function AddToDatasetButton({
         buttonProps={{
           size: "sm",
         }}
-        disabled={disabled}
+        disabled={isReadOnly}
       />
 
       <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>

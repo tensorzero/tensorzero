@@ -8,13 +8,19 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { ChevronDown } from "lucide-react";
 import { Compare } from "~/components/icons/Icons";
+import { useReadOnly } from "~/context/read-only";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 export interface TryWithButtonProps {
   options: string[];
   onOptionSelect: (variant: string) => void;
   isLoading: boolean;
   isDefaultFunction?: boolean;
-  disabled?: boolean;
 }
 
 export function TryWithButton({
@@ -22,14 +28,15 @@ export function TryWithButton({
   onOptionSelect: onVariantSelect,
   isLoading,
   isDefaultFunction,
-  disabled = false,
 }: TryWithButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const isReadOnly = useReadOnly();
+  const isDisabled = isLoading || isReadOnly;
 
-  return (
+  const button = (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={isLoading || disabled}>
+        <Button variant="outline" size="sm" disabled={isDisabled}>
           <ButtonIcon as={Compare} variant="tertiary" />
           Try with {isDefaultFunction ? "model" : "variant"}
           <ButtonIcon as={ChevronDown} variant="tertiary" />
@@ -51,4 +58,22 @@ export function TryWithButton({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+
+  // Wrap with tooltip when in read-only mode
+  if (isReadOnly) {
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={100}>
+          <TooltipTrigger asChild>
+            <span className="inline-block">{button}</span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>This feature is not available in read-only mode</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return button;
 }

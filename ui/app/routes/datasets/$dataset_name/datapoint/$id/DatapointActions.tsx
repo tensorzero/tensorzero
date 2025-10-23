@@ -47,7 +47,6 @@ export function DatapointActions({
           options={variants}
           onOptionSelect={onVariantSelect}
           isLoading={variantInferenceIsLoading}
-          disabled={isReadOnly}
         />
       )}
       {isEditing ? (

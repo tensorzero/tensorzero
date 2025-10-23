@@ -63,7 +63,6 @@ import { useEffect } from "react";
 import { AddToDatasetButton } from "~/components/dataset/AddToDatasetButton";
 import { logger } from "~/utils/logger";
 import { getDatapoint } from "~/utils/clickhouse/datasets.server";
-import { useReadOnly } from "~/context/read-only";
 
 export const handle: RouteHandle = {
   crumb: (match) => [
@@ -244,7 +243,6 @@ export default function EvaluationDatapointPage({
     datapoint_staled_at,
   } = loaderData;
   const fetcher = useFetcher();
-  const isReadOnly = useReadOnly();
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
   if (!evaluation_config) {
@@ -328,7 +326,6 @@ export default function EvaluationDatapointPage({
             evaluation_name={evaluation_name}
             evaluation_config={evaluation_config}
             datapointId={datapoint_id}
-            isReadOnly={isReadOnly}
           />
         </SectionsGroup>
         <Toaster />
@@ -530,7 +527,6 @@ type OutputsSectionProps = {
   evaluation_name: string;
   evaluation_config: EvaluationConfig; // Use the specific config type
   datapointId: string;
-  isReadOnly: boolean;
 };
 
 function OutputsSection({
@@ -538,7 +534,6 @@ function OutputsSection({
   evaluation_name,
   evaluation_config,
   datapointId,
-  isReadOnly,
 }: OutputsSectionProps) {
   const { getColor } = useColorAssigner();
 
@@ -586,7 +581,6 @@ function OutputsSection({
                           episodeId={result.episodeId}
                           hasDemonstration={false}
                           alwaysUseInherit={true}
-                          disabled={isReadOnly}
                         />
                       )}
                     </div>

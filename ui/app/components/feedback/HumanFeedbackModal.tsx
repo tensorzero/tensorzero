@@ -6,13 +6,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
+import { useReadOnly } from "~/context/read-only";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 interface HumanFeedbackModalProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   trigger?: React.ReactElement;
   children?: React.ReactNode;
-  disabled?: boolean;
 }
 
 export function HumanFeedbackModal({
@@ -20,12 +26,13 @@ export function HumanFeedbackModal({
   onOpenChange,
   trigger,
   children,
-  disabled = false,
 }: HumanFeedbackModalProps) {
-  return (
+  const isReadOnly = useReadOnly();
+
+  const dialogContent = (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       {!!trigger && (
-        <DialogTrigger asChild disabled={disabled}>
+        <DialogTrigger asChild disabled={isReadOnly}>
           {trigger}
         </DialogTrigger>
       )}
@@ -37,4 +44,22 @@ export function HumanFeedbackModal({
       </DialogContent>
     </Dialog>
   );
+
+  // Wrap the trigger with tooltip when in read-only mode
+  if (isReadOnly && trigger) {
+    return (
+      <TooltipProvider>
+        <Tooltip delayDuration={100}>
+          <TooltipTrigger asChild>
+            <span className="inline-block">{dialogContent}</span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>This feature is not available in read-only mode</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  }
+
+  return dialogContent;
 }

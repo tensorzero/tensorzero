@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { useReadOnly } from "~/context/read-only";
+import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 export default function DatasetRowTable({
   rows,
@@ -37,7 +37,6 @@ export default function DatasetRowTable({
   dataset_name: string;
 }) {
   const activeFetcher = useFetcher();
-  const isReadOnly = useReadOnly();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datapointToDelete, setDatapointToDelete] =
     useState<DatasetDetailRow | null>(null);
@@ -102,18 +101,21 @@ export default function DatasetRowTable({
                 </TableCell>
                 <TableCell>
                   <div className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="opacity-60 transition-opacity hover:opacity-100"
-                      disabled={isReadOnly}
+                    <ReadOnlyGuard
+                      asChild
                       onClick={() => {
                         setDatapointToDelete(row);
                         setDeleteDialogOpen(true);
                       }}
                     >
-                      <Trash />
-                    </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="opacity-60 transition-opacity hover:opacity-100"
+                      >
+                        <Trash />
+                      </Button>
+                    </ReadOnlyGuard>
                   </div>
                 </TableCell>
               </TableRow>
