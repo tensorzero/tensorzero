@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 
 interface AddButtonProps {
   label: string;
-  onClick?: () => void;
+  onClick: () => void;
 }
 
 export default function AddButton({ label, onClick }: AddButtonProps) {
