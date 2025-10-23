@@ -7,7 +7,7 @@ Runs a small experiment to ensure everything is set up correctly.
 
 from pathlib import Path
 
-from experiment_runner import run_experiment_batch
+from naive_bandits_runner import run_experiment_batch
 from plotting import plot_cumulative_regret_trajectories
 
 

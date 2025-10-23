@@ -11,7 +11,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from experiment_runner import run_experiment_batch
+from naive_bandits_runner import run_experiment_batch
 from plotting import create_comparison_plots, plot_grid_comparison
 
 

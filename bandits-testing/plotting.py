@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 
-from experiment_runner import ExperimentResult
+from naive_bandits_runner import ExperimentResult
 
 
 def plot_cumulative_regret_trajectories(
