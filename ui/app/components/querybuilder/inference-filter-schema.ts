@@ -68,7 +68,7 @@ type BidirectionalCheck<TUnion, TArray> = [TUnion] extends [TArray]
   : never;
 
 // Factory function that creates bidirectionally type-checked const arrays
-export default function enforceEnumTypeMatches<TRustType extends string>() {
+function enforceEnumTypeMatches<TRustType extends string>() {
   return <const TArray extends readonly TRustType[]>(
     array: TArray & BidirectionalCheck<TRustType, TArray[number]>,
   ): TArray => array;

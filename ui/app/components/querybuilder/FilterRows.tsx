@@ -139,12 +139,10 @@ export const TagFilterRow = memo(function TagFilterRow({
         <div className="w-14">
           <Select
             onValueChange={(value) => {
-              if (value in TAG_OPERATOR_LABELS) {
-                onChange({
-                  ...filter,
-                  comparison_operator: value as TagComparisonOperator,
-                });
-              }
+              onChange({
+                ...filter,
+                comparison_operator: value as TagComparisonOperator,
+              });
             }}
             value={filter.comparison_operator}
           >
@@ -187,7 +185,10 @@ export const TagFilterRow = memo(function TagFilterRow({
           />
         </div>
 
-        <DeleteButton onDelete={() => onChange(undefined)} />
+        <DeleteButton
+          onDelete={() => onChange(undefined)}
+          ariaLabel="Delete tag filter"
+        />
       </div>
     </div>
   );
@@ -225,12 +226,10 @@ export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
         <div className="w-14">
           <Select
             onValueChange={(value) => {
-              if (value in FLOAT_OPERATOR_LABELS) {
-                onChange({
-                  ...filter,
-                  comparison_operator: value as FloatComparisonOperator,
-                });
-              }
+              onChange({
+                ...filter,
+                comparison_operator: value as FloatComparisonOperator,
+              });
             }}
             value={filter.comparison_operator}
           >
@@ -276,7 +275,10 @@ export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
           />
         </div>
 
-        <DeleteButton onDelete={() => onChange(undefined)} />
+        <DeleteButton
+          onDelete={() => onChange(undefined)}
+          ariaLabel="Delete metric filter"
+        />
       </div>
     </div>
   );
@@ -324,7 +326,10 @@ export const BooleanMetricFilterRow = memo(function BooleanMetricFilterRow({
           </Select>
         </div>
 
-        <DeleteButton onDelete={() => onChange(undefined)} />
+        <DeleteButton
+          onDelete={() => onChange(undefined)}
+          ariaLabel="Delete metric filter"
+        />
       </div>
     </div>
   );

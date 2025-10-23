@@ -192,7 +192,10 @@ const FilterGroup = memo(function FilterGroup({
           </Tooltip>
         </TooltipProvider>
 
-        <DeleteButton onDelete={() => onChange(undefined)} />
+        <DeleteButton
+          onDelete={() => onChange(undefined)}
+          ariaLabel="Delete filter group"
+        />
       </div>
       <div
         className={cn(
@@ -217,7 +220,7 @@ const FilterGroup = memo(function FilterGroup({
         <div className="flex items-center gap-2">
           <AddMetricPopover onSelect={handleAddMetric} />
           <AddButton label="Tag" onClick={handleAddTag} />
-          {depth < MAX_NESTING_DEPTH ? (
+          {depth < MAX_NESTING_DEPTH && (
             <>
               <AddButton
                 label="And"
@@ -238,48 +241,33 @@ const FilterGroup = memo(function FilterGroup({
                 }
               />
             </>
-          ) : (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled
-                      aria-label={`Cannot add AND group: maximum nesting depth of ${MAX_NESTING_DEPTH} levels reached`}
-                      className="cursor-not-allowed"
-                    >
-                      <Plus className="text-fg-tertiary h-4 w-4" />
-                      And
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled
-                      aria-label={`Cannot add OR group: maximum nesting depth of ${MAX_NESTING_DEPTH} levels reached`}
-                      className="cursor-not-allowed"
-                    >
-                      <Plus className="text-fg-tertiary h-4 w-4" />
-                      Or
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <span className="text-xs">
-                    Maximum nesting depth reached ({MAX_NESTING_DEPTH} levels)
-                  </span>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
           )}
         </div>
       </div>
     </div>
   );
 });
+
+// MissingMetricError: Displays error when metric is not found
+function MissingMetricError({
+  metricName,
+  onDelete,
+}: {
+  metricName: string;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded border border-red-300 bg-red-50 px-3 py-2">
+      <span className="text-destructive text-sm">
+        Unknown Metric: <span className="font-mono">{metricName}</span>
+      </span>
+      <DeleteButton
+        onDelete={onDelete}
+        ariaLabel={`Delete missing metric ${metricName}`}
+      />
+    </div>
+  );
+}
 
 // FilterNodeRenderer: Recursive renderer for any InferenceFilter
 const FilterNodeRenderer = memo(function FilterNodeRenderer({
@@ -303,13 +291,10 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
     const metricConfig = config.metrics[filter.metric_name];
     if (!metricConfig) {
       return (
-        <div className="flex items-center gap-2 rounded border border-red-300 bg-red-50 px-3 py-2">
-          <span className="text-destructive text-sm">
-            Unknown Metric:{" "}
-            <span className="font-mono">{filter.metric_name}</span>
-          </span>
-          <DeleteButton onDelete={() => onChange(undefined)} />
-        </div>
+        <MissingMetricError
+          metricName={filter.metric_name}
+          onDelete={() => onChange(undefined)}
+        />
       );
     }
     return (
@@ -325,12 +310,10 @@ const FilterNodeRenderer = memo(function FilterNodeRenderer({
     const metricConfig = config.metrics[filter.metric_name];
     if (!metricConfig) {
       return (
-        <div className="flex items-center gap-2 rounded border border-red-300 bg-red-50 px-3 py-2">
-          <span className="text-destructive text-sm">
-            Metric "{filter.metric_name}" not found in configuration
-          </span>
-          <DeleteButton onDelete={() => onChange(undefined)} />
-        </div>
+        <MissingMetricError
+          metricName={filter.metric_name}
+          onDelete={() => onChange(undefined)}
+        />
       );
     }
     return (
