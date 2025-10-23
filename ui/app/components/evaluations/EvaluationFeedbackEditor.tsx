@@ -39,7 +39,7 @@ export default function EvaluationFeedbackEditor({
   const [isOpen, setIsOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const { getColor } = useColorAssigner();
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const config = useConfig();
   const metricConfig = config.metrics[metricName];
   if (!metricConfig) {

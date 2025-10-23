@@ -37,7 +37,7 @@ export default function DatasetRowTable({
   dataset_name: string;
 }) {
   const activeFetcher = useFetcher();
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datapointToDelete, setDatapointToDelete] =
     useState<DatasetDetailRow | null>(null);

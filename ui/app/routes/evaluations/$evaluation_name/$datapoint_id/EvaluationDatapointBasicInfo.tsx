@@ -45,7 +45,7 @@ export default function BasicInfo({
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const functionConfig = useFunctionConfig(functionName);
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const functionType = functionConfig?.type;
   const functionIconConfig = functionType
     ? getFunctionTypeIcon(functionType)

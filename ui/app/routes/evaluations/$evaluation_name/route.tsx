@@ -275,7 +275,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     newJudgeDemonstrationId,
   } = loaderData;
   const navigate = useNavigate();
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const { toast } = useToast();
   const fetcher = useFetcher();
 

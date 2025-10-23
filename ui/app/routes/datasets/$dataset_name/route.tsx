@@ -116,7 +116,7 @@ export default function DatasetDetailPage({
   const { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
     loaderData;
   const { toast } = useToast();
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const fetcher = useFetcher();
   const navigate = useNavigate();
 

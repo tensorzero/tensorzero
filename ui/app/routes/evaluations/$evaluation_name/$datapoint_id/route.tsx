@@ -244,7 +244,7 @@ export default function EvaluationDatapointPage({
     datapoint_staled_at,
   } = loaderData;
   const fetcher = useFetcher();
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const config = useConfig();
   const evaluation_config = config.evaluations[evaluation_name];
   if (!evaluation_config) {

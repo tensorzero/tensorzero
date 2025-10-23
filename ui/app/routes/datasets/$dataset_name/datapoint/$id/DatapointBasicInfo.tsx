@@ -43,7 +43,7 @@ export default function DatapointBasicInfo({
   onRenameDatapoint,
 }: BasicInfoProps) {
   const function_config = useFunctionConfig(datapoint.function_name);
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const type = function_config?.type || "unknown";
 
   // Create timestamp tooltip

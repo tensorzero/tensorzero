@@ -157,7 +157,7 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     latestFeedbackByMetric,
   } = loaderData;
   const navigate = useNavigate();
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const topInference = inferences[0];

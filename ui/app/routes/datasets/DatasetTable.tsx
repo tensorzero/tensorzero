@@ -41,7 +41,7 @@ export default function DatasetTable({
   counts: DatasetMetadata[];
 }) {
   const fetcher = useFetcher();
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
 
