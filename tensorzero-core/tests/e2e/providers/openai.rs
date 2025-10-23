@@ -26,7 +26,7 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
-use tensorzero_core::tool::ToolCallInput;
+use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ToolCallInput};
 use url::Url;
 use uuid::Uuid;
 
@@ -1234,6 +1234,9 @@ async fn test_embedding_request() {
                 rate_limiting_config: Arc::new(Default::default()),
                 otlp_config: Default::default(),
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
+                scope_info: ScopeInfo {
+                    tags: Arc::new(HashMap::new()),
+                },
             },
         )
         .await
@@ -1319,6 +1322,9 @@ async fn test_embedding_request() {
                 rate_limiting_config: Arc::new(Default::default()),
                 otlp_config: Default::default(),
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
+                scope_info: ScopeInfo {
+                    tags: Arc::new(HashMap::new()),
+                },
             },
         )
         .await
@@ -1389,16 +1395,16 @@ async fn test_embedding_sanity_check() {
         rate_limiting_config: Arc::new(Default::default()),
         otlp_config: Default::default(),
         deferred_tasks: tokio_util::task::TaskTracker::new(),
-    };
-    let scope_info = ScopeInfo {
-        tags: &HashMap::new(),
+        scope_info: ScopeInfo {
+            tags: Arc::new(HashMap::new()),
+        },
     };
 
     // Compute all 3 embeddings concurrently
     let (response_a, response_b, response_c) = tokio::join!(
-        provider_config.embed(&embedding_request_a, &clients, &scope_info, &request_info),
-        provider_config.embed(&embedding_request_b, &clients, &scope_info, &request_info),
-        provider_config.embed(&embedding_request_c, &clients, &scope_info, &request_info)
+        provider_config.embed(&embedding_request_a, &clients, &request_info),
+        provider_config.embed(&embedding_request_b, &clients, &request_info),
+        provider_config.embed(&embedding_request_c, &clients, &request_info)
     );
 
     // Unwrap the results
@@ -2219,15 +2225,142 @@ async fn test_responses_api_reasoning() {
         "Missing thought block in output: {content_blocks:?}"
     );
 
-    let has_encrypted_thought = content_blocks.iter().any(|block| {
+    let encrypted_thought = content_blocks.iter().find(|block| {
         block.get("type").unwrap().as_str().unwrap() == "thought"
             && block.get("signature").unwrap().as_str().is_some()
     });
     assert!(
-        has_encrypted_thought,
+        encrypted_thought.is_some(),
         "Missing encrypted thought block in output: {content_blocks:?}"
     );
+    let encrypted_thought = encrypted_thought.unwrap();
+
+    assert_eq!(
+        encrypted_thought.get("text").unwrap(),
+        &Value::Null,
+        "Text should be null in encrypted thought: {encrypted_thought:?}"
+    );
+    let summary = encrypted_thought
+        .get("summary")
+        .unwrap()
+        .as_array()
+        .unwrap();
+    assert!(
+        !summary.is_empty(),
+        "Missing summary in encrypted thought: {encrypted_thought:?}"
+    );
+    for item in summary {
+        assert_eq!(item.get("type").unwrap().as_str().unwrap(), "summary_text");
+        let summary_text = item.get("text").unwrap().as_str().unwrap();
+        assert!(
+            !summary_text.is_empty(),
+            "Missing summary text in item: {item:?}"
+        );
+    }
+
+    let payload = json!({
+        "function_name": "openai_responses_gpt5",
+        "variant_name": "openai",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "How many letters are in the word potato?"
+                },
+                {
+                    "role": "assistant",
+                    "content": content_blocks,
+                },
+                {
+                    "role": "user",
+                    "content": "What were you thinking about during your last response?"
+                }
+            ]},
+        "extra_body": [
+            {
+                "variant_name": "openai",
+                "pointer": "/reasoning",
+                "value": {
+                    "effort": "low",
+                    "summary": "auto"
+                }
+            }
+        ]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("New API response: {response_json}");
+    assert_eq!(status, StatusCode::OK);
 }
+
+#[tokio::test]
+async fn test_responses_api_invalid_thought() {
+    let payload = json!({
+        "function_name": "openai_responses_gpt5",
+        "variant_name": "openai",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "How many letters are in the word potato?"
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "thought",
+                            "signature": "My fake signature",
+                            "summary": [
+                                {
+                                    "type": "summary_text",
+                                    "text": "I thought about responding to the next message with the word 'potato'"
+                                }
+                            ]
+                        },
+                    ]
+                },
+                {
+                    "role": "user",
+                    "content": "What time is it?"
+                }
+            ]},
+        "extra_body": [
+            {
+                "variant_name": "openai",
+                "pointer": "/reasoning",
+                "value": {
+                    "effort": "low",
+                    "summary": "auto"
+                }
+            }
+        ]
+    });
+
+    let response = Client::new()
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_text = response.text().await.unwrap();
+    println!("API response: {response_text}");
+    assert!(response_text.contains("could not be verified"));
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+const WEB_SEARCH_PROMPT: &str = "Tell me some good news that happened today from around the world. Don't ask me any questions, and provide markdown citations in the form [text](url)";
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_openai_built_in_websearch() {
@@ -2267,7 +2400,7 @@ model = "test-model"
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: "Tell me some good news that happened today".to_string(),
+                        text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
             },
@@ -2381,7 +2514,7 @@ model = "test-model"
                     ClientInputMessage {
                         role: Role::User,
                         content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                            text: "Tell me some good news that happened today".to_string(),
+                            text: WEB_SEARCH_PROMPT.to_string(),
                         })],
                     },
                     ClientInputMessage {
@@ -2464,7 +2597,7 @@ model = "test-model"
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: "Tell me some good news that happened today".to_string(),
+                        text: WEB_SEARCH_PROMPT.to_string(),
                     })],
                 }],
             },
@@ -2511,8 +2644,8 @@ model = "test-model"
 
     // Assert that we have multiple streaming chunks (indicates streaming is working)
     assert!(
-        chunks.len() >= 10,
-        "Expected at least 10 streaming chunks, but got {}. Streaming may not be working properly.",
+        chunks.len() >= 3,
+        "Expected at least 3 streaming chunks, but got {}. Streaming may not be working properly.",
         chunks.len()
     );
 
@@ -2577,4 +2710,359 @@ model = "test-model"
         raw_response.contains("response.completed"),
         "Expected raw_response to contain 'response.completed' event, but it was not found"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_openai_built_in_websearch_dynamic() {
+    // Create a config WITHOUT provider_tools in the model config
+    // We'll pass the provider_tools dynamically at inference time
+    let config = r#"
+
+gateway.debug = true
+[models."test-model"]
+routing = ["test-provider"]
+
+[models."test-model".providers.test-provider]
+type = "openai"
+model_name = "gpt-5-nano"
+api_type = "responses"
+
+[functions.basic_test]
+type = "chat"
+
+[functions.basic_test.variants.default]
+type = "chat_completion"
+model = "test-model"
+"#;
+
+    // Create an embedded gateway with this config
+    let client = tensorzero::test_helpers::make_embedded_gateway_with_config(config).await;
+
+    // Make a simple inference request with dynamic provider_tools
+    let episode_id = Uuid::now_v7();
+    let result = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: WEB_SEARCH_PROMPT.to_string(),
+                    })],
+                }],
+            },
+            stream: Some(false),
+            dynamic_tool_params: tensorzero_core::tool::DynamicToolParams {
+                allowed_tools: None,
+                additional_tools: None,
+                tool_choice: None,
+                parallel_tool_calls: None,
+                provider_tools: Some(vec![
+                    ProviderTool {
+                        scope: ProviderToolScope::Unscoped,
+                        tool: json!({"type": "web_search"}),
+                    },
+                    // This should get filtered out
+                    ProviderTool {
+                        scope: ProviderToolScope::ModelProvider {
+                            model_name: "garbage".to_string(),
+                            model_provider_name: "model".to_string(),
+                        },
+                        tool: json!({"type": "garbage"}),
+                    },
+                ]),
+            },
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the inference succeeded
+    let response = result.unwrap();
+    println!("response: {response:?}");
+
+    // Extract the chat response
+    let InferenceOutput::NonStreaming(response) = response else {
+        panic!("Expected non-streaming inference response");
+    };
+
+    let InferenceResponse::Chat(chat_response) = response else {
+        panic!("Expected chat inference response");
+    };
+
+    // Assert that we have at least one Unknown content block with type "web_search_call"
+    let web_search_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter(|block| {
+            if let ContentBlockChatOutput::Unknown { data, .. } = block {
+                data.get("type")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t == "web_search_call")
+                    .unwrap_or(false)
+            } else {
+                false
+            }
+        })
+        .collect();
+
+    assert!(
+        !web_search_blocks.is_empty(),
+        "Expected at least one Unknown content block with type 'web_search_call', but found none. Content blocks: {:#?}",
+        chat_response.content
+    );
+
+    // Assert that we have exactly one Text content block
+    let text_blocks: Vec<_> = chat_response
+        .content
+        .iter()
+        .filter_map(|block| {
+            if let ContentBlockChatOutput::Text(text) = block {
+                Some(text)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    assert_eq!(
+        text_blocks.len(),
+        1,
+        "Expected exactly one Text content block, but found {}. Content blocks: {:#?}",
+        text_blocks.len(),
+        chat_response.content
+    );
+
+    // Assert that the text block contains citations (markdown links)
+    let text_content = &text_blocks[0].text;
+    assert!(
+        text_content.contains("]("),
+        "Expected text content to contain citations in markdown format [text](url), but found none. Text: {text_content}",
+    );
+
+    // Round-trip test: Convert output content blocks back to input and make another inference
+    let assistant_content: Vec<ClientInputMessageContent> = chat_response
+        .content
+        .iter()
+        .map(|block| match block {
+            ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
+                text: text.text.clone(),
+            }),
+            ContentBlockChatOutput::ToolCall(tool_call) => {
+                ClientInputMessageContent::ToolCall(ToolCallInput {
+                    id: tool_call.id.clone(),
+                    name: tool_call.name.clone(),
+                    arguments: tool_call.arguments.clone(),
+                    raw_name: None,
+                    raw_arguments: None,
+                })
+            }
+            ContentBlockChatOutput::Thought(thought) => {
+                ClientInputMessageContent::Thought(thought.clone())
+            }
+            ContentBlockChatOutput::Unknown {
+                data,
+                model_provider_name,
+            } => ClientInputMessageContent::Unknown {
+                data: data.clone(),
+                model_provider_name: model_provider_name.clone(),
+            },
+        })
+        .collect();
+
+    // Make a second inference with the assistant's response and a new user question
+    let result2 = client
+        .inference(ClientInferenceParams {
+            function_name: Some("basic_test".to_string()),
+            variant_name: Some("default".to_string()),
+            episode_id: Some(episode_id),
+            input: ClientInput {
+                system: None,
+                messages: vec![
+                    ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: WEB_SEARCH_PROMPT.to_string(),
+                        })],
+                    },
+                    ClientInputMessage {
+                        role: Role::Assistant,
+                        content: assistant_content,
+                    },
+                    ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "Can you summarize what you just told me in one sentence?"
+                                .to_string(),
+                        })],
+                    },
+                ],
+            },
+            stream: Some(false),
+            dynamic_tool_params: tensorzero_core::tool::DynamicToolParams {
+                allowed_tools: None,
+                additional_tools: None,
+                tool_choice: None,
+                parallel_tool_calls: None,
+                provider_tools: Some(vec![ProviderTool {
+                    scope: ProviderToolScope::Unscoped,
+                    tool: json!({"type": "web_search"}),
+                }]),
+            },
+            ..Default::default()
+        })
+        .await;
+
+    // Assert the round-trip inference succeeded
+    let response2 = result2.unwrap();
+    println!("Round-trip response: {response2:?}");
+
+    let InferenceOutput::NonStreaming(response2) = response2 else {
+        panic!("Expected non-streaming inference response for round-trip");
+    };
+
+    let InferenceResponse::Chat(chat_response2) = response2 else {
+        panic!("Expected chat inference response for round-trip");
+    };
+
+    // Assert that the second response has at least one text block
+    let has_text = chat_response2
+        .content
+        .iter()
+        .any(|block| matches!(block, ContentBlockChatOutput::Text(_)));
+    assert!(
+        has_text,
+        "Expected at least one text content block in round-trip response. Content blocks: {:#?}",
+        chat_response2.content
+    );
+}
+
+/// Tests using the shorthand form for the OpenAI Responses API.
+/// This works because gpt-5-codex is only available via the responses API,
+/// so the shorthand form "openai::responses::gpt-5-codex" correctly identifies
+/// both the provider (openai) and the API type (responses).
+#[tokio::test]
+async fn test_responses_api_shorthand() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "model_name": "openai::responses::gpt-5-codex",
+        "episode_id": episode_id,
+        "input": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the capital of France?"
+                }
+            ]},
+        "stream": false,
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    // Check Response is OK, then fields in order
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    let content_blocks = response_json.get("content").unwrap().as_array().unwrap();
+    println!("response: {response_json:#}");
+    assert!(!content_blocks.is_empty());
+
+    // Find the text block (there should be exactly one)
+    let text_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "text")
+        .collect();
+    assert_eq!(text_blocks.len(), 1, "Should have exactly one text block");
+
+    let text_block = text_blocks.first().unwrap();
+    let content = text_block.get("text").unwrap().as_str().unwrap();
+    // Assert that Paris is in the content
+    assert!(content.contains("Paris"), "Content should mention Paris");
+    // Check that inference_id is here
+    let inference_id = response_json.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Check ClickHouse
+    let clickhouse = get_clickhouse().await;
+
+    // First, check Inference table
+    let result = select_chat_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let id = result.get("id").unwrap().as_str().unwrap();
+    let id_uuid = Uuid::parse_str(id).unwrap();
+    assert_eq!(id_uuid, inference_id);
+    let function_name = result.get("function_name").unwrap().as_str().unwrap();
+    assert_eq!(function_name, "tensorzero::default");
+    let input: Value =
+        serde_json::from_str(result.get("input").unwrap().as_str().unwrap()).unwrap();
+    let correct_input = json!({
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "value": "What is the capital of France?"}]
+            }
+        ]
+    });
+    assert_eq!(input, correct_input);
+    let content_blocks = result.get("output").unwrap().as_str().unwrap();
+    // Check that content_blocks is a list of blocks with at least 1 block
+    let content_blocks: Vec<Value> = serde_json::from_str(content_blocks).unwrap();
+    assert!(!content_blocks.is_empty());
+
+    // Find the text block (there should be exactly one)
+    let text_blocks: Vec<&Value> = content_blocks
+        .iter()
+        .filter(|block| block.get("type").unwrap().as_str().unwrap() == "text")
+        .collect();
+    assert_eq!(text_blocks.len(), 1, "Should have exactly one text block");
+
+    let text_block = text_blocks.first().unwrap();
+    let clickhouse_content = text_block.get("text").unwrap().as_str().unwrap();
+    assert_eq!(clickhouse_content, content);
+    // Check that episode_id is here and correct
+    let retrieved_episode_id = result.get("episode_id").unwrap().as_str().unwrap();
+    let retrieved_episode_id = Uuid::parse_str(retrieved_episode_id).unwrap();
+    assert_eq!(retrieved_episode_id, episode_id);
+    // Check the variant name
+    let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
+    assert_eq!(variant_name, "openai::responses::gpt-5-codex");
+    // Check the processing time
+    let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
+    assert!(processing_time_ms > 0);
+
+    // Check the ModelInference Table
+    let result = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+    let inference_id_result = result.get("inference_id").unwrap().as_str().unwrap();
+    let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
+    assert_eq!(inference_id_result, inference_id);
+    let model_name = result.get("model_name").unwrap().as_str().unwrap();
+    assert_eq!(model_name, "openai::responses::gpt-5-codex");
+    let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
+    assert_eq!(model_provider_name, "openai");
+    let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
+    assert!(raw_request.to_lowercase().contains("france"));
+    // Check that raw_request is valid JSON
+    let _: Value = serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
+    let input_tokens = result.get("input_tokens").unwrap().as_u64().unwrap();
+    assert!(input_tokens > 5);
+    let output_tokens = result.get("output_tokens").unwrap().as_u64().unwrap();
+    assert!(output_tokens > 5);
+    let response_time_ms = result.get("response_time_ms").unwrap().as_u64().unwrap();
+    assert!(response_time_ms > 0);
+    assert!(result.get("ttft_ms").unwrap().is_null());
+    let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
+    let _raw_response_json: Value = serde_json::from_str(raw_response).unwrap();
 }

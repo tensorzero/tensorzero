@@ -177,6 +177,14 @@ async fn check_cache<
             }
         }
     }
+    if args.remove_user_agent_non_amazon {
+        let has_user_agent = request.headers().contains_key("user-agent");
+        let has_amz_sdk_invocation_id = request.headers().contains_key("amz-sdk-invocation-id");
+        if has_user_agent && !has_amz_sdk_invocation_id {
+            request.headers_mut().remove("user-agent");
+            sanitized_header = true;
+        }
+    }
     let json_request = http_serde_ext::request::serialize(&request, serde_json::value::Serializer)
         .with_context(|| "Failed to serialize request")?;
     let hash = hash_value(&json_request)?;
@@ -316,6 +324,10 @@ pub struct Args {
     pub sanitize_aws_sigv4: bool,
     #[arg(long, default_value = "true")]
     pub sanitize_model_headers: bool,
+    /// If `true`, removes the `user-agent` header from cache key computation when
+    /// `amz-sdk-invocation-id` is not present (i.e., for non-Amazon SDK requests)
+    #[arg(long, default_value = "true")]
+    pub remove_user_agent_non_amazon: bool,
     #[arg(long, default_value = "read-old-write-new")]
     pub mode: CacheMode,
 }
@@ -357,6 +369,8 @@ async fn run_health_server(port: u16) -> Result<(), Box<dyn std::error::Error + 
         let (stream, _) = listener.accept().await?;
         let io = hyper_util::rt::TokioIo::new(stream);
 
+        // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+        #[expect(clippy::disallowed_methods)]
         tokio::task::spawn(async move {
             if let Err(err) = http1::Builder::new()
                 .serve_connection(io, service_fn(health_check_handler))
@@ -389,6 +403,8 @@ pub async fn run_server(args: Args, server_started: oneshot::Sender<SocketAddr>)
 
     // Start health check server
     let health_port = args.health_port;
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         if let Err(e) = run_health_server(health_port).await {
             tracing::error!("Health check server failed: {:?}", e);

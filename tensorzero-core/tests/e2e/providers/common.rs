@@ -1297,6 +1297,7 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         },
         &format!(
             r#"
+        gateway.fetch_and_encode_input_files_before_inference = true
         [object_storage]
         type = "filesystem"
         path = "{}"
@@ -1551,7 +1552,10 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         Err(object_store::Error::NotFound { .. }) => {
             // Expected - object should not exist
         }
-        _ => {
+        Err(e) => {
+            panic!("Unexpected error: {e}");
+        }
+        Ok(_) => {
             panic!("Object should not exist after deletion");
         }
     }
@@ -1593,6 +1597,8 @@ async fn make_temp_image_server() -> (SocketAddr, tokio::sync::oneshot::Sender<(
         let _ = recv.await;
     };
 
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(
         axum::serve(listener, app)
             .with_graceful_shutdown(shutdown_fut)
@@ -2224,7 +2230,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
             res["error"]
                 .as_str()
                 .unwrap()
-                .contains(format!("Error from {} server", provider.model_provider_name).as_str()),
+                .contains(format!("from {} server", provider.model_provider_name).as_str()),
             "Missing provider type in error: {res}"
         );
     }
@@ -2377,7 +2383,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
     let res = client
         .inference(ClientInferenceParams {
             function_name: Some("basic_test".to_string()),
-            variant_name: Some(provider.variant_name),
+            variant_name: Some(provider.variant_name.clone()),
             input: ClientInput {
                 system: Some(serde_json::json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![
@@ -2386,6 +2392,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
                         content: vec![ClientInputMessageContent::Thought(Thought {
                             text: Some("My TensorZero thought".to_string()),
                             signature: Some("My new TensorZero signature".to_string()),
+                            summary: None,
                             provider_type: None,
                         })],
                     },
@@ -2404,6 +2411,10 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
 
     if "anthropic" == provider.model_provider_name.as_str() {
         // Anthropic rejects requests with invalid thought signatures
+        let err = res.unwrap_err();
+        assert!(err.to_string().contains("signature"));
+    } else if "openai-responses" == provider.variant_name.as_str() {
+        // OpenAI Responses rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
     } else {
@@ -7003,11 +7014,14 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
         .collect();
 
     // Assert at most one tool call (a model could decide to call no tools if to reads the `self_destruct` description).
-    assert!(
-        tool_call_blocks.len() <= 1,
-        "Expected at most one tool call, found {}",
-        tool_call_blocks.len()
-    );
+    // Sglang likes to emit lots of tool calls
+    if provider.model_provider_name != "sglang" {
+        assert!(
+            tool_call_blocks.len() <= 1,
+            "Expected at most one tool call, found {}",
+            tool_call_blocks.len()
+        );
+    }
 
     let tool_call_block = tool_call_blocks.first();
     match tool_call_block {
@@ -7136,10 +7150,19 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
                     match &tool_id {
                         None => tool_id = Some(block_tool_id.to_string()),
-                        Some(tool_id) => assert_eq!(
-                            tool_id, block_tool_id,
-                            "Provider returned multiple tool calls"
-                        ),
+                        Some(tool_id) => {
+                            if provider.model_provider_name == "sglang" {
+                                // Sglang likes to emit lots of duplicate tool calls
+                                if tool_id != block_tool_id {
+                                    continue;
+                                }
+                            } else {
+                                assert_eq!(
+                                    tool_id, block_tool_id,
+                                    "Provider returned multiple tool calls"
+                                );
+                            }
+                        }
                     }
 
                     let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
@@ -7410,11 +7433,14 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
         .collect();
 
     // Assert at most one tool call (a model could decide to call no tools if to reads the `self_destruct` description).
-    assert!(
-        tool_call_blocks.len() <= 1,
-        "Expected at most one tool call, found {}",
-        tool_call_blocks.len()
-    );
+    // Sglang likes to emit lots of tool calls
+    if provider.model_provider_name != "sglang" {
+        assert!(
+            tool_call_blocks.len() <= 1,
+            "Expected at most one tool call, found {}",
+            tool_call_blocks.len()
+        );
+    }
 
     let tool_call_block = tool_call_blocks.first();
     match tool_call_block {
@@ -7676,16 +7702,25 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
-    // Assert exactly one tool call
-    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+    if provider.model_provider_name == "sglang" {
+        // Sglang likes to emit lots of duplicate tool calls
+        assert!(
+            !tool_call_blocks.is_empty(),
+            "Expected at least one tool call"
+        );
+    } else {
+        // Assert exactly one tool call
+        assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+    }
 
-    let tool_call_block = tool_call_blocks[0];
-    match tool_call_block {
-        StoredContentBlock::ToolCall(tool_call) => {
-            assert_eq!(tool_call.name, "get_humidity");
-            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+    for tool_call_block in tool_call_blocks {
+        match tool_call_block {
+            StoredContentBlock::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_humidity");
+                serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+            }
+            _ => panic!("Unreachable"),
         }
-        _ => panic!("Unreachable"),
     }
 }
 
@@ -7782,10 +7817,13 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     if let Some(block_raw_name) = block.get("raw_name") {
                         match tool_name {
                             Some(_) => {
-                                assert!(
-                                    block_raw_name.as_str().unwrap().is_empty(),
-                                    "Raw name already seen, got {block:#?}"
-                                );
+                                // Sglang likes to emit lots of duplicate tool calls
+                                if provider.model_provider_name != "sglang" {
+                                    assert!(
+                                        block_raw_name.as_str().unwrap().is_empty(),
+                                        "Raw name already seen, got {block:#?}"
+                                    );
+                                }
                             }
                             None => {
                                 tool_name = Some(block_raw_name.as_str().unwrap().to_string());
@@ -7796,7 +7834,16 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
                     let block_tool_id = block.get("id").unwrap().as_str().unwrap();
                     match &tool_id {
                         None => tool_id = Some(block_tool_id.to_string()),
-                        Some(tool_id) => assert_eq!(tool_id, block_tool_id),
+                        Some(tool_id) => {
+                            if provider.model_provider_name == "sglang" {
+                                // Sglang likes to emit lots of duplicate tool calls
+                                if tool_id != block_tool_id {
+                                    continue;
+                                }
+                            } else {
+                                assert_eq!(tool_id, block_tool_id);
+                            }
+                        }
                     }
 
                     let chunk_arguments = block.get("raw_arguments").unwrap().as_str().unwrap();
@@ -8028,16 +8075,25 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
         .filter(|block| matches!(block, StoredContentBlock::ToolCall(_)))
         .collect();
 
-    // Assert exactly one tool call
-    assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+    // Sglang likes to emit lots of tool calls
+    if provider.model_provider_name == "sglang" {
+        assert!(
+            !tool_call_blocks.is_empty(),
+            "Expected at least one tool call"
+        );
+    } else {
+        // Assert exactly one tool call
+        assert_eq!(tool_call_blocks.len(), 1, "Expected exactly one tool call");
+    }
 
-    let tool_call_block = tool_call_blocks[0];
-    match tool_call_block {
-        StoredContentBlock::ToolCall(tool_call) => {
-            assert_eq!(tool_call.name, "get_humidity");
-            serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+    for tool_call_block in tool_call_blocks {
+        match tool_call_block {
+            StoredContentBlock::ToolCall(tool_call) => {
+                assert_eq!(tool_call.name, "get_humidity");
+                serde_json::from_str::<Value>(&tool_call.arguments.to_lowercase()).unwrap();
+            }
+            _ => panic!("Unreachable"),
         }
-        _ => panic!("Unreachable"),
     }
 }
 

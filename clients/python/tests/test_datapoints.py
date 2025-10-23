@@ -72,6 +72,7 @@ def test_sync_insert_delete_datapoints(sync_client: TensorZeroGateway):
                 {
                     "type": "tool_call",
                     "name": "get_temperature",
+                    "id": "tool_call_id",
                     "arguments": {
                         "location": "New York",
                         "units": "fahrenheit",
@@ -194,6 +195,7 @@ async def test_async_insert_delete_datapoints(
             output=[
                 {
                     "type": "tool_call",
+                    "id": "tool_call_id",
                     "name": "get_temperature",
                     "arguments": {
                         "location": "New York",

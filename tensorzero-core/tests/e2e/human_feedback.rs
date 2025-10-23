@@ -3,7 +3,7 @@ use serde_json::{json, Value};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         select_feedback_clickhouse, select_feedback_tags_clickhouse,
-        select_human_static_evaluation_feedback_clickhouse,
+        select_inference_evaluation_human_feedback_clickhouse,
     },
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
 };
@@ -90,7 +90,8 @@ async fn e2e_test_comment_human_feedback() {
     )
     .await
     .unwrap();
-    // Sleep for 200ms to ensure that the StaticEvaluationHumanFeedback is written
+    // Sleep for 200ms to ensure that the StaticEvaluationHumanFeedback table is written
+    // Note: table name retains "Static" prefix for backward compatibility (now called "Inference Evaluations")
     sleep(Duration::from_millis(200)).await;
     let id = result.get("feedback_id").unwrap().as_str().unwrap();
     let id_uuid = Uuid::parse_str(id).unwrap();
@@ -98,6 +99,7 @@ async fn e2e_test_comment_human_feedback() {
 
     // Running without datapoint_id.
     // We generate a new datapoint_id so these don't trample. We'll only use it to check that there is no StaticEvaluationHumanFeedback
+    // Note: table name retains "Static" prefix for backward compatibility (now called "Inference Evaluations")
     let new_datapoint_id = Uuid::now_v7();
     let payload = json!({"episode_id": episode_id, "metric_name": "comment", "value": "bad job!", "internal": true, "tags": {"tensorzero::human_feedback": "true"}});
     let response = client
@@ -126,8 +128,8 @@ async fn e2e_test_comment_human_feedback() {
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     assert_eq!(retrieved_value, "bad job!");
 
-    // Check that there is no StaticEvaluationHumanFeedback
-    let result = select_human_static_evaluation_feedback_clickhouse(
+    // Check that there is no StaticEvaluationHumanFeedback (database table name, retains "Static" prefix for backward compatibility)
+    let result = select_inference_evaluation_human_feedback_clickhouse(
         &clickhouse,
         "comment",
         new_datapoint_id,
@@ -246,7 +248,7 @@ async fn e2e_test_demonstration_feedback() {
 
     // Try a tool call demonstration
     // This should fail because the inference was made for a function that doesn't support tool calls
-    let tool_call = json!({"type": "tool_call", "name": "tool_name", "arguments": "tool_input"});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -367,7 +369,7 @@ async fn e2e_test_demonstration_feedback_json() {
 
     // Try a tool call demonstration
     // This should fail because the inference was made for a function that doesn't support tool calls
-    let tool_call = json!({"type": "tool_call", "name": "tool_name", "arguments": "tool_input"});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -493,7 +495,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
 
     // Try a tool call demonstration
     // This should fail because the inference was made for a function that doesn't support tool calls
-    let tool_call = json!({"type": "tool_call", "name": "tool_name", "arguments": "tool_input"});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -615,7 +617,7 @@ async fn e2e_test_demonstration_feedback_tool() {
 
     // Try a tool call demonstration
     // This should fail because the name is incorrect
-    let tool_call = json!({"type": "tool_call", "name": "tool_name", "arguments": "tool_input"});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -629,8 +631,7 @@ async fn e2e_test_demonstration_feedback_tool() {
     assert_eq!(error_message, "Demonstration contains invalid tool name");
 
     // Try a tool call demonstration with correct name incorrect args
-    let tool_call =
-        json!({"type": "tool_call", "name": "get_temperature", "arguments": "tool_input"});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_temperature", "arguments": "tool_input"});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -647,7 +648,7 @@ async fn e2e_test_demonstration_feedback_tool() {
     );
 
     // Try a tool call demonstration with correct name and args
-    let tool_call = json!({"type": "tool_call", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -674,7 +675,7 @@ async fn e2e_test_demonstration_feedback_tool() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
-    let expected_value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}, "raw_name": "get_temperature", "raw_arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}", "id": "" }]);
+    let expected_value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}, "raw_name": "get_temperature", "raw_arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}", "id": "tool_call_id" }]);
     assert_eq!(retrieved_value, expected_value);
 }
 
@@ -775,7 +776,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
 
     // Try a tool call demonstration
     // This should fail because the name is incorrect
-    let tool_call = json!({"type": "tool_call", "name": "tool_name", "arguments": "tool_input"});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "tool_name", "arguments": "tool_input"});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -789,7 +790,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
     assert_eq!(error_message, "Demonstration contains invalid tool name");
 
     // Try a tool call demonstration with the dynamic tool name and incorrect args
-    let tool_call = json!({"type": "tool_call", "name": "get_humidity", "arguments": "tool_input"});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_humidity", "arguments": "tool_input"});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -806,8 +807,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
     );
 
     // Try a tool call demonstration with the dynamic tool name and correct args
-    let tool_call =
-        json!({"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}});
+    let tool_call = json!({"type": "tool_call", "id": "tool_call_id", "name": "get_humidity", "arguments": {"location": "Tokyo"}});
     let payload = json!({"inference_id": inference_id, "metric_name": "demonstration", "value": vec![tool_call]});
     let response = client
         .post(get_gateway_endpoint("/feedback"))
@@ -834,7 +834,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
-    let expected_value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}, "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "id": "" }]);
+    let expected_value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}, "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "id": "tool_call_id" }]);
     assert_eq!(retrieved_value, expected_value);
 }
 
@@ -1209,6 +1209,8 @@ async fn test_fast_inference_then_feedback() {
     let tasks: Vec<_> = (0..20)
         .map(|_| {
             let client = Arc::clone(&client);
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+            #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 let inference_payload = tensorzero::ClientInferenceParams {
                     function_name: Some("basic_test".to_string()),

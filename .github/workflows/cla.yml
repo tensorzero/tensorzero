@@ -29,6 +29,6 @@ jobs:
           path-to-signatures: "ci/cla-signatures.json"
           path-to-document: "https://github.com/tensorzero/tensorzero/blob/main/CLA.md"
           branch: "cla-signatures"
-          allowlist: dependabot[bot]
+          allowlist: dependabot[bot],TensorZero-Experimental-CI-Bot[bot]
           custom-pr-sign-comment: "I have read the Contributor License Agreement (CLA) and hereby sign the CLA."
           lock-pullrequest-aftermerge: false

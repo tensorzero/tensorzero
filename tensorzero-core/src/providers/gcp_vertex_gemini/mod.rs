@@ -61,8 +61,7 @@ use crate::model::{
 use crate::model_table::{GCPVertexGeminiKind, ProviderType, ProviderTypeDefaultCredentials};
 use crate::tool::{Tool, ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::helpers::{parse_jsonl_batch_file, JsonlBatchFileInfo};
-use super::openai::convert_stream_error;
+use super::helpers::{convert_stream_error, parse_jsonl_batch_file, JsonlBatchFileInfo};
 
 const PROVIDER_NAME: &str = "GCP Vertex Gemini";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_gemini";
@@ -2177,6 +2176,8 @@ fn content_part_to_tensorzero_chunk(
                 return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: Some(text),
+                    summary_id: None,
+                    summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })));
@@ -2188,6 +2189,8 @@ fn content_part_to_tensorzero_chunk(
                 return Ok(Some(ContentBlockChunk::Thought(ThoughtChunk {
                     id: "0".to_string(),
                     text: None,
+                    summary_id: None,
+                    summary_text: None,
                     signature: part.thought_signature,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })));
@@ -2275,6 +2278,7 @@ fn convert_to_output(
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: Some(text),
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -2285,6 +2289,7 @@ fn convert_to_output(
                 return Ok(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: None,
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -2771,6 +2776,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),

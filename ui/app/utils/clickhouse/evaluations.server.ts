@@ -254,7 +254,8 @@ export async function getEvaluationResults(
     feedback.metric_name as metric_name,
     feedback.value as metric_value,
     feedback.feedback_id as feedback_id,
-    toBool(feedback.is_human_feedback) as is_human_feedback
+    toBool(feedback.is_human_feedback) as is_human_feedback,
+    formatDateTime(dp.staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at
   FROM filtered_dp dp
   INNER JOIN filtered_inference ci
     ON toUUIDOrNull(ci.tags['tensorzero::datapoint_id']) = dp.id
@@ -576,7 +577,8 @@ export async function getEvaluationsForDatapoint(
       filtered_feedback.metric_name as metric_name,
       filtered_feedback.value as metric_value,
       filtered_feedback.feedback_id as feedback_id,
-      toBool(filtered_feedback.is_human_feedback) as is_human_feedback
+      toBool(filtered_feedback.is_human_feedback) as is_human_feedback,
+      formatDateTime(filtered_datapoint.staled_at, '%Y-%m-%dT%H:%i:%SZ') as staled_at
     FROM filtered_inference
     INNER JOIN filtered_datapoint
       ON filtered_datapoint.id = toUUIDOrNull(filtered_inference.tags['tensorzero::datapoint_id'])

@@ -18,7 +18,7 @@ use crate::config::{Config, ConfigFileGlob};
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::{self, RunMigrationManagerArgs};
 use crate::db::clickhouse::ClickHouseConnectionInfo;
-use crate::db::SelectQueries;
+use crate::db::feedback::FeedbackQueries;
 use crate::endpoints;
 use crate::error::{Error, ErrorDetails};
 use crate::howdy::setup_howdy;
@@ -206,7 +206,7 @@ impl GatewayHandle {
                 .experimentation()
                 .setup(
                     Arc::new(clickhouse_connection_info.clone())
-                        as Arc<dyn SelectQueries + Send + Sync>,
+                        as Arc<dyn FeedbackQueries + Send + Sync>,
                     function_name,
                     &postgres_connection_info,
                     cancel_token.clone(),
@@ -414,6 +414,8 @@ pub async fn start_openai_compatible_gateway(
         let _ = recv.await;
     };
 
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(
         axum::serve(listener, router)
             .with_graceful_shutdown(shutdown_fut)

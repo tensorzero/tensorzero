@@ -381,6 +381,8 @@ fn make_stream_from_non_stream(
                         id: id.to_string(),
                         text: thought.text,
                         signature: thought.signature,
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: thought.provider_type,
                     });
                     id += 1;
@@ -896,6 +898,7 @@ impl FuserConfig {
 
 #[cfg(test)]
 mod tests {
+    use crate::rate_limiting::ScopeInfo;
     use std::collections::HashMap;
 
     use tokio_stream::StreamExt;
@@ -1405,6 +1408,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let input = LazyResolvedInput {
             system: None,
@@ -1675,11 +1681,13 @@ mod tests {
                     ContentBlockChatOutput::Thought(Thought {
                         text: Some("My first thought".into()),
                         signature: Some("my_first_signature".into()),
+                        summary: None,
                         provider_type: Some("my_first_provider_type".into()),
                     }),
                     ContentBlockChatOutput::Thought(Thought {
                         text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
+                        summary: None,
                         provider_type: None,
                     }),
                     ContentBlockChatOutput::ToolCall(ToolCallOutput {
@@ -1726,12 +1734,16 @@ mod tests {
                         id: "1".into(),
                         text: Some("My first thought".into()),
                         signature: Some("my_first_signature".into()),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some("my_first_provider_type".into()),
                     }),
                     ContentBlockChunk::Thought(ThoughtChunk {
                         id: "2".into(),
                         text: Some("My second thought".into()),
                         signature: Some("my_second_signature".into()),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: None,
                     }),
                     ContentBlockChunk::ToolCall(ToolCallChunk {

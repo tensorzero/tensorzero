@@ -7,13 +7,25 @@ use super::check_table_exists;
 
 /// NOTE: This migration is BANNED in favor of migration_0028.
 ///
+/// ============================================================================
+/// TERMINOLOGY NOTE:
+/// "Static Evaluations" are now called "Inference Evaluations" in the project,
+/// configuration, and user-facing documentation. However, the database table
+/// names and view names created by this migration still use the "StaticEvaluation"
+/// prefix (e.g., StaticEvaluationHumanFeedback, StaticEvaluationFloatHumanFeedbackView)
+/// for backwards compatibility. This naming mismatch is intentional and should
+/// not be changed in existing database objects to avoid breaking deployments.
+/// ============================================================================
+///
 /// This migration adds a table StaticEvaluationHumanFeedback that stores human feedback in an easy-to-reference format.
+/// Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
 /// This is technically an auxiliary table as the primary store is still the various feedback tables.
 /// We also create two materialized views that automatically write to StaticEvaluationHumanFeedback when
 /// FloatMetricFeedback and BooleanMetricFeedback are updated with new feedback that contains both
 /// tensorzero::datapoint_id and tensorzero::human_feedback tags.
 ///
 /// NOTE: The views in this table are StaticEvaluationHumanFeedbackFloatView and StaticEvaluationHumanFeedbackBooleanView.
+/// Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
 /// Thew views created by Migration 0028 are StaticEvaluationFloatHumanFeedbackView and StaticEvaluationBooleanHumanFeedbackView.
 pub struct Migration0023<'a> {
     pub clickhouse: &'a ClickHouseConnectionInfo,
@@ -39,6 +51,7 @@ impl Migration for Migration0023<'_> {
     }
 
     async fn should_apply(&self) -> Result<bool, Error> {
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let human_feedback_table_exists =
             check_table_exists(self.clickhouse, "StaticEvaluationHumanFeedback", "0023").await?;
         let float_materialized_view_exists = check_table_exists(
@@ -59,6 +72,7 @@ impl Migration for Migration0023<'_> {
     }
 
     async fn apply(&self, _clean_start: bool) -> Result<(), Error> {
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         self.clickhouse
             .run_query_synchronous(
                 r#"CREATE TABLE IF NOT EXISTS StaticEvaluationHumanFeedback (
@@ -78,9 +92,11 @@ impl Migration for Migration0023<'_> {
             .await?;
 
         // Since there cannot have been any StaticEvaluationHumanFeedback rows before this migration runs,
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         // we can just create the materialized views in place.
 
         // Create the materialized view for FloatMetricFeedback
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let query = r#"
             CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationHumanFeedbackFloatView
             TO StaticEvaluationHumanFeedback
@@ -119,6 +135,7 @@ impl Migration for Migration0023<'_> {
             .await?;
 
         // Create the materialized view for BooleanMetricFeedback
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         let query = r#"
         CREATE MATERIALIZED VIEW IF NOT EXISTS StaticEvaluationHumanFeedbackBooleanView
         TO StaticEvaluationHumanFeedback
@@ -160,6 +177,7 @@ impl Migration for Migration0023<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
+        // Note: StaticEvaluation prefix retained for backwards compatibility (now called "Inference Evaluations")
         r#"DROP TABLE IF EXISTS StaticEvaluationHumanFeedback;
         DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackFloatView;
         DROP VIEW IF EXISTS StaticEvaluationHumanFeedbackBooleanView;

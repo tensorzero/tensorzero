@@ -251,8 +251,8 @@ pub async fn run_evaluation(
     }
 
     if evaluation_stats.output_format == OutputFormat::Pretty {
-        let EvaluationConfig::Static(static_evaluation_config) = &*result.evaluation_config;
-        let stats = evaluation_stats.compute_stats(&static_evaluation_config.evaluators);
+        let EvaluationConfig::Inference(inference_evaluation_config) = &*result.evaluation_config;
+        let stats = evaluation_stats.compute_stats(&inference_evaluation_config.evaluators);
 
         // Print all stats
         for (evaluator_name, evaluator_stats) in &stats {
@@ -260,7 +260,7 @@ pub async fn run_evaluation(
         }
 
         // Check cutoffs and handle failures
-        let failures = check_evaluator_cutoffs(&stats, &static_evaluation_config.evaluators)?;
+        let failures = check_evaluator_cutoffs(&stats, &inference_evaluation_config.evaluators)?;
 
         // Print failure messages
         for (name, cutoff, actual) in &failures {
@@ -355,15 +355,15 @@ pub async fn run_evaluation_core_streaming(
 
     debug!(evaluation_name = %args.evaluation_name, "Evaluation config found");
 
-    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
+    let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
     let function_config = args
         .config
-        .get_function(&static_evaluation_config.function_name)?
+        .get_function(&inference_evaluation_config.function_name)?
         .into_owned();
 
     info!(
-        function_name = %static_evaluation_config.function_name,
-        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        function_name = %inference_evaluation_config.function_name,
+        evaluators = ?inference_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
         "Function and evaluators configured"
     );
 
@@ -373,7 +373,7 @@ pub async fn run_evaluation_core_streaming(
     let dataset = query_dataset(
         &clients.clickhouse_client,
         &args.dataset_name,
-        &static_evaluation_config.function_name,
+        &inference_evaluation_config.function_name,
         &function_config,
     )
     .await?;
@@ -405,7 +405,7 @@ pub async fn run_evaluation_core_streaming(
         let function_config = function_config.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
-        let function_name = static_evaluation_config.function_name.clone();
+        let function_name = inference_evaluation_config.function_name.clone();
         let evaluation_name = evaluation_name.clone();
         let evaluation_run_id_clone = args.evaluation_run_id;
         let datapoint = Arc::new(datapoint);
@@ -458,6 +458,8 @@ pub async fn run_evaluation_core_streaming(
 
     // Spawn a task to collect results and stream them
     let sender_clone = sender.clone();
+    // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+    #[expect(clippy::disallowed_methods)]
     tokio::spawn(async move {
         while let Some(result) = join_set.join_next_with_id().await {
             let update = match result {

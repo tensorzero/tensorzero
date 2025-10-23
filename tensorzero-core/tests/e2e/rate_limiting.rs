@@ -475,34 +475,38 @@ async fn test_rate_limiting_tokens_helper(stream: bool) {
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(&[&format!(
         r#"[[rate_limiting.rules]]
-tokens_per_minute = {{ capacity = 500, refill_rate = 150 }}
+tokens_per_minute = {{ capacity = 150, refill_rate = 50 }}
 always = true
 scope = [
     {{ tag_key = "test_tokens_user_id_{id}", tag_value = "123" }}
 ]"#
     )]);
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = Arc::new(
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+    );
     let tags = HashMap::from([(format!("test_tokens_user_id_{id}"), "123".to_string())]);
 
-    // Make several requests - should succeed until token limit is reached
-    // Each request borrows roughly 100 tokens
-    for i in 0..38 {
-        match make_request_with_tags(&client, tags.clone(), stream).await {
-            Ok(()) => (),
-            Err(_) => {
-                // Should hit limit after 37 requests due to token consumption
-                // (11 * 37 = 407, the borrowed amount is 102, 407 + 102 = 509 > 500)
-                assert!(
-                    i == 37,
-                    "Should hit exactly 37 requests before hitting token limit (got {i})"
-                );
-                break;
-            }
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+    // Each request uses 11 input tokens and borrows ~102 tokens upfront
+    // With capacity = 150: n*11 + 102 <= 150, so n <= 4.36
+    // So up to 5 requests should succeed, 6th should fail
+
+    // Run 4 sequential requests - should all succeed
+    for i in 0..4 {
+        let result = make_request_with_tags(&client, tags.clone(), stream).await;
+        assert!(
+            result.is_ok(),
+            "Sequential request {i} should succeed: {result:?}"
+        );
     }
+
+    // 5th request should succeed (4 * 11 = 44, plus 102 borrow = 146 <= 150)
+    let result_5 = make_request_with_tags(&client, tags.clone(), stream).await;
+    assert!(result_5.is_ok(), "5th request should succeed: {result_5:?}");
+
+    // 6th request should fail (5 * 11 = 55, plus 102 borrow = 157 > 150)
+    let result_6 = make_request_with_tags(&client, tags.clone(), stream).await;
+    assert_rate_limit_exceeded(result_6);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -579,6 +583,8 @@ scope = [
         .map(|_| {
             let client_clone = client.clone();
             let tags_clone = tags.clone();
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+            #[expect(clippy::disallowed_methods)]
             tokio::spawn(
                 async move { make_request_with_tags(&client_clone, tags_clone, stream).await },
             )
@@ -662,6 +668,8 @@ scope = [
         .map(|i| {
             let client_clone = client.clone();
             let tags = HashMap::from([(format!("user_id_{id}"), format!("user{}", i % 3))]);
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+            #[expect(clippy::disallowed_methods)]
             tokio::spawn(async move {
                 (
                     i % 3,
@@ -963,14 +971,37 @@ scope = [
 ]"#
     )]);
 
-    let client =
-        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+    let client = Arc::new(
+        tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await,
+    );
     let tags = HashMap::from([(format!("test11_user_id_{id}"), "123".to_string())]);
 
-    // Should be able to make many requests without hitting the limit
-    for _ in 0..100 {
-        let result = make_request_with_tags(&client, tags.clone(), stream).await;
-        assert!(result.is_ok(), "Should succeed with very large limit");
+    // Launch 100 concurrent requests to test large limit handling
+    let handles: Vec<_> = (0..100)
+        .map(|_| {
+            let client_clone = client.clone();
+            let tags_clone = tags.clone();
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+            #[expect(clippy::disallowed_methods)]
+            tokio::spawn(
+                async move { make_request_with_tags(&client_clone, tags_clone, stream).await },
+            )
+        })
+        .collect();
+
+    // Wait for all requests to complete
+    let results: Vec<_> = futures::future::join_all(handles)
+        .await
+        .into_iter()
+        .map(|handle_result| handle_result.unwrap())
+        .collect();
+
+    // All requests should succeed with very large limit
+    for (i, result) in results.iter().enumerate() {
+        assert!(
+            result.is_ok(),
+            "Request {i} should succeed with very large limit: {result:?}"
+        );
     }
 }
 

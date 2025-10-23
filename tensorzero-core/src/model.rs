@@ -54,7 +54,7 @@ use crate::providers::hyperbolic::HyperbolicProvider;
 use crate::providers::openai::OpenAIAPIType;
 use crate::providers::sglang::SGLangProvider;
 use crate::providers::tgi::TGIProvider;
-use crate::rate_limiting::{RateLimitResourceUsage, ScopeInfo, TicketBorrows};
+use crate::rate_limiting::{RateLimitResourceUsage, TicketBorrows};
 use crate::{
     endpoints::inference::InferenceCredentials,
     error::{Error, ErrorDetails},
@@ -214,6 +214,7 @@ impl ModelConfig {
                 ContentBlock::Thought(Thought {
                     text: _,
                     signature: _,
+                    summary: _,
                     provider_type,
                 }) => provider_type
                     .as_ref()
@@ -243,6 +244,7 @@ impl ModelConfig {
                             ContentBlock::Thought(Thought {
                                 text: _,
                                 signature: _,
+                                summary: _,
                                 provider_type,
                             }) => {
                                 // When a thought is scoped to a particular provider type, we discard
@@ -294,11 +296,8 @@ impl ModelConfig {
                 return Ok(cache_lookup);
             }
         }
-        let scope_info = ScopeInfo {
-            tags: &clients.tags,
-        };
         let response = provider
-            .infer(model_provider_request, clients, &scope_info)
+            .infer(model_provider_request, clients)
             .instrument(span!(
                 Level::INFO,
                 "infer",
@@ -343,16 +342,13 @@ impl ModelConfig {
                 });
             }
         }
-        let scope_info = ScopeInfo {
-            tags: &clients.tags,
-        };
 
         let StreamAndRawRequest {
             stream,
             raw_request,
             ticket_borrow,
         } = provider
-            .infer_stream(model_provider_request, clients, &scope_info)
+            .infer_stream(model_provider_request, clients)
             .await?;
 
         // Note - we cache the chunks here so that we store the raw model provider input and response chunks
@@ -396,6 +392,9 @@ impl ModelConfig {
         clients: &InferenceClients,
         model_name: &'request str,
     ) -> Result<ModelInferenceResponse, Error> {
+        let span = tracing::Span::current();
+        clients.otlp_config.mark_openinference_chain_span(&span);
+
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
@@ -498,6 +497,9 @@ impl ModelConfig {
         clients: &InferenceClients,
         model_name: &'request str,
     ) -> Result<StreamResponseAndMessages, Error> {
+        clients
+            .otlp_config
+            .mark_openinference_chain_span(&tracing::Span::current());
         let mut provider_errors: HashMap<String, Error> = HashMap::new();
         let run_all_models = async {
             for provider_name in &self.routing {
@@ -652,6 +654,13 @@ async fn wrap_provider_stream(
                     Err(e) => {
                         tracing::warn!("Skipping cache write for stream response due to error in stream: {e}");
                         errored = true;
+                        // If we see a `FatalStreamError`, then yield it and stop processing the stream,
+                        // to avoid holding open a stream that might never produce more chunks.
+                        // We'll still compute rate-limiting usage using all of the chunks that we've seen so far.
+                        if let ErrorDetails::FatalStreamError { .. } = e.get_details() {
+                            yield chunk;
+                            break;
+                        }
                     }
                 }
             }
@@ -660,11 +669,20 @@ async fn wrap_provider_stream(
         otlp_config.apply_usage_to_model_provider_span(&span, &total_usage);
         // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
         deferred_tasks.spawn(async move {
-            if let Err(e) = ticket_borrow
-                .return_tickets(&postgres_connection_info, RateLimitResourceUsage {
+            let usage = if errored {
+                RateLimitResourceUsage::UnderEstimate {
                     model_inferences: 1,
                     tokens: total_usage.total_tokens() as u64,
-                })
+                }
+             } else {
+                RateLimitResourceUsage::Exact {
+                    model_inferences: 1,
+                    tokens: total_usage.total_tokens() as u64,
+                }
+            };
+
+            if let Err(e) = ticket_borrow
+                .return_tickets(&postgres_connection_info, usage)
                 .await
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
@@ -687,7 +705,9 @@ async fn wrap_provider_stream(
     // This ensures that we keep processing chunks (and call `return_tickets` to update rate-limiting information)
     // even if the top-level HTTP request is later dropped.
     let (send, recv) = tokio::sync::mpsc::unbounded_channel();
-    tokio::spawn(async move {
+    // Make sure that we finish processing the stream (so that we call `return_tickets` to update rate-limiting information)
+    // if the gateway shuts down.
+    clients.deferred_tasks.spawn(async move {
         futures::pin_mut!(base_stream);
         while let Some(chunk) = base_stream.next().await {
             // Intentionally ignore errors - the receiver might be dropped, but we want to keep polling
@@ -933,6 +953,8 @@ pub enum UninitializedProviderConfig {
     Anthropic {
         model_name: String,
         #[cfg_attr(test, ts(type = "string | null"))]
+        api_base: Option<Url>,
+        #[cfg_attr(test, ts(type = "string | null"))]
         api_key_location: Option<CredentialLocationWithFallback>,
     },
     #[strum(serialize = "aws_bedrock")]
@@ -1079,9 +1101,11 @@ impl UninitializedProviderConfig {
         Ok(match self {
             UninitializedProviderConfig::Anthropic {
                 model_name,
+                api_base,
                 api_key_location,
             } => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
+                api_base,
                 AnthropicKind
                     .get_defaulted_credential(
                         api_key_location.as_ref(),
@@ -1470,7 +1494,6 @@ impl ModelProvider {
         &self,
         request: ModelProviderRequest<'_>,
         clients: &InferenceClients,
-        scope_info: &ScopeInfo<'_>,
     ) -> Result<ProviderInferenceResponse, Error> {
         let span = Span::current();
         self.apply_otlp_span_fields_input(request.otlp_config, &span);
@@ -1478,7 +1501,7 @@ impl ModelProvider {
             .rate_limiting_config
             .consume_tickets(
                 &clients.postgres_connection_info,
-                scope_info,
+                &clients.scope_info,
                 request.request,
             )
             .await?;
@@ -1607,14 +1630,13 @@ impl ModelProvider {
         &self,
         request: ModelProviderRequest<'_>,
         clients: &InferenceClients,
-        scope_info: &ScopeInfo<'_>,
     ) -> Result<StreamAndRawRequest, Error> {
         self.apply_otlp_span_fields_input(request.otlp_config, &Span::current());
         let ticket_borrow = clients
             .rate_limiting_config
             .consume_tickets(
                 &clients.postgres_connection_info,
-                scope_info,
+                &clients.scope_info,
                 request.request,
             )
             .await?;
@@ -2204,6 +2226,7 @@ impl ShorthandModelConfig for ModelConfig {
         let provider_config = match provider_type {
             "anthropic" => ProviderConfig::Anthropic(AnthropicProvider::new(
                 model_name,
+                None,
                 AnthropicKind
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
@@ -2253,16 +2276,31 @@ impl ShorthandModelConfig for ModelConfig {
                     .get_defaulted_credential(None, default_credentials)
                     .await?,
             )),
-            "openai" => ProviderConfig::OpenAI(OpenAIProvider::new(
-                model_name,
-                None,
-                OpenAIKind
-                    .get_defaulted_credential(None, default_credentials)
-                    .await?,
-                OpenAIAPIType::ChatCompletions,
-                false,
-                Vec::new(),
-            )?),
+            "openai" => {
+                if let Some(stripped_model_name) = model_name.strip_prefix("responses::") {
+                    ProviderConfig::OpenAI(OpenAIProvider::new(
+                        stripped_model_name.to_string(),
+                        None,
+                        OpenAIKind
+                            .get_defaulted_credential(None, default_credentials)
+                            .await?,
+                        OpenAIAPIType::Responses,
+                        false,
+                        Vec::new(),
+                    )?)
+                } else {
+                    ProviderConfig::OpenAI(OpenAIProvider::new(
+                        model_name,
+                        None,
+                        OpenAIKind
+                            .get_defaulted_credential(None, default_credentials)
+                            .await?,
+                        OpenAIAPIType::ChatCompletions,
+                        false,
+                        Vec::new(),
+                    )?)
+                }
+            }
             "openrouter" => ProviderConfig::OpenRouter(OpenRouterProvider::new(
                 model_name,
                 OpenRouterKind
@@ -2364,6 +2402,7 @@ mod tests {
 
     use crate::cache::CacheEnabledMode;
     use crate::config::SKIP_CREDENTIAL_VALIDATION;
+    use crate::rate_limiting::ScopeInfo;
     use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         cache::CacheOptions,
@@ -2415,6 +2454,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
@@ -2432,6 +2472,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
 
         // Try inferring the good model only
@@ -2535,7 +2578,6 @@ mod tests {
         let postgres_mock = PostgresConnectionInfo::Disabled;
         let api_keys = InferenceCredentials::default();
         let tags = HashMap::new();
-        let scope_info = ScopeInfo { tags: &tags };
 
         // With token rate limiting enabled and no max_tokens
         let toml_str = r"
@@ -2560,6 +2602,9 @@ mod tests {
             rate_limiting_config: Arc::new(rate_limit_config.clone()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(tags.clone()),
+            },
         };
 
         let request_no_max_tokens = ModelInferenceRequest {
@@ -2580,9 +2625,7 @@ mod tests {
         };
 
         // Should fail with RateLimitMissingMaxTokens
-        let result = provider
-            .infer(provider_request, &clients, &scope_info)
-            .await;
+        let result = provider.infer(provider_request, &clients).await;
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err(),
@@ -2609,7 +2652,7 @@ mod tests {
         };
 
         let result = provider
-            .infer(provider_request, &clients, &scope_info)
+            .infer(provider_request, &clients)
             .await
             .unwrap_err();
         assert_ne!(result, Error::new(ErrorDetails::RateLimitMissingMaxTokens));
@@ -2644,6 +2687,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         // Try inferring the good model only
         let request = ModelInferenceRequest {
@@ -2795,6 +2841,9 @@ mod tests {
                     rate_limiting_config: Arc::new(Default::default()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
+                    scope_info: ScopeInfo {
+                        tags: Arc::new(HashMap::new()),
+                    },
                 },
                 "my_model",
             )
@@ -2864,6 +2913,9 @@ mod tests {
                     rate_limiting_config: Arc::new(Default::default()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
+                    scope_info: ScopeInfo {
+                        tags: Arc::new(HashMap::new()),
+                    },
                 },
                 "my_model",
             )
@@ -2980,6 +3032,9 @@ mod tests {
                     rate_limiting_config: Arc::new(Default::default()),
                     otlp_config: Default::default(),
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
+                    scope_info: ScopeInfo {
+                        tags: Arc::new(HashMap::new()),
+                    },
                 },
                 "my_model",
             )
@@ -3045,6 +3100,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
@@ -3062,6 +3118,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
 
         let request = ModelInferenceRequest {
@@ -3119,6 +3178,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3165,6 +3227,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
@@ -3182,6 +3245,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
 
         let request = ModelInferenceRequest {
@@ -3238,6 +3304,9 @@ mod tests {
             rate_limiting_config: Arc::new(Default::default()),
             otlp_config: Default::default(),
             deferred_tasks: tokio_util::task::TaskTracker::new(),
+            scope_info: ScopeInfo {
+                tags: Arc::new(HashMap::new()),
+            },
         };
         let response = model_config
             .infer(&request, &clients, model_name)
@@ -3282,6 +3351,7 @@ mod tests {
         let anthropic_provider_config = SKIP_CREDENTIAL_VALIDATION.sync_scope((), || {
             ProviderConfig::Anthropic(AnthropicProvider::new(
                 "claude".to_string(),
+                None,
                 AnthropicCredentials::None,
             ))
         });

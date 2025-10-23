@@ -34,18 +34,17 @@ use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::providers;
 use crate::providers::helpers::{
     inject_extra_request_data_and_send, inject_extra_request_data_and_send_eventsource,
-    warn_cannot_forward_url_if_missing_mime_type,
 };
 use crate::tool::{ToolCall, ToolCallChunk, ToolCallConfig, ToolChoice, ToolConfig};
 
-use super::helpers::peek_first_chunk;
-use super::openai::convert_stream_error;
+use super::helpers::convert_stream_error;
+use super::helpers::{peek_first_chunk, warn_cannot_forward_url_if_missing_mime_type};
 
 lazy_static! {
-    static ref ANTHROPIC_BASE_URL: Url = {
+    static ref ANTHROPIC_DEFAULT_BASE_URL: Url = {
         #[expect(clippy::expect_used)]
         Url::parse("https://api.anthropic.com/v1/messages")
-            .expect("Failed to parse ANTHROPIC_BASE_URL")
+            .expect("Failed to parse ANTHROPIC_DEFAULT_BASE_URL")
     };
 }
 const ANTHROPIC_API_VERSION: &str = "2023-06-01";
@@ -57,20 +56,32 @@ pub const PROVIDER_TYPE: &str = "anthropic";
 #[cfg_attr(test, ts(export))]
 pub struct AnthropicProvider {
     model_name: String,
+    api_base: Option<Url>,
     #[serde(skip)]
     credentials: AnthropicCredentials,
 }
 
 impl AnthropicProvider {
-    pub fn new(model_name: String, credentials: AnthropicCredentials) -> Self {
+    pub fn new(
+        model_name: String,
+        api_base: Option<Url>,
+        credentials: AnthropicCredentials,
+    ) -> Self {
         AnthropicProvider {
             model_name,
+            api_base,
             credentials,
         }
     }
 
     pub fn model_name(&self) -> &str {
         &self.model_name
+    }
+
+    fn base_url(&self) -> &Url {
+        self.api_base
+            .as_ref()
+            .unwrap_or(&ANTHROPIC_DEFAULT_BASE_URL)
     }
 }
 
@@ -168,7 +179,7 @@ impl InferenceProvider for AnthropicProvider {
         let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
         let start_time = Instant::now();
         let builder = http_client
-            .post(ANTHROPIC_BASE_URL.as_ref())
+            .post(self.base_url().as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
@@ -263,7 +274,7 @@ impl InferenceProvider for AnthropicProvider {
         let start_time = Instant::now();
         let api_key = self.credentials.get_api_key(api_key)?;
         let builder = http_client
-            .post(ANTHROPIC_BASE_URL.as_ref())
+            .post(self.base_url().as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
             .header("x-api-key", api_key.expose_secret());
 
@@ -578,14 +589,12 @@ impl<'a> AnthropicMessageContent<'a> {
                     }
                 }
                 _ => {
-                    // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
-
                     warn_cannot_forward_url_if_missing_mime_type(
                         file,
                         messages_config.fetch_and_encode_input_files_before_inference,
                         PROVIDER_TYPE,
                     );
-
+                    // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
                     let file = file.resolve().await?;
                     let FileWithPath {
                         file,
@@ -660,6 +669,15 @@ impl<'a> AnthropicMessage<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum AnthropicSystemBlock<'a> {
+    Text {
+        text: &'a str,
+        // This also contains cache control and citations but we will ignore these for now.
+    },
+}
+
+#[derive(Debug, PartialEq, Serialize)]
 struct AnthropicRequestBody<'a> {
     model: &'a str,
     messages: Vec<AnthropicMessage<'a>>,
@@ -668,7 +686,7 @@ struct AnthropicRequestBody<'a> {
     stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     // This is the system message
-    system: Option<&'a str>,
+    system: Option<Vec<AnthropicSystemBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -701,7 +719,12 @@ impl<'a> AnthropicRequestBody<'a> {
             fetch_and_encode_input_files_before_inference: request
                 .fetch_and_encode_input_files_before_inference,
         };
-        let system = request.system.as_deref();
+        // We use the content block form rather than string so people can use
+        // extra_body for cache control.
+        let system = match request.system.as_deref() {
+            Some(text) => Some(vec![AnthropicSystemBlock::Text { text }]),
+            None => None,
+        };
         let request_messages: Vec<AnthropicMessage> = try_join_all(
             request
                 .messages
@@ -773,6 +796,8 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
     } else if model_name.starts_with("claude-3-7-sonnet")
         || model_name.starts_with("claude-sonnet-4-202")
         || model_name == "claude-sonnet-4-0"
+        || model_name.starts_with("claude-haiku-4-5")
+        || model_name.starts_with("claude-sonnet-4-5")
     {
         Ok(64_000)
     } else if model_name.starts_with("claude-opus-4-202")
@@ -942,12 +967,14 @@ fn convert_to_output(
         }) => Ok(ContentBlockOutput::Thought(Thought {
             text: Some(thinking),
             signature: Some(signature),
+            summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
         })),
         FlattenUnknown::Normal(AnthropicContentBlock::RedactedThinking { data }) => {
             Ok(ContentBlockOutput::Thought(Thought {
                 text: None,
                 signature: Some(data),
+                summary: None,
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
@@ -1204,6 +1231,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: Some(thinking),
                         signature: None,
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
@@ -1218,6 +1247,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: None,
                         signature: Some(signature),
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
@@ -1269,6 +1300,8 @@ fn anthropic_to_tensorzero_stream_message(
                     text: Some(thinking),
                     signature: Some(signature),
                     id: index.to_string(),
+                    summary_id: None,
+                    summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 })],
                 None,
@@ -1282,6 +1315,8 @@ fn anthropic_to_tensorzero_stream_message(
                         text: None,
                         signature: Some(data),
                         id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
                         provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
@@ -1413,6 +1448,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(false),
             tools_available: vec![],
+            provider_tools: None,
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
@@ -1426,6 +1462,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
             tools_available: vec![],
+            provider_tools: None,
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1440,6 +1477,7 @@ mod tests {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             tools_available: vec![],
+            provider_tools: None,
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1454,6 +1492,7 @@ mod tests {
             tool_choice: ToolChoice::Specific("test".to_string()),
             parallel_tool_calls: Some(false),
             tools_available: vec![],
+            provider_tools: None,
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1697,7 +1736,9 @@ mod tests {
                 ],
                 max_tokens: 64_000,
                 stream: Some(false),
-                system: Some("test_system"),
+                system: Some(vec![AnthropicSystemBlock::Text {
+                    text: "test_system"
+                }]),
                 temperature: None,
                 top_p: None,
                 tool_choice: None,
@@ -1762,7 +1803,9 @@ mod tests {
                 ],
                 max_tokens: 100,
                 stream: Some(true),
-                system: Some("test_system"),
+                system: Some(vec![AnthropicSystemBlock::Text {
+                    text: "test_system"
+                }]),
                 temperature: Some(0.5),
                 top_p: None,
                 tool_choice: None,
@@ -2854,8 +2897,31 @@ mod tests {
     #[test]
     fn test_anthropic_base_url() {
         assert_eq!(
-            ANTHROPIC_BASE_URL.as_str(),
+            ANTHROPIC_DEFAULT_BASE_URL.as_str(),
             "https://api.anthropic.com/v1/messages"
+        );
+    }
+
+    #[test]
+    fn test_anthropic_provider_custom_api_base() {
+        let custom_url = Url::parse("https://example.com/custom").unwrap();
+        let provider = AnthropicProvider::new(
+            "claude".to_string(),
+            Some(custom_url.clone()),
+            AnthropicCredentials::None,
+        );
+
+        assert_eq!(provider.base_url(), &custom_url);
+    }
+
+    #[test]
+    fn test_anthropic_provider_default_api_base() {
+        let provider =
+            AnthropicProvider::new("claude".to_string(), None, AnthropicCredentials::None);
+
+        assert_eq!(
+            provider.base_url().as_str(),
+            ANTHROPIC_DEFAULT_BASE_URL.as_str()
         );
     }
 

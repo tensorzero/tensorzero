@@ -44,15 +44,15 @@ use crate::inference::types::{
 use crate::jsonschema_util::DynamicJSONSchema;
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::rate_limiting::RateLimitingConfig;
+use crate::rate_limiting::{RateLimitingConfig, ScopeInfo};
 use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
-use super::dynamic_evaluation_run::validate_inference_episode_id_and_apply_dynamic_evaluation_run;
 use super::validate_tags;
+use super::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Deserialize)]
@@ -98,6 +98,9 @@ pub struct Params {
     // parallel_tool_calls: Option<bool>,
     // If provided for a JSON inference, the inference will use the specified output schema instead of the
     // configured one. We only lazily validate this schema.
+    // provider_tools: Vec<ProviderTool> (defaults to [])
+    // If set, will attempt to pass this vector of tools to providers which run server-side tools
+    // that satisfy the scopes required.
     pub output_schema: Option<Value>,
     #[serde(default)]
     pub cache_options: CacheParamsOptions,
@@ -238,6 +241,12 @@ pub async fn inference(
         span.record("episode_id", episode_id.to_string());
     }
 
+    config
+        .gateway
+        .export
+        .otlp
+        .mark_openinference_chain_span(&span);
+
     // Automatically add internal tag when internal=true
     if params.internal {
         params
@@ -257,7 +266,7 @@ pub async fn inference(
     // Retrieve or generate the episode ID
     let episode_id = params.episode_id.unwrap_or_else(Uuid::now_v7);
 
-    validate_inference_episode_id_and_apply_dynamic_evaluation_run(
+    validate_inference_episode_id_and_apply_workflow_evaluation_run(
         episode_id,
         params.function_name.as_ref(),
         &mut params.variant_name,
@@ -334,16 +343,19 @@ pub async fn inference(
     // Set up inference config
     let output_schema = params.output_schema.map(DynamicJSONSchema::new);
 
+    let tags = Arc::new(params.tags.clone());
+
     let inference_clients = InferenceClients {
         http_client: http_client.clone(),
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
         credentials: Arc::new(params.credentials.clone()),
         cache_options: (params.cache_options, dryrun).into(),
-        tags: Arc::new(params.tags.clone()),
+        tags: tags.clone(),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
+        scope_info: ScopeInfo { tags: tags.clone() },
     };
 
     let inference_models = InferenceModels {
@@ -633,6 +645,8 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
             // not be cancelled partway through execution if the outer '/inference' request
             // is cancelled. This reduces the chances that we only write to some tables and not others
             // (but this is inherently best-effort due to ClickHouse's lack of transactions).
+            // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+            #[expect(clippy::disallowed_methods)]
             let write_future = tokio::spawn(async move {
                 let _: () = write_inference(
                     &clickhouse_connection_info,
@@ -904,6 +918,8 @@ fn create_stream(
                 drop(clickhouse_connection_info);
             };
             if async_write {
+                // TODO(https://github.com/tensorzero/tensorzero/issues/3983): Audit this callsite
+                #[expect(clippy::disallowed_methods)]
                 tokio::spawn(write_future);
             } else {
                 write_future.await;
@@ -1277,6 +1293,7 @@ pub struct InferenceClients {
     pub rate_limiting_config: Arc<RateLimitingConfig>,
     pub otlp_config: OtlpConfig,
     pub deferred_tasks: TaskTracker,
+    pub scope_info: ScopeInfo,
 }
 
 // Carryall struct for models used in inference
@@ -1436,11 +1453,13 @@ fn prepare_candidate_variants(
 mod tests {
     use super::*;
 
+    use object_store::path::Path;
     use serde_json::json;
     use std::time::Duration;
     use uuid::Uuid;
 
     use crate::inference::types::{
+        storage::{StorageKind, StoragePath},
         ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
         JsonInferenceResultChunk, Role, TextChunk,
     };
@@ -1652,7 +1671,8 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_file_content() {
+    fn test_deserialize_file_content_untagged_url() {
+        // Test backwards compatibility: untagged URL should still deserialize
         let input_with_url = json!({
             "messages": [
                 {
@@ -1661,6 +1681,7 @@ mod tests {
                         {
                             "type": "file",
                             "url": "https://example.com/file.txt",
+                            "mime_type": "image/png"
                         }
                     ]
                 }
@@ -1675,10 +1696,14 @@ mod tests {
             input_with_url.messages[0].content[0],
             InputMessageContent::File(File::Url {
                 url: "https://example.com/file.txt".parse().unwrap(),
-                mime_type: None,
+                mime_type: Some(mime::IMAGE_PNG),
             })
         );
+    }
 
+    #[test]
+    fn test_deserialize_file_content_untagged_base64() {
+        // Test backwards compatibility: untagged Base64 should still deserialize
         let input_with_base64 = json!({
             "messages": [
                 {
@@ -1705,5 +1730,158 @@ mod tests {
                 data: "fake_base64_data".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn test_serialize_file_content_always_tagged() {
+        // Test that serialization always produces tagged format
+        let file_url = File::Url {
+            url: "https://example.com/file.txt".parse().unwrap(),
+            mime_type: Some(mime::IMAGE_PNG),
+        };
+        let serialized = serde_json::to_value(&file_url).unwrap();
+        assert_eq!(serialized["file_type"], "url");
+        assert_eq!(serialized["url"], "https://example.com/file.txt");
+        assert_eq!(serialized["mime_type"], "image/png");
+
+        let file_base64 = File::Base64 {
+            mime_type: mime::IMAGE_PNG,
+            data: "fake_base64_data".to_string(),
+        };
+        let serialized = serde_json::to_value(&file_base64).unwrap();
+        assert_eq!(serialized["file_type"], "base64");
+        assert_eq!(serialized["mime_type"], "image/png");
+        assert_eq!(serialized["data"], "fake_base64_data");
+    }
+
+    #[test]
+    fn test_deserialize_file_content_for_url() {
+        let input_with_url = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "file_type": "url",
+                            "url": "https://example.com/file.txt",
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_url: Input = serde_json::from_value(input_with_url).unwrap();
+        assert_eq!(input_with_url.messages.len(), 1);
+        assert_eq!(input_with_url.messages[0].role, Role::User);
+        assert_eq!(input_with_url.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_url.messages[0].content[0],
+            InputMessageContent::File(File::Url {
+                url: "https://example.com/file.txt".parse().unwrap(),
+                mime_type: None,
+            })
+        );
+    }
+
+    #[test]
+    fn test_deserialize_file_content_for_base64() {
+        let input_with_base64 = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "file_type": "base64",
+                            "data": "fake_base64_data",
+                            "mime_type": "image/png"
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_base64: Input = serde_json::from_value(input_with_base64).unwrap();
+        assert_eq!(input_with_base64.messages.len(), 1);
+        assert_eq!(input_with_base64.messages[0].role, Role::User);
+        assert_eq!(input_with_base64.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_base64.messages[0].content[0],
+            InputMessageContent::File(File::Base64 {
+                mime_type: mime::IMAGE_PNG,
+                data: "fake_base64_data".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn test_deserialize_file_content_for_object_storage() {
+        let input_with_object_storage = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "file",
+                            "file_type": "object_storage",
+                            "mime_type": "image/png",
+                            "storage_path": {
+                                "kind": {
+                                    "type": "s3_compatible",
+                                    "bucket_name": "test-bucket",
+                                    "region": "test-region",
+                                    "endpoint": "test-endpoint",
+                                    "allow_http": false,
+                                    "prefix": ""
+                                },
+                                "path": "test-path"
+                            }
+                        }
+                    ]
+                }
+            ]
+        });
+
+        let input_with_object_storage: Input =
+            serde_json::from_value(input_with_object_storage).unwrap();
+        assert_eq!(input_with_object_storage.messages.len(), 1);
+        assert_eq!(input_with_object_storage.messages[0].role, Role::User);
+        assert_eq!(input_with_object_storage.messages[0].content.len(), 1);
+        assert_eq!(
+            input_with_object_storage.messages[0].content[0],
+            InputMessageContent::File(File::ObjectStorage {
+                source_url: None,
+                mime_type: mime::IMAGE_PNG,
+                storage_path: StoragePath {
+                    kind: StorageKind::S3Compatible {
+                        bucket_name: Some("test-bucket".to_string()),
+                        region: Some("test-region".to_string()),
+                        endpoint: Some("test-endpoint".to_string()),
+                        allow_http: Some(false),
+                        prefix: String::new(),
+                    },
+                    path: Path::from("test-path"),
+                },
+            })
+        );
+    }
+
+    #[test]
+    fn test_file_roundtrip_serialization() {
+        // Test that serialize -> deserialize maintains data integrity
+        let original = File::Base64 {
+            mime_type: mime::IMAGE_JPEG,
+            data: "base64data".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&original).unwrap();
+        let deserialized: File = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(original, deserialized);
+
+        // Verify serialized format is tagged
+        let serialized_value: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(serialized_value["file_type"], "base64");
     }
 }

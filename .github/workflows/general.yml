@@ -15,11 +15,14 @@ concurrency:
 env:
   FORCE_COLOR: 1
   TENSORZERO_CLICKHOUSE_URL: "http://chuser:chpassword@localhost:8123/tensorzero"
+  SQLX_OFFLINE: 1
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
 jobs:
   check-version-consistency:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -37,6 +40,8 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+      # Permission to download artifacts
+      actions: read
 
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
@@ -120,9 +125,15 @@ jobs:
         run: ./ci/check-all-docker-compose.sh
 
   check-python-client-build:
+    permissions:
+      contents: read
     uses: ./.github/workflows/python-client-build.yml
 
   check-node-bindings:
+    permissions:
+      contents: read
+      # Permission to upload artifacts
+      actions: write
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -171,6 +182,10 @@ jobs:
         run: pnpm --filter=tensorzero-node run check-exports
 
   build-windows:
+    permissions:
+      contents: read
+      # Permission for rust-cache to read/write cache
+      actions: read
     runs-on: windows-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -195,8 +210,43 @@ jobs:
       - name: Build Rust
         run: cargo build --workspace
 
+  lint-rust:
+    permissions:
+      contents: read
+    runs-on: namespace-profile-tensorzero-8x16
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # We install the latest rust when running lints, since we don't care if older rust versions lint successfully.
+      # This avoids the need to deal with linter bugs in older rust versions.
+      - name: Install Rust toolchain
+        run: |
+          for attempt in 1 2 3; do
+            if rustup toolchain install stable --component clippy,rustfmt && rustup default stable; then
+              break
+            fi
+          done
+        shell: bash
+
+      - name: Configure Namespace cache for Rust
+        uses: namespacelabs/nscloud-cache-action@2f50e7d0f70475e6f59a55ba0f05eec9108e77cc
+        with:
+          cache: |
+            rust
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@d12e869b89167df346dd0ff65da342d1fb1202fb
+        with:
+          tool: cargo-hack
+
+      - name: Lint (Rust)
+        run: |
+          cargo fmt --all --check
+          cargo hack clippy --all-targets --each-feature -- -D warnings
+
   validate:
-    runs-on: namespace-profile-tensorzero-32x64
+    permissions:
+      contents: read
+    runs-on: namespace-profile-tensorzero-8x32
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
@@ -208,7 +258,7 @@ jobs:
       - name: Install Rust 1.86.0
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.86.0 --component clippy,rustfmt && rustup default 1.86.0; then
+            if rustup install 1.86.0 && rustup default 1.86.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -327,11 +377,6 @@ jobs:
       - name: Build (Rust)
         run: cargo build --workspace --verbose
 
-      - name: Lint (Rust)
-        run: |
-          cargo fmt -- --check
-          cargo hack clippy --all-targets --each-feature -- -D warnings
-
       - name: Run cargo-deny
         run: cargo deny check
 
@@ -417,6 +462,10 @@ jobs:
 
   clickhouse-tests:
     name: "ClickHouse tests (replicated: ${{ matrix.replicated }}) (version: ${{ matrix.clickhouse_version.tag }})"
+    permissions:
+      contents: read
+      # Permission to download artifacts and for rust-cache
+      actions: read
     needs: [build-gateway-container]
 
     # We don't run many tests here, so use a normal runner with Github Actions caching
@@ -493,6 +542,11 @@ jobs:
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
 
+      - name: Set Postgres database URL for tests
+        run: |
+          echo "DATABASE_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+
       - name: Set TENSORZERO_GATEWAY_TAG
         run: |
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> $GITHUB_ENV
@@ -553,6 +607,9 @@ jobs:
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
       - name: Test (Rust)
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
+          TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero-e2e-tests
         run: cargo test-e2e-no-creds
 
       - name: Print docker compose logs (replicated)
@@ -601,6 +658,10 @@ jobs:
 
   # Run 'cargo test-optimization' against mock-inference-provider
   mock-optimization-tests:
+    permissions:
+      contents: read
+      # Permission for rust-cache
+      actions: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     env:
@@ -682,10 +743,16 @@ jobs:
       id-token: write
 
   ui-tests:
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ui-tests.yml
     needs: build-gateway-container
 
   ui-tests-e2e:
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ui-tests-e2e.yml
     needs: [build-gateway-container, build-ui-container]
     secrets:
@@ -709,6 +776,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
+    permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [
@@ -721,6 +789,7 @@ jobs:
         build-ui-container,
         build-gateway-container,
         validate,
+        lint-rust,
         clickhouse-tests,
         ui-tests,
         ui-tests-e2e,

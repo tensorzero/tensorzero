@@ -1,18 +1,14 @@
 import z from "zod";
 import { getInferenceTableName } from "./common";
-import type { FunctionConfig, MetricConfig } from "tensorzero-node";
+import type { FunctionConfig, MetricConfig, TimeWindow } from "tensorzero-node";
 import { getClickhouseClient } from "./client.server";
 
-export const timeWindowUnitSchema = z.enum([
-  "day",
-  "week",
-  "month",
-  "cumulative",
-]);
-export type TimeWindowUnit = z.infer<typeof timeWindowUnitSchema>;
-
-function getTimeWindowInMs(timeWindow: TimeWindowUnit): number {
+function getTimeWindowInMs(timeWindow: TimeWindow): number {
   switch (timeWindow) {
+    case "minute":
+      return 60 * 1000; // 1 minute in ms
+    case "hour":
+      return 60 * 60 * 1000; // 1 hour in ms
     case "day":
       return 24 * 60 * 60 * 1000; // 1 day in ms
     case "week":
@@ -29,7 +25,7 @@ export async function getVariantPerformances(params: {
   function_config: FunctionConfig;
   metric_name: string;
   metric_config: MetricConfig;
-  time_window_unit: TimeWindowUnit;
+  time_window_unit: TimeWindow;
   variant_name?: string;
 }) {
   const {
@@ -95,7 +91,7 @@ async function getEpisodePerformances(params: {
   inference_table_name: string;
   metric_name: string;
   metric_table_name: string;
-  time_window_unit: TimeWindowUnit;
+  time_window_unit: TimeWindow;
   variant_name?: string;
 }): Promise<VariantPerformanceRow[] | undefined> {
   const {
@@ -239,7 +235,7 @@ async function getInferencePerformances(params: {
   inference_table_name: string;
   metric_name: string;
   metric_table_name: string;
-  time_window_unit: TimeWindowUnit;
+  time_window_unit: TimeWindow;
   variant_name?: string;
 }): Promise<VariantPerformanceRow[] | undefined> {
   const {
@@ -396,7 +392,7 @@ export type VariantThroughput = z.infer<typeof variantThroughputSchema>;
 
 export async function getFunctionThroughputByVariant(
   functionName: string,
-  timeWindow: TimeWindowUnit,
+  timeWindow: TimeWindow,
   maxPeriods: number,
 ): Promise<VariantThroughput[]> {
   const timeWindowMs = getTimeWindowInMs(timeWindow);
