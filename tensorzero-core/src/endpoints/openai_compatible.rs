@@ -59,7 +59,7 @@ use axum::routing::post;
 use axum::Router;
 
 /// Constructs (but does not register) all of our OpenAI-compatible endpoints.
-/// The `RouterExit::register_openai_compatible_routes` is a convenience method
+/// The `RouterExt::register_openai_compatible_routes` is a convenience method
 /// to register all of the routes on a router.
 ///
 /// Alternatively, the returned `RouteHandlers` can be inspected (e.g. to allow middleware to see the route paths)
