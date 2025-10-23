@@ -191,12 +191,24 @@ class TensorZeroExperimentRunner:
             arm_counts = Counter(batch_arms)
             arm_dist = {i: arm_counts.get(i, 0) for i in range(self.env.K)}
 
-            print(
-                f"    Batch {batch_num}: t={t}/{self.max_time_steps}, "
-                f"size={current_batch_size}, duration={batch_duration:.2f}s "
-                f"(inference={inference_duration:.2f}s, feedback={feedback_duration:.2f}s), "
-                f"cumulative_regret={final_regret:.2f}"
-            )
+            # Detect if track-and-stop has stopped (all samples go to one variant)
+            max_arm_count = max(arm_counts.values()) if arm_counts else 0
+            if max_arm_count == current_batch_size and batch_num > 1:
+                # Track-and-stop has likely stopped - one variant getting 100% of samples
+                stopped_variant = max(arm_counts, key=arm_counts.get)
+                print(
+                    f"    Batch {batch_num}: t={t}/{self.max_time_steps}, "
+                    f"size={current_batch_size}, duration={batch_duration:.2f}s "
+                    f"(inference={inference_duration:.2f}s, feedback={feedback_duration:.2f}s), "
+                    f"cumulative_regret={final_regret:.2f} [STOPPED - variant_{stopped_variant}]"
+                )
+            else:
+                print(
+                    f"    Batch {batch_num}: t={t}/{self.max_time_steps}, "
+                    f"size={current_batch_size}, duration={batch_duration:.2f}s "
+                    f"(inference={inference_duration:.2f}s, feedback={feedback_duration:.2f}s), "
+                    f"cumulative_regret={final_regret:.2f}"
+                )
             print(f"      Arm distribution: {arm_dist}")
             print(f"      True means: {self.env.true_means}")
             print(f"      Best arm: {self.env.best_arm} (mean={self.env.best_mean:.3f})")
@@ -231,6 +243,89 @@ class TensorZeroExperimentRunner:
         """Clean up resources."""
         if self.client:
             await self.client.close()
+
+
+async def clear_databases(clickhouse_url: str, postgres_url: str):
+    """Clear ClickHouse and Postgres databases for fresh experiment runs."""
+    import subprocess
+
+    # Parse URLs for connection details
+    # ClickHouse URL format: http://user:password@host:port/database
+    ch_parts = clickhouse_url.replace("http://", "").split("@")
+    ch_creds = ch_parts[0].split(":")
+    ch_host_db = ch_parts[1].split("/")
+    ch_user = ch_creds[0]
+    ch_password = ch_creds[1]
+    ch_database = ch_host_db[1] if len(ch_host_db) > 1 else "default"
+
+    # Postgres URL format: postgresql://user:password@host:port/database
+    pg_parts = postgres_url.replace("postgresql://", "").split("@")
+    pg_creds = pg_parts[0].split(":")
+    pg_host_db = pg_parts[1].split("/")
+    pg_user = pg_creds[0]
+    pg_password = pg_creds[1]
+    pg_database = pg_host_db[1] if len(pg_host_db) > 1 else "postgres"
+
+    print("  Clearing databases for fresh run...")
+
+    # Clear ClickHouse tables
+    ch_tables = [
+        "ChatInference",
+        "JsonInference",
+        "ModelInference",
+        "BooleanMetricFeedback",
+        "FloatMetricFeedback",
+        "CommentFeedback",
+        "DemonstrationFeedback",
+        "ModelInferenceCache",
+    ]
+
+    for table in ch_tables:
+        try:
+            cmd = [
+                "docker",
+                "exec",
+                "bandits-testing-clickhouse-1",
+                "clickhouse-client",
+                "--user",
+                ch_user,
+                "--password",
+                ch_password,
+                "--query",
+                f"TRUNCATE TABLE IF EXISTS {ch_database}.{table}",
+            ]
+            subprocess.run(cmd, check=False, capture_output=True)
+        except Exception:
+            pass  # Table might not exist yet
+
+    # Clear Postgres tables
+    pg_tables = [
+        "ExperimentalEpisodeVariantAssignment",
+        "TrackAndStopExperimentState",
+    ]
+
+    for table in pg_tables:
+        try:
+            cmd = [
+                "docker",
+                "exec",
+                "bandits-testing-postgres-1",
+                "psql",
+                "-U",
+                pg_user,
+                "-d",
+                pg_database,
+                "-c",
+                f"TRUNCATE TABLE {table} CASCADE;",
+            ]
+            env = {"PGPASSWORD": pg_password}
+            subprocess.run(
+                cmd, check=False, capture_output=True, env={**subprocess.os.environ, **env}
+            )
+        except Exception:
+            pass  # Table might not exist yet
+
+    print("  Databases cleared successfully")
 
 
 async def run_tensorzero_experiment_batch(
@@ -288,11 +383,21 @@ async def run_tensorzero_experiment_batch(
         postgres_url=postgres_url,
     )
 
-    await runner.setup()
-
     try:
         for run_idx in range(n_runs):
             seed = base_seed + run_idx
+
+            # Clear databases before each independent run for fresh start
+            print(f"  Run {run_idx + 1}/{n_runs}: Clearing databases...")
+            await clear_databases(clickhouse_url, postgres_url)
+
+            # Setup gateway for this run (after clearing databases)
+            if run_idx == 0:
+                await runner.setup()
+            else:
+                # Reinitialize gateway to pick up cleared state
+                await runner.cleanup()
+                await runner.setup()
 
             # Create fresh environment for this run
             env = create_environment(env_type, K, difficulty, seed, **env_kwargs)
@@ -302,9 +407,8 @@ async def run_tensorzero_experiment_batch(
             result = await runner.run(seed)
             results.append(result)
 
-            stop_info = f"stopped at t={result.stopping_time}" if result.stopped else "did not stop"
             final_regret = result.cumulative_regrets[-1]
-            print(f"  Run {run_idx + 1}/{n_runs}: {stop_info}, final regret={final_regret:.2f}")
+            print(f"  Run {run_idx + 1}/{n_runs}: final regret={final_regret:.2f}")
 
     finally:
         await runner.cleanup()
