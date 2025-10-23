@@ -16,11 +16,29 @@ It compares three bandit types:
 
 ## Setup
 
-Install dependencies:
+### Prerequisites
+
+1. Install Docker and Docker Compose
+2. Install Python 3.10+
+3. Install the Python dependencies with `pip install -r requirements.txt`
+4. Generate an API key for OpenAI (`OPENAI_API_KEY`)
+
+### Environment Setup
+
+1. Create a `.env` file with the required environment variables (see `.env.example` for an example):
 
 ```bash
-pip install -r requirements.txt
+cp .env.example .env
+# Edit .env and add your actual OPENAI_API_KEY
 ```
+
+2. Launch the required services (ClickHouse and PostgreSQL):
+
+```bash
+docker compose up -d
+```
+
+This will automatically run the PostgreSQL migrations needed for track-and-stop experimentation.
 
 ## Running Experiments
 
@@ -94,36 +112,29 @@ Plots compare the naive uniform baselines (and eventually the track-and-stop imp
 
 - `environments.py`: Data generating processes (Bernoulli, Beta, Gaussian)
 - `naive_bandits.py`: Naive uniform baseline implementations
-- `experiment_runner.py`: Orchestrates experiments and tracks cumulative regret for naive bandits
+- `naive_bandits_runner.py`: Orchestrates experiments and tracks cumulative regret for naive bandits
 - `tensorzero_runner.py`: TensorZero integration for track-and-stop experiments
 - `plotting.py`: Creates cumulative regret trajectory plots
 - `run_experiments.py`: Script for running naive baseline experiments only
 - `run_full_comparison.py`: Main script for running all bandit types including TensorZero
 - `quick_test.py`: Quick verification script for naive baselines
-- `config/tensorzero.toml`: Basic TensorZero configuration (no experimentation)
-- `config/tensorzero_trackandstop.toml`: TensorZero config with track-and-stop experimentation
+- `config/tensorzero.toml`: TensorZero config with track-and-stop experimentation
 
 ## Running Full Comparison with TensorZero
 
 To compare all three bandit types (including TensorZero's track-and-stop):
 
-### Prerequisites
-
-1. **ClickHouse** (for storing inference/feedback data)
-2. **PostgreSQL** (for episode-to-variant consistency)
-
-Start the required services using the provided docker-compose file:
-
-```bash
-# From the bandits-testing directory
-cd bandits-testing
-docker compose up -d
-
-# Wait for services to be healthy
-docker compose ps
-```
+**Note on costs**: The framework uses `gpt-4o-mini` with caching enabled. Since all variants use the same model/provider and we send the same message for every inference, only the **very first inference** will actually hit the OpenAI API. All subsequent inferences (regardless of which variant is selected) are cache hits and cost nothing. Total cost per experiment run is negligible (~$0.0001 for a single API call).
 
 ### Run Full Comparison
+
+First, ensure your environment variables are loaded. You can use [direnv](https://direnv.net/) to automatically load the `.env` file, or manually export them:
+
+```bash
+export $(cat .env | xargs)
+```
+
+Then run the comparison:
 
 ```bash
 # Run all three bandit types
