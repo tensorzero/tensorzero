@@ -273,7 +273,7 @@ jobs:
 
           echo "=== Capturing backtraces with gdb ==="
           # Find all python processes that might be related to our test
-          PYTHON_PIDS=$(pgrep -f "python.*pytest" || true)
+          PYTHON_PIDS=$(pgrep -f "tensorzero.*python" || true)
           if [ -n "$PYTHON_PIDS" ]; then
             for pid in $PYTHON_PIDS; do
               echo "--- Backtrace for Python process $pid ---"
