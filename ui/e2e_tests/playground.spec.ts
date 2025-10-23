@@ -14,7 +14,7 @@ test("playground should work for a chat function that sets 2 variants", async ({
   // Select dataset 'foo'
   await page.getByText("Select a dataset").click();
   await page.getByPlaceholder(/dataset/i).fill("foo");
-  await page.getByRole("option", { name: "foo" }).click();
+  await page.locator('[data-dataset-name="foo"]').click();
 
   // Select variant 'initial_prompt_gpt4o_mini'
   await page
@@ -64,7 +64,7 @@ test("playground should work for extract_entities JSON function with 2 variants"
   // Select dataset 'foo'
   await page.getByText("Select a dataset").click();
   await page.getByPlaceholder(/dataset/i).fill("foo");
-  await page.getByRole("option", { name: "foo" }).click();
+  await page.locator('[data-dataset-name="foo"]').click();
 
   // Select variants 'baseline' and 'gpt4o_mini_initial_prompt'
   await page.getByPlaceholder("Filter by variant...").fill("baseline");
@@ -122,7 +122,7 @@ test("playground should work for image_judger function with images in input", as
   // Select dataset 'baz'
   await page.getByText("Select a dataset").click();
   await page.getByPlaceholder(/dataset/i).fill("baz");
-  await page.getByRole("option", { name: "baz" }).click();
+  await page.locator('[data-dataset-name="baz"]').click();
 
   // Select variant 'honest_answer'
   await page.getByPlaceholder("Filter by variant...").fill("honest_answer");

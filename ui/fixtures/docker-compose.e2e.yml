@@ -1,3 +1,6 @@
+include:
+  - docker-compose-common.yml
+
 services:
   clickhouse:
     image: clickhouse/clickhouse-server:${TENSORZERO_CLICKHOUSE_VERSION:-24.12-alpine}
@@ -20,24 +23,6 @@ services:
       start_interval: 1s
       timeout: 1s
 
-  # We set 'OPENAI_BASE_URL=http://localhost:3030/openai' when starting the ui server in ci
-  # so that we use the mock server for SFT jobs
-  mock-inference-provider:
-    image: tensorzero/mock-inference-provider:${TENSORZERO_MOCK_INFERENCE_PROVIDER_TAG:-latest}
-    build:
-      context: ../../
-      dockerfile: tensorzero-core/tests/mock-inference-provider/Dockerfile
-    environment:
-      RUST_LOG: debug
-    ports:
-      - "3030:3030"
-    healthcheck:
-      test: wget --spider --tries 1 http://localhost:3030/status
-      interval: 1s
-      start_period: 30s
-      start_interval: 1s
-      timeout: 1s
-
   gateway:
     image: tensorzero/gateway:${TENSORZERO_GATEWAY_TAG:-latest}
     build:
@@ -49,6 +34,7 @@ services:
     command: --config-file ${TENSORZERO_GATEWAY_CONFIG:-/app/config/tensorzero.e2e.toml}
     environment:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures
     env_file:
       - .env
       - .env-gateway
@@ -59,6 +45,8 @@ services:
       - "howdy.tensorzero.com:127.0.0.1"
     depends_on:
       clickhouse:
+        condition: service_healthy
+      gateway-postgres-migrations:
         condition: service_healthy
     healthcheck:
       test:
@@ -89,6 +77,10 @@ services:
       - TENSORZERO_SKIP_LARGE_FIXTURES
     depends_on:
       gateway:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      gateway-postgres-migrations:
         condition: service_healthy
     command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     # Added healthcheck to wait for the marker file created by the script

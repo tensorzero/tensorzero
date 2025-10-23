@@ -3,9 +3,12 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
     error::{Error, ErrorDetails},
+    inference::types::storage::StorageKind,
 };
 
-#[derive(Debug, Deserialize, Serialize)]
+use super::ObjectStoreInfo;
+
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
@@ -37,31 +40,11 @@ pub struct UninitializedGatewayConfig {
     pub unstable_error_json: bool,
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
-    #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
-    pub fetch_and_encode_input_files_before_inference: bool,
-}
-
-impl Default for UninitializedGatewayConfig {
-    fn default() -> Self {
-        Self {
-            bind_address: Default::default(),
-            observability: Default::default(),
-            debug: Default::default(),
-            enable_template_filesystem_access: Default::default(),
-            template_filesystem_access: Default::default(),
-            export: Default::default(),
-            base_path: Default::default(),
-            unstable_disable_feedback_target_validation: Default::default(),
-            unstable_error_json: Default::default(),
-            disable_pseudonymous_usage_analytics: Default::default(),
-            fetch_and_encode_input_files_before_inference:
-                default_fetch_and_encode_input_files_before_inference(),
-        }
-    }
+    pub fetch_and_encode_input_files_before_inference: Option<bool>,
 }
 
 impl UninitializedGatewayConfig {
-    pub fn load(self) -> Result<GatewayConfig, Error> {
+    pub fn load(self, object_store_info: Option<&ObjectStoreInfo>) -> Result<GatewayConfig, Error> {
         if self.enable_template_filesystem_access.is_some() {
             tracing::warn!("Deprecation Warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access.enabled]` instead.");
         }
@@ -81,6 +64,18 @@ impl UninitializedGatewayConfig {
                 }));
             }
         };
+        let fetch_and_encode_input_files_before_inference = if let Some(value) =
+            self.fetch_and_encode_input_files_before_inference
+        {
+            value
+        } else {
+            if let Some(info) = object_store_info {
+                if !matches!(info.kind, StorageKind::Disabled) {
+                    tracing::info!("Object store is enabled but `gateway.fetch_and_encode_input_files_before_inference` is unset (defaults to `false`). In rare cases, the files we fetch for object storage may differ from the image the inference provider fetched if this setting is disabled.");
+                }
+            }
+            default_fetch_and_encode_input_files_before_inference()
+        };
         Ok(GatewayConfig {
             bind_address: self.bind_address,
             observability: self.observability,
@@ -92,8 +87,7 @@ impl UninitializedGatewayConfig {
             unstable_disable_feedback_target_validation: self
                 .unstable_disable_feedback_target_validation,
             disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
-            fetch_and_encode_input_files_before_inference: self
-                .fetch_and_encode_input_files_before_inference,
+            fetch_and_encode_input_files_before_inference,
         })
     }
 }
@@ -137,7 +131,7 @@ impl Default for GatewayConfig {
 }
 
 fn default_fetch_and_encode_input_files_before_inference() -> bool {
-    true
+    false
 }
 
 fn serialize_optional_socket_addr<S>(

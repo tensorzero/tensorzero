@@ -125,6 +125,8 @@ jobs:
         run: ./ci/check-all-docker-compose.sh
 
   check-python-client-build:
+    permissions:
+      contents: read
     uses: ./.github/workflows/python-client-build.yml
 
   check-node-bindings:
@@ -209,6 +211,8 @@ jobs:
         run: cargo build --workspace
 
   lint-rust:
+    permissions:
+      contents: read
     runs-on: namespace-profile-tensorzero-8x16
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -240,7 +244,9 @@ jobs:
           cargo hack clippy --all-targets --each-feature -- -D warnings
 
   validate:
-    runs-on: namespace-profile-tensorzero-8x16
+    permissions:
+      contents: read
+    runs-on: namespace-profile-tensorzero-8x32
 
     timeout-minutes: 30
     if: github.repository == 'tensorzero/tensorzero'
@@ -737,10 +743,16 @@ jobs:
       id-token: write
 
   ui-tests:
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ui-tests.yml
     needs: build-gateway-container
 
   ui-tests-e2e:
+    permissions:
+      contents: read
+      actions: read
     uses: ./.github/workflows/ui-tests-e2e.yml
     needs: [build-gateway-container, build-ui-container]
     secrets:

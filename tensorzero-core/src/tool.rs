@@ -190,20 +190,31 @@ impl ToolCallConfig {
             .allowed_tools
             .as_deref()
             .unwrap_or(function_tools);
+        // Make a set for all names in additional tools
+        let additional_tool_names: HashSet<&str> = dynamic_tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| tools.iter().map(|t| t.name.as_str()).collect())
+            .unwrap_or_default();
 
         // Get each tool from the static tool config.
+        // If a tool name is in allowed_tools but not in static_tools, check if it's a dynamic tool.
+        // If it's neither static nor dynamic, throw an error.
         let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
             .iter()
-            .map(|tool_name| {
-                static_tools
-                    .get(tool_name)
-                    .cloned()
-                    .map(ToolConfig::Static)
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::ToolNotFound {
-                            name: tool_name.clone(),
-                        })
-                    })
+            .filter_map(|tool_name| {
+                if let Some(static_tool) = static_tools.get(tool_name) {
+                    // Found in static tools, add it
+                    Some(Ok(ToolConfig::Static(static_tool.clone())))
+                } else if additional_tool_names.contains(tool_name.as_str()) {
+                    // Found in dynamic tools, skip it (will be added in the next loop)
+                    None
+                } else {
+                    // Not found in either static or dynamic tools
+                    Some(Err(Error::new(ErrorDetails::ToolNotFound {
+                        name: tool_name.clone(),
+                    })))
+                }
             })
             .collect();
 
@@ -215,16 +226,17 @@ impl ToolCallConfig {
                 // Today we automatically add dynamically configured tools to the allowed tools list but in future we may
                 // change this behavior to be more in line with OpenAI's (if allowed_tools is set do not add tools.
                 // This warning is unusable today.
-                // let allowed_tools_set: HashSet<&str> = allowed_tools.iter().map(String::as_str).collect();
-                // if !allowed_tools_set.contains(tool.name.as_str()) {
-                //     tracing::info!(
-                //         tool_name = %tool.name,
-                //         "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
-                //          In a near-future release, dynamic tools will no longer be included automatically. \
-                //          If you intend for your dynamic tools to be allowed, please allow them explicitly; \
-                //          otherwise, disregard this warning."
-                //     );
-                // }
+                let allowed_tools_set: HashSet<&str> =
+                    allowed_tools.iter().map(String::as_str).collect();
+                if !allowed_tools_set.contains(tool.name.as_str()) {
+                    tracing::info!(
+                        tool_name = %tool.name,
+                        "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
+                         In a near-future release, dynamic tools will no longer be included automatically. \
+                         If you intend for your dynamic tools to be allowed, please allow them explicitly; \
+                         otherwise, disregard this warning."
+                    );
+                }
                 tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
                     description: tool.description,
                     parameters: DynamicJSONSchema::new(tool.parameters),
@@ -1421,5 +1433,127 @@ mod tests {
         };
         let result = config_no_tools.get_scoped_provider_tools("gpt-4", "openai");
         assert_eq!(result.len(), 0);
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_dynamic_tool_in_allowed_tools() {
+        // Test that a dynamic tool name in allowed_tools is recognized and doesn't error
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "establish_campground".to_string(),
+            ]),
+            additional_tools: Some(vec![Tool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                strict: false,
+            }]),
+            ..Default::default()
+        };
+
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Should have both static and dynamic tools
+        assert_eq!(tool_call_config.tools_available.len(), 2);
+
+        // Verify the static tool is included
+        assert!(tool_call_config
+            .tools_available
+            .iter()
+            .any(|t| t.name() == "get_temperature"));
+
+        // Verify the dynamic tool is included
+        assert!(tool_call_config
+            .tools_available
+            .iter()
+            .any(|t| t.name() == "establish_campground"));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_allowed_tool_not_found_in_static_or_dynamic() {
+        // Test that a tool name in allowed_tools that's not in static_tools or additional_tools throws error
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec![
+                "get_temperature".to_string(),
+                "nonexistent_tool".to_string(),
+            ]),
+            additional_tools: Some(vec![Tool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object"}),
+                strict: false,
+            }]),
+            ..Default::default()
+        };
+
+        let err = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            err,
+            ErrorDetails::ToolNotFound {
+                name: "nonexistent_tool".to_string()
+            }
+            .into()
+        );
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_dynamic_tool_auto_added_with_warning() {
+        // Test that dynamic tools are still auto-added even when not in allowed_tools (with warning)
+        let dynamic_tool_params = DynamicToolParams {
+            allowed_tools: Some(vec!["get_temperature".to_string()]),
+            additional_tools: Some(vec![Tool {
+                name: "establish_campground".to_string(),
+                description: "Establish a campground".to_string(),
+                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                strict: false,
+            }]),
+            ..Default::default()
+        };
+
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Both tools should be included (dynamic tool auto-added despite not being in allowed_tools)
+        assert_eq!(tool_call_config.tools_available.len(), 2);
+        assert!(tool_call_config
+            .tools_available
+            .iter()
+            .any(|t| t.name() == "get_temperature"));
+        assert!(tool_call_config
+            .tools_available
+            .iter()
+            .any(|t| t.name() == "establish_campground"));
+
+        // Check that warning was logged
+        assert!(logs_contain(
+            "Currently, the gateway automatically includes all dynamic tools"
+        ));
     }
 }
