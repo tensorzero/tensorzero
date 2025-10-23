@@ -7,16 +7,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, RwLockWriteGuard};
 
-use crate::config::Config;
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
-use crate::db::clickhouse::query_builder::ListInferencesParams;
 use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, Rows, TableName,
 };
 use crate::error::{Error, ErrorDetails};
-use crate::stored_inference::StoredInference;
 
 lazy_static! {
     static ref FAKE_DATABASE_URL: SecretString = SecretString::from("fake");
@@ -162,14 +159,6 @@ impl ClickHouseClient for FakeClickHouseClient {
 
     async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
         Ok(())
-    }
-
-    async fn list_inferences(
-        &self,
-        _config: &Config,
-        _opts: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error> {
-        Ok(Vec::new())
     }
 
     fn is_cluster_configured(&self) -> bool {

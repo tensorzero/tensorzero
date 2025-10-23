@@ -11,13 +11,9 @@ use std::time::Duration;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
-use crate::config::Config;
 use crate::db::clickhouse::batching::BatchSender;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::migration_manager::migrations::check_table_exists;
-use crate::db::clickhouse::query_builder::generate_list_inferences_sql;
-use crate::db::clickhouse::query_builder::ClickHouseStoredInference;
-use crate::db::clickhouse::query_builder::ListInferencesParams;
 use crate::db::clickhouse::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseClient;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
@@ -31,7 +27,6 @@ use crate::db::clickhouse::TableName;
 use crate::error::DisplayOrDebugGateway;
 use crate::error::Error;
 use crate::error::ErrorDetails;
-use crate::stored_inference::StoredInference;
 
 /// Production implementation of ClickHouseClient
 #[derive(Debug, Clone)]
@@ -533,34 +528,6 @@ impl ClickHouseClient for ProductionClickHouseClient {
             .await
             .map(|_| ())?;
         Ok(())
-    }
-
-    async fn list_inferences(
-        &self,
-        config: &Config,
-        opts: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error> {
-        let (sql, params) = generate_list_inferences_sql(config, opts)?;
-        let params_map = params
-            .iter()
-            .map(|p| (p.name.as_str(), p.value.as_str()))
-            .collect();
-        let response = self.run_query_synchronous(sql, &params_map).await?;
-        let inferences = response
-            .response
-            .trim()
-            .lines()
-            .map(|line| {
-                serde_json::from_str::<ClickHouseStoredInference>(line)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::ClickHouseQuery {
-                            message: format!("Failed to deserialize response: {e:?}"),
-                        })
-                    })
-                    .and_then(ClickHouseStoredInference::try_into)
-            })
-            .collect::<Result<Vec<StoredInference>, Error>>()?;
-        Ok(inferences)
     }
 
     fn is_cluster_configured(&self) -> bool {
