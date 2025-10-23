@@ -264,7 +264,7 @@ pub async fn get_tempo_spans(
                         if attr["key"].as_str().unwrap() == tag_key {
                             let inference_id_jaeger =
                                 attr["value"]["stringValue"].as_str().unwrap();
-                            if tag_value.to_string() == inference_id_jaeger {
+                            if tag_value == inference_id_jaeger {
                                 if target_span.is_some() {
                                     panic!("Found multiple function_inference spans with `{tag_key}`: {tag_value}");
                                 } else {
@@ -304,7 +304,7 @@ async fn test_otel_health_not_exported() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let spans = get_tempo_spans(
-        ("my-health-attr", &"my-attr-value".to_string()),
+        ("my-health-attr", "my-attr-value"),
         start_time,
         &tempo_semaphore,
     )
