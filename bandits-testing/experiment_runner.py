@@ -97,12 +97,16 @@ class NaiveExperimentRunner:
         final_arm = None
 
         for t in range(1, self.max_time_steps + 1):
-            # Select and pull arm
-            arm = self.bandit.select_arm()
-            reward = self.env.sample_reward(arm)
-
-            # Update bandit
-            self.bandit.update(arm, reward)
+            # If stopped, use the recommended arm; otherwise select and pull
+            if stopped:
+                # After stopping, continue accumulating regret for the final arm
+                arm = final_arm
+            else:
+                # Select and pull arm
+                arm = self.bandit.select_arm()
+                reward = self.env.sample_reward(arm)
+                # Update bandit
+                self.bandit.update(arm, reward)
 
             # Compute cumulative regret
             regret_per_pull = self.env.best_mean - self.env.true_means[arm]
@@ -114,7 +118,7 @@ class NaiveExperimentRunner:
             total_pulls.append(t)
             cumulative_regrets.append(cumulative_regret)
 
-            # Check stopping condition
+            # Check stopping condition (only if not already stopped)
             if not stopped:
                 should_stop, recommended_arm = self.bandit.check_stopping()
                 if should_stop:
