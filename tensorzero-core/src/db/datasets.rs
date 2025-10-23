@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+#[cfg(test)]
+use mockall::automock;
+
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::FloatComparisonOperator;
 use crate::endpoints::datasets::{Datapoint, DatapointKind};
@@ -13,7 +16,7 @@ use crate::serde_util::{
 };
 use crate::tool::ToolCallConfigDatabaseInsert;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -24,7 +27,7 @@ pub enum DatapointInsert {
     Json(JsonInferenceDatapointInsert),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct ChatInferenceDatapointInsert {
@@ -49,7 +52,7 @@ pub struct ChatInferenceDatapointInsert {
     pub is_custom: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapointInsert {
@@ -199,6 +202,7 @@ pub struct GetDatapointParams {
 }
 
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait DatasetQueries {
     /// Counts rows for a dataset based on query parameters
     async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
@@ -225,8 +229,14 @@ pub trait DatasetQueries {
     /// Marks a datapoint as stale by inserting a new row with staled_at set to now
     async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error>;
 
-    /// Inserts a new datapoint into the dataset
+    /// Inserts a single new datapoint into the dataset
+    /// TODO(shuyangli): To deprecate in favor of `insert_datapoints`
     async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error>;
+
+    /// Inserts a batch of datapoints into the database
+    /// Internally separates chat and JSON datapoints and writes them to the appropriate tables
+    /// Returns the number of rows written.
+    async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error>;
 
     /// Counts datapoints for a specific dataset and function
     async fn count_datapoints_for_dataset_function(
@@ -241,6 +251,7 @@ pub trait DatasetQueries {
     ) -> Result<AdjacentDatapointIds, Error>;
 
     /// Gets a single datapoint by dataset name and ID
+    /// TODO(shuyangli): To deprecate in favor of `get_datapoints`
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error>;
 
     /// Gets multiple datapoints by dataset name and IDs

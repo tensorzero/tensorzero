@@ -46,7 +46,7 @@ use once_cell::sync::OnceCell;
 use opentelemetry::ContextGuard;
 use tracing::field::Empty;
 
-use crate::observability::exporter_wrapper::ExporterWrapperUnsetToOk;
+use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
 use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
@@ -104,6 +104,7 @@ struct CustomTracerKey {
     // These will be set as attributes on *all* spans (not just top-level spans)
     // exported by a `CustomTracer`
     extra_resources: Vec<KeyValue>,
+    extra_attributes: Vec<KeyValue>,
 }
 
 impl Hash for CustomTracerKey {
@@ -111,6 +112,7 @@ impl Hash for CustomTracerKey {
         let CustomTracerKey {
             extra_headers,
             extra_resources,
+            extra_attributes,
         } = self;
         // We add null byte separators to keep the data prefix-free: https://doc.rust-lang.org/std/hash/trait.Hash.html#prefix-collisions
         extra_headers.as_ref().iter().for_each(|(key, value)| {
@@ -121,6 +123,7 @@ impl Hash for CustomTracerKey {
         });
         state.write_u8(0);
         extra_resources.hash(state);
+        extra_attributes.hash(state);
     }
 }
 
@@ -129,9 +132,11 @@ impl PartialEq for CustomTracerKey {
         let CustomTracerKey {
             extra_headers,
             extra_resources,
+            extra_attributes,
         } = self;
         extra_headers.as_ref() == other.extra_headers.as_ref()
             && extra_resources == &other.extra_resources
+            && extra_attributes == &other.extra_attributes
     }
 }
 
@@ -225,11 +230,8 @@ impl TracerWrapper {
         //    lookup and nested `build_with_context` inside the closure.
         let tracer = self.custom_tracers.try_get_with_by_ref(key, || {
             // We need to provide a dummy generic parameter to satisfy the compiler
-            let (provider, tracer) = build_tracer::<opentelemetry_otlp::SpanExporter>(
-                key.extra_headers.clone(),
-                key.extra_resources.clone(),
-                None,
-            )?;
+            let (provider, tracer) =
+                build_tracer::<opentelemetry_otlp::SpanExporter>(key.clone(), None)?;
             Ok::<_, Error>(Arc::new(CustomTracer {
                 inner: tracer,
                 provider: Some(provider),
@@ -249,8 +251,7 @@ impl TracerWrapper {
 /// Builds a new `SdkTracerProvider`, which will attach the extra headers from `metadata`
 /// to outgoing OTLP export requests.
 fn build_tracer<T: SpanExporter + 'static>(
-    metadata: MetadataMap,
-    resources: Vec<KeyValue>,
+    key: CustomTracerKey,
     override_exporter: Option<T>,
 ) -> Result<(SdkTracerProvider, SdkTracer), Error> {
     let tls_config = tonic::transport::ClientTlsConfig::new().with_enabled_roots();
@@ -259,7 +260,7 @@ fn build_tracer<T: SpanExporter + 'static>(
 
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
-        .with_metadata(metadata)
+        .with_metadata(key.extra_headers)
         .with_tls_config(tls_config)
         .build()
         .map_err(|e| {
@@ -274,14 +275,20 @@ fn build_tracer<T: SpanExporter + 'static>(
                 opentelemetry_semantic_conventions::resource::SERVICE_NAME,
                 "tensorzero-gateway",
             ))
-            .with_attributes(resources)
+            .with_attributes(key.extra_resources)
             .build(),
     );
 
     if let Some(override_exporter) = override_exporter {
-        builder = builder.with_simple_exporter(ExporterWrapperUnsetToOk::new(override_exporter));
+        builder = builder.with_simple_exporter(TensorZeroExporterWrapper::new(
+            override_exporter,
+            key.extra_attributes,
+        ));
     } else {
-        builder = builder.with_batch_exporter(ExporterWrapperUnsetToOk::new(exporter));
+        builder = builder.with_batch_exporter(TensorZeroExporterWrapper::new(
+            exporter,
+            key.extra_attributes,
+        ));
     }
     let provider = builder.build();
 
@@ -321,7 +328,14 @@ fn internal_build_otel_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<OtelLayerData<impl Layer<Registry>>, Error> {
     // Default tracer always has empty headers and no extra resources
-    let (provider, tracer) = build_tracer(MetadataMap::new(), vec![], override_exporter)?;
+    let (provider, tracer) = build_tracer(
+        CustomTracerKey {
+            extra_headers: MetadataMap::new(),
+            extra_resources: vec![],
+            extra_attributes: vec![],
+        },
+        override_exporter,
+    )?;
     opentelemetry::global::set_tracer_provider(provider.clone());
     let shutdown_tasks = TaskTracker::new();
     // Initialize empty - will be set once later via set_static_otlp_traces_extra_headers
@@ -537,6 +551,7 @@ pub trait RouterExt<S> {
 /// 5. The custom `SdkTracer` is preserved in a `moka::Cache` for subsequent requests.
 const TENSORZERO_OTLP_HEADERS_PREFIX: &str = "tensorzero-otlp-traces-extra-header-";
 const TENSORZERO_OTLP_RESOURCE_PREFIX: &str = "tensorzero-otlp-traces-extra-resource-";
+const TENSORZERO_OTLP_ATTRIBUTE_PREFIX: &str = "tensorzero-otlp-traces-extra-attribute-";
 
 /// Converts a HashMap of config headers to a MetadataMap
 fn config_headers_to_metadata(
@@ -563,6 +578,26 @@ fn config_headers_to_metadata(
     Ok(metadata)
 }
 
+fn json_to_otel_value(value: serde_json::Value) -> Result<opentelemetry::Value, Error> {
+    match value {
+        serde_json::Value::Null => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Null is not a valid OpenTelemetry attribute value".to_string(),
+        })),
+        serde_json::Value::Bool(value) => Ok(opentelemetry::Value::Bool(value)),
+        serde_json::Value::Number(_) => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Numbers are not yet supported for OpenTelemetry attributes values"
+                .to_string(),
+        })),
+        serde_json::Value::String(value) => Ok(opentelemetry::Value::String(value.into())),
+        serde_json::Value::Array(_) => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "Arrays are not yet supported for OpenTelemetry attribute values".to_string(),
+        })),
+        serde_json::Value::Object(_) => Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "JSON objects are not valid OpenTelemetry attribute values".to_string(),
+        })),
+    }
+}
+
 // Removes all of the headers prefixed with `TENSORZERO_OTLP_HEADERS_PREFIX`.
 // If any are present (or we have static config headers), constructs a `CustomTracerKey` with all of the  matching header/value pairs
 // (with `TENSORZERO_OTLP_HEADERS_PREFIX` removed from the header name).
@@ -578,6 +613,7 @@ fn extract_tensorzero_headers(
         .cloned()
         .unwrap_or_default();
     let mut extra_resources = vec![];
+    let mut extra_attributes = vec![];
     for (name, value) in headers {
         if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_HEADERS_PREFIX) {
             let key: AsciiMetadataKey = suffix.parse().map_err(|e| {
@@ -599,22 +635,43 @@ fn extract_tensorzero_headers(
         if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_RESOURCE_PREFIX) {
             let key = suffix.to_string();
             let value = value.to_str().map_err(|e| {
-                Error::new(ErrorDetails::Observability {
+                Error::new(ErrorDetails::InvalidRequest {
                     message: format!("Failed to parse `{TENSORZERO_OTLP_RESOURCE_PREFIX}` header `{suffix}` value as valid string: {e}"),
                 })
             })?.to_string();
             extra_resources.push(KeyValue::new(key, value));
         }
+        if let Some(suffix) = name.as_str().strip_prefix(TENSORZERO_OTLP_ATTRIBUTE_PREFIX) {
+            let key = suffix.to_string();
+            let value = value.to_str().map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Failed to parse `{TENSORZERO_OTLP_ATTRIBUTE_PREFIX}` header `{suffix}` value as valid string: {e}"),
+                })
+            })?;
+            let value_json = serde_json::from_str::<serde_json::Value>(value).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Failed to parse `{TENSORZERO_OTLP_ATTRIBUTE_PREFIX}` header `{suffix}` value as valid JSON: {e}"),
+                })
+            })?;
+            let value_otel = json_to_otel_value(value_json).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Failed to convert `{TENSORZERO_OTLP_ATTRIBUTE_PREFIX}` header `{suffix}` value to OpenTelemetry attribute value: {e}"),
+                })
+            })?;
+            extra_attributes.push(KeyValue::new(key, value_otel));
+        }
     }
-    if !metadata.is_empty() || !extra_resources.is_empty() {
+    if !metadata.is_empty() || !extra_resources.is_empty() || !extra_attributes.is_empty() {
         tracing::debug!(
-            "Using custom OTLP configuration: metadata={:?}, extra_resources={:?}",
+            "Using custom OTLP configuration: metadata={:?}, extra_resources={:?}, extra_attributes={:?}",
             metadata,
-            extra_resources
+            extra_resources,
+            extra_attributes
         );
         return Ok(Some(CustomTracerKey {
             extra_headers: metadata,
             extra_resources,
+            extra_attributes,
         }));
     }
     Ok(None)
