@@ -1,6 +1,5 @@
 import { Code } from "./code";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
-import { TooltipProvider } from "./tooltip";
 import { Check } from "../icons/Icons";
 import { X } from "lucide-react";
 import KVChip from "./KVChip";
@@ -31,67 +30,65 @@ export function CommitHash({ tags }: CommitHashProps) {
   const branchLink = origin ? `${origin}/tree/${displayBranch}` : undefined;
 
   return (
-    <TooltipProvider delayDuration={100}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {commitLink ? (
-            displayBranch ? (
-              <KVChip
-                k={displayBranch}
-                v={shortHash}
-                k_href={branchLink}
-                v_href={commitLink}
-                separator="@"
-              />
-            ) : (
-              <Code className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
-                {shortHash}
-              </Code>
-            )
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {commitLink ? (
+          displayBranch ? (
+            <KVChip
+              k={displayBranch}
+              v={shortHash}
+              k_href={branchLink}
+              v_href={commitLink}
+              separator="@"
+            />
           ) : (
             <Code className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
               {shortHash}
             </Code>
+          )
+        ) : (
+          <Code className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 font-mono text-xs">
+            {shortHash}
+          </Code>
+        )}
+      </TooltipTrigger>
+      <TooltipContent>
+        <div style={{ minWidth: 220 }}>
+          {message && (
+            <div>
+              <strong>Message:</strong> {message}
+            </div>
           )}
-        </TooltipTrigger>
-        <TooltipContent>
-          <div style={{ minWidth: 220 }}>
-            {message && (
-              <div>
-                <strong>Message:</strong> {message}
-              </div>
-            )}
-            {branch && (
-              <div>
-                <strong>Branch:</strong> {branch}
-              </div>
-            )}
-            {author && (
-              <div>
-                <strong>Author:</strong> {author}{" "}
-                {author_email && `(${author_email})`}
-              </div>
-            )}
-            {origin && (
-              <div>
-                <strong>Origin:</strong> {origin}
-              </div>
-            )}
-            {untracked_files !== undefined && (
-              <div className="flex items-center gap-1">
-                <strong>Untracked files:</strong>
-                {untracked_files ? <Check /> : <X />}
-              </div>
-            )}
-            {modified_files !== undefined && (
-              <div className="flex items-center gap-1">
-                <strong>Modified files:</strong>
-                {modified_files ? <Check /> : <X />}
-              </div>
-            )}
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+          {branch && (
+            <div>
+              <strong>Branch:</strong> {branch}
+            </div>
+          )}
+          {author && (
+            <div>
+              <strong>Author:</strong> {author}{" "}
+              {author_email && `(${author_email})`}
+            </div>
+          )}
+          {origin && (
+            <div>
+              <strong>Origin:</strong> {origin}
+            </div>
+          )}
+          {untracked_files !== undefined && (
+            <div className="flex items-center gap-1">
+              <strong>Untracked files:</strong>
+              {untracked_files ? <Check /> : <X />}
+            </div>
+          )}
+          {modified_files !== undefined && (
+            <div className="flex items-center gap-1">
+              <strong>Modified files:</strong>
+              {modified_files ? <Check /> : <X />}
+            </div>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 }

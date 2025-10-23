@@ -2,7 +2,6 @@ import { Badge } from "~/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import type { ReactNode } from "react";
@@ -131,21 +130,19 @@ const SectionHeader: React.FC<SectionHeaderProps> = ({
     )}
 
     {badge && (
-      <TooltipProvider>
-        <Tooltip delayDuration={0}>
-          <TooltipTrigger asChild>
-            <Badge
-              variant="outline"
-              className="ml-1 px-2 py-0.5 text-xs font-medium"
-            >
-              {badge.name}
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p className="max-w-xs">{badge.tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip delayDuration={0}>
+        <TooltipTrigger asChild>
+          <Badge
+            variant="outline"
+            className="ml-1 px-2 py-0.5 text-xs font-medium"
+          >
+            {badge.name}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="max-w-xs">{badge.tooltip}</p>
+        </TooltipContent>
+      </Tooltip>
     )}
 
     {children}

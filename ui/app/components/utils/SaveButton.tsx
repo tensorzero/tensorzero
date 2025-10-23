@@ -3,7 +3,6 @@ import { Button } from "~/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
@@ -19,25 +18,20 @@ export function SaveButton({
   disabled = false,
 }: SaveButtonProps) {
   return (
-    <TooltipProvider>
-      <Tooltip delayDuration={100}>
-        <TooltipTrigger asChild>
-          <Button
-            variant="outline"
-            size="iconSm"
-            onClick={onClick}
-            className={className}
-            disabled={disabled}
-            aria-label="Save"
-            title="Save"
-          >
-            <Save className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>Save</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="outline"
+          size="iconSm"
+          onClick={onClick}
+          className={className}
+          disabled={disabled}
+          aria-label="Save"
+        >
+          <Save className="h-4 w-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Save</TooltipContent>
+    </Tooltip>
   );
 }
