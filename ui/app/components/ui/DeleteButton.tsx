@@ -1,10 +1,17 @@
 import { Button } from "~/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+
+// TODO (GabrielBianconi): We could consider unifying this component with:
+//
+// - ui/app/components/utils/DeleteButton.tsx
+// - The delete button in the querybuilder PR
+//
+// They're all somewhat different so let's snooze for now.
 
 interface DeleteButtonProps {
   label?: string;
@@ -27,24 +34,5 @@ export function DeleteButton({ label, onDelete }: DeleteButtonProps) {
       </TooltipTrigger>
       {label && <TooltipContent>{label}</TooltipContent>}
     </Tooltip>
-  );
-}
-
-interface AddButtonProps {
-  label?: string;
-  onAdd?: () => void;
-}
-
-export function AddButton({ label, onAdd }: AddButtonProps) {
-  return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={onAdd}
-      className="flex items-center gap-2"
-    >
-      <Plus className="h-4 w-4" />
-      {label}
-    </Button>
   );
 }

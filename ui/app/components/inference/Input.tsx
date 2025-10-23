@@ -17,9 +17,10 @@ import {
   EmptyMessage,
   TemplateMessage,
 } from "~/components/layout/SnippetContent";
-import { renderContentBlock } from "~/components/layout/ContentBlockRenderer";
+import { ContentBlockRenderer } from "~/components/layout/ContentBlockRenderer";
 import type { JsonObject } from "type-fest";
-import { AddButton, DeleteButton } from "~/components/ui/EditButtons";
+import { AddButton } from "~/components/ui/AddButton";
+import { DeleteButton } from "~/components/ui/DeleteButton";
 
 interface InputProps {
   messages: DisplayInputMessage[];
@@ -178,27 +179,33 @@ export default function Input({
               {message.content.length === 0 && !isEditing && (
                 <EmptyMessage message="Empty message" />
               )}
-              {message.content.map((block, contentBlockIndex) =>
-                renderContentBlock({
-                  block,
-                  key: `${messageIndex}-${contentBlockIndex}`,
-                  isEditing,
-                  onChange: (updatedContentBlock) =>
+              {message.content.map((block, contentBlockIndex) => (
+                <ContentBlockRenderer
+                  key={`${messageIndex}-${contentBlockIndex}`}
+                  block={block}
+                  isEditing={isEditing}
+                  onChange={(updatedContentBlock) =>
                     onContentBlockChange(
                       messageIndex,
                       contentBlockIndex,
                       updatedContentBlock as DisplayInputMessageContent,
-                    ),
-                  action: isEditing && (
-                    <DeleteButton
-                      onDelete={() =>
-                        onDeleteContentBlock?.(messageIndex, contentBlockIndex)
-                      }
-                      label="Delete content block"
-                    />
-                  ),
-                }),
-              )}
+                    )
+                  }
+                  action={
+                    isEditing && (
+                      <DeleteButton
+                        onDelete={() =>
+                          onDeleteContentBlock?.(
+                            messageIndex,
+                            contentBlockIndex,
+                          )
+                        }
+                        label="Delete content block"
+                      />
+                    )
+                  }
+                />
+              ))}
               {isEditing && (
                 <div className="flex items-center gap-2 py-2">
                   <AddButton

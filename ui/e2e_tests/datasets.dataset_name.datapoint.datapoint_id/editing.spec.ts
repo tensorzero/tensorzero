@@ -43,7 +43,9 @@ test.describe("System Message - Text", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify system message was added
     await expect(page.getByText(systemMessageText1)).toBeVisible();
@@ -68,7 +70,9 @@ test.describe("System Message - Text", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify system message was edited
     await expect(page.getByText(systemMessageText2)).toBeVisible();
@@ -99,7 +103,9 @@ test.describe("System Message - Text", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify system message was deleted
     await expect(page.getByText("system", { exact: true })).not.toBeVisible();
@@ -157,7 +163,9 @@ test.describe("System Message - Template", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify template was added
     const templateSection = page
@@ -188,7 +196,9 @@ test.describe("System Message - Template", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify template was edited
     await expect(templateSection).toBeVisible();
@@ -230,7 +240,6 @@ test.describe("User Message - Text Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100); // Small delay for DOM updates
     }
 
     // Find a user message section and add text block
@@ -258,7 +267,9 @@ test.describe("User Message - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 1: Verify text block was added
     await expect(page.getByText(textContent)).toBeVisible();
@@ -273,7 +284,6 @@ test.describe("User Message - Text Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     // Find the text editor again
@@ -291,7 +301,9 @@ test.describe("User Message - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(textContent2)).toBeVisible();
@@ -307,7 +319,6 @@ test.describe("User Message - Text Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     // Find delete button for the newly added content block (last one)
@@ -322,7 +333,9 @@ test.describe("User Message - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify text block was deleted
     await expect(page.getByText(textContent2)).not.toBeVisible();
@@ -361,9 +374,6 @@ test.describe("User Message - Tool Call Blocks", () => {
     await expect(addToolCallButton).toBeVisible();
     await addToolCallButton.click();
 
-    // Wait for tool call editor to appear
-    await page.waitForTimeout(500);
-
     // Fill in tool call details
     const toolId = "tool_" + v7();
     const toolName = "test_tool_" + Math.random().toString(36).substring(2, 10);
@@ -389,7 +399,9 @@ test.describe("User Message - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify tool call visible (check for tool name and ID)
     await expect(page.getByText(toolName)).toBeVisible();
@@ -418,7 +430,9 @@ test.describe("User Message - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // CRITICAL: Verify ID is still there after edit
     await expect(page.getByText(toolId)).toBeVisible();
@@ -438,7 +452,9 @@ test.describe("User Message - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify tool call removed
     await expect(page.getByText(toolId)).not.toBeVisible();
@@ -471,8 +487,6 @@ test.describe("User Message - Tool Result Blocks", () => {
     await expect(addToolResultButton).toBeVisible();
     await addToolResultButton.click();
 
-    await page.waitForTimeout(500);
-
     // Fill tool result details
     const resultId = "result_" + v7();
     const resultName =
@@ -496,7 +510,9 @@ test.describe("User Message - Tool Result Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 1: Verify tool result was added
     await expect(page.getByText(resultName)).toBeVisible();
@@ -521,7 +537,9 @@ test.describe("User Message - Tool Result Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify edited content
     await expect(page.getByText(resultValue2)).toBeVisible();
@@ -541,7 +559,9 @@ test.describe("User Message - Tool Result Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify tool result was deleted
     await expect(page.getByText(resultValue2)).not.toBeVisible();
@@ -573,7 +593,6 @@ test.describe("User Message - Template Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     const userSection = page.getByTestId("message-user").first();
@@ -590,8 +609,6 @@ test.describe("User Message - Template Blocks", () => {
       .last();
     await expect(addTemplateButton).toBeVisible();
     await addTemplateButton.click();
-
-    await page.waitForTimeout(500);
 
     // Select template name
     const templateNameInput = userSection.locator('input[type="text"]').first();
@@ -615,7 +632,9 @@ test.describe("User Message - Template Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 2: Verify template was added
     await expect(page.getByText(templateValue1)).toBeVisible();
@@ -643,7 +662,9 @@ test.describe("User Message - Template Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify template was edited
     await expect(page.getByText(templateValue2)).toBeVisible();
@@ -678,7 +699,6 @@ test.describe("User Message - Thought Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100); // Small delay for DOM updates
     }
 
     // Find a user message section and add thought block
@@ -706,7 +726,9 @@ test.describe("User Message - Thought Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 1: Verify thought block was added
     await expect(page.getByText(thoughtContent)).toBeVisible();
@@ -721,7 +743,6 @@ test.describe("User Message - Thought Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     // Find the thought editor again
@@ -739,7 +760,9 @@ test.describe("User Message - Thought Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(thoughtContent2)).toBeVisible();
@@ -755,7 +778,6 @@ test.describe("User Message - Thought Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     // Find delete button for the newly added content block (last one)
@@ -770,7 +792,9 @@ test.describe("User Message - Thought Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify thought block was deleted
     await expect(page.getByText(thoughtContent2)).not.toBeVisible();
@@ -809,9 +833,6 @@ test.describe("Assistant Message - Text Blocks", () => {
     await expect(addAssistantButton).toBeVisible();
     await addAssistantButton.click();
 
-    // Wait for the assistant section to appear
-    await page.waitForTimeout(300);
-
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
@@ -822,7 +843,6 @@ test.describe("Assistant Message - Text Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100); // Small delay for DOM updates
     }
 
     // Now add text to the assistant message
@@ -848,7 +868,9 @@ test.describe("Assistant Message - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 1: Verify text block was added
     await expect(page.getByText(textContent)).toBeVisible();
@@ -863,7 +885,6 @@ test.describe("Assistant Message - Text Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     const textEditor2 = assistantSection
@@ -880,7 +901,9 @@ test.describe("Assistant Message - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(textContent2)).toBeVisible();
@@ -896,7 +919,6 @@ test.describe("Assistant Message - Text Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     const deleteButton = assistantSection
@@ -909,7 +931,9 @@ test.describe("Assistant Message - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify text block was deleted
     await expect(page.getByText(textContent2)).not.toBeVisible();
@@ -944,9 +968,6 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
     await expect(addAssistantButton).toBeVisible();
     await addAssistantButton.click();
 
-    // Wait for the assistant section to appear
-    await page.waitForTimeout(300);
-
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
@@ -956,7 +977,6 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // Add tool call to assistant message
@@ -967,9 +987,6 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
       .last();
     await expect(addToolCallButton).toBeVisible();
     await addToolCallButton.click();
-
-    // Wait for tool call editor to appear
-    await page.waitForTimeout(500);
 
     // Fill in tool call details
     const toolId = "tool_" + v7();
@@ -996,7 +1013,9 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify tool call visible (check for tool name and ID)
     await expect(page.getByText(toolName)).toBeVisible();
@@ -1018,7 +1037,6 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     // Modify the arguments
@@ -1034,7 +1052,9 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // CRITICAL: Verify ID is still there after edit
     await expect(page.getByText(toolId)).toBeVisible();
@@ -1050,7 +1070,6 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     const deleteButton = assistantSection
@@ -1063,7 +1082,9 @@ test.describe("Assistant Message - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify tool call removed
     await expect(page.getByText(toolId)).not.toBeVisible();
@@ -1097,9 +1118,6 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
     await expect(addAssistantButton).toBeVisible();
     await addAssistantButton.click();
 
-    // Wait for the assistant section to appear
-    await page.waitForTimeout(300);
-
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
@@ -1109,7 +1127,6 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // Add tool result to assistant message
@@ -1120,8 +1137,6 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
       .last();
     await expect(addToolResultButton).toBeVisible();
     await addToolResultButton.click();
-
-    await page.waitForTimeout(500);
 
     // Fill tool result details
     const resultId = "result_" + v7();
@@ -1146,7 +1161,9 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 1: Verify tool result was added
     await expect(page.getByText(resultName)).toBeVisible();
@@ -1163,7 +1180,6 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     const resultEditor2 = assistantSection
@@ -1180,7 +1196,9 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify edited content
     await expect(page.getByText(resultValue2)).toBeVisible();
@@ -1196,7 +1214,6 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     const deleteButton = assistantSection
@@ -1209,7 +1226,9 @@ test.describe("Assistant Message - Tool Result Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify tool result was deleted
     await expect(page.getByText(resultValue2)).not.toBeVisible();
@@ -1242,9 +1261,6 @@ test.describe("Assistant Message - Template Blocks", () => {
     await expect(addAssistantButton).toBeVisible();
     await addAssistantButton.click();
 
-    // Wait for the assistant section to appear
-    await page.waitForTimeout(300);
-
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
@@ -1254,7 +1270,6 @@ test.describe("Assistant Message - Template Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // Add a template (greeting_template is defined in custom_template_test)
@@ -1263,8 +1278,6 @@ test.describe("Assistant Message - Template Blocks", () => {
       .last();
     await expect(addTemplateButton).toBeVisible();
     await addTemplateButton.click();
-
-    await page.waitForTimeout(500);
 
     // Select template name
     const templateNameInput = assistantSection
@@ -1290,7 +1303,9 @@ test.describe("Assistant Message - Template Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 1: Verify template was added
     await expect(page.getByText(templateValue1)).toBeVisible();
@@ -1305,7 +1320,6 @@ test.describe("Assistant Message - Template Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     const templateEditor2 = assistantSection
@@ -1327,7 +1341,9 @@ test.describe("Assistant Message - Template Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify template was edited
     await expect(page.getByText(templateValue2)).toBeVisible();
@@ -1343,7 +1359,6 @@ test.describe("Assistant Message - Template Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     const deleteButton = assistantSection
@@ -1357,7 +1372,9 @@ test.describe("Assistant Message - Template Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify template was deleted
     await expect(page.getByText(templateValue2)).not.toBeVisible();
@@ -1391,9 +1408,6 @@ test.describe("Assistant Message - Thought Blocks", () => {
     await expect(addAssistantButton).toBeVisible();
     await addAssistantButton.click();
 
-    // Wait for the assistant section to appear
-    await page.waitForTimeout(300);
-
     // Find the newly added assistant message section
     const assistantSection = page.getByTestId("message-assistant").first();
 
@@ -1404,7 +1418,6 @@ test.describe("Assistant Message - Thought Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100); // Small delay for DOM updates
     }
 
     // Now add thought to the assistant message
@@ -1430,7 +1443,9 @@ test.describe("Assistant Message - Thought Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 1: Verify thought block was added
     await expect(page.getByText(thoughtContent)).toBeVisible();
@@ -1445,7 +1460,6 @@ test.describe("Assistant Message - Thought Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     const thoughtEditor2 = assistantSection
@@ -1462,7 +1476,9 @@ test.describe("Assistant Message - Thought Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(thoughtContent2)).toBeVisible();
@@ -1478,7 +1494,6 @@ test.describe("Assistant Message - Thought Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     const deleteButton = assistantSection
@@ -1491,7 +1506,9 @@ test.describe("Assistant Message - Thought Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify thought block was deleted
     await expect(page.getByText(thoughtContent2)).not.toBeVisible();
@@ -1527,7 +1544,6 @@ test.describe("Output - Text Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // Find Output section
@@ -1556,7 +1572,9 @@ test.describe("Output - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Step 1: Verify text block was added
     await expect(page.getByText(textContent)).toBeVisible();
@@ -1571,7 +1589,6 @@ test.describe("Output - Text Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     const textEditor2 = outputSection
@@ -1588,7 +1605,9 @@ test.describe("Output - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify edited content is visible and old content is gone
     await expect(page.getByText(textContent2)).toBeVisible();
@@ -1604,7 +1623,6 @@ test.describe("Output - Text Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     const deleteButton = outputSection
@@ -1618,7 +1636,9 @@ test.describe("Output - Text Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify text block was deleted
     await expect(page.getByText(textContent2)).not.toBeVisible();
@@ -1650,7 +1670,6 @@ test.describe("Output - Tool Call Blocks", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // Find Output section
@@ -1665,16 +1684,12 @@ test.describe("Output - Tool Call Blocks", () => {
     await expect(addToolCallButton).toBeVisible();
     await addToolCallButton.click();
 
-    // Wait for tool call editor to appear
-    await page.waitForTimeout(500);
-
     // Expand all "Show more" buttons again (tool call might be collapsed)
     const showMoreButtonAfterAdd = page
       .getByRole("button", { name: "Show more" })
       .first();
     while ((await showMoreButtonAfterAdd.count()) > 0) {
       await showMoreButtonAfterAdd.click();
-      await page.waitForTimeout(100);
     }
 
     // Fill in tool call details
@@ -1700,7 +1715,9 @@ test.describe("Output - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify tool call visible (check for unique content and ID)
     await expect(page.getByText("test thought")).toBeVisible();
@@ -1724,7 +1741,6 @@ test.describe("Output - Tool Call Blocks", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     // Modify the arguments
@@ -1740,7 +1756,9 @@ test.describe("Output - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // TODO (#4058): we are not roundtripping IDs
     // await expect(page.getByText(toolId)).toBeVisible();
@@ -1756,7 +1774,6 @@ test.describe("Output - Tool Call Blocks", () => {
       .first();
     while ((await showMoreButton3.count()) > 0) {
       await showMoreButton3.click();
-      await page.waitForTimeout(100);
     }
 
     const deleteButton = outputSection
@@ -1770,7 +1787,9 @@ test.describe("Output - Tool Call Blocks", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify tool call removed
     await expect(page.getByText(toolId)).not.toBeVisible();
@@ -1805,7 +1824,6 @@ test.describe("Message Operations", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // Count existing user messages
@@ -1827,7 +1845,6 @@ test.describe("Message Operations", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     // Add content to new message
@@ -1850,7 +1867,9 @@ test.describe("Message Operations", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify
     await expect(page.getByText(newMessageContent)).toBeVisible();
@@ -1870,7 +1889,9 @@ test.describe("Message Operations", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify message removed
     await expect(page.getByText(newMessageContent)).not.toBeVisible();
@@ -1894,7 +1915,6 @@ test.describe("Message Operations", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // Count existing assistant messages
@@ -1920,7 +1940,6 @@ test.describe("Message Operations", () => {
       .first();
     while ((await showMoreButton2.count()) > 0) {
       await showMoreButton2.click();
-      await page.waitForTimeout(100);
     }
 
     // Add content to assistant message
@@ -1945,7 +1964,9 @@ test.describe("Message Operations", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify
     await expect(page.getByText(assistantContent)).toBeVisible();
@@ -1964,7 +1985,9 @@ test.describe("Message Operations", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify removed
     await expect(page.getByText(assistantContent)).not.toBeVisible();
@@ -2004,7 +2027,6 @@ test.describe("Delete Action Buttons", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // In edit mode, delete buttons should be visible
@@ -2061,7 +2083,6 @@ test.describe("Edge Cases", () => {
       .first();
     while ((await showMoreButton.count()) > 0) {
       await showMoreButton.click();
-      await page.waitForTimeout(100);
     }
 
     // Add multiple content blocks to one message
@@ -2085,7 +2106,6 @@ test.describe("Edge Cases", () => {
     });
     await expect(addToolCallButton).toBeVisible();
     await addToolCallButton.click();
-    await page.waitForTimeout(300);
 
     const toolName =
       "mixed_tool_" + Math.random().toString(36).substring(2, 10);
@@ -2104,7 +2124,9 @@ test.describe("Edge Cases", () => {
       timeout: 10000,
     });
     await page.waitForLoadState("networkidle", { timeout: 5000 });
-    await page.waitForTimeout(2000);
+    await page
+      .getByRole("button", { name: "Edit" })
+      .waitFor({ state: "visible" });
 
     // Verify both content blocks are visible
     await expect(page.getByText(textContent)).toBeVisible();

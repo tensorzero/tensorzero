@@ -20,11 +20,10 @@ export type RenderableContentBlock =
   | ContentBlockChatOutput;
 
 /**
- * Props for the renderContentBlock function
+ * Props for the ContentBlockRenderer component
  */
-interface RenderContentBlockProps {
+interface ContentBlockRendererProps {
   block: RenderableContentBlock;
-  key: string;
   isEditing?: boolean;
   onChange?: (updatedContentBlock: RenderableContentBlock) => void;
   action?: ReactNode;
@@ -38,20 +37,18 @@ interface RenderContentBlockProps {
  * Renders a content block based on its type
  * Supports both input and output content blocks
  */
-export function renderContentBlock({
+export function ContentBlockRenderer({
   block,
-  key,
   isEditing,
   onChange,
   action,
   thoughtFooter,
-}: RenderContentBlockProps): ReactNode {
+}: ContentBlockRendererProps): ReactNode {
   switch (block.type) {
     // Text content (unstructured text from function/variant with no schema)
     case "text": {
       return (
         <TextMessage
-          key={key}
           label="Text"
           content={block.text}
           isEditing={isEditing}
@@ -67,7 +64,6 @@ export function renderContentBlock({
     case "raw_text": {
       return (
         <TextMessage
-          key={key}
           label="Raw Text"
           content={block.value}
           isEditing={isEditing}
@@ -82,7 +78,6 @@ export function renderContentBlock({
     case "missing_function_text": {
       return (
         <TextMessage
-          key={key}
           label="Text (Missing Function Config)"
           content={block.value}
           isEditing={isEditing}
@@ -116,7 +111,6 @@ export function renderContentBlock({
 
         return (
           <ToolCallMessage
-            key={key}
             toolName={toolName}
             toolRawName={toolRawName}
             toolArguments={toolArguments}
@@ -162,7 +156,6 @@ export function renderContentBlock({
 
         return (
           <ToolCallMessage
-            key={key}
             toolName={inputBlock.name}
             toolRawName={inputBlock.name}
             toolArguments={inputBlock.arguments}
@@ -190,7 +183,6 @@ export function renderContentBlock({
     case "tool_result": {
       return (
         <ToolResultMessage
-          key={key}
           toolName={block.name}
           toolResult={block.result}
           toolResultId={block.id}
@@ -210,20 +202,17 @@ export function renderContentBlock({
     case "file": {
       return block.file.mime_type.startsWith("image/") ? (
         <ImageMessage
-          key={key}
           url={block.file.dataUrl}
           downloadName={`tensorzero_${block.storage_path.path}`}
         />
       ) : block.file.mime_type.startsWith("audio/") ? (
         <AudioMessage
-          key={key}
           fileData={block.file.dataUrl}
           mimeType={block.file.mime_type}
           filePath={block.storage_path.path}
         />
       ) : (
         <FileMessage
-          key={key}
           fileData={block.file.dataUrl}
           mimeType={block.file.mime_type}
           filePath={block.storage_path.path}
@@ -232,13 +221,12 @@ export function renderContentBlock({
     }
 
     case "file_error": {
-      return <FileErrorMessage key={key} error="Failed to retrieve file" />;
+      return <FileErrorMessage error="Failed to retrieve file" />;
     }
 
     case "unknown": {
       return (
         <TextMessage
-          key={key}
           label="Unknown Content"
           content={JSON.stringify(block.data)}
           action={action}
@@ -249,7 +237,6 @@ export function renderContentBlock({
     case "thought": {
       return (
         <TextMessage
-          key={key}
           label="Thought"
           content={block.text || ""}
           isEditing={isEditing}
@@ -269,7 +256,6 @@ export function renderContentBlock({
     case "template": {
       return (
         <TemplateMessage
-          key={key}
           templateName={block.name}
           templateArguments={block.arguments}
           isEditing={isEditing}
