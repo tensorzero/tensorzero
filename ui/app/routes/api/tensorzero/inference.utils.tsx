@@ -366,6 +366,7 @@ export function prepareInferenceActionRequest(
     additional_tools: null,
     tool_choice: null,
     parallel_tool_calls: null,
+    provider_tools: null,
   };
 
   // Prepare request based on source and function type
@@ -611,6 +612,7 @@ function resolvedFileContentToClientFile(
   const data = content.file.dataUrl.split(",")[1];
   return {
     type: "file",
+    file_type: "base64",
     mime_type: content.file.mime_type,
     data: data,
   };

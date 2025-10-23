@@ -28,16 +28,17 @@ use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_00
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0011::Migration0011;
 use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0013::Migration0013;
 use tensorzero_core::db::clickhouse::migration_manager::MigrationTableState;
+use tensorzero_core::db::feedback::FeedbackQueries;
+use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
+
 use tensorzero_core::db::clickhouse::migration_manager::{
     self, get_all_migration_records, make_all_migrations, MigrationRecordDatabaseInsert,
     RunMigrationArgs, RunMigrationManagerArgs,
 };
 use tensorzero_core::db::clickhouse::test_helpers::{get_clickhouse, CLICKHOUSE_URL};
 use tensorzero_core::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
-use tensorzero_core::db::SelectQueries;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::error::{Error, ErrorDetails};
-use tensorzero_core::inference::types::ModelInferenceDatabaseInsert;
 
 pub struct DeleteDbOnDrop {
     database: String,
@@ -867,7 +868,7 @@ async fn test_clickhouse_migration_manager() {
     assert_eq!(feedback_by_variant.variant_name, "dummy");
     assert_eq!(feedback_by_variant.count, 2500000);
     assert_eq!(feedback_by_variant.mean, 1.0);
-    assert_eq!(feedback_by_variant.variance, 0.0);
+    assert_eq!(feedback_by_variant.variance, Some(0.0));
 
     // Since we've already ran all of the migrations, we shouldn't have written any new records
     // except for Migration0029 (which runs every time)

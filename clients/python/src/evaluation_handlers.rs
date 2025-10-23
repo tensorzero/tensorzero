@@ -43,8 +43,8 @@ fn compute_evaluation_stats(
         progress_bar: None,
     };
     // Extract evaluators from the evaluation config
-    let EvaluationConfig::Static(static_config) = &*evaluation_config;
-    let computed_stats = stats.compute_stats(&static_config.evaluators);
+    let EvaluationConfig::Inference(inference_config) = &*evaluation_config;
+    let computed_stats = stats.compute_stats(&inference_config.evaluators);
     serialize_to_dict(py, &computed_stats)
 }
 

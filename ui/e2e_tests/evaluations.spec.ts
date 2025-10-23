@@ -22,7 +22,7 @@ test("push the new run button, launch an evaluation", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.getByText("Select a dataset").click();
   await page.waitForTimeout(500);
-  await page.getByRole("option", { name: "foo" }).click();
+  await page.locator('[data-dataset-name="foo"]').click();
   await page.waitForTimeout(500);
   await page.getByText("Select a variant").click();
   await page.waitForTimeout(500);
@@ -69,7 +69,7 @@ test("push the new run button, launch an image evaluation", async ({
   await page.waitForTimeout(500);
   await page.getByText("Select a dataset").click();
   await page.waitForTimeout(500);
-  await page.getByRole("option", { name: "baz" }).click();
+  await page.locator('[data-dataset-name="baz"]').click();
   await page.waitForTimeout(500);
   await page.getByText("Select a variant").click();
   await page.waitForTimeout(500);
@@ -116,7 +116,7 @@ test("run evaluation with dataset with no output", async ({ page }) => {
   await page.waitForTimeout(500);
   await page.getByText("Select a dataset").click();
   await page.waitForTimeout(500);
-  await page.getByRole("option", { name: "no_output" }).click();
+  await page.locator('[data-dataset-name="no_output"]').click();
   await page.waitForTimeout(500);
   await page.getByText("Select a variant").click();
   await page.waitForTimeout(500);

@@ -39,8 +39,7 @@ use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::gcp_vertex_gemini::process_output_schema;
-use super::helpers::inject_extra_request_data_and_send;
-use super::openai::convert_stream_error;
+use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
 pub const PROVIDER_TYPE: &str = "google_ai_studio_gemini";
@@ -454,6 +453,7 @@ impl<'a> GeminiContent<'a> {
                     thought @ Thought {
                         text,
                         signature,
+                        summary: _,
                         provider_type: _,
                     },
                 ) => {
@@ -879,6 +879,8 @@ fn content_part_to_tensorzero_chunk(
                     id: last_thought_id.to_string(),
                     text: Some(text),
                     signature: part.thought_signature,
+                    summary_id: None,
+                    summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -891,6 +893,8 @@ fn content_part_to_tensorzero_chunk(
                     id: last_thought_id.to_string(),
                     text: None,
                     signature: part.thought_signature,
+                    summary_id: None,
+                    summary_text: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -923,6 +927,8 @@ fn content_part_to_tensorzero_chunk(
         output.push(ContentBlockChunk::Thought(ThoughtChunk {
             id: last_thought_id.to_string(),
             text: None,
+            summary_id: None,
+            summary_text: None,
             signature: Some(thought_signature),
             provider_type: Some(PROVIDER_TYPE.to_string()),
         }));
@@ -988,6 +994,7 @@ fn convert_part_to_output(
                 output.push(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: Some(text),
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -998,6 +1005,7 @@ fn convert_part_to_output(
                 output.push(ContentBlockOutput::Thought(Thought {
                     signature: part.thought_signature,
                     text: None,
+                    summary: None,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
                 }));
             }
@@ -1026,6 +1034,7 @@ fn convert_part_to_output(
         output.push(ContentBlockOutput::Thought(Thought {
             signature: Some(thought_signature),
             text: None,
+            summary: None,
             provider_type: Some(PROVIDER_TYPE.to_string()),
         }));
     }
@@ -1539,6 +1548,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),

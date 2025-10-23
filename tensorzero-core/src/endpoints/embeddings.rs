@@ -13,6 +13,7 @@ use crate::{
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     inference::types::Usage,
+    rate_limiting::ScopeInfo,
 };
 
 use super::inference::InferenceCredentials;
@@ -65,6 +66,10 @@ pub async fn embeddings(
         dimensions: params.dimensions,
         encoding_format: params.encoding_format,
     };
+
+    // NOTE: we do not support tags for embeddings yet
+    // we should fix this once the tags are implemented
+    let tags = Arc::new(HashMap::default());
     let dryrun = params.dryrun.unwrap_or(false);
     let clients = InferenceClients {
         http_client: http_client.clone(),
@@ -72,12 +77,11 @@ pub async fn embeddings(
         cache_options: (params.cache_options, dryrun).into(),
         clickhouse_connection_info: clickhouse_connection_info.clone(),
         postgres_connection_info: postgres_connection_info.clone(),
-        // NOTE: we do not support tags for embeddings yet
-        // we should fix this once the tags are implemented
-        tags: Arc::new(HashMap::default()),
+        tags: tags.clone(),
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
+        scope_info: ScopeInfo { tags: tags.clone() },
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)

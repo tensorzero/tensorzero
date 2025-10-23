@@ -63,8 +63,9 @@ use uuid::Uuid;
 use crate::{
     config::{MetricConfig, MetricConfigOptimize},
     db::{
-        postgres::PostgresConnectionInfo, ExperimentationQueries, FeedbackByVariant,
-        HealthCheckable, SelectQueries,
+        feedback::{FeedbackByVariant, FeedbackQueries},
+        postgres::PostgresConnectionInfo,
+        ExperimentationQueries, HealthCheckable,
     },
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     variant::VariantInfo,
@@ -88,6 +89,7 @@ pub struct TrackAndStopConfig {
     epsilon: f64,
     #[ts(skip)]
     update_period: Duration,
+    min_prob: Option<f64>,
     #[serde(skip)]
     metric_optimize: MetricConfigOptimize,
     #[serde(skip)]
@@ -178,6 +180,7 @@ pub struct UninitializedTrackAndStopConfig {
     delta: f64,
     epsilon: f64,
     update_period_s: u64,
+    min_prob: Option<f64>,
 }
 
 impl UninitializedTrackAndStopConfig {
@@ -247,6 +250,36 @@ impl UninitializedTrackAndStopConfig {
             }));
         }
 
+        // Validate min_prob if provided
+        if let Some(min_prob) = self.min_prob {
+            // Check non-negative
+            if min_prob < 0.0 {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("Track-and-Stop min_prob must be >= 0, got {min_prob}"),
+                }));
+            }
+
+            // Check finite
+            if !min_prob.is_finite() {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!("Track-and-Stop min_prob must be finite, got {min_prob}"),
+                }));
+            }
+
+            // Check that min_prob * num_candidate_variants <= 1.0
+            // Only candidate variants get probability mass, not fallback variants
+            let num_candidate_variants = self.candidate_variants.len();
+            let min_total_prob = min_prob * (num_candidate_variants as f64);
+            if min_total_prob > 1.0 + 1e-9 {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Track-and-Stop min_prob is too large: min_prob ({min_prob}) * num_candidate_variants ({num_candidate_variants}) = {min_total_prob} > 1.0. \
+                        The sum of minimum probabilities for candidate variants cannot exceed 1.0."
+                    ),
+                }));
+            }
+        }
+
         let keep_variants: Vec<String> = self
             .candidate_variants
             .iter()
@@ -269,6 +302,7 @@ impl UninitializedTrackAndStopConfig {
             delta: self.delta,
             epsilon: self.epsilon,
             update_period: Duration::from_secs(self.update_period_s),
+            min_prob: self.min_prob,
             metric_optimize: metric_config.optimize,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(keep_variants),
@@ -281,7 +315,7 @@ impl UninitializedTrackAndStopConfig {
 impl VariantSampler for TrackAndStopConfig {
     async fn setup(
         &self,
-        db: Arc<dyn SelectQueries + Send + Sync>,
+        db: Arc<dyn FeedbackQueries + Send + Sync>,
         function_name: &str,
         postgres: &PostgresConnectionInfo,
         cancel_token: CancellationToken,
@@ -346,6 +380,7 @@ impl VariantSampler for TrackAndStopConfig {
             min_samples_per_variant: self.min_samples_per_variant,
             epsilon: self.epsilon,
             delta: self.delta,
+            min_prob: self.min_prob,
             metric_optimize: self.metric_optimize,
             cancel_token,
         }));
@@ -410,7 +445,7 @@ impl VariantSampler for TrackAndStopConfig {
 }
 
 struct ProbabilityUpdateTaskArgs {
-    db: Arc<dyn SelectQueries + Send + Sync>,
+    db: Arc<dyn FeedbackQueries + Send + Sync>,
     candidate_variants: Arc<Vec<String>>,
     metric_name: String,
     function_name: String,
@@ -419,6 +454,7 @@ struct ProbabilityUpdateTaskArgs {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
+    min_prob: Option<f64>,
     metric_optimize: MetricConfigOptimize,
     cancel_token: CancellationToken,
 }
@@ -444,6 +480,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
         min_samples_per_variant,
         epsilon,
         delta,
+        min_prob,
         metric_optimize,
         cancel_token,
     } = args;
@@ -466,6 +503,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
             min_samples_per_variant,
             epsilon,
             delta,
+            min_prob,
             metric_optimize,
         })
         .await;
@@ -480,7 +518,7 @@ async fn probability_update_task(args: ProbabilityUpdateTaskArgs) {
 }
 
 struct UpdateProbabilitiesArgs<'a> {
-    db: &'a (dyn SelectQueries + Send + Sync),
+    db: &'a (dyn FeedbackQueries + Send + Sync),
     candidate_variants: &'a Arc<Vec<String>>,
     metric_name: &'a str,
     function_name: &'a str,
@@ -488,6 +526,7 @@ struct UpdateProbabilitiesArgs<'a> {
     min_samples_per_variant: u64,
     epsilon: f64,
     delta: f64,
+    min_prob: Option<f64>,
     metric_optimize: MetricConfigOptimize,
 }
 
@@ -501,6 +540,7 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
         min_samples_per_variant,
         epsilon,
         delta,
+        min_prob,
         metric_optimize,
     } = args;
 
@@ -518,6 +558,7 @@ async fn update_probabilities(args: UpdateProbabilitiesArgs<'_>) -> Result<(), T
             min_samples_per_variant,
             delta,
             epsilon,
+            min_prob,
             metric_optimize,
         )
     })
@@ -645,6 +686,7 @@ impl TrackAndStopState {
         min_samples_per_variant: u64,
         delta: f64,
         epsilon: f64,
+        min_prob: Option<f64>,
         metric_optimize: MetricConfigOptimize,
     ) -> Result<Self, TrackAndStopError> {
         let variant_performances = if variant_performances.len() > candidate_variants.len() {
@@ -707,7 +749,7 @@ impl TrackAndStopState {
                                 feedback: variant_performances,
                                 epsilon: Some(epsilon),
                                 variance_floor: None,
-                                min_prob: None,
+                                min_prob,
                                 reg0: None,
                                 metric_optimize,
                             },
@@ -774,7 +816,7 @@ impl TrackAndStopState {
                                 feedback: bandit_feedback,
                                 epsilon: Some(epsilon),
                                 variance_floor: None,
-                                min_prob: None,
+                                min_prob,
                                 reg0: None,
                                 metric_optimize,
                             },
@@ -865,7 +907,8 @@ impl TrackAndStopState {
 mod tests {
     use super::*;
     use crate::config::{ErrorContext, SchemaData};
-    use crate::db::{clickhouse::ClickHouseConnectionInfo, FeedbackByVariant};
+    use crate::db::clickhouse::ClickHouseConnectionInfo;
+    use crate::db::feedback::FeedbackByVariant;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
 
     // Helper function to create test variants
@@ -903,7 +946,7 @@ mod tests {
             variant_name: variant_name.to_string(),
             count,
             mean,
-            variance,
+            variance: Some(variance),
         }
     }
 
@@ -1330,6 +1373,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -1357,6 +1401,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -1392,6 +1437,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Min,
         )
         .unwrap();
@@ -1418,6 +1464,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -1448,6 +1495,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Min,
         )
         .unwrap();
@@ -1484,6 +1532,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -1512,6 +1561,7 @@ mod tests {
             10,
             0.05,
             0.0,
+            None,
             MetricConfigOptimize::Min,
         );
 
@@ -1714,6 +1764,7 @@ mod tests {
             5,
             0.1,
             0.0,
+            None,
             MetricConfigOptimize::Max,
         )
         .expect("state builds");
@@ -1750,6 +1801,7 @@ mod tests {
             5,
             0.1,
             0.0,
+            None,
             MetricConfigOptimize::Min,
         )
         .expect("state builds");
@@ -1782,6 +1834,7 @@ mod tests {
             delta: 0.05,
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
+            min_prob: Some(0.001),
             metric_optimize: MetricConfigOptimize::Min,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
@@ -1790,7 +1843,7 @@ mod tests {
         };
 
         let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
-            as Arc<dyn SelectQueries + Send + Sync>;
+            as Arc<dyn FeedbackQueries + Send + Sync>;
         let postgres = PostgresConnectionInfo::new_mock(true);
         let cancel_token = CancellationToken::new();
 
@@ -1828,6 +1881,7 @@ mod tests {
             delta: 0.05,
             epsilon: 0.1,
             update_period: Duration::from_secs(60),
+            min_prob: Some(0.001),
             metric_optimize: MetricConfigOptimize::Max,
             state: Arc::new(ArcSwap::new(Arc::new(
                 TrackAndStopState::nursery_from_variants(vec!["A".to_string(), "B".to_string()]),
@@ -1836,7 +1890,7 @@ mod tests {
         };
 
         let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
-            as Arc<dyn SelectQueries + Send + Sync>;
+            as Arc<dyn FeedbackQueries + Send + Sync>;
         let cancel_token = CancellationToken::new();
 
         // Test with disabled Postgres
@@ -1884,5 +1938,124 @@ mod tests {
             result.is_err(),
             "Setup should fail when Postgres is unhealthy"
         );
+    }
+
+    // Tests for min_prob parameter being passed through correctly
+    #[test]
+    fn test_min_prob_passed_to_estimate_optimal_probabilities() {
+        // Test that min_prob is passed through to estimate_optimal_probabilities
+        // by checking that all probabilities respect the min_prob constraint
+        let candidates = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let performances = vec![
+            create_feedback("A", 20, 0.5, 0.1),
+            create_feedback("B", 20, 0.6, 0.2),
+            create_feedback("C", 20, 0.55, 0.15),
+        ];
+
+        let min_prob = 0.15; // Set a high min_prob to ensure it's enforced
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            Some(min_prob),
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
+
+        match state {
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities,
+            } => {
+                // All probabilities should be >= min_prob
+                for (variant_name, &prob) in &sampling_probabilities {
+                    assert!(
+                        prob >= min_prob - 1e-6,
+                        "Variant {variant_name} has probability {prob} which violates min_prob {min_prob}"
+                    );
+                }
+            }
+            _ => panic!("Expected BanditsOnly state, got {state:?}"),
+        }
+    }
+
+    #[test]
+    fn test_min_prob_none_uses_default() {
+        // Test that when min_prob is None, the default value from
+        // estimate_optimal_probabilities (1e-6) is used
+        let candidates = vec!["A".to_string(), "B".to_string()];
+        let performances = vec![
+            create_feedback("A", 20, 0.5, 0.1),
+            create_feedback("B", 20, 0.6, 0.2),
+        ];
+
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            None, // min_prob is None, should use default
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
+
+        match state {
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities,
+            } => {
+                // All probabilities should be >= default min_prob (1e-6)
+                for (variant_name, &prob) in &sampling_probabilities {
+                    assert!(
+                        prob >= 1e-6 - 1e-9,
+                        "Variant {variant_name} has probability {prob} which is less than default min_prob"
+                    );
+                }
+            }
+            _ => panic!("Expected BanditsOnly state, got {state:?}"),
+        }
+    }
+
+    #[test]
+    fn test_min_prob_in_nursery_and_bandits_state() {
+        // Test that min_prob is respected in NurseryAndBandits state
+        let candidates = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let performances = vec![
+            create_feedback("A", 20, 0.5, 0.1),  // Above cutoff
+            create_feedback("B", 20, 0.6, 0.2),  // Above cutoff
+            create_feedback("C", 5, 0.55, 0.15), // Below cutoff, in nursery
+        ];
+
+        let min_prob = 0.2;
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            Some(min_prob),
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
+
+        match state {
+            TrackAndStopState::NurseryAndBandits {
+                nursery,
+                sampling_probabilities,
+            } => {
+                // Nursery should have variant C
+                assert_eq!(nursery.variants, vec!["C".to_string()]);
+
+                // All bandit probabilities should be >= min_prob
+                for (variant_name, &prob) in &sampling_probabilities {
+                    assert!(
+                        prob >= min_prob - 1e-6,
+                        "Variant {variant_name} has probability {prob} which violates min_prob {min_prob}"
+                    );
+                }
+            }
+            _ => panic!("Expected NurseryAndBandits state, got {state:?}"),
+        }
     }
 }

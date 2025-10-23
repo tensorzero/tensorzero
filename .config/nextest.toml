@@ -26,14 +26,14 @@ slow-timeout = { period = "20s", terminate-after = 3 }
 # We also define cargo aliases for common use-cases (e.g. `cargo test-e2e`)
 [profile.e2e]
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
-default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse))"
+default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse) | test(db::))"
 junit.path = "junit.xml"
 
 [profile.batch]
 default-filter = 'test(batch)'
 
 [profile.clickhouse]
-default-filter = 'test(test_dummy_only) | test(clickhouse)'
+default-filter = 'test(test_dummy_only) | test(clickhouse) | test(db::)'
 junit.path = "junit.xml"
 
 [profile.optimization]
@@ -105,6 +105,11 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 # Web search is very slow
 filter = 'test(websearch)'
 slow-timeout = { period = "120s", terminate-after = 2 }
+
+# Image inference seems to be slow on GCP Vertex Gemini, so we give it a longer timeout
+[[profile.default.overrides]]
+filter = 'test(providers::gcp_vertex_gemini::test_image_inference)'
+slow-timeout = { period = "60s", terminate-after = 2 }
 
 [[profile.default.overrides]]
 filter = 'binary(e2e) and test(providers::sglang::)'

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint, Role};
+use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
@@ -164,6 +164,7 @@ async fn test_create_delete_datapoint_chat() {
                     "output": [
                         {
                             "type": "tool_call",
+                            "id": "call_123",
                             "name": "get_temperature",
                             "arguments": { "location": "New York", "units": "fahrenheit" }
                         }
@@ -445,7 +446,7 @@ async fn test_insert_datapoint_chat_bad_request() {
                         ]
                     },
                     "output": [
-                        {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
+                        {"type": "tool_call", "id": "call_123", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
                     ]
                 }
             ]
@@ -513,7 +514,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                 ]
             },
             "output": [
-                {"type": "tool_call", "name": "get_humidity", "arguments": {"location": "New York", "units": "fahrenheit"}}
+                {"type": "tool_call", "id": "call_123", "name": "get_humidity", "arguments": {"location": "New York", "units": "fahrenheit"}}
             ],
             "tool_params": tool_params,
             "is_custom": true,
@@ -553,7 +554,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
                 ]
             },
             "output": [
-                {"type": "tool_call", "name": "get_temperature", "arguments": {"city": "New York", "units": "fahrenheit"}}
+                {"type": "tool_call", "id": "call_123", "name": "get_temperature", "arguments": {"city": "New York", "units": "fahrenheit"}}
             ],
             "tool_params": tool_params,
             "is_custom": true,
@@ -592,7 +593,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
             ]
         },
         "output": [
-            {"type": "tool_call", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
+            {"type": "tool_call", "id": "call_123", "name": "get_temperature", "arguments": {"location": "New York", "units": "fahrenheit"}}
         ],
         "tool_params": tool_params,
         "is_custom": true,
@@ -643,7 +644,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "id": id.to_string(),
       "episode_id": null,
       "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
-      "output": "[{\"type\":\"tool_call\",\"arguments\":{\"location\":\"New York\",\"units\":\"fahrenheit\"},\"id\":\"\",\"name\":\"get_temperature\",\"raw_arguments\":\"{\\\"location\\\":\\\"New York\\\",\\\"units\\\":\\\"fahrenheit\\\"}\",\"raw_name\":\"get_temperature\"}]",
+      "output": "[{\"type\":\"tool_call\",\"arguments\":{\"location\":\"New York\",\"units\":\"fahrenheit\"},\"id\":\"call_123\",\"name\":\"get_temperature\",\"raw_arguments\":\"{\\\"location\\\":\\\"New York\\\",\\\"units\\\":\\\"fahrenheit\\\"}\",\"raw_name\":\"get_temperature\"}]",
       "tool_params": "{\"tools_available\":[{\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}",
       "tags": {},
       "auxiliary": "",
@@ -2927,4 +2928,153 @@ async fn test_stale_dataset_mixed_staled_fresh() {
         .unwrap();
     let new_staled_at = datapoint1["staled_at"].as_str().unwrap();
     assert_eq!(staled_at, new_staled_at);
+}
+
+/// Regression test for bug where tool call IDs were being lost during datapoint updates.
+/// This test verifies that when a datapoint with tool calls containing IDs is updated
+/// multiple times, the IDs are preserved across all updates.
+#[tokio::test]
+async fn test_update_datapoint_preserves_tool_call_ids() {
+    use tensorzero_core::{
+        db::datasets::{ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries},
+        inference::types::{ContentBlockChatOutput, StoredInput},
+        tool::ToolCallOutput,
+    };
+
+    let episode_id = Uuid::now_v7();
+    let clickhouse = get_clickhouse().await;
+    let client = Client::new();
+    let dataset_name = "test_preserve_tool_call_ids";
+    let datapoint_id = Uuid::now_v7();
+
+    // Define tool params for the function
+    let tool_params_json = json!({
+        "tools_available": [
+            {
+                "name": "load_wikipedia_page",
+                "description": "Load a Wikipedia page",
+                "parameters": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "title": {
+                            "type": "string",
+                            "description": "The title of the Wikipedia page"
+                        }
+                    },
+                    "required": ["title"],
+                    "additionalProperties": false
+                },
+                "strict": false
+            }
+        ],
+        "tool_choice": "auto",
+        "parallel_tool_calls": true
+    });
+
+    // Create initial datapoint using ClickHouse directly with tool calls that have IDs
+    let initial_datapoint = ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.to_string(),
+        function_name: "basic_test".to_string(),
+        id: datapoint_id,
+        name: Some("test_datapoint".to_string()),
+        episode_id: Some(episode_id),
+        input: StoredInput {
+            system: None,
+            messages: vec![],
+        },
+        output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            id: "call_eBDiwZRnNnddB5tjcQbhdY0s".to_string(),
+            name: Some("load_wikipedia_page".to_string()),
+            raw_name: "load_wikipedia_page".to_string(),
+            arguments: Some(json!({"title": "Russell Hoban"})),
+            raw_arguments: "{\"title\": \"Russell Hoban\"}".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    };
+
+    clickhouse
+        .insert_datapoint(&DatapointInsert::Chat(initial_datapoint))
+        .await
+        .unwrap();
+
+    // Sleep for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify the initial datapoint has the correct tool call IDs
+    let datapoint = clickhouse
+        .get_datapoints(dataset_name, &[datapoint_id], false)
+        .await
+        .unwrap();
+    let Datapoint::Chat(chat_datapoint) = &datapoint[0] else {
+        panic!("Datapoint is not a chat datapoint");
+    };
+    let output = chat_datapoint.output.as_ref().unwrap();
+    if let ContentBlockChatOutput::ToolCall(first_tool_call_pre_update) = &output[0] {
+        assert_eq!(
+            first_tool_call_pre_update.id,
+            "call_eBDiwZRnNnddB5tjcQbhdY0s"
+        );
+    } else {
+        panic!("First content block is not a tool call");
+    };
+
+    // Update the datapoint (change input slightly) - IDs should be preserved
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "basic_test",
+            "input": {
+                "system": {"assistant_name": "TestBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Tell me about Russell Hoban xyz abc"}]
+                    }
+                ]
+            },
+            "output": [
+                {
+                    "type": "tool_call",
+                    "id": "call_eBDiwZRnNnddB5tjcQbhdY0s",
+                    "name": "load_wikipedia_page",
+                    "arguments": {"title": "Russell Hoban xyz abc"}
+                },
+            ],
+            "tool_params": tool_params_json,
+            "episode_id": episode_id,
+            "is_custom": true,
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(resp.status().is_success());
+
+    // Sleep for ClickHouse to become consistent
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Verify IDs are still preserved after update
+    let datapoint = clickhouse
+        .get_datapoints(dataset_name, &[datapoint_id], false)
+        .await
+        .unwrap();
+    let Datapoint::Chat(chat_datapoint) = &datapoint[0] else {
+        panic!("Datapoint is not a chat datapoint");
+    };
+    let output = chat_datapoint.output.as_ref().unwrap();
+    let ContentBlockChatOutput::ToolCall(first_tool_call_post_update) = &output[0] else {
+        panic!("First content block is not a tool call");
+    };
+    assert_eq!(
+        first_tool_call_post_update.id,
+        "call_eBDiwZRnNnddB5tjcQbhdY0s"
+    );
 }

@@ -126,10 +126,17 @@ class ToolCall(ContentBlock):
 
 
 @dataclass
+class ThoughtSummaryBlock:
+    text: str
+    type: str = "summary_text"
+
+
+@dataclass
 class Thought(ContentBlock):
     text: Optional[str] = None
     type: str = "thought"
     signature: Optional[str] = None
+    summary: Optional[List["ThoughtSummaryBlock"]] = None
     _internal_provider_type: Optional[str] = None
 
 
@@ -150,6 +157,7 @@ class UnknownContentBlock(ContentBlock):
 
 class FinishReason(str, Enum):
     STOP = "stop"
+    STOP_SEQUENCE = "stop_sequence"
     LENGTH = "length"
     TOOL_CALL = "tool_call"
     CONTENT_FILTER = "content_filter"
@@ -246,9 +254,14 @@ def parse_content_block(block: Dict[str, Any]) -> ContentBlock:
             type=block_type,
         )
     elif block_type == "thought":
+        summary_data = block.get("summary")
+        summary = None
+        if summary_data:
+            summary = [ThoughtSummaryBlock(text=s["text"]) for s in summary_data]
         return Thought(
-            text=block["text"],
+            text=block.get("text"),
             signature=block.get("signature"),
+            summary=summary,
             type=block_type,
         )
     elif block_type == "unknown":
@@ -290,9 +303,11 @@ class ToolCallChunk(ContentBlockChunk):
 @dataclass
 class ThoughtChunk(ContentBlockChunk):
     id: str
-    text: str
+    text: Optional[str]
     type: str = "thought"
     signature: Optional[str] = None
+    summary_id: Optional[str] = None
+    summary_text: Optional[str] = None
     _internal_provider_type: Optional[str] = None
 
 
@@ -373,7 +388,13 @@ def parse_content_block_chunk(block: Dict[str, Any]) -> ContentBlockChunk:
             raw_name=block["raw_name"],
         )
     elif block_type == "thought":
-        return ThoughtChunk(id=block["id"], text=block["text"])
+        return ThoughtChunk(
+            id=block["id"],
+            text=block.get("text"),
+            signature=block.get("signature"),
+            summary_id=block.get("summary_id"),
+            summary_text=block.get("summary_text"),
+        )
     else:
         raise ValueError(f"Unknown content block type: {block}")
 
@@ -417,25 +438,47 @@ class TensorZeroError(BaseTensorZeroError):
 
 
 @dataclass
-class DynamicEvaluationRunResponse:
+class WorkflowEvaluationRunResponse:
     run_id: UUID
 
 
-def parse_dynamic_evaluation_run_response(
+def parse_workflow_evaluation_run_response(
     data: Dict[str, Any],
-) -> DynamicEvaluationRunResponse:
-    return DynamicEvaluationRunResponse(run_id=UUID(data["run_id"]))
+) -> WorkflowEvaluationRunResponse:
+    return WorkflowEvaluationRunResponse(run_id=UUID(data["run_id"]))
 
 
 @dataclass
-class DynamicEvaluationRunEpisodeResponse:
+class WorkflowEvaluationRunEpisodeResponse:
     episode_id: UUID
 
 
+def parse_workflow_evaluation_run_episode_response(
+    data: Dict[str, Any],
+) -> WorkflowEvaluationRunEpisodeResponse:
+    return WorkflowEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
+
+
+# DEPRECATED: Use WorkflowEvaluationRunResponse instead
+DynamicEvaluationRunResponse = WorkflowEvaluationRunResponse
+
+
+# DEPRECATED: Use parse_workflow_evaluation_run_response instead
+def parse_dynamic_evaluation_run_response(
+    data: Dict[str, Any],
+) -> WorkflowEvaluationRunResponse:
+    return parse_workflow_evaluation_run_response(data)
+
+
+# DEPRECATED: Use WorkflowEvaluationRunEpisodeResponse instead
+DynamicEvaluationRunEpisodeResponse = WorkflowEvaluationRunEpisodeResponse
+
+
+# DEPRECATED: Use parse_workflow_evaluation_run_episode_response instead
 def parse_dynamic_evaluation_run_episode_response(
     data: Dict[str, Any],
-) -> DynamicEvaluationRunEpisodeResponse:
-    return DynamicEvaluationRunEpisodeResponse(episode_id=UUID(data["episode_id"]))
+) -> WorkflowEvaluationRunEpisodeResponse:
+    return parse_workflow_evaluation_run_episode_response(data)
 
 
 @dataclass
@@ -498,12 +541,16 @@ ToolChoice = Union[Literal["auto", "required", "off"], Dict[Literal["specific"],
 
 
 @dataclass
-class InferenceFilterTreeNode(ABC, HasTypeField):
+class InferenceFilter(ABC, HasTypeField):
     pass
 
 
+# DEPRECATED: Use InferenceFilter instead
+InferenceFilterTreeNode = InferenceFilter
+
+
 @dataclass
-class FloatMetricFilter(InferenceFilterTreeNode):
+class FloatMetricFilter(InferenceFilter):
     metric_name: str
     value: float
     comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
@@ -511,14 +558,14 @@ class FloatMetricFilter(InferenceFilterTreeNode):
 
 
 @dataclass
-class BooleanMetricFilter(InferenceFilterTreeNode):
+class BooleanMetricFilter(InferenceFilter):
     metric_name: str
     value: bool
     type: str = "boolean_metric"
 
 
 @dataclass
-class TagFilter(InferenceFilterTreeNode):
+class TagFilter(InferenceFilter):
     key: str
     value: str
     comparison_operator: Literal["=", "!="]
@@ -526,27 +573,27 @@ class TagFilter(InferenceFilterTreeNode):
 
 
 @dataclass
-class TimeFilter(InferenceFilterTreeNode):
+class TimeFilter(InferenceFilter):
     time: str  # RFC 3339 timestamp
     comparison_operator: Literal["<", "<=", "=", ">", ">=", "!="]
     type: str = "time"
 
 
 @dataclass
-class AndFilter(InferenceFilterTreeNode):
-    children: List[InferenceFilterTreeNode]
+class AndFilter(InferenceFilter):
+    children: List[InferenceFilter]
     type: str = "and"
 
 
 @dataclass
-class OrFilter(InferenceFilterTreeNode):
-    children: List[InferenceFilterTreeNode]
+class OrFilter(InferenceFilter):
+    children: List[InferenceFilter]
     type: str = "or"
 
 
 @dataclass
-class NotFilter(InferenceFilterTreeNode):
-    child: InferenceFilterTreeNode
+class NotFilter(InferenceFilter):
+    child: InferenceFilter
     type: str = "not"
 
 

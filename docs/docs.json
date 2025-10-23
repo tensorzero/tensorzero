@@ -43,6 +43,7 @@
             "pages": [
               "gateway/index",
               "gateway/call-any-llm",
+              "gateway/call-the-openai-responses-api",
               "gateway/create-a-prompt-template",
               "gateway/generate-embeddings",
               "gateway/tutorial",
@@ -61,6 +62,7 @@
               "gateway/data-model",
               {
                 "group": "API Reference",
+                "expanded": true,
                 "pages": [
                   "gateway/api-reference/inference",
                   "gateway/api-reference/inference-openai-compatible",
@@ -80,18 +82,20 @@
             "pages": [
               "evaluations/index",
               {
-                "group": "Static Evaluations",
+                "group": "Inference Evaluations",
+                "expanded": true,
                 "pages": [
-                  "evaluations/static-evaluations/tutorial",
-                  "evaluations/static-evaluations/configuration-reference",
-                  "evaluations/static-evaluations/cli-reference"
+                  "evaluations/inference-evaluations/tutorial",
+                  "evaluations/inference-evaluations/configuration-reference",
+                  "evaluations/inference-evaluations/cli-reference"
                 ]
               },
               {
-                "group": "Dynamic Evaluations",
+                "group": "Workflow Evaluations",
+                "expanded": true,
                 "pages": [
-                  "evaluations/dynamic-evaluations/tutorial",
-                  "evaluations/dynamic-evaluations/api-reference"
+                  "evaluations/workflow-evaluations/tutorial",
+                  "evaluations/workflow-evaluations/api-reference"
                 ]
               }
             ]
@@ -114,10 +118,10 @@
             "group": "Operations",
             "pages": [
               "operations/manage-credentials",
+              "operations/enforce-custom-rate-limits",
               "operations/organize-your-configuration",
               "operations/export-opentelemetry-traces",
               "operations/export-prometheus-metrics",
-              "operations/enforce-custom-rate-limits",
               "operations/extend-tensorzero"
             ]
           }
@@ -204,27 +208,27 @@
   "redirects": [
     {
       "source": "/evaluations/cli-reference",
-      "destination": "/evaluations/static-evaluations/cli-reference"
+      "destination": "/evaluations/inference-evaluations/cli-reference"
     },
     {
       "source": "/evaluations/cli-reference/",
-      "destination": "/evaluations/static-evaluations/cli-reference"
+      "destination": "/evaluations/inference-evaluations/cli-reference"
     },
     {
       "source": "/evaluations/configuration-reference",
-      "destination": "/evaluations/static-evaluations/configuration-reference"
+      "destination": "/evaluations/inference-evaluations/configuration-reference"
     },
     {
       "source": "/evaluations/configuration-reference/",
-      "destination": "/evaluations/static-evaluations/configuration-reference"
+      "destination": "/evaluations/inference-evaluations/configuration-reference"
     },
     {
       "source": "/evaluations/tutorial",
-      "destination": "/evaluations/static-evaluations/tutorial"
+      "destination": "/evaluations/inference-evaluations/tutorial"
     },
     {
       "source": "/evaluations/tutorial/",
-      "destination": "/evaluations/static-evaluations/tutorial"
+      "destination": "/evaluations/inference-evaluations/tutorial"
     },
     {
       "source": "/gateway/api-reference",
@@ -337,6 +341,46 @@
     {
       "source": "/gateway/guides/prompt-templates-schemas/",
       "destination": "/gateway/create-a-prompt-template"
+    },
+    {
+      "source": "/evaluations/static-evaluations/cli-reference",
+      "destination": "/evaluations/inference-evaluations/cli-reference"
+    },
+    {
+      "source": "/evaluations/static-evaluations/cli-reference/",
+      "destination": "/evaluations/inference-evaluations/cli-reference"
+    },
+    {
+      "source": "/evaluations/static-evaluations/configuration-reference",
+      "destination": "/evaluations/inference-evaluations/configuration-reference"
+    },
+    {
+      "source": "/evaluations/static-evaluations/configuration-reference/",
+      "destination": "/evaluations/inference-evaluations/configuration-reference"
+    },
+    {
+      "source": "/evaluations/static-evaluations/tutorial",
+      "destination": "/evaluations/inference-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/static-evaluations/tutorial/",
+      "destination": "/evaluations/inference-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/dynamic-evaluations/tutorial",
+      "destination": "/evaluations/workflow-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/dynamic-evaluations/tutorial/",
+      "destination": "/evaluations/workflow-evaluations/tutorial"
+    },
+    {
+      "source": "/evaluations/dynamic-evaluations/api-reference",
+      "destination": "/evaluations/workflow-evaluations/api-reference"
+    },
+    {
+      "source": "/evaluations/dynamic-evaluations/api-reference/",
+      "destination": "/evaluations/workflow-evaluations/api-reference"
     }
   ]
 }

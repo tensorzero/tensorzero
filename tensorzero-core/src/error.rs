@@ -202,7 +202,7 @@ pub enum ErrorDetails {
     BatchNotFound {
         id: Uuid,
     },
-    BadImageFetch {
+    BadFileFetch {
         url: Url,
         message: String,
     },
@@ -279,6 +279,14 @@ pub enum ErrorDetails {
     InferenceNotFound {
         inference_id: Uuid,
     },
+    FatalStreamError {
+        message: String,
+        provider_type: String,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_request: Option<String>,
+        #[serde(serialize_with = "serialize_if_debug")]
+        raw_response: Option<String>,
+    },
     InferenceServer {
         message: String,
         provider_type: String,
@@ -348,7 +356,7 @@ pub enum ErrorDetails {
     InvalidDiclConfig {
         message: String,
     },
-    InvalidDynamicEvaluationRun {
+    InvalidWorkflowEvaluationRun {
         episode_id: Uuid,
     },
     InvalidTensorzeroUuid {
@@ -573,7 +581,7 @@ impl ErrorDetails {
             ErrorDetails::Cache { .. } => tracing::Level::WARN,
             ErrorDetails::ChannelWrite { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConnection { .. } => tracing::Level::ERROR,
-            ErrorDetails::BadImageFetch { .. } => tracing::Level::ERROR,
+            ErrorDetails::BadFileFetch { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseConfiguration { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseDeserialization { .. } => tracing::Level::ERROR,
             ErrorDetails::ClickHouseMigration { .. } => tracing::Level::ERROR,
@@ -593,6 +601,7 @@ impl ErrorDetails {
             ErrorDetails::InferenceClient { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceNotFound { .. } => tracing::Level::WARN,
             ErrorDetails::InferenceServer { .. } => tracing::Level::ERROR,
+            ErrorDetails::FatalStreamError { .. } => tracing::Level::ERROR,
             ErrorDetails::InferenceTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::ModelProviderTimeout { .. } => tracing::Level::WARN,
             ErrorDetails::ModelTimeout { .. } => tracing::Level::WARN,
@@ -606,7 +615,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidClientMode { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDiclConfig { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidDatasetName { .. } => tracing::Level::WARN,
-            ErrorDetails::InvalidDynamicEvaluationRun { .. } => tracing::Level::ERROR,
+            ErrorDetails::InvalidWorkflowEvaluationRun { .. } => tracing::Level::ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidTensorzeroUuid { .. } => tracing::Level::WARN,
             ErrorDetails::InvalidFunctionVariants { .. } => tracing::Level::ERROR,
@@ -714,9 +723,10 @@ impl ErrorDetails {
                 status_code.unwrap_or_else(|| StatusCode::INTERNAL_SERVER_ERROR)
             }
             ErrorDetails::Base64 { .. } => StatusCode::INTERNAL_SERVER_ERROR,
-            ErrorDetails::BadImageFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::BadFileFetch { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceNotFound { .. } => StatusCode::NOT_FOUND,
             ErrorDetails::InferenceServer { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            ErrorDetails::FatalStreamError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InferenceTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelProviderTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
             ErrorDetails::ModelTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
@@ -736,7 +746,7 @@ impl ErrorDetails {
             ErrorDetails::InvalidDiclConfig { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidDatasetName { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicEndpoint { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::InvalidDynamicEvaluationRun { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::InvalidWorkflowEvaluationRun { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidDynamicTemplatePath { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::InvalidFunctionVariants { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::InvalidInferenceOutputSource { .. } => StatusCode::BAD_REQUEST,
@@ -896,8 +906,8 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidInferenceTarget { message } => {
                 write!(f, "Invalid inference target: {message}")
             }
-            ErrorDetails::BadImageFetch { url, message } => {
-                write!(f, "Error fetching image from {url}: {message}")
+            ErrorDetails::BadFileFetch { url, message } => {
+                write!(f, "Error fetching file from {url}: {message}")
             }
             ErrorDetails::ObjectStoreUnconfigured { block_type } => {
                 write!(f, "Object storage is not configured. You must configure `[object_storage]` before making requests containing a `{block_type}` content block. If you don't want to use object storage, you can explicitly set `object_storage.type = \"disabled\"` in your configuration.")
@@ -1065,6 +1075,30 @@ impl std::fmt::Display for ErrorDetails {
                     write!(f, "Error from {provider_type} server: {message}")
                 }
             }
+            ErrorDetails::FatalStreamError {
+                message,
+                provider_type,
+                raw_request,
+                raw_response,
+            } => {
+                // `debug` defaults to false so we don't log raw request and response by default
+                if *DEBUG.get().unwrap_or(&false) {
+                    write!(
+                        f,
+                        "Inference stream closed due to error from {} server: {}{}{}",
+                        provider_type,
+                        message,
+                        raw_request
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw request: {r}")),
+                        raw_response
+                            .as_ref()
+                            .map_or(String::new(), |r| format!("\nRaw response: {r}"))
+                    )
+                } else {
+                    write!(f, "Inference stream closed due to error from {provider_type} server: {message}")
+                }
+            }
             ErrorDetails::InferenceTimeout { variant_name } => {
                 write!(f, "Inference timed out for variant: {variant_name}")
             }
@@ -1096,10 +1130,10 @@ impl std::fmt::Display for ErrorDetails {
             ErrorDetails::InvalidDatasetName { dataset_name } => {
                 write!(f, "Invalid dataset name: {dataset_name}. Datasets cannot be named \"builder\" or begin with \"tensorzero::\"")
             }
-            ErrorDetails::InvalidDynamicEvaluationRun { episode_id } => {
+            ErrorDetails::InvalidWorkflowEvaluationRun { episode_id } => {
                 write!(
                     f,
-                    "Dynamic evaluation run not found for episode id: {episode_id}",
+                    "Workflow evaluation run not found for episode id: {episode_id}",
                 )
             }
             ErrorDetails::InvalidDynamicEndpoint { url } => {

@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::inference::types::ProviderInferenceResponseStreamInner;
-use crate::providers::openai::convert_stream_error;
+use crate::inference::types::{ProviderInferenceResponseStreamInner, ThoughtSummaryBlock};
+use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
 use futures::{future::try_join_all, Stream};
@@ -164,25 +164,29 @@ impl OpenAIResponsesResponse<'_> {
                     encrypted_content,
                     summary,
                 }) => {
+                    let mut thought = Thought {
+                        text: None,
+                        signature: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                        summary: None,
+                    };
+
                     if let Some(encrypted_content) = encrypted_content {
-                        output.push(ContentBlockOutput::Thought(Thought {
-                            text: None,
-                            signature: Some(encrypted_content),
-                            provider_type: Some(PROVIDER_TYPE.to_string()),
-                        }));
+                        thought.signature = Some(encrypted_content);
                     }
 
-                    for summary in summary {
-                        match summary {
+                    let tensorzero_summary = summary
+                        .into_iter()
+                        .map(|summary| match summary {
                             OpenAIResponsesReasoningSummary::SummaryText { text } => {
-                                output.push(ContentBlockOutput::Thought(Thought {
-                                    text: Some(text.to_string()),
-                                    signature: None,
-                                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                                }));
+                                ThoughtSummaryBlock::SummaryText {
+                                    text: text.to_string(),
+                                }
                             }
-                        }
-                    }
+                        })
+                        .collect::<Vec<ThoughtSummaryBlock>>();
+                    thought.summary = Some(tensorzero_summary);
+                    output.push(ContentBlockOutput::Thought(thought));
                 }
                 FlattenUnknown::Unknown(data) => {
                     output.push(ContentBlockOutput::Unknown {
@@ -250,7 +254,7 @@ impl<'a> OpenAITool<'a> {
 #[serde(untagged)]
 pub enum OpenAIResponsesTool<'a> {
     Function(OpenAIResponsesFunctionTool<'a>),
-    BuiltIn(Value),
+    BuiltIn(&'a Value),
 }
 
 #[derive(Serialize, Debug)]
@@ -309,10 +313,12 @@ pub enum OpenAIResponsesToolReference {
 
 impl<'a> OpenAIResponsesRequest<'a> {
     pub async fn new(
-        model: &'a str,
+        openai_model: &'a str,
         request: &'a ModelInferenceRequest<'_>,
         include_encrypted_reasoning: bool,
-        built_in_tools: &[Value],
+        built_in_tools: &'a [Value],
+        tensorzero_model_name: &str,
+        tensorzero_model_provider_name: &str,
     ) -> Result<OpenAIResponsesRequest<'a>, Error> {
         let mut tools: Vec<OpenAIResponsesTool> = request
             .tool_config
@@ -326,11 +332,16 @@ impl<'a> OpenAIResponsesRequest<'a> {
             })
             .unwrap_or_default();
         // If we have built_in_tools we should extend the list with them
-        tools.extend(
-            built_in_tools
-                .iter()
-                .map(|tool| OpenAIResponsesTool::BuiltIn(tool.clone())),
-        );
+        tools.extend(built_in_tools.iter().map(OpenAIResponsesTool::BuiltIn));
+        if let Some(tc) = request.tool_config.as_ref() {
+            let provider_tools =
+                tc.get_scoped_provider_tools(tensorzero_model_name, tensorzero_model_provider_name);
+            tools.extend(
+                provider_tools
+                    .iter()
+                    .map(|t| OpenAIResponsesTool::BuiltIn(&t.tool)),
+            );
+        }
 
         // For now, we don't allow selecting any built-in tools
         let tool_choice =
@@ -362,7 +373,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .tool_config
             .as_ref()
             .and_then(|config| config.parallel_tool_calls);
-        if model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
+        if openai_model.to_lowercase().starts_with("o1") && parallel_tool_calls == Some(false) {
             parallel_tool_calls = None;
         }
 
@@ -388,7 +399,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
         };
 
         Ok(Self {
-            model,
+            model: openai_model,
             input: prepare_openai_responses_messages(
                 request
                     .system
@@ -439,7 +450,7 @@ pub enum OpenAIResponsesOutputInner<'a> {
     },
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum OpenAIResponsesReasoningSummary<'a> {
     SummaryText { text: Cow<'a, str> },
@@ -531,6 +542,7 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct OpenAIResponsesReasoning<'a> {
     encrypted_content: Cow<'a, str>,
+    summary: Vec<OpenAIResponsesReasoningSummary<'a>>,
 }
 
 impl Serialize for OpenAIResponsesInputMessageContent<'_> {
@@ -710,7 +722,7 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
 
 pub fn tensorzero_to_openai_responses_assistant_message<'a>(
     content_blocks: Cow<'a, [ContentBlock]>,
-    provider_type: &str,
+    _provider_type: &str,
 ) -> Result<Vec<OpenAIResponsesInput<'a>>, Error> {
     let mut output = Vec::new();
     let content_block_cows: Vec<Cow<'_, ContentBlock>> = match content_blocks {
@@ -773,8 +785,31 @@ pub fn tensorzero_to_openai_responses_assistant_message<'a>(
             }
             Cow::Borrowed(ContentBlock::Thought(ref thought))
             | Cow::Owned(ContentBlock::Thought(ref thought)) => {
-                warn_discarded_thought_block(provider_type, thought);
+                if let Some(encrypted_content) = &thought.signature {
+                    output.push(OpenAIResponsesInput::Known(
+                        OpenAIResponsesInputInner::Reasoning(OpenAIResponsesReasoning {
+                            encrypted_content: Cow::Owned(encrypted_content.clone()),
+                            summary: thought
+                                .summary
+                                .as_ref()
+                                .map(|summary| {
+                                    summary
+                                        .iter()
+                                        .map(|block| match block {
+                                            ThoughtSummaryBlock::SummaryText { text } => {
+                                                OpenAIResponsesReasoningSummary::SummaryText {
+                                                    text: Cow::Owned(text.to_string()),
+                                                }
+                                            }
+                                        })
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
+                        }),
+                    ));
+                }
             }
+
             Cow::Borrowed(ContentBlock::Unknown {
                 data,
                 model_provider_name: _,
@@ -1002,13 +1037,16 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
         // Reasoning (thought) delta
         OpenAIResponsesStreamEvent::ResponseReasoningSummaryTextDelta {
             delta,
+            output_index,
             summary_index,
             ..
         } => Ok(Some(ProviderInferenceResponseChunk::new(
             vec![ContentBlockChunk::Thought(ThoughtChunk {
-                text: Some(delta),
+                text: None,
                 signature: None,
-                id: summary_index.to_string(),
+                id: output_index.to_string(),
+                summary_id: Some(summary_index.to_string()),
+                summary_text: Some(delta),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
             })],
             None,
@@ -1455,7 +1493,7 @@ mod tests {
             delta: "Let me think...".to_string(),
             item_id: "rs_1".to_string(),
             output_index: 0,
-            summary_index: 1,
+            summary_index: 3,
         };
 
         let mut tool_id = None;
@@ -1474,8 +1512,13 @@ mod tests {
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
             ContentBlockChunk::Thought(thought_chunk) => {
-                assert_eq!(thought_chunk.text, Some("Let me think...".to_string()));
-                assert_eq!(thought_chunk.id, "1");
+                assert_eq!(thought_chunk.text, None);
+                assert_eq!(thought_chunk.id, "0");
+                assert_eq!(thought_chunk.summary_id, Some("3".to_string()));
+                assert_eq!(
+                    thought_chunk.summary_text,
+                    Some("Let me think...".to_string())
+                );
                 assert_eq!(thought_chunk.provider_type, Some(PROVIDER_TYPE.to_string()));
             }
             _ => panic!("Expected Thought chunk"),

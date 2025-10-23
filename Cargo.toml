@@ -11,17 +11,18 @@ members = [
     "provider-proxy",
     "evaluations",
     "internal/tensorzero-derive",
+     "internal/tensorzero-auth",
     "examples/integrations/cursor/feedback",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "2025.10.3"
+version = "2025.10.7"
 rust-version = "1.86.0"
 license = "Apache-2.0"
 
 [workspace.dependencies]
-reqwest = { version = "0.12.23", features = [
+reqwest = { version = "0.12.24", features = [
     "json",
     "multipart",
     "rustls-tls",
@@ -33,7 +34,7 @@ uuid = { version = "1.18.1", features = ["serde", "v7"] }
 serde_json = { version = "1.0.143", features = ["preserve_order"] }
 secrecy = { version = "0.10.2", features = ["serde"] }
 tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
-toml = "0.9.5"
+toml = "0.9.8"
 reqwest-eventsource = "0.6.0"
 async-stream = "0.3.5"
 async-trait = "0.1.89"
@@ -45,14 +46,14 @@ pyo3 = { version = "0.26.0", features = ["experimental-async", "abi3-py39"] }
 axum = { version = "0.8", features = ["macros", "http2"] }
 anyhow = "1.0.99"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
-clap = { version = "4.5.46", features = ["derive"] }
+clap = { version = "4.5.49", features = ["derive"] }
 futures = "0.3.30"
 lazy_static = { version = "1.5.0" }
 url = "2.5.4"
 serde-untagged = "0.1.8"
 object_store = { version = "0.12.2", features = ["serde", "aws", "gcp"] }
 rand = "0.9.1"
-ts-rs = { version = "11.0.1", features = [
+ts-rs = { version = "11.1.0", features = [
     "serde-compat",
     "serde-json-impl",
     "uuid-impl",
@@ -60,6 +61,7 @@ ts-rs = { version = "11.0.1", features = [
     "chrono-impl",
     "no-serde-warnings",
 ] }
+pin-project = "1.1.10"
 chrono = { version = "0.4.41", features = ["serde"] }
 git2 = { version = "0.20.2", default-features = false }
 tracing-opentelemetry-instrumentation-sdk = { version = "0.32.1", features = [
@@ -71,6 +73,9 @@ mime = { git = "https://github.com/hyperium/mime", rev = "1ef137c7358fc64e07c8a6
 ] }
 sqlx = { version = "0.8.6", features = ["runtime-tokio", "tls-rustls", "postgres", "migrate", "chrono", "uuid"] }
 rlt = "0.2.1"
+metrics-exporter-prometheus = { version = "0.17.2", features = [
+    "http-listener",
+], default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

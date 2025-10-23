@@ -247,6 +247,7 @@ fn parse_thinking_output(
                     .push(ContentBlockOutput::Thought(Thought {
                         text: Some(thinking),
                         signature: None,
+                        summary: None,
                         provider_type: None,
                     }));
                 return Ok(output);
@@ -256,6 +257,7 @@ fn parse_thinking_output(
                 ContentBlockOutput::Thought(Thought {
                     text: Some(thinking),
                     signature: None,
+                    summary: None,
                     provider_type: None,
                 }),
             );
@@ -349,6 +351,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("step by step".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             })
         );
@@ -363,6 +366,7 @@ mod tests {
             auxiliary_content: vec![ContentBlockOutput::Thought(Thought {
                 text: Some("existing thinking".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             })],
             json_block_index: Some(0),
@@ -389,6 +393,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("new thinking process".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             })
         );
@@ -397,6 +402,7 @@ mod tests {
             ContentBlockOutput::Thought(Thought {
                 text: Some("existing thinking".to_string()),
                 signature: None,
+                summary: None,
                 provider_type: None,
             })
         );

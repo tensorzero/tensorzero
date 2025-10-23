@@ -1,9 +1,7 @@
-import type {
-  TimeWindowUnit,
-  VariantThroughput,
-} from "~/utils/clickhouse/function";
+import type { VariantThroughput } from "~/utils/clickhouse/function";
+import type { TimeWindow } from "tensorzero-node";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { CHART_COLORS } from "~/utils/chart";
+import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
 
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import {
@@ -20,8 +18,8 @@ export function VariantThroughput({
   onTimeGranularityChange,
 }: {
   variant_throughput: VariantThroughput[];
-  time_granularity: TimeWindowUnit;
-  onTimeGranularityChange: (time_granularity: TimeWindowUnit) => void;
+  time_granularity: TimeWindow;
+  onTimeGranularityChange: (time_granularity: TimeWindow) => void;
 }) {
   const { data, variantNames } = transformVariantThroughput(variant_throughput);
 
@@ -69,15 +67,7 @@ export function VariantThroughput({
                   angle: -90,
                   position: "insideLeft",
                 }}
-                tickFormatter={(value) => {
-                  const num = Number(value);
-                  if (num >= 1000000) {
-                    return (num / 1000000).toFixed(1) + "M";
-                  } else if (num >= 1000) {
-                    return (num / 1000).toFixed(1) + "K";
-                  }
-                  return num.toString();
-                }}
+                tickFormatter={(value) => formatChartNumber(Number(value))}
               />
               <ChartTooltip
                 content={({ active, payload, label }) => {

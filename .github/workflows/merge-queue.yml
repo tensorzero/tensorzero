@@ -53,6 +53,7 @@ env:
   VOYAGE_API_KEY: ${{ secrets.VOYAGE_API_KEY }}
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://localhost:4316
+  SQLX_OFFLINE: 1
 
 jobs:
   batch-tests:
@@ -83,7 +84,7 @@ jobs:
       - name: Warm up Modal instances
         run: |
           curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
-          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
           # TODO: Re-enable once we can switch to a T4 GPU
           # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
 
@@ -306,10 +307,23 @@ jobs:
         run: |
           uv run pytest
 
-      - name: Terminate the gateway
+      - name: Terminate the gateway and wait for it to exit
+        if: always()
         run: |
           echo "Killing gateway with pid $GATEWAY_PID"
           kill $GATEWAY_PID
+          # Wait for at most 30 seconds for the gateway to exit
+          for i in {1..30}; do
+            if ! kill -0 $GATEWAY_PID 2>/dev/null; then
+              echo "Gateway exited"
+              break
+            fi
+            sleep 1
+          done
+          if kill -0 $GATEWAY_PID 2>/dev/null; then
+            echo "Gateway did not exit after 30 seconds!"
+            exit 1
+          fi
 
       - name: Print e2e logs
         if: always()
@@ -403,5 +417,5 @@ jobs:
     steps:
       # When running in the merge queue, jobs should never be skipped.
       # In a scheduled run, some jobs may be intentionally skipped, as we only care about regenerating the model inference cache.
-      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
+      - if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || (github.event_name == 'merge_group' && contains(needs.*.result, 'skipped')) }}
         run: exit 1

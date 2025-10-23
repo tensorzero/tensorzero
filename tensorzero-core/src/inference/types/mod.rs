@@ -44,10 +44,14 @@
 //!
 //! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
 //! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
+use crate::endpoints::object_storage::get_object;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
-    FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage, LazyResolvedInputMessageContent,
+    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
+    LazyResolvedInputMessageContent,
 };
+use crate::inference::types::storage::StorageKind;
 use crate::inference::types::stored_input::StoredFile;
 use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
@@ -132,6 +136,8 @@ pub use streams::{
 /// A request is made that contains an Input
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<Value>,
@@ -176,6 +182,24 @@ impl LazyResolvedInput {
             messages,
         })
     }
+
+    /// Turns the input into a StoredInput, avoiding resolving network resources if possible.
+    pub async fn into_stored_input(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInput, Error> {
+        let stored_messages = futures::future::try_join_all(
+            self.messages
+                .into_iter()
+                .map(|message| message.into_stored_input_message(object_store_info)),
+        )
+        .await?;
+
+        Ok(StoredInput {
+            system: self.system,
+            messages: stored_messages,
+        })
+    }
 }
 
 impl InputMessage {
@@ -195,6 +219,7 @@ impl InputMessage {
 }
 
 impl LazyResolvedInputMessage {
+    /// Turns the input into a ResolvedInputMessage by fetching network resources for Files.
     pub async fn resolve(self) -> Result<ResolvedInputMessage, Error> {
         let content = futures::future::try_join_all(
             self.content
@@ -207,6 +232,34 @@ impl LazyResolvedInputMessage {
             content,
         })
     }
+
+    /// Turns the input into a StoredInputMessage by converting Files to StoredFiles, bypassing resolving network resources if possible.
+    pub async fn into_stored_input_message(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInputMessage, Error> {
+        let content = futures::future::try_join_all(
+            self.content
+                .into_iter()
+                .map(|content| content.into_stored_input_message_content(object_store_info)),
+        )
+        .await?;
+
+        Ok(StoredInputMessage {
+            role: self.role,
+            content,
+        })
+    }
+}
+
+/// Extracts the StorageKind from the FetchContext, or returns an error if the object store is not configured.
+fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
+    let object_store_info = context.object_store_info.as_ref().ok_or_else(|| {
+        Error::new(ErrorDetails::ObjectStoreUnconfigured {
+            block_type: "file".to_string(),
+        })
+    })?;
+    Ok(object_store_info.kind.clone())
 }
 
 impl InputMessageContent {
@@ -266,31 +319,12 @@ impl InputMessageContent {
                 }
             }
             InputMessageContent::File(file) => {
-                let storage_kind = context
-                    .object_store_info
-                    .as_ref()
-                    .ok_or_else(|| {
-                        Error::new(ErrorDetails::ObjectStoreUnconfigured {
-                            block_type: "file".to_string(),
-                        })
-                    })?
-                    .kind
-                    .clone();
                 match &file {
                     File::Url { url, mime_type } => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
-                        let storage_kind = context
-                            .object_store_info
-                            .as_ref()
-                            .ok_or_else(|| {
-                                Error::new(ErrorDetails::ObjectStoreUnconfigured {
-                                    block_type: "file".to_string(),
-                                })
-                            })?
-                            .kind
-                            .clone();
+                        let storage_kind = get_storage_kind(&context)?;
                         let client = context.client.clone();
                         // Construct a future that will actually fetch the file URL from the network.
                         // Important - we do *not* use `tokio::spawn` here. As a result, the future
@@ -320,7 +354,7 @@ impl InputMessageContent {
                             mime_type: mime_type.clone(),
                             data: data.clone(),
                         };
-
+                        let storage_kind = get_storage_kind(&context)?;
                         let path = storage_kind.file_path(&file)?;
 
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(
@@ -329,6 +363,41 @@ impl InputMessageContent {
                                 storage_path: path,
                             },
                         )))
+                    }
+                    File::ObjectStorage {
+                        source_url,
+                        mime_type,
+                        storage_path,
+                    } => {
+                        let source_url = source_url.clone();
+                        let object_store_info = context.object_store_info.clone();
+                        let owned_storage_path = storage_path.clone();
+                        let mime_type_for_closure = mime_type.clone();
+                        // Construct a future that will fetch the file from the object store.
+                        // Important - the future will not actually begin executing (including opening the network connection)
+                        // until the first time the `Shared` wrapper is `.await`ed.
+                        let delayed_file_future = async move {
+                            let object_response =
+                                get_object(object_store_info.as_ref(), owned_storage_path.clone())
+                                    .await?;
+                            let file = Base64File {
+                                url: None,
+                                mime_type: mime_type_for_closure,
+                                data: object_response.data,
+                            };
+                            Ok(FileWithPath {
+                                file,
+                                storage_path: owned_storage_path,
+                            })
+                        };
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::ObjectStorage {
+                            metadata: Base64FileMetadata {
+                                url: source_url,
+                                mime_type: mime_type.clone(),
+                            },
+                            storage_path: storage_path.clone(),
+                            future: delayed_file_future.boxed().shared(),
+                        }))
                     }
                 }
             }
@@ -370,6 +439,9 @@ impl LazyResolvedInputMessageContent {
                     file_url: _,
                 } => ResolvedInputMessageContent::File(Box::new(future.await?)),
                 LazyFile::FileWithPath(file) => ResolvedInputMessageContent::File(Box::new(file)),
+                LazyFile::ObjectStorage { future, .. } => {
+                    ResolvedInputMessageContent::File(Box::new(future.await?))
+                }
             },
             LazyResolvedInputMessageContent::Unknown {
                 data,
@@ -380,12 +452,53 @@ impl LazyResolvedInputMessageContent {
             },
         })
     }
+
+    /// Converts the message content into a StoredInputMessageContent,
+    /// bypassing fetching files / resolving network resources if possible.
+    pub async fn into_stored_input_message_content(
+        self,
+        object_store_info: &Option<ObjectStoreInfo>,
+    ) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
+            // When the input file already contains the ObjectStorage path, we discard the future without awaiting
+            // (which doesn't trigger the pending network request), and directly convert the metadata and
+            // storage_path into a StoredFile.
+            LazyResolvedInputMessageContent::File(file) => match *file {
+                LazyFile::ObjectStorage {
+                    metadata,
+                    storage_path,
+                    future: _,
+                } => StoredInputMessageContent::File(Box::new(StoredFile {
+                    file: metadata,
+                    storage_path,
+                })),
+                // All other file types need to be resolved first.
+                other => {
+                    let file = other.resolve().await?.into_owned();
+                    // Because this may trigger during a datapoint update,
+                    // we need to try and write the file to object storage first.
+                    write_file(
+                        object_store_info,
+                        file.file.clone(),
+                        file.storage_path.clone(),
+                    )
+                    .await?;
+
+                    StoredInputMessageContent::File(Box::new(file.into_stored_file()))
+                }
+            },
+            // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
+            other => other.resolve().await?.into_stored_input_message_content(),
+        })
+    }
 }
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct InputMessage {
     pub role: Role,
     #[serde(deserialize_with = "deserialize_content")]
@@ -402,6 +515,8 @@ pub struct TemplateInput {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
 pub enum InputMessageContent {
     Text(TextKind),
     Template(TemplateInput),
@@ -549,6 +664,14 @@ impl Text {
     }
 }
 
+#[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ThoughtSummaryBlock {
+    SummaryText { text: String },
+}
+
 /// Struct that represents Chain of Thought reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
@@ -560,6 +683,9 @@ pub struct Thought {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub summary: Option<Vec<ThoughtSummaryBlock>>,
     /// When set, this 'Thought' block will only be used for providers
     /// matching this type (e.g. `anthropic`). Other providers will emit
     /// a warning and discard the block.
@@ -576,6 +702,11 @@ impl RateLimitedInputContent for Thought {
         let Thought {
             text,
             signature,
+            // We intentionally do *not* count the summary towards the token usage
+            // Even though OpenAI responses requires passing the summaries back in a multi-turn
+            // conversation, we expect that the actual model will ignore them, since they're
+            // not the internal model thoughts.
+            summary: _,
             provider_type: _,
         } = self;
         text.as_ref().map_or(0, |text| get_estimated_tokens(text))
@@ -1047,7 +1178,7 @@ pub struct ProviderInferenceResponse {
 
 impl ProviderInferenceResponse {
     pub fn resource_usage(&self) -> Result<RateLimitResourceUsage, Error> {
-        Ok(RateLimitResourceUsage {
+        Ok(RateLimitResourceUsage::Exact {
             model_inferences: 1,
             tokens: self.usage.total_tokens() as u64,
         })
@@ -2356,6 +2487,7 @@ mod tests {
             })],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
 
         // Test valid arguments for additional tool
@@ -2478,6 +2610,7 @@ mod tests {
             })],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
+            provider_tools: None,
         };
 
         // Test allowed tool call

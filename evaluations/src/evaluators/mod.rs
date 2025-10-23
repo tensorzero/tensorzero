@@ -52,14 +52,14 @@ pub(crate) async fn evaluate_inference(
         evaluation_run_id,
         inference_cache,
     } = params;
-    let EvaluationConfig::Static(static_evaluation_config) = &*evaluation_config;
+    let EvaluationConfig::Inference(inference_evaluation_config) = &*evaluation_config;
     info!(
-        evaluators = ?static_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
+        evaluators = ?inference_evaluation_config.evaluators.keys().collect::<Vec<_>>(),
         "Starting evaluation with evaluators"
     );
 
     let results: EvaluationResult =
-        FuturesUnordered::from_iter(static_evaluation_config.evaluators.keys().map(
+        FuturesUnordered::from_iter(inference_evaluation_config.evaluators.keys().map(
             |evaluator_name| async {
                 let inference_response = inference_response.clone();
                 let evaluation_config = evaluation_config.clone();
@@ -198,8 +198,8 @@ async fn run_evaluator(params: RunEvaluatorParams<'_>) -> Result<EvaluatorResult
         input,
         inference_cache,
     } = params;
-    let EvaluationConfig::Static(static_evaluation_config) = evaluation_config;
-    let evaluator_config = match static_evaluation_config.evaluators.get(&evaluator_name) {
+    let EvaluationConfig::Inference(inference_evaluation_config) = evaluation_config;
+    let evaluator_config = match inference_evaluation_config.evaluators.get(&evaluator_name) {
         Some(evaluator_config) => {
             debug!("Evaluator config found");
             evaluator_config
