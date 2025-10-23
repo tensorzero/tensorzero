@@ -59,10 +59,10 @@ BANDIT_CONFIGS = {
 # =============================================================================
 
 # Number of independent runs per configuration
-N_INDEPENDENT_RUNS = 2
+N_INDEPENDENT_RUNS = 5
 
 # Maximum time steps per run
-MAX_TIME_STEPS = 200
+MAX_TIME_STEPS = 1000
 
 # Batch size for arm pulls (check stopping at batch boundaries)
 BATCH_SIZE = 100
@@ -110,8 +110,10 @@ EXPERIMENT_SETS = {
     },
     "full_comparison": {
         "description": "Full comparison including TensorZero track-and-stop",
-        "environments": ["bernoulli", "beta", "gaussian"],
-        "difficulties": ["easy", "medium", "hard"],
+        # "environments": ["bernoulli", "beta", "gaussian"],
+        "environments": ["bernoulli"],
+        # "difficulties": ["easy", "medium", "hard"],
+        "difficulties": ["medium"],
         "K_values": K_VALUES,
         "algorithms": BANDIT_ALGORITHMS,
         "n_runs": N_INDEPENDENT_RUNS,
@@ -120,7 +122,7 @@ EXPERIMENT_SETS = {
     "tensorzero_only": {
         "description": "Test only TensorZero track-and-stop",
         "environments": ["bernoulli"],
-        "difficulties": ["medium"],
+        "difficulties": ["easy"],
         "K_values": K_VALUES,
         "algorithms": ["subgaussian"],
         "n_runs": N_INDEPENDENT_RUNS,
