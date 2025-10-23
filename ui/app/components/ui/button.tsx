@@ -37,12 +37,12 @@ const buttonVariants = cva(
   },
 );
 
-type Variant = VariantProps<typeof buttonVariants>["variant"];
-type Size = VariantProps<typeof buttonVariants>["size"];
+export type ButtonVariant = VariantProps<typeof buttonVariants>["variant"];
+export type ButtonSize = VariantProps<typeof buttonVariants>["size"];
 
 interface ButtonContextValue {
-  variant: Variant;
-  size: Size;
+  variant: ButtonVariant;
+  size: ButtonSize;
 }
 
 const ButtonContext = React.createContext<ButtonContextValue | null>(null);

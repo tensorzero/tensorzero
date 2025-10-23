@@ -58,6 +58,7 @@ export default function BasicInfo({
             defaultLabel="—"
             font="mono"
             onSetLabel={onRenameDatapoint}
+            tooltipLabel={"Rename"}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>

@@ -13,7 +13,7 @@ import {
   SectionsGroup,
 } from "~/components/layout/PageLayout";
 import { PageLayout } from "~/components/layout/PageLayout";
-import InputSnippet from "~/components/inference/InputSnippet";
+import Input from "~/components/inference/Input";
 
 import {
   data,
@@ -318,7 +318,7 @@ export default function EvaluationDatapointPage({
         <SectionsGroup>
           <SectionLayout>
             <SectionHeader heading="Input" />
-            <InputSnippet {...consolidatedEvaluationResults[0].input} />
+            <Input {...consolidatedEvaluationResults[0].input} />
           </SectionLayout>
           <OutputsSection
             outputsToDisplay={outputsToDisplay}
