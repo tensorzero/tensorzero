@@ -1,3 +1,4 @@
+pub mod helpers;
 pub mod launch_optimization_workflow;
 pub mod legacy;
 pub mod types;
@@ -14,5 +15,5 @@ pub use legacy::{
 pub use launch_optimization_workflow::launch_optimization_workflow;
 pub use types::{
     LaunchOptimizationWorkflowParams as LaunchOptimizationWorkflowInternalParams,
-    ListDatapointsSource, OptimizationData,
+    ListDatapointsData, OptimizationData,
 };
