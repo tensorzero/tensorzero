@@ -1,5 +1,6 @@
 import { ActionBar } from "~/components/layout/ActionBar";
 import { BuildDatasetButton } from "./BuildDatasetButton";
+import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 interface DatasetsActionsProps {
   onBuildDataset: () => void;
@@ -8,7 +9,9 @@ interface DatasetsActionsProps {
 export function DatasetsActions({ onBuildDataset }: DatasetsActionsProps) {
   return (
     <ActionBar>
-      <BuildDatasetButton onClick={onBuildDataset} />
+      <ReadOnlyGuard asChild>
+        <BuildDatasetButton onClick={onBuildDataset} />
+      </ReadOnlyGuard>
     </ActionBar>
   );
 }

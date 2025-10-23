@@ -28,6 +28,8 @@ export interface AddToDatasetButtonProps {
     dataset: string,
     output: "inherit" | "demonstration" | "none",
   ) => void;
+  // Whether the button should be disabled
+  disabled?: boolean;
 }
 
 export function AddToDatasetButton({
@@ -38,6 +40,7 @@ export function AddToDatasetButton({
   hasDemonstration,
   alwaysUseInherit = false,
   onDatasetSelect,
+  disabled = false,
 }: AddToDatasetButtonProps) {
   const [selectedDataset, setSelectedDataset] = useState("");
   const [outputDialogOpen, setOutputDialogOpen] = useState(false);
@@ -109,6 +112,7 @@ export function AddToDatasetButton({
         buttonProps={{
           size: "sm",
         }}
+        disabled={disabled}
       />
 
       <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>

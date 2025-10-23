@@ -14,6 +14,7 @@ export interface TryWithButtonProps {
   onOptionSelect: (variant: string) => void;
   isLoading: boolean;
   isDefaultFunction?: boolean;
+  disabled?: boolean;
 }
 
 export function TryWithButton({
@@ -21,13 +22,14 @@ export function TryWithButton({
   onOptionSelect: onVariantSelect,
   isLoading,
   isDefaultFunction,
+  disabled = false,
 }: TryWithButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={isLoading}>
+        <Button variant="outline" size="sm" disabled={isLoading || disabled}>
           <ButtonIcon as={Compare} variant="tertiary" />
           Try with {isDefaultFunction ? "model" : "variant"}
           <ButtonIcon as={ChevronDown} variant="tertiary" />
