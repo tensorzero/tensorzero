@@ -109,9 +109,7 @@ pub enum TensorZeroAuthError {
     #[error("Database error: {0}")]
     Sqlx(#[from] sqlx::Error),
     #[error("Migration error: {message}")]
-    Migration {
-        message: String,
-    },
+    Migration { message: String },
 }
 
 #[cfg(test)]
