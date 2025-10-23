@@ -79,7 +79,7 @@ where
 #[cfg(test)]
 #[expect(clippy::print_stdout)]
 mod tests {
-    use crate::observability;
+    use crate::observability::{self, enter_fake_http_request_otel};
     use gag::BufferRedirect;
     use serde_json::json;
     use std::io::Read;
@@ -121,6 +121,8 @@ mod tests {
             .unwrap();
         handle.delayed_otel.unwrap().enable_otel().unwrap();
         let buf = BufferRedirect::stdout().unwrap();
+
+        let _guard = enter_fake_http_request_otel();
 
         log_message("First message");
         // The problematic call from https://github.com/tensorzero/tensorzero/issues/3715

@@ -168,8 +168,14 @@ If the content block has type `tool_result`, it must have the following addition
 
 If the content block has type `file`, it must have exactly one of the following additional fields:
 
-- `url`: The URL for a remote file.
-- `mime_type` and `data`: The MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`) and `base64`-encoded data for an embedded file.
+- File URLs
+  - `file_type`: must be `url`
+  - `url`
+  - `mime_type` (optional): override the MIME type of the file
+- Base64-encoded Files
+  - `file_type`: must be `base64`
+  - `data`: `base64`-encoded data for an embedded file
+  - `mime_type`: the MIME type (e.g. `image/png`, `image/jpeg`, `application/pdf`)
 
 See the [Multimodal Inference](/gateway/guides/multimodal-inference/) guide for more details on how to use images in inference.
 

@@ -43,9 +43,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use once_cell::sync::OnceCell;
+#[cfg(feature = "e2e_tests")]
+use opentelemetry::ContextGuard;
 use tokio_stream::wrappers::IntervalStream;
+use tracing::field::Empty;
 
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
 use axum::extract::MatchedPath;
 use axum::extract::State;
@@ -71,9 +73,12 @@ use tokio_util::task::TaskTracker;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
 use tracing::level_filters::LevelFilter;
-use tracing::Span;
+use tracing::{Metadata, Span};
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing_opentelemetry_instrumentation_sdk::http::{
+    http_flavor, http_host, url_scheme, user_agent,
+};
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -428,18 +433,53 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
                     message: format!("Failed to initialize OTLP propagator: {e}"),
                 })
             })?;
+
             // Avoid exposing all of our internal spans, as we don't want customers to start depending on them.
-            // We only expose spans that explicitly contain field prefixed with "http." or "otel."
+            // We only expose spans that explicitly contain field prefixed with "otel."
             // For example, `#[instrument(fields(otel.name = "my_otel_name"))]` will be exported
-            let filter = filter::filter_fn(|metadata| {
+            fn accept_errors_and_otel(metadata: &Metadata<'_>) -> bool {
                 if metadata.is_event() {
                     matches!(metadata.level(), &tracing::Level::ERROR)
                 } else {
-                    metadata.fields().iter().any(|field| {
-                        field.name().starts_with("http.") || field.name().starts_with("otel.")
-                    })
+                    // We only expose spans that explicitly contain field prefixed with "otel.",
+                    // *and* that are a descendant of a top-level HTTP span (as determined by the presence of an `InFlightSpan` in the context).
+                    // This ensures that we can call into instrumented code (e.g. `Variant::infer`, or any authorization middleware)
+                    // from a non-OTEL http route (e.g. a ui route that internally makes some inferences) without causing
+                    // parent-less OTEL spans to get emitted by the instrumented code.
+                    metadata
+                        .fields()
+                        .iter()
+                        .any(|field| field.name().starts_with("otel."))
+                        && Context::map_current(|c| c.get::<InFlightSpan>().is_some())
                 }
-            });
+            }
+
+            // We mark this as a dynamic filter so that `tracing` doesn't cache the result
+            // (it depends on the current call stack via the opentelemetry `Context`),
+            // not just the static call site of the immediate span/event being filtered.
+            #[allow(unused_mut, clippy::allow_attributes)]
+            let mut filter =
+                filter::dynamic_filter_fn(|metadata, _context| accept_errors_and_otel(metadata));
+
+            #[cfg(any(test, feature = "e2e_tests"))]
+            {
+                if tracing_bug::DISABLE_TRACING_BUG_WORKAROUND
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    // When we're attempting to reproduce the tracing bug, we turn *on* callsite caching.
+                    // This is effectively the same behavior as when 'filter::filter_fn' is used instead of
+                    // 'filter::dynamic_filter_fn'.
+                    // We do this to avoid needing to do anything weird in the main production code
+                    // (this entire block is only compiled in test code)
+                    filter = filter.with_callsite_filter(|metadata| {
+                        if accept_errors_and_otel(metadata) {
+                            tracing::subscriber::Interest::always()
+                        } else {
+                            tracing::subscriber::Interest::never()
+                        }
+                    });
+                }
+            }
 
             reload_handle
                 .modify(|l| {
@@ -657,6 +697,21 @@ pub struct InFlightSpan {
     token: TaskTrackerToken,
 }
 
+/// Enters into a fake HTTP request context for testing purposes, which will allow OTEL spans to be reported
+/// This is used by OTEL tests that use an embedded client - since they don't go through our axum router,
+/// we would normally (correctly) suppress any nested OTEL spans (e.g. `function_inference`)
+/// This method simulates the relevant parts of our axum otel logic
+/// We also have fully end-to-end tests that use a live gateway, so this is just to allow us to write
+/// in-memory tests
+#[cfg(feature = "e2e_tests")]
+pub fn enter_fake_http_request_otel() -> ContextGuard {
+    Context::current()
+        .with_value(InFlightSpan {
+            token: TaskTracker::new().token(),
+        })
+        .attach()
+}
+
 /// Creates the top-level span for an incoming HTTP request, with the correct
 /// OpenTelemetry context attached
 /// This span is *only* used for OpenTelemetry - we have a separate `TracerLayer`
@@ -683,28 +738,43 @@ fn make_otel_http_span<B>(
     if let Some(custom_tracer_key) = key {
         context = tracer_wrapper.get_or_create_custom_tracer(&custom_tracer_key, context);
     }
-
-    let span =
-        tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(req);
-    match span.set_parent(context) {
-        Ok(()) => (),
-        Err(e) => {
-            tracing::error!("Failed to set parent context: {e}. {IMPOSSIBLE_ERROR_MESSAGE}");
-        }
-    }
+    let _guard = context.attach();
 
     let route = req
         .extensions()
         .get::<MatchedPath>()
         .map(MatchedPath::as_str);
+
+    let http_method = req.method();
+
+    // Copied from `tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request` (https://github.com/davidB/tracing-opentelemetry-instrumentation-sdk/blob/5a64c55228645be87f21c628093dbd044104a10a/tracing-opentelemetry-instrumentation-sdk/src/http/http_server.rs#L10)
+    // with `otel.name` added (so that it can be detected by our filtering layer)
+    let span = tracing::info_span!(
+        "HTTP request",
+        http.request.method = %http_method,
+        http.route = Empty, // to set by router of "webframework" after
+        network.protocol.version = %http_flavor(req.version()),
+        server.address = http_host(req),
+        // server.port = req.uri().port(),
+        http.client.address = Empty, //%$request.connection_info().realip_remote_addr().unwrap_or(""),
+        user_agent.original = user_agent(req),
+        http.response.status_code = Empty, // to set on response
+        url.path = req.uri().path(),
+        url.query = req.uri().query(),
+        url.scheme = url_scheme(req.uri()),
+        otel.kind = ?opentelemetry::trace::SpanKind::Server,
+        otel.status_code = Empty, // to set on response
+        trace_id = Empty, // to set on response
+        request_id = Empty, // to set
+        exception.message = Empty, // to set on response
+        "span.type" = "web", // non-official open-telemetry key, only supported by Datadog
+        otel.name = format!("{} {}", req.method(), route.unwrap_or_default()).trim(),
+    );
+
     if let Some(route) = route {
         span.record("http.route", route);
     }
 
-    span.record(
-        "otel.name",
-        format!("{} {}", req.method(), route.unwrap_or_default()).trim(),
-    );
     span
 }
 
