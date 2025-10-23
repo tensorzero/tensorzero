@@ -19,7 +19,7 @@ It compares three bandit types:
 Install dependencies:
 
 ```bash
-pip install -r bandits-testing/requirements.txt
+pip install -r requirements.txt
 ```
 
 ## Running Experiments
@@ -29,7 +29,7 @@ pip install -r bandits-testing/requirements.txt
 Run experiments with default settings:
 
 ```bash
-python bandits-testing/run_experiments.py
+python run_experiments.py
 ```
 
 This will:
@@ -37,12 +37,12 @@ This will:
 2. Test Bernoulli, Beta, and Gaussian environments at easy/medium/hard difficulty
 3. Use K=5 arms
 4. Generate cumulative regret trajectory plots
-5. Save results to `bandits-testing/results/run_<timestamp>/`
+5. Save results to `results/run_<timestamp>/`
 
 ### Custom Configuration
 
 ```bash
-python bandits-testing/run_experiments.py \
+python run_experiments.py \
   --env-types bernoulli gaussian \
   --difficulties medium hard \
   --K 6 \
@@ -50,7 +50,7 @@ python bandits-testing/run_experiments.py \
   --max-time-steps 15000 \
   --delta 0.05 \
   --epsilon 0.0 \
-  --output-dir bandits-testing/results/my_experiment
+  --output-dir results/my_experiment
 ```
 
 ### Arguments
@@ -63,7 +63,7 @@ python bandits-testing/run_experiments.py \
 - `--delta`: Confidence level for stopping (default: 0.05)
 - `--epsilon`: Best arm tolerance (default: 0.0)
 - `--min-pulls-per-arm`: Minimum pulls per arm before stopping (default: 10)
-- `--output-dir`: Output directory for results (default: bandits-testing/results)
+- `--output-dir`: Output directory for results (default: results)
 - `--max-plot-time`: Maximum time to show in plots (truncates trajectories)
 - `--bandit-types`: Which bandit types to test (default: both naive baselines)
 - `--base-seed`: Base random seed (default: 42)
@@ -94,24 +94,67 @@ Plots compare the naive uniform baselines (and eventually the track-and-stop imp
 
 - `environments.py`: Data generating processes (Bernoulli, Beta, Gaussian)
 - `naive_bandits.py`: Naive uniform baseline implementations
-- `experiment_runner.py`: Orchestrates experiments and tracks cumulative regret
+- `experiment_runner.py`: Orchestrates experiments and tracks cumulative regret for naive bandits
+- `tensorzero_runner.py`: TensorZero integration for track-and-stop experiments
 - `plotting.py`: Creates cumulative regret trajectory plots
-- `run_experiments.py`: Main entry point script
-- `config/tensorzero.toml`: TensorZero configuration (for future integration)
+- `run_experiments.py`: Script for running naive baseline experiments only
+- `run_full_comparison.py`: Main script for running all bandit types including TensorZero
+- `quick_test.py`: Quick verification script for naive baselines
+- `config/tensorzero.toml`: Basic TensorZero configuration (no experimentation)
+- `config/tensorzero_trackandstop.toml`: TensorZero config with track-and-stop experimentation
 
-## Future Work: TensorZero Integration
+## Running Full Comparison with TensorZero
 
-The `subgaussian` bandit type is not yet implemented. To integrate with TensorZero:
+To compare all three bandit types (including TensorZero's track-and-stop):
 
-1. Start a TensorZero gateway with track-and-stop experimentation configured
-2. Set up local ClickHouse and Postgres instances
-3. Implement `TensorZeroExperimentRunner.run()` in `experiment_runner.py` to:
-   - Call TensorZero inference API to select variants (arms)
-   - Submit feedback with reward values from the environment
-   - Track cumulative regret over time
-   - Query the gateway to detect when stopping occurs
+### Prerequisites
 
-The current framework provides the naive baselines for comparison once the TensorZero integration is complete.
+1. **ClickHouse** (for storing inference/feedback data)
+2. **PostgreSQL** (for episode-to-variant consistency)
+
+Start the required services using the provided docker-compose file:
+
+```bash
+# From the bandits-testing directory
+cd bandits-testing
+docker compose up -d
+
+# Wait for services to be healthy
+docker compose ps
+```
+
+### Run Full Comparison
+
+```bash
+# Run all three bandit types
+python run_full_comparison.py \
+  --env-types bernoulli \
+  --difficulties medium \
+  --K 6 \
+  --n-runs 10
+
+# Run only naive baselines (skip TensorZero)
+python run_full_comparison.py --skip-tensorzero
+
+# Run only TensorZero (skip naive baselines)
+python run_full_comparison.py --only-tensorzero
+```
+
+The script will:
+1. Run naive baseline experiments (pure Python)
+2. Start embedded TensorZero gateway with track-and-stop config
+3. Run track-and-stop experiments via TensorZero Python client
+4. Generate comparison plots showing all three approaches
+
+### How TensorZero Integration Works
+
+The `tensorzero_runner.py` module:
+- Starts an embedded TensorZero gateway with track-and-stop experimentation
+- Makes inference calls which trigger variant selection via track-and-stop
+- Samples rewards from the environment for the selected variant
+- Submits feedback to TensorZero
+- Tracks cumulative regret over time
+- Background task in gateway updates sampling probabilities asynchronously
 
 ## Comparison with Research Repo
 
