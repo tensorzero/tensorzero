@@ -242,9 +242,6 @@ impl AsyncStreamWrapper {
 }
 
 fn check_stream_terminated(stream: Arc<Mutex<InferenceStream>>) {
-    // This is purely informational, so we don't need to wait for it when the 'gateway'
-    // shuts down.
-    #[expect(clippy::disallowed_methods)]
     pyo3_async_runtimes::tokio::get_runtime().spawn(async move {
         let stream = stream.lock().await;
         if !stream.is_terminated() {
