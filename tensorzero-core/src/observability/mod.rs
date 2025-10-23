@@ -83,6 +83,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
 mod exporter_wrapper;
+pub mod warn_early_drop;
 pub mod tracing_bug;
 
 #[derive(Clone, Debug, Default, ValueEnum)]

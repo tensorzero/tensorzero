@@ -1,11 +1,14 @@
 # TODO - remove this 'type: ignore'
 # type: ignore
+import gc
 import json
+import typing as t
 from uuid import UUID
 
 import pytest
 import tensorzero
 from openai import AsyncOpenAI
+from pytest import CaptureFixture
 from tensorzero.util import uuid7
 
 
@@ -104,7 +107,7 @@ async def test_patch_openai_client_with_async_client_async_setup_true():
 
 
 @pytest.mark.asyncio
-async def test_patch_openai_client_with_async_client_async_setup_false():
+async def test_patch_openai_client_with_async_client_async_setup_false_non_streaming():
     """Tests that tensorzero.patch_openai_client works with AsyncOpenAI client using sync setup."""
     client = AsyncOpenAI(api_key="donotuse")
 
@@ -138,3 +141,80 @@ async def test_patch_openai_client_with_async_client_async_setup_false():
     assert result.model == "tensorzero::function_name::generate_haiku::variant_name::gpt_4o_mini"
 
     tensorzero.close_patched_openai_client_gateway(patched_client)
+
+
+@pytest.mark.asyncio
+async def test_patch_openai_client_with_async_client_async_setup_false_streaming_full(capfd: CaptureFixture[str]):
+    """Tests that tensorzero.patch_openai_client works with AsyncOpenAI client using sync setup."""
+    client = AsyncOpenAI(api_key="donotuse")
+
+    # Patch the client with sync setup
+    patched_client = tensorzero.patch_openai_client(
+        client,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+        config_file="../../examples/quickstart/config/tensorzero.toml",
+        async_setup=False,
+    )
+
+    messages = [
+        {"role": "user", "content": "What is the capital of Japan?"},
+    ]
+
+    result = await patched_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::model_name::dummy::good",
+        temperature=0.4,
+        extra_body={"tensorzero::episode_id": str(uuid7())},
+        stream=True,
+    )
+    assert isinstance(result, t.AsyncIterator)
+    chunks = [chunk async for chunk in result]
+    assert len(chunks) == 17
+    del result
+    gc.collect()
+
+    # Check that we didn't log warnings about dropping a stream early
+    captured = capfd.readouterr()
+    out_lines = captured.out.splitlines()
+    assert len(out_lines) == 1
+    assert "Pseudonymous usage analytic" in out_lines[0]
+    assert captured.err == ""
+
+
+@pytest.mark.asyncio
+async def test_patch_openai_client_with_async_client_async_setup_false_streaming_early_drop(capfd: CaptureFixture[str]):
+    client = AsyncOpenAI(api_key="donotuse")
+
+    # Patch the client with sync setup
+    patched_client = tensorzero.patch_openai_client(
+        client,
+        clickhouse_url="http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests",
+        config_file="../../examples/quickstart/config/tensorzero.toml",
+        async_setup=False,
+    )
+
+    messages = [
+        {"role": "user", "content": "What is the capital of Japan?"},
+    ]
+
+    result = await patched_client.chat.completions.create(
+        messages=messages,
+        model="tensorzero::model_name::dummy::slow_second_chunk",
+        temperature=0.4,
+        extra_body={"tensorzero::episode_id": str(uuid7())},
+        stream=True,
+    )
+    assert isinstance(result, t.AsyncIterator)
+    _chunk = await anext(result)
+
+    await result.close()
+    await patched_client.close()
+    gc.collect()
+
+    # The stream should have been closed early, so we should see a warning about it
+    captured = capfd.readouterr()
+    out_lines = captured.out.splitlines()
+    assert len(out_lines) == 2
+    assert "Pseudonymous usage analytic" in out_lines[0]
+    assert "Client closed the connection before the response was sent" in out_lines[-1]
+    assert captured.err == ""
