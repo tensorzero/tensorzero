@@ -20,7 +20,9 @@ pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
 use tensorzero_core::endpoints::datasets::StaleDatasetResponse;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
-use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
+use tensorzero_core::endpoints::optimization::{
+    launch_optimization, launch_optimization_workflow_legacy,
+};
 use tensorzero_core::endpoints::stored_inference::render_samples;
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
@@ -1010,7 +1012,7 @@ impl Client {
     /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
     pub async fn experimental_list_inferences(
         &self,
-        params: ListInferencesParams<'_>,
+        params: ListInferencesParams,
     ) -> Result<Vec<StoredInference>, TensorZeroError> {
         // TODO: consider adding a flag that returns the generated sql query
         let ClientMode::EmbeddedGateway { gateway, .. } = &*self.mode else {
@@ -1102,7 +1104,7 @@ impl Client {
         match &*self.mode {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
-                    launch_optimization_workflow(
+                    launch_optimization_workflow_legacy(
                         &gateway.handle.app_state.http_client,
                         gateway.handle.app_state.config.clone(),
                         &gateway.handle.app_state.clickhouse_connection_info,

@@ -1223,11 +1223,11 @@ impl TensorZeroGateway {
             .map(|x| deserialize_from_pyobj(this.py(), x))
             .transpose()?;
         let params = ListInferencesParams {
-            function_name: &function_name,
-            variant_name: variant_name.as_deref(),
-            filters: filters.as_ref(),
+            function_name,
+            variant_name,
+            filters,
             output_source,
-            order_by: order_by.as_deref(),
+            order_by,
             limit,
             offset,
             format: ClickhouseFormat::JsonEachRow,
@@ -2078,11 +2078,11 @@ impl AsyncTensorZeroGateway {
                 })?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let params = ListInferencesParams {
-                function_name: &function_name,
-                variant_name: variant_name.as_deref(),
-                filters: filters.as_ref(),
+                function_name,
+                variant_name,
+                filters,
                 output_source,
-                order_by: order_by.as_deref(),
+                order_by,
                 limit,
                 offset,
                 format: ClickhouseFormat::JsonEachRow,

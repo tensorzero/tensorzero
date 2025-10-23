@@ -510,15 +510,29 @@ fn generate_order_by_sql(
     Ok(format!("\nORDER BY {joined_clauses}"))
 }
 
-#[derive(Debug, Clone)]
-pub struct ListInferencesParams<'a> {
-    pub function_name: &'a str,
-    pub variant_name: Option<&'a str>,
-    pub filters: Option<&'a InferenceFilter>,
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ListInferencesParams {
+    pub function_name: String,
+    #[serde(default)]
+    pub variant_name: Option<String>,
+    #[serde(default)]
+    pub filters: Option<InferenceFilter>,
     pub output_source: InferenceOutputSource,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_util::deserialize_option_u64"
+    )]
     pub limit: Option<u64>,
+    #[serde(
+        default,
+        deserialize_with = "crate::serde_util::deserialize_option_u64"
+    )]
     pub offset: Option<u64>,
-    pub order_by: Option<&'a [OrderBy]>,
+    #[serde(default)]
+    pub order_by: Option<Vec<OrderBy>>,
+    #[serde(default)]
     pub format: ClickhouseFormat,
 }
 
@@ -546,14 +560,14 @@ pub struct QueryParameter {
 /// - handle selecting the feedback values
 pub fn generate_list_inferences_sql(
     config: &Config,
-    opts: &ListInferencesParams<'_>,
+    opts: &ListInferencesParams,
 ) -> Result<(String, Vec<QueryParameter>), Error> {
     let mut params_map: Vec<QueryParameter> = Vec::new();
     let mut param_idx_counter = 0; // Counter for unique parameter names
 
-    let function_config = config.get_function(opts.function_name)?;
+    let function_config = config.get_function(&opts.function_name)?;
     let function_name_param_placeholder = add_parameter(
-        opts.function_name,
+        &opts.function_name,
         ClickhouseType::String,
         &mut params_map,
         &mut param_idx_counter,
@@ -569,7 +583,7 @@ pub fn generate_list_inferences_sql(
     ));
 
     // Add `variant_name` filter
-    if let Some(variant_name) = opts.variant_name {
+    if let Some(variant_name) = &opts.variant_name {
         let variant_name_param_placeholder = add_parameter(
             variant_name,
             ClickhouseType::String,
@@ -603,7 +617,7 @@ pub fn generate_list_inferences_sql(
         }
     }
 
-    if let Some(filter_node) = opts.filters {
+    if let Some(filter_node) = &opts.filters {
         // Recursively builds the filter condition SQL statement for the WHERE clause
         //  * adds the JOINed tables it needs
         //  * adds metric columns to the SELECT clause for visibility and debugging
@@ -629,7 +643,7 @@ FROM
     // We generate the order by SQL before we add the joins so that the join registry is up to date with everything it needs.
     // We don't actually add the order by SQL to the query until after we've added the joins.
     let order_by_sql = generate_order_by_sql(
-        opts.order_by,
+        opts.order_by.as_deref(),
         config,
         &mut params_map,
         &mut param_idx_counter,
@@ -863,7 +877,7 @@ mod tests {
     async fn test_simple_query_json_function() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
@@ -902,7 +916,7 @@ FORMAT JSONEachRow";
     async fn test_simple_query_chat_function() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "write_haiku",
+            function_name: "write_haiku".to_string(),
             variant_name: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
@@ -946,9 +960,9 @@ FORMAT JSONEachRow";
             comparison_operator: FloatComparisonOperator::GreaterThan,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1003,7 +1017,7 @@ FORMAT JSONEachRow";
     async fn test_unknown_function_name() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "unknown_function_name",
+            function_name: "unknown_function_name".to_string(),
             variant_name: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
@@ -1029,9 +1043,9 @@ FORMAT JSONEachRow";
             comparison_operator: FloatComparisonOperator::GreaterThan,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1050,7 +1064,7 @@ FORMAT JSONEachRow";
     async fn test_demonstration_output_source() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
             filters: None,
             output_source: InferenceOutputSource::Demonstration,
@@ -1095,9 +1109,9 @@ FORMAT JSONEachRow";
             value: true,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1156,9 +1170,9 @@ FORMAT JSONEachRow";
             value: false,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1233,9 +1247,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1329,9 +1343,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1434,9 +1448,9 @@ FORMAT JSONEachRow";
             }),
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1519,9 +1533,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1611,9 +1625,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1654,8 +1668,8 @@ FORMAT JSONEachRow";
     async fn test_variant_name_filter() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: Some("v1"),
+            function_name: "extract_entities".to_string(),
+            variant_name: Some("v1".to_string()),
             filters: None,
             output_source: InferenceOutputSource::Inference,
             limit: None,
@@ -1699,7 +1713,7 @@ FORMAT JSONEachRow";
     async fn test_limit_and_offset() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
@@ -1765,9 +1779,9 @@ FORMAT JSONEachRow";
                 comparison_operator: op,
             });
             let opts = ListInferencesParams {
-                function_name: "extract_entities",
+                function_name: "extract_entities".to_string(),
                 variant_name: None,
-                filters: Some(&filter_node),
+                filters: Some(filter_node),
                 output_source: InferenceOutputSource::Inference,
                 limit: None,
                 offset: None,
@@ -1830,9 +1844,9 @@ FORMAT JSONEachRow",
             comparison_operator: TagComparisonOperator::Equal,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1884,9 +1898,9 @@ FORMAT JSONEachRow";
             comparison_operator: TagComparisonOperator::NotEqual,
         });
         let opts = ListInferencesParams {
-            function_name: "write_haiku",
+            function_name: "write_haiku".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -1947,9 +1961,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -2018,9 +2032,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -2096,9 +2110,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: Some("production"),
-            filters: Some(&filter_node),
+            function_name: "extract_entities".to_string(),
+            variant_name: Some("production".to_string()),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Demonstration,
             limit: Some(25),
             offset: Some(50),
@@ -2192,9 +2206,9 @@ FORMAT JSONEachRow";
             comparison_operator: TimeComparisonOperator::GreaterThan,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
@@ -2251,9 +2265,9 @@ FORMAT JSONEachRow";
                 comparison_operator: op,
             });
             let opts = ListInferencesParams {
-                function_name: "write_haiku",
+                function_name: "write_haiku".to_string(),
                 variant_name: None,
-                filters: Some(&filter_node),
+                filters: Some(filter_node),
                 output_source: InferenceOutputSource::Inference,
                 limit: None,
                 offset: None,
@@ -2317,9 +2331,9 @@ FORMAT JSONEachRow",
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
-            filters: Some(&filter_node),
+            filters: Some(filter_node),
             output_source: InferenceOutputSource::Inference,
             limit: Some(10),
             offset: None,
@@ -2707,13 +2721,13 @@ FORMAT JSONEachRow";
             direction: OrderDirection::Desc,
         }];
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
-            order_by: Some(&order_by),
+            order_by: Some(order_by),
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -2755,13 +2769,13 @@ FORMAT JSONEachRow";
             direction: OrderDirection::Asc,
         }];
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
-            order_by: Some(&order_by),
+            order_by: Some(order_by),
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
@@ -2823,13 +2837,13 @@ FORMAT JSONEachRow";
             },
         ];
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: "extract_entities".to_string(),
             variant_name: None,
             filters: None,
             output_source: InferenceOutputSource::Inference,
             limit: None,
             offset: None,
-            order_by: Some(&order_by),
+            order_by: Some(order_by),
             format: ClickhouseFormat::JsonEachRow,
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();

@@ -128,7 +128,7 @@ pub struct UpdateDatapointsResponse {
 
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, serde::Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ListDatapointsRequest {

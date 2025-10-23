@@ -94,18 +94,18 @@ pub async fn launch_optimization_workflow(
         .list_inferences(
             &config,
             &ListInferencesParams {
-                function_name: &function_name,
-                variant_name: query_variant_name.as_deref(),
-                filters: filters.as_ref(),
+                function_name: function_name.clone(),
+                variant_name: query_variant_name,
+                filters,
                 output_source,
                 limit,
                 offset,
                 format,
-                order_by: order_by.as_deref(),
+                order_by,
             },
         )
         .await?;
-    let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
+    let variants = HashMap::from([(function_name, template_variant_name)]);
     // Template the inferences and fetch any network resources needed
     let rendered_inferences = render_samples(config.clone(), stored_inferences, variants).await?;
 

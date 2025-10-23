@@ -17,13 +17,13 @@ pub async fn test_simple_query_json_function() {
         direction: OrderDirection::Desc,
     }];
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
         filters: None,
         output_source: InferenceOutputSource::Inference,
         limit: Some(2),
         offset: None,
-        order_by: Some(&order_by),
+        order_by: Some(order_by),
         format: ClickhouseFormat::JsonEachRow,
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -63,13 +63,13 @@ pub async fn test_simple_query_chat_function() {
         direction: OrderDirection::Asc,
     }];
     let opts = ListInferencesParams {
-        function_name: "write_haiku",
+        function_name: "write_haiku".to_string(),
         variant_name: None,
         filters: None,
         output_source: InferenceOutputSource::Demonstration,
         limit: Some(3),
         offset: Some(3),
-        order_by: Some(&order_by),
+        order_by: Some(order_by.clone()),
         format: ClickhouseFormat::JsonEachRow,
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -116,13 +116,13 @@ pub async fn test_simple_query_with_float_filter() {
         direction: OrderDirection::Desc,
     }];
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
-        filters: Some(&filter_node),
+        filters: Some(filter_node.clone()),
         output_source: InferenceOutputSource::Inference,
         limit: Some(3),
         offset: None,
-        order_by: Some(&order_by),
+        order_by: Some(order_by.clone()),
         format: ClickhouseFormat::JsonEachRow,
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -140,7 +140,7 @@ pub async fn test_simple_query_with_float_filter() {
 pub async fn test_demonstration_output_source() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
         filters: None,
         output_source: InferenceOutputSource::Demonstration,
@@ -169,9 +169,9 @@ pub async fn test_boolean_metric_filter() {
         value: true,
     });
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
-        filters: Some(&filter_node),
+        filters: Some(filter_node.clone()),
         output_source: InferenceOutputSource::Inference,
         limit: Some(5),
         offset: Some(1),
@@ -207,9 +207,9 @@ pub async fn test_and_filter_multiple_float_metrics() {
         ],
     };
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
-        filters: Some(&filter_node),
+        filters: Some(filter_node.clone()),
         output_source: InferenceOutputSource::Inference,
         limit: Some(1),
         offset: None,
@@ -249,9 +249,9 @@ async fn test_or_filter_mixed_metrics() {
         ],
     };
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
-        filters: Some(&filter_node),
+        filters: Some(filter_node.clone()),
         output_source: InferenceOutputSource::Inference,
         limit: Some(1),
         offset: None,
@@ -287,9 +287,9 @@ async fn test_not_filter() {
         }),
     };
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
-        filters: Some(&filter_node),
+        filters: Some(filter_node.clone()),
         output_source: InferenceOutputSource::Inference,
         limit: None,
         offset: None,
@@ -320,13 +320,13 @@ async fn test_simple_time_filter() {
         },
     ];
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
-        filters: Some(&filter_node),
+        filters: Some(filter_node.clone()),
         output_source: InferenceOutputSource::Inference,
         limit: Some(5),
         offset: None,
-        order_by: Some(&order_by),
+        order_by: Some(order_by.clone()),
         format: ClickhouseFormat::JsonEachRow,
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -366,9 +366,9 @@ async fn test_simple_tag_filter() {
         comparison_operator: TagComparisonOperator::Equal,
     });
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
+        function_name: "extract_entities".to_string(),
         variant_name: None,
-        filters: Some(&filter_node),
+        filters: Some(filter_node.clone()),
         output_source: InferenceOutputSource::Inference,
         limit: Some(200),
         offset: None,
@@ -407,9 +407,9 @@ async fn test_combined_time_and_tag_filter() {
         ],
     };
     let opts = ListInferencesParams {
-        function_name: "write_haiku",
+        function_name: "write_haiku".to_string(),
         variant_name: None,
-        filters: Some(&filter_node),
+        filters: Some(filter_node.clone()),
         output_source: InferenceOutputSource::Inference,
         limit: Some(50),
         offset: None,

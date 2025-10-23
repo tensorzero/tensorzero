@@ -280,7 +280,7 @@ impl ClickHouseConnectionInfo {
     pub async fn list_inferences(
         &self,
         config: &Config,
-        opts: &ListInferencesParams<'_>,
+        opts: &ListInferencesParams,
     ) -> Result<Vec<StoredInference>, Error> {
         self.inner.list_inferences(config, opts).await
     }
