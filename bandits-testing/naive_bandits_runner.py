@@ -48,6 +48,7 @@ class NaiveExperimentRunner:
         epsilon: float = 0.0,
         min_pulls_per_arm: int = 10,
         max_time_steps: int = 10000,
+        batch_size: int = 100,
     ):
         """
         Initialize experiment runner.
@@ -59,6 +60,7 @@ class NaiveExperimentRunner:
             epsilon: Best arm tolerance
             min_pulls_per_arm: Minimum pulls per arm before stopping
             max_time_steps: Maximum number of arm pulls
+            batch_size: Number of arm pulls per batch (check stopping at batch boundaries)
         """
         self.env = env
         self.bandit_type = bandit_type
@@ -66,6 +68,7 @@ class NaiveExperimentRunner:
         self.epsilon = epsilon
         self.min_pulls_per_arm = min_pulls_per_arm
         self.max_time_steps = max_time_steps
+        self.batch_size = batch_size
 
         # Create bandit
         if bandit_type == "uniform_naive_no_bonferroni":
@@ -77,7 +80,7 @@ class NaiveExperimentRunner:
 
     def run(self, seed: int) -> ExperimentResult:
         """
-        Run a single experiment.
+        Run a single experiment with batch-based arm pulls.
 
         Args:
             seed: Random seed for this run
@@ -91,34 +94,41 @@ class NaiveExperimentRunner:
         total_pulls = []
         cumulative_regrets = []
 
-        # Run experiment
+        # Run experiment in batches
         stopped = False
         stopping_time = None
         final_arm = None
+        t = 0
 
-        for t in range(1, self.max_time_steps + 1):
-            # If stopped, use the recommended arm; otherwise select and pull
-            if stopped:
-                # After stopping, continue accumulating regret for the final arm
-                arm = final_arm
-            else:
-                # Select and pull arm
-                arm = self.bandit.select_arm()
-                reward = self.env.sample_reward(arm)
-                # Update bandit
-                self.bandit.update(arm, reward)
+        while t < self.max_time_steps:
+            # Determine batch size (might be smaller for last batch)
+            current_batch_size = min(self.batch_size, self.max_time_steps - t)
 
-            # Compute cumulative regret
-            regret_per_pull = self.env.best_mean - self.env.true_means[arm]
-            if t == 1:
-                cumulative_regret = regret_per_pull
-            else:
-                cumulative_regret = cumulative_regrets[-1] + regret_per_pull
+            # Pull arms in batch
+            for _ in range(current_batch_size):
+                t += 1
 
-            total_pulls.append(t)
-            cumulative_regrets.append(cumulative_regret)
+                if stopped:
+                    # After stopping, continue accumulating regret for the final arm
+                    arm = final_arm
+                else:
+                    # Select and pull arm
+                    arm = self.bandit.select_arm()
+                    reward = self.env.sample_reward(arm)
+                    # Update bandit
+                    self.bandit.update(arm, reward)
 
-            # Check stopping condition (only if not already stopped)
+                # Compute cumulative regret
+                regret_per_pull = self.env.best_mean - self.env.true_means[arm]
+                if t == 1:
+                    cumulative_regret = regret_per_pull
+                else:
+                    cumulative_regret = cumulative_regrets[-1] + regret_per_pull
+
+                total_pulls.append(t)
+                cumulative_regrets.append(cumulative_regret)
+
+            # Check stopping condition at batch boundary (only if not already stopped)
             if not stopped:
                 should_stop, recommended_arm = self.bandit.check_stopping()
                 if should_stop:
@@ -209,6 +219,7 @@ def run_experiment_batch(
     epsilon: float = 0.0,
     min_pulls_per_arm: int = 10,
     max_time_steps: int = 10000,
+    batch_size: int = 100,
     base_seed: int = 42,
     **env_kwargs,
 ) -> Dict[str, List[ExperimentResult]]:
@@ -225,6 +236,7 @@ def run_experiment_batch(
         epsilon: Best arm tolerance
         min_pulls_per_arm: Minimum pulls per arm before stopping
         max_time_steps: Maximum arm pulls per run
+        batch_size: Number of arm pulls per batch
         base_seed: Base random seed
         **env_kwargs: Additional environment parameters
 
@@ -252,7 +264,7 @@ def run_experiment_batch(
             else:
                 # Naive baseline
                 runner = NaiveExperimentRunner(
-                    env, bandit_type, delta, epsilon, min_pulls_per_arm, max_time_steps
+                    env, bandit_type, delta, epsilon, min_pulls_per_arm, max_time_steps, batch_size
                 )
                 result = runner.run(seed)
                 results[bandit_type].append(result)

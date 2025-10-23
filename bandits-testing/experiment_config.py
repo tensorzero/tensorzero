@@ -59,10 +59,17 @@ BANDIT_CONFIGS = {
 # =============================================================================
 
 # Number of independent runs per configuration
-N_INDEPENDENT_RUNS = 10
+N_INDEPENDENT_RUNS = 2
 
 # Maximum time steps per run
-MAX_TIME_STEPS = 10000
+MAX_TIME_STEPS = 200
+
+# Batch size for arm pulls (check stopping at batch boundaries)
+BATCH_SIZE = 100
+
+# TensorZero-specific: Time to wait between batches for track-and-stop update (seconds)
+# The update_period_s in config is 1, so we wait a bit longer to ensure it runs
+BATCH_WAIT_TIME = 1.5
 
 # Random seed base (each run gets base_seed + run_idx)
 BASE_SEED = 42
@@ -90,7 +97,7 @@ EXPERIMENT_SETS = {
         "K_values": K_VALUES,
         "algorithms": ["uniform_naive_no_bonferroni", "uniform_naive_bonferroni"],
         "n_runs": 3,
-        "max_time_steps": 5000,
+        "max_time_steps": MAX_TIME_STEPS,
     },
     "naive_only": {
         "description": "Compare only naive baseline algorithms",

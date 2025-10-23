@@ -18,6 +18,8 @@ from pathlib import Path
 
 from experiment_config import (
     BASE_SEED,
+    BATCH_SIZE,
+    BATCH_WAIT_TIME,
     get_bandit_config,
     get_environment_params,
     get_experiment_config,
@@ -131,6 +133,7 @@ Use 'python run_experiment.py <experiment_name>' to run.
                             "min_pulls_per_arm"
                         ],
                         max_time_steps=config["max_time_steps"],
+                        batch_size=BATCH_SIZE,
                         base_seed=BASE_SEED,
                         **env_kwargs,
                     )
@@ -147,6 +150,8 @@ Use 'python run_experiment.py <experiment_name>' to run.
                         config_file=tz_config["config_file"],
                         n_runs=config["n_runs"],
                         max_time_steps=config["max_time_steps"],
+                        batch_size=BATCH_SIZE,
+                        batch_wait_time=BATCH_WAIT_TIME,
                         base_seed=BASE_SEED,
                         **env_kwargs,
                     )
