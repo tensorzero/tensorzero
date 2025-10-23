@@ -35,7 +35,7 @@ export function DatapointActions({
   showTryWithButton,
   isStale,
 }: DatapointActionsProps) {
-  const { isReadOnly } = useReadOnly();
+  const isReadOnly = useReadOnly();
   const handleCancel = () => {
     onReset();
     toggleEditing();

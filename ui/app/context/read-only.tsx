@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Read-Only Mode Context Provider
  *
@@ -8,24 +10,16 @@
  * @module read-only
  */
 
-import { createContext, useContext } from "react";
+import { createContext, use } from "react";
 
-interface ReadOnlyContextValue {
-  isReadOnly: boolean;
-}
-
-const ReadOnlyContext = createContext<ReadOnlyContextValue | null>(null);
+const ReadOnlyContext = createContext(false);
+ReadOnlyContext.displayName = "ReadOnlyContext";
 
 /**
  * Hook to check if the application is in read-only mode
- * @returns Object with isReadOnly boolean
  */
-export function useReadOnly(): ReadOnlyContextValue {
-  const context = useContext(ReadOnlyContext);
-  if (!context) {
-    throw new Error("useReadOnly must be used within a ReadOnlyProvider");
-  }
-  return context;
+export function useReadOnly() {
+  return use(ReadOnlyContext);
 }
 
 export function ReadOnlyProvider({
@@ -35,9 +29,5 @@ export function ReadOnlyProvider({
   children: React.ReactNode;
   value: boolean;
 }) {
-  return (
-    <ReadOnlyContext.Provider value={{ isReadOnly: value }}>
-      {children}
-    </ReadOnlyContext.Provider>
-  );
+  return <ReadOnlyContext value={value}>{children}</ReadOnlyContext>;
 }
