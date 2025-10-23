@@ -1,0 +1,47 @@
+# TensorZero Configuration for Bandits Testing
+# Uses dummy provider to avoid making real LLM API calls
+
+[models.dummy_model]
+routing = ["dummy"]
+
+[models.dummy_model.providers.dummy]
+type = "dummy"
+model_name = "dummy-model"
+
+[functions.test_function]
+type = "chat"
+
+[functions.test_function.variants.variant_0]
+type = "chat_completion"
+model = "dummy_model"
+weight = 1.0
+
+[functions.test_function.variants.variant_1]
+type = "chat_completion"
+model = "dummy_model"
+weight = 1.0
+
+[functions.test_function.variants.variant_2]
+type = "chat_completion"
+model = "dummy_model"
+weight = 1.0
+
+[functions.test_function.variants.variant_3]
+type = "chat_completion"
+model = "dummy_model"
+weight = 1.0
+
+[functions.test_function.variants.variant_4]
+type = "chat_completion"
+model = "dummy_model"
+weight = 1.0
+
+[functions.test_function.variants.variant_5]
+type = "chat_completion"
+model = "dummy_model"
+weight = 1.0
+
+[metrics.test_metric]
+type = "float"
+optimize = "max"
+level = "inference"
