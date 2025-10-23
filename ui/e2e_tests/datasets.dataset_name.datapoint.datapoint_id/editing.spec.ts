@@ -1723,3 +1723,388 @@ test.describe("Edge Cases", () => {
     await expect(page.getByText(toolName)).toBeVisible();
   });
 });
+
+// ============================================================================
+// Error Cases - Template Validation
+// ============================================================================
+
+test.describe("Error Cases - Template Validation", () => {
+  test("should reject template with non-existent template name", async ({
+    page,
+  }) => {
+    // Create datapoint from custom_template_test function which has named templates:
+    // greeting_template, analysis_prompt, fun_fact_topic
+    await createDatapointFromInference(page, {
+      inferenceId: "019a0881-7437-7495-b506-782079c593bf",
+    });
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await expandShowMoreIfPresent(page);
+
+    const userSection = page.getByTestId("message-user").first();
+
+    // Delete the existing text block
+    const deleteTextButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .first();
+    await deleteTextButton.click();
+
+    // Add a template with a non-existent name
+    const addTemplateButton = userSection
+      .getByRole("button", { name: "Template" })
+      .last();
+    await expect(addTemplateButton).toBeVisible();
+    await addTemplateButton.click();
+
+    // Use a template name that doesn't exist
+    const templateNameInput = userSection.locator('input[type="text"]').first();
+    await templateNameInput.fill("nonexistent_template");
+
+    // Provide valid JSON (but for a template that doesn't exist)
+    const templateEditor = userSection
+      .locator("div[contenteditable='true']")
+      .last();
+    await templateEditor.fill(
+      JSON.stringify({ name: "Alice", place: "NYC" }, null, 2),
+    );
+
+    // Try to save - should fail
+    const currentUrl = page.url();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    // Wait briefly to see if an error appears or save fails
+    await page.waitForTimeout(1000);
+
+    // Verify we're still on the same page (didn't redirect) OR an error message appeared
+    const stillOnSamePage = page.url() === currentUrl;
+    const errorVisible = await page
+      .getByText(/error|invalid|failed/i)
+      .isVisible()
+      .catch(() => false);
+
+    expect(stillOnSamePage || errorVisible).toBeTruthy();
+  });
+
+  test("should reject template missing required fields", async ({ page }) => {
+    // greeting_template schema requires: name, place, day_of_week (all required)
+    await createDatapointFromInference(page, {
+      inferenceId: "019a0881-7437-7495-b506-782079c593bf",
+    });
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await expandShowMoreIfPresent(page);
+
+    const userSection = page.getByTestId("message-user").first();
+
+    // Delete the existing text block
+    const deleteTextButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .first();
+    await deleteTextButton.click();
+
+    // Add template
+    const addTemplateButton = userSection
+      .getByRole("button", { name: "Template" })
+      .last();
+    await addTemplateButton.click();
+
+    const templateNameInput = userSection.locator('input[type="text"]').first();
+    await templateNameInput.fill("greeting_template");
+
+    // Missing required fields: place and day_of_week
+    const templateEditor = userSection
+      .locator("div[contenteditable='true']")
+      .last();
+    await templateEditor.fill(JSON.stringify({ name: "Alice" }, null, 2));
+
+    // Try to save - should fail
+    const currentUrl = page.url();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await page.waitForTimeout(1000);
+
+    const stillOnSamePage = page.url() === currentUrl;
+    const errorVisible = await page
+      .getByText(/error|invalid|failed|required/i)
+      .isVisible()
+      .catch(() => false);
+
+    expect(stillOnSamePage || errorVisible).toBeTruthy();
+  });
+
+  test("should reject template with wrong field types", async ({ page }) => {
+    // greeting_template schema expects strings, but we'll provide a number
+    await createDatapointFromInference(page, {
+      inferenceId: "019a0881-7437-7495-b506-782079c593bf",
+    });
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await expandShowMoreIfPresent(page);
+
+    const userSection = page.getByTestId("message-user").first();
+
+    // Delete the existing text block
+    const deleteTextButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .first();
+    await deleteTextButton.click();
+
+    // Add template
+    const addTemplateButton = userSection
+      .getByRole("button", { name: "Template" })
+      .last();
+    await addTemplateButton.click();
+
+    const templateNameInput = userSection.locator('input[type="text"]').first();
+    await templateNameInput.fill("greeting_template");
+
+    // Wrong type: name should be string, but we provide number
+    const templateEditor = userSection
+      .locator("div[contenteditable='true']")
+      .last();
+    await templateEditor.fill(
+      JSON.stringify(
+        { name: 123, place: "NYC", day_of_week: "Monday" },
+        null,
+        2,
+      ),
+    );
+
+    // Try to save - should fail
+    const currentUrl = page.url();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await page.waitForTimeout(1000);
+
+    const stillOnSamePage = page.url() === currentUrl;
+    const errorVisible = await page
+      .getByText(/error|invalid|failed|type/i)
+      .isVisible()
+      .catch(() => false);
+
+    expect(stillOnSamePage || errorVisible).toBeTruthy();
+  });
+
+  test("should reject template with extra fields", async ({ page }) => {
+    // greeting_template schema has additionalProperties: false
+    await createDatapointFromInference(page, {
+      inferenceId: "019a0881-7437-7495-b506-782079c593bf",
+    });
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await expandShowMoreIfPresent(page);
+
+    const userSection = page.getByTestId("message-user").first();
+
+    // Delete the existing text block
+    const deleteTextButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .first();
+    await deleteTextButton.click();
+
+    // Add template
+    const addTemplateButton = userSection
+      .getByRole("button", { name: "Template" })
+      .last();
+    await addTemplateButton.click();
+
+    const templateNameInput = userSection.locator('input[type="text"]').first();
+    await templateNameInput.fill("greeting_template");
+
+    // Extra field that's not in the schema
+    const templateEditor = userSection
+      .locator("div[contenteditable='true']")
+      .last();
+    await templateEditor.fill(
+      JSON.stringify(
+        {
+          name: "Alice",
+          place: "NYC",
+          day_of_week: "Monday",
+          extra_field: "not_allowed",
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Try to save - should fail
+    const currentUrl = page.url();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await page.waitForTimeout(1000);
+
+    const stillOnSamePage = page.url() === currentUrl;
+    const errorVisible = await page
+      .getByText(/error|invalid|failed|additional/i)
+      .isVisible()
+      .catch(() => false);
+
+    expect(stillOnSamePage || errorVisible).toBeTruthy();
+  });
+
+  test("should reject template with malformed JSON", async ({ page }) => {
+    await createDatapointFromInference(page, {
+      inferenceId: "019a0881-7437-7495-b506-782079c593bf",
+    });
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await expandShowMoreIfPresent(page);
+
+    const userSection = page.getByTestId("message-user").first();
+
+    // Delete the existing text block
+    const deleteTextButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .first();
+    await deleteTextButton.click();
+
+    // Add template
+    const addTemplateButton = userSection
+      .getByRole("button", { name: "Template" })
+      .last();
+    await addTemplateButton.click();
+
+    const templateNameInput = userSection.locator('input[type="text"]').first();
+    await templateNameInput.fill("greeting_template");
+
+    // Malformed JSON - missing closing brace
+    const templateEditor = userSection
+      .locator("div[contenteditable='true']")
+      .last();
+    await templateEditor.fill(
+      '{"name": "Alice", "place": "NYC", "day_of_week": "Monday"',
+    );
+
+    // Try to save - should fail
+    const currentUrl = page.url();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await page.waitForTimeout(1000);
+
+    const stillOnSamePage = page.url() === currentUrl;
+    const errorVisible = await page
+      .getByText(/error|invalid|failed|json/i)
+      .isVisible()
+      .catch(() => false);
+
+    expect(stillOnSamePage || errorVisible).toBeTruthy();
+  });
+
+  test("should reject template with empty name", async ({ page }) => {
+    await createDatapointFromInference(page, {
+      inferenceId: "019a0881-7437-7495-b506-782079c593bf",
+    });
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    await expandShowMoreIfPresent(page);
+
+    const userSection = page.getByTestId("message-user").first();
+
+    // Delete the existing text block
+    const deleteTextButton = userSection
+      .getByRole("button", { name: "Delete content block" })
+      .first();
+    await deleteTextButton.click();
+
+    // Add template
+    const addTemplateButton = userSection
+      .getByRole("button", { name: "Template" })
+      .last();
+    await addTemplateButton.click();
+
+    // Leave template name empty
+    const templateNameInput = userSection.locator('input[type="text"]').first();
+    await templateNameInput.fill("");
+
+    // Provide valid JSON
+    const templateEditor = userSection
+      .locator("div[contenteditable='true']")
+      .last();
+    await templateEditor.fill(
+      JSON.stringify(
+        { name: "Alice", place: "NYC", day_of_week: "Monday" },
+        null,
+        2,
+      ),
+    );
+
+    // Try to save - should fail
+    const currentUrl = page.url();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await page.waitForTimeout(1000);
+
+    const stillOnSamePage = page.url() === currentUrl;
+    const errorVisible = await page
+      .getByText(/error|invalid|failed|empty|required/i)
+      .isVisible()
+      .catch(() => false);
+
+    expect(stillOnSamePage || errorVisible).toBeTruthy();
+  });
+});
+
+// ============================================================================
+// Error Cases - System Template Validation
+// ============================================================================
+
+test.describe("Error Cases - System Template Validation", () => {
+  test("should reject system template with malformed JSON", async ({
+    page,
+  }) => {
+    // Use answer_question function which has system_schema
+    await createDatapointFromInference(page, {
+      inferenceId: "01968d06-392d-7451-b32c-e77ed6b13146",
+    });
+
+    await page.getByRole("button", { name: "Edit" }).click();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+
+    // Delete existing system message
+    const deleteSystemButton = page.getByRole("button", {
+      name: "Delete system",
+    });
+    await expect(deleteSystemButton).toBeVisible();
+    await deleteSystemButton.click();
+
+    // Add system template
+    const systemSection = page.getByTestId("message-system");
+    const addTemplateButton = systemSection.getByRole("button", {
+      name: "Template",
+    });
+    await expect(addTemplateButton).toBeVisible();
+    await addTemplateButton.click();
+
+    // Provide malformed JSON - missing closing brace
+    const templateEditor = page.locator("div[contenteditable='true']").first();
+    await templateEditor.waitFor({ state: "visible" });
+    await templateEditor.fill('{"secret": "value"');
+
+    // Try to save - should fail
+    const currentUrl = page.url();
+    await page.getByRole("button", { name: "Save" }).click();
+
+    await page.waitForTimeout(1000);
+
+    const stillOnSamePage = page.url() === currentUrl;
+    const errorVisible = await page
+      .getByText(/error|invalid|failed|json/i)
+      .isVisible()
+      .catch(() => false);
+
+    expect(stillOnSamePage || errorVisible).toBeTruthy();
+  });
+});
