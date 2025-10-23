@@ -858,7 +858,7 @@ async fn tensorzero_otel_tracing_middleware(
     }
 
     // Otherwise, just process the request without creating a span.
-    // Since `make_otel_http_span` didn't run, we won't have an `InFlightSpan` in the context,
+    // Since `make_otel_http_span` didn't run, we won't have an `InFlightOtelOnlySpan` in the context,
     next.run(req).await
 }
 
