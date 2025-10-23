@@ -31,6 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { useReadOnly } from "~/context/read-only";
 
 const columnHelper = createColumnHelper<DatasetMetadata>();
 
@@ -40,6 +41,7 @@ export default function DatasetTable({
   counts: DatasetMetadata[];
 }) {
   const fetcher = useFetcher();
+  const { isReadOnly } = useReadOnly();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [datasetToDelete, setDatasetToDelete] = useState<string | null>(null);
 
@@ -78,6 +80,7 @@ export default function DatasetTable({
               variant="ghost"
               size="icon"
               className="opacity-60 transition-opacity hover:opacity-100"
+              disabled={isReadOnly}
               onClick={() => {
                 setDatasetToDelete(info.row.original.dataset_name);
                 setDeleteDialogOpen(true);
@@ -90,7 +93,7 @@ export default function DatasetTable({
         enableSorting: false,
       }),
     ],
-    [],
+    [isReadOnly],
   );
 
   const table = useReactTable({

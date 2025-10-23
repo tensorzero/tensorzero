@@ -22,6 +22,7 @@ import { useFetcher } from "react-router";
 import { DeleteButton } from "~/components/utils/DeleteButton";
 import { staleDatapoint } from "~/utils/clickhouse/datasets.server";
 import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
+import { useReadOnly } from "~/context/read-only";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { dataset_name } = params;
@@ -115,6 +116,7 @@ export default function DatasetDetailPage({
   const { rows, count_info, pageSize, offset, rowsAdded, rowsSkipped } =
     loaderData;
   const { toast } = useToast();
+  const { isReadOnly } = useReadOnly();
   const fetcher = useFetcher();
   const navigate = useNavigate();
 
@@ -157,6 +159,7 @@ export default function DatasetDetailPage({
           <DeleteButton
             onClick={handleDelete}
             isLoading={fetcher.state === "submitting"}
+            disabled={isReadOnly}
           />
         </div>
       </PageHeader>

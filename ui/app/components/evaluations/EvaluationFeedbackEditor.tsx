@@ -14,6 +14,7 @@ import { useConfig } from "~/context/config";
 import FloatFeedbackInput from "../feedback/FloatFeedbackInput";
 import { Button } from "../ui/button";
 import { logger } from "~/utils/logger";
+import { useReadOnly } from "~/context/read-only";
 
 interface EvaluationFeedbackEditorProps {
   inferenceId: string;
@@ -38,10 +39,14 @@ export default function EvaluationFeedbackEditor({
   const [isOpen, setIsOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const { getColor } = useColorAssigner();
+  const { isReadOnly } = useReadOnly();
   const config = useConfig();
   const metricConfig = config.metrics[metricName];
   if (!metricConfig) {
     logger.warn(`Metric ${metricName} not found`);
+    return null;
+  }
+  if (isReadOnly) {
     return null;
   }
   const metricType = metricConfig.type;

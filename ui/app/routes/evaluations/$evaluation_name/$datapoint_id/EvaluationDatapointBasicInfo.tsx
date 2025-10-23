@@ -22,6 +22,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { useReadOnly } from "~/context/read-only";
 
 interface BasicInfoProps {
   evaluation_name: string;
@@ -44,6 +45,7 @@ export default function BasicInfo({
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const functionConfig = useFunctionConfig(functionName);
+  const { isReadOnly } = useReadOnly();
   const functionType = functionConfig?.type;
   const functionIconConfig = functionType
     ? getFunctionTypeIcon(functionType)
@@ -58,7 +60,7 @@ export default function BasicInfo({
             label={datapoint_name}
             defaultLabel="—"
             font="mono"
-            onSetLabel={onRenameDatapoint}
+            onSetLabel={isReadOnly ? undefined : onRenameDatapoint}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
