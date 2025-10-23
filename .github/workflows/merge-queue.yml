@@ -384,7 +384,7 @@ jobs:
   ui-tests-e2e-regen-model-inference-cache:
     permissions:
       contents: read
-      actions: read
+      actions: write
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
