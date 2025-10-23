@@ -627,8 +627,11 @@ pub async fn insert_datapoint(
                         })
                     })?;
                 // Prepare the tool config
-                let tool_config =
-                    function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools, None)?;
+                let tool_config = function_config.prepare_tool_config(
+                    chat.dynamic_tool_params,
+                    &config.tools,
+                    None,
+                )?;
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Chat(tool_config.clone().unwrap_or_default());
                 // Validate the output
