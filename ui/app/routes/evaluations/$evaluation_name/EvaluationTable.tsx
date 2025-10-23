@@ -14,7 +14,6 @@ import { Checkbox } from "~/components/ui/checkbox";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { toEvaluationDatapointUrl } from "~/utils/urls";
@@ -196,21 +195,19 @@ const VariantCircle = ({
   const colorClass = getColor(runId);
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className={`${colorClass} h-4 w-4 cursor-help rounded-full`} />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="p-2">
-          <p className="text-xs">
-            Variant: <span className="font-mono text-xs">{variantName}</span>
-          </p>
-          <p className="text-xs">
-            Run ID: <span className="font-mono text-xs">{runId}</span>
-          </p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className={`${colorClass} h-4 w-4 cursor-help rounded-full`} />
+      </TooltipTrigger>
+      <TooltipContent side="top" className="p-2">
+        <p className="text-xs">
+          Variant: <span className="font-mono text-xs">{variantName}</span>
+        </p>
+        <p className="text-xs">
+          Run ID: <span className="font-mono text-xs">{runId}</span>
+        </p>
+      </TooltipContent>
+    </Tooltip>
   );
 };
 
@@ -703,42 +700,38 @@ const EvaluatorHeader = ({
     return null;
   }
   return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="cursor-help">
-            <div className="font-mono">{evaluator_name}</div>
-            <EvaluatorProperties
-              metricConfig={metricProperties}
-              summaryStats={summaryStats}
-              evaluatorConfig={evaluatorConfig}
-            />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="cursor-help">
+          <div className="font-mono">{evaluator_name}</div>
+          <EvaluatorProperties
+            metricConfig={metricProperties}
+            summaryStats={summaryStats}
+            evaluatorConfig={evaluatorConfig}
+          />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="p-3">
+        <div className="space-y-1 text-left text-xs">
+          <div>
+            <span className="font-medium">Type:</span>
+            <span className="ml-2 font-medium">{metricProperties.type}</span>
           </div>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="p-3">
-          <div className="space-y-1 text-left text-xs">
-            <div>
-              <span className="font-medium">Type:</span>
-              <span className="ml-2 font-medium">{metricProperties.type}</span>
-            </div>
-            <div>
-              <span className="font-medium">Optimize:</span>
-              <span className="ml-2 font-medium">
-                {metricProperties.optimize}
-              </span>
-            </div>
-            {evaluatorConfig.cutoff !== undefined && (
-              <div>
-                <span className="font-medium">Cutoff:</span>
-                <span className="ml-2 font-medium">
-                  {evaluatorConfig.cutoff}
-                </span>
-              </div>
-            )}
+          <div>
+            <span className="font-medium">Optimize:</span>
+            <span className="ml-2 font-medium">
+              {metricProperties.optimize}
+            </span>
           </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+          {evaluatorConfig.cutoff !== undefined && (
+            <div>
+              <span className="font-medium">Cutoff:</span>
+              <span className="ml-2 font-medium">{evaluatorConfig.cutoff}</span>
+            </div>
+          )}
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 };
 

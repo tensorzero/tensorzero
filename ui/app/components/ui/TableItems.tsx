@@ -1,10 +1,5 @@
 import { Link } from "react-router";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  TooltipProvider,
-} from "./tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { formatDate } from "~/utils/date";
 import { useFunctionConfig } from "~/context/config";
@@ -30,29 +25,27 @@ function TableItemShortUuid({ id, link }: TableItemShortUuidProps) {
   );
 
   return (
-    <TooltipProvider delayDuration={400}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          {link ? (
-            <Link
-              to={link}
-              aria-label={id}
-              className="block no-underline transition-colors duration-300 hover:text-gray-500"
-            >
-              {content}
-            </Link>
-          ) : (
-            content
-          )}
-        </TooltipTrigger>
-        <TooltipContent
-          className="border-border bg-bg-secondary text-fg-primary border font-mono shadow-lg"
-          sideOffset={5}
-        >
-          {id}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {link ? (
+          <Link
+            to={link}
+            aria-label={id}
+            className="block no-underline transition-colors duration-300 hover:text-gray-500"
+          >
+            {content}
+          </Link>
+        ) : (
+          content
+        )}
+      </TooltipTrigger>
+      <TooltipContent
+        className="border-border bg-bg-secondary text-fg-primary border font-mono shadow-lg"
+        sideOffset={5}
+      >
+        {id}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -97,21 +90,20 @@ function TableItemFunction({
 
   const content = (
     <>
-      <TooltipProvider delayDuration={400}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className={`${functionIconConfig.iconBg} rounded-sm p-0.5`}>
-              {functionIconConfig.icon}
-            </div>
-          </TooltipTrigger>
-          <TooltipContent
-            className="border-border bg-bg-secondary text-fg-primary border shadow-lg"
-            sideOffset={5}
-          >
-            {functionIconConfig.label}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className={`${functionIconConfig.iconBg} rounded-sm p-0.5`}>
+            {functionIconConfig.icon}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent
+          className="border-border bg-bg-secondary text-fg-primary border shadow-lg"
+          sideOffset={5}
+        >
+          {functionIconConfig.label}
+        </TooltipContent>
+      </Tooltip>
+
       <span className="text-fg-primary inline-block truncate transition-colors duration-300 group-hover:text-gray-500">
         {functionName}
       </span>

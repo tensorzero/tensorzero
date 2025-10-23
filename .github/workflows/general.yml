@@ -752,7 +752,7 @@ jobs:
   ui-tests-e2e:
     permissions:
       contents: read
-      actions: read
+      actions: write
     uses: ./.github/workflows/ui-tests-e2e.yml
     needs: [build-gateway-container, build-ui-container]
     secrets:

@@ -32,6 +32,41 @@ pub struct JsonlBatchFileInfo {
     pub file_id: String,
 }
 
+pub async fn convert_stream_error(provider_type: String, e: reqwest_eventsource::Error) -> Error {
+    let message = e.to_string();
+    // If we get an invalid status code, content type, or generic transport error,
+    // then we assume that we're never going to be able to read more chunks from the stream,
+    // The `wrap_provider_stream` function will bail out when it sees this error,
+    // to avoid holding open a broken stream (which will delay gateway shutdown when we
+    // wait on the parent `Span` to finish)
+    match e {
+        reqwest_eventsource::Error::InvalidStatusCode(_, resp)
+        | reqwest_eventsource::Error::InvalidContentType(_, resp) => {
+            ErrorDetails::FatalStreamError {
+                message,
+                provider_type,
+                raw_request: None,
+                raw_response: resp.text().await.ok(),
+            }
+            .into()
+        }
+        reqwest_eventsource::Error::Transport(_) => ErrorDetails::FatalStreamError {
+            message,
+            provider_type,
+            raw_request: None,
+            raw_response: None,
+        }
+        .into(),
+        _ => ErrorDetails::InferenceServer {
+            message,
+            raw_request: None,
+            raw_response: None,
+            provider_type,
+        }
+        .into(),
+    }
+}
+
 // If we could have forwarded an file/image (except for the fact that we're missing the mime_type), log a warning.
 pub fn warn_cannot_forward_url_if_missing_mime_type(
     file: &LazyFile,

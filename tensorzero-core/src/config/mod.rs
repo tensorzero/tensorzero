@@ -784,7 +784,9 @@ impl Config {
             )?;
 
         let mut config = Config {
-            gateway: uninitialized_config.gateway.load()?,
+            gateway: uninitialized_config
+                .gateway
+                .load(object_store_info.as_ref())?,
             models: Arc::new(models),
             embedding_models: Arc::new(embedding_models),
             functions,

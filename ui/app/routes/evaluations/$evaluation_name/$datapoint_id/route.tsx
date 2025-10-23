@@ -37,7 +37,6 @@ import BasicInfo from "./EvaluationDatapointBasicInfo";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { EvalRunSelector } from "~/components/evaluations/EvalRunSelector";
@@ -419,39 +418,35 @@ const MetricRow = ({
   const evaluationType = evaluatorConfig.type;
   return (
     <div className="group flex items-center gap-2">
-      <TooltipProvider delayDuration={300}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="cursor-help text-sm text-gray-600">
-              {evaluatorName}:
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="cursor-help text-sm text-gray-600">
+            {evaluatorName}:
+          </div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="p-3">
+          <div className="space-y-1 text-left text-xs">
+            <div>
+              <span className="font-medium">Type:</span>
+              <span className="ml-2 font-medium">{metricProperties.type}</span>
             </div>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="p-3">
-            <div className="space-y-1 text-left text-xs">
+            <div>
+              <span className="font-medium">Optimize:</span>
+              <span className="ml-2 font-medium">
+                {metricProperties.optimize}
+              </span>
+            </div>
+            {evaluatorConfig.cutoff !== undefined && (
               <div>
-                <span className="font-medium">Type:</span>
+                <span className="font-medium">Cutoff:</span>
                 <span className="ml-2 font-medium">
-                  {metricProperties.type}
+                  {evaluatorConfig.cutoff}
                 </span>
               </div>
-              <div>
-                <span className="font-medium">Optimize:</span>
-                <span className="ml-2 font-medium">
-                  {metricProperties.optimize}
-                </span>
-              </div>
-              {evaluatorConfig.cutoff !== undefined && (
-                <div>
-                  <span className="font-medium">Cutoff:</span>
-                  <span className="ml-2 font-medium">
-                    {evaluatorConfig.cutoff}
-                  </span>
-                </div>
-              )}
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
       <MetricValue
         value={String(metricValue)}
         metricType={getMetricType(evaluatorConfig)}

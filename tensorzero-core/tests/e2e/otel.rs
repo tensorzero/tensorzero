@@ -2,6 +2,7 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
 use opentelemetry::{trace::Status, KeyValue, SpanId, Value};
@@ -14,8 +15,10 @@ use tensorzero::{
     Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     FeedbackParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Role,
 };
-use tensorzero_core::observability::setup_observability_with_exporter_override;
 use tensorzero_core::observability::LogFormat;
+use tensorzero_core::observability::{
+    enter_fake_http_request_otel, setup_observability_with_exporter_override,
+};
 use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -120,6 +123,8 @@ pub async fn test_reproduce_tracing_bug() {
 
     let client = make_embedded_gateway_with_config(&config).await;
 
+    let _guard = enter_fake_http_request_otel();
+
     // Make an inference to initialize the tracing call-site cache
     client
         .inference(ClientInferenceParams {
@@ -198,6 +203,8 @@ pub async fn test_capture_simple_inference_spans_openinference_tags_streaming() 
 }
 
 struct ResponseData {
+    model_name: String,
+    streaming: bool,
     inference_id: Uuid,
     episode_id: Uuid,
     input_tokens: i64,
@@ -236,6 +243,8 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
     };
 
     ResponseData {
+        model_name: "dummy::good".to_string(),
+        streaming: false,
         inference_id: response.inference_id,
         episode_id: response.episode_id,
         input_tokens: response.usage.input_tokens as i64,
@@ -252,6 +261,7 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
                 system: None,
                 messages: vec![ClientInputMessage {
                     role: Role::User,
+
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: "What is your name?".to_string(),
                     })],
@@ -289,6 +299,8 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
     }
 
     ResponseData {
+        model_name: "dummy::good".to_string(),
+        streaming: true,
         inference_id: inference_id.unwrap(),
         episode_id: episode_id.unwrap(),
         input_tokens,
@@ -297,33 +309,116 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
     }
 }
 
-pub async fn test_capture_simple_inference_spans(
-    mode: OtlpTracesFormat,
-    config_mode: &str,
-    streaming: bool,
-) {
+#[tokio::test]
+async fn test_stream_fatal_error_usage() {
     let exporter = install_capturing_otel_exporter().await;
 
-    let config = format!(
-        "
+    let config = "
     [gateway.export.otlp.traces]
     enabled = true
-    format = \"{config_mode}\"
     "
-    );
+    .to_string();
+
+    let _guard = enter_fake_http_request_otel();
 
     let client = make_embedded_gateway_with_config(&config).await;
-    let response_data = if streaming {
-        make_streaming_inference(&client).await
-    } else {
-        make_non_streaming_inference(&client).await
+    let model_name = "dummy::fatal_stream_error";
+    let res: InferenceOutput = client
+        .inference(ClientInferenceParams {
+            model_name: Some(model_name.to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
+            stream: Some(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::Streaming(mut stream) = res else {
+        panic!("Expected streaming output, got: {res:#?}");
     };
+
+    let mut inference_id = None;
+    let mut episode_id = None;
+    let mut input_tokens = 0;
+    let mut output_tokens = 0;
+    let mut total_tokens = 0;
+    let mut all_chunks = vec![];
+    while let Some(chunk) = stream.next().await {
+        all_chunks.push(chunk.clone());
+        match chunk {
+            Ok(InferenceResponseChunk::Chat(response)) => {
+                inference_id = Some(response.inference_id);
+                episode_id = Some(response.episode_id);
+                if let Some(usage) = response.usage {
+                    input_tokens += usage.input_tokens as i64;
+                    output_tokens += usage.output_tokens as i64;
+                    total_tokens += (usage.input_tokens + usage.output_tokens) as i64;
+                }
+            }
+            Ok(_) => panic!("Expected chat response, got: {chunk:#?}"),
+            Err(e) => {
+                // Once we encounter a fatal error, the stream should end, and spans should be reported
+                // The 'dummy::fatal_stream_error' model will try to produce more chunks after 5 seconds,
+                // but the client should not see them, and the OTEL span should get reported anyway.
+                assert!(
+                    e.to_string().contains("Dummy fatal error"),
+                    "Unexpected error: {e:#?}"
+                );
+                let start = Instant::now();
+                let next_chunk = stream.next().await;
+                let elapsed = start.elapsed();
+                assert!(
+                    elapsed < Duration::from_secs(1),
+                    "Stream should end within 1 second of fatal error, but took {elapsed:?}"
+                );
+                assert!(
+                    next_chunk.is_none(),
+                    "Expected stream to end after fatal error, got: {next_chunk:#?}"
+                );
+                check_spans(
+                    &exporter,
+                    ResponseData {
+                        model_name: model_name.to_string(),
+                        streaming: true,
+                        inference_id: inference_id.unwrap(),
+                        episode_id: episode_id.unwrap(),
+                        input_tokens,
+                        output_tokens,
+                        total_tokens,
+                    },
+                    OtlpTracesFormat::OpenTelemetry,
+                );
+                return;
+            }
+        }
+    }
+    panic!("Expected to see fatal error in stream, but saw: {all_chunks:#?}");
+}
+
+fn check_spans(
+    exporter: &CapturingOtelExporter,
+    response_data: ResponseData,
+    mode: OtlpTracesFormat,
+) {
     let ResponseData {
         inference_id,
         episode_id,
         input_tokens,
         output_tokens,
         total_tokens,
+        model_name,
+        streaming,
     } = response_data;
 
     let all_spans = exporter.take_spans();
@@ -336,9 +431,9 @@ pub async fn test_capture_simple_inference_spans(
     // Since we're using the embedded gateway, the root span will be `function_inference`
     // (we won't have a top-level HTTP span)
     assert_eq!(root_span.name, "function_inference");
-    assert_eq!(root_span.status, Status::Unset);
+    assert_eq!(root_span.status, Status::Ok);
     let root_attr_map = attrs_to_map(&root_span.attributes);
-    assert_eq!(root_attr_map["model_name"], "dummy::good".into());
+    assert_eq!(root_attr_map["model_name"], model_name.clone().into());
     assert_eq!(
         root_attr_map["inference_id"],
         inference_id.to_string().into()
@@ -367,13 +462,13 @@ pub async fn test_capture_simple_inference_spans(
     };
 
     assert_eq!(variant_span.name, "variant_inference");
-    assert_eq!(variant_span.status, Status::Unset);
+    assert_eq!(variant_span.status, Status::Ok);
     let variant_attr_map = attrs_to_map(&variant_span.attributes);
     assert_eq!(
         variant_attr_map["function_name"],
         "tensorzero::default".into()
     );
-    assert_eq!(variant_attr_map["variant_name"], "dummy::good".into());
+    assert_eq!(variant_attr_map["variant_name"], model_name.clone().into());
     assert_eq!(variant_attr_map["stream"], streaming.into());
 
     let variant_children = &spans.span_children[&variant_span.span_context.span_id()];
@@ -382,9 +477,9 @@ pub async fn test_capture_simple_inference_spans(
     };
 
     assert_eq!(model_span.name, "model_inference");
-    assert_eq!(model_span.status, Status::Unset);
+    assert_eq!(model_span.status, Status::Ok);
     let model_attr_map = attrs_to_map(&model_span.attributes);
-    assert_eq!(model_attr_map["model_name"], "dummy::good".into());
+    assert_eq!(model_attr_map["model_name"], model_name.clone().into());
     assert_eq!(model_attr_map["stream"], streaming.into());
 
     let model_children = &spans.span_children[&model_span.span_context.span_id()];
@@ -392,7 +487,7 @@ pub async fn test_capture_simple_inference_spans(
         panic!("Expected one child span: {model_children:#?}");
     };
     assert_eq!(model_provider_span.name, "model_provider_inference");
-    assert_eq!(model_provider_span.status, Status::Unset);
+    assert_eq!(model_provider_span.status, Status::Ok);
     let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
     assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
 
@@ -405,7 +500,11 @@ pub async fn test_capture_simple_inference_spans(
             assert_eq!(model_provider_attr_map["gen_ai.system"], "dummy".into());
             assert_eq!(
                 model_provider_attr_map["gen_ai.request.model"],
-                "good".into()
+                model_name
+                    .strip_prefix("dummy::")
+                    .unwrap()
+                    .to_string()
+                    .into()
             );
             assert!(!model_provider_attr_map.contains_key("openinference.span.kind"));
             assert!(!model_provider_attr_map.contains_key("llm.system"));
@@ -435,7 +534,14 @@ pub async fn test_capture_simple_inference_spans(
                 "LLM".into()
             );
             assert_eq!(model_provider_attr_map["llm.system"], "dummy".into());
-            assert_eq!(model_provider_attr_map["llm.model_name"], "good".into());
+            assert_eq!(
+                model_provider_attr_map["llm.model_name"],
+                model_name
+                    .strip_prefix("dummy::")
+                    .unwrap()
+                    .to_string()
+                    .into()
+            );
             assert!(!model_provider_attr_map.contains_key("gen_ai.operation.name"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.system"));
             assert!(!model_provider_attr_map.contains_key("gen_ai.request.model"));
@@ -492,6 +598,31 @@ pub async fn test_capture_simple_inference_spans(
     assert_eq!(num_spans, 4);
 }
 
+pub async fn test_capture_simple_inference_spans(
+    mode: OtlpTracesFormat,
+    config_mode: &str,
+    streaming: bool,
+) {
+    let exporter = install_capturing_otel_exporter().await;
+
+    let config = format!(
+        "
+    [gateway.export.otlp.traces]
+    enabled = true
+    format = \"{config_mode}\"
+    "
+    );
+
+    let client = make_embedded_gateway_with_config(&config).await;
+    let _guard = enter_fake_http_request_otel();
+    let response_data = if streaming {
+        make_streaming_inference(&client).await
+    } else {
+        make_non_streaming_inference(&client).await
+    };
+    check_spans(&exporter, response_data, mode);
+}
+
 #[test]
 pub fn test_capture_model_error_genai_tags() {
     test_capture_model_error(OtlpTracesFormat::OpenTelemetry, "opentelemetry");
@@ -516,6 +647,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let (exporter, _err) = runtime.block_on(async {
         let exporter = install_capturing_otel_exporter().await;
+        let _guard = enter_fake_http_request_otel();
         let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
         let _err = client
             .inference(ClientInferenceParams {
@@ -571,7 +703,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     };
 
     assert_eq!(variant_span.name, "variant_inference");
-    assert_eq!(variant_span.status, Status::Unset);
+    assert_eq!(variant_span.status, Status::Ok);
     let variant_attr_map = attrs_to_map(&variant_span.attributes);
     assert_eq!(
         variant_attr_map["function_name"],
@@ -682,8 +814,62 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+pub async fn test_suppress_otel_spans() {
+    let exporter = install_capturing_otel_exporter().await;
+
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    // We do *not* call `enter_fake_http_request_otel` before calling `inference`.
+    // As a result, otel reporting should get suppressed entirely.
+    // This is the behavior of an embedded client if we somehow turned on real otel exporting. (which we don't support at the moment)
+    // The main purpose of this test is to verify that otel span suppression works correctly - in a real gateway,
+    // we want to ensure that non-instrumented routes (e.g. ui routes) cannot cause otel spans to be reported,
+    // even if they call into instrumented code.
+    let res = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::NonStreaming(output) = res else {
+        panic!("Expected non-streaming output, got: {res:#?}");
+    };
+
+    let _feedback_res = client
+        .feedback(FeedbackParams {
+            inference_id: Some(output.inference_id()),
+            metric_name: "task_success".to_string(),
+            value: true.into(),
+            tags: HashMap::from([
+                ("my_tag".to_string(), "my_value".to_string()),
+                ("my_tag2".to_string(), "my_value2".to_string()),
+            ]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let all_spans = exporter.take_spans();
+    assert!(all_spans.is_empty(), "Should have suppressed all spans");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 pub async fn test_capture_feedback_spans() {
     let exporter = install_capturing_otel_exporter().await;
+    let _guard = enter_fake_http_request_otel();
 
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let res = client

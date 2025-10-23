@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use http::{HeaderMap, HeaderValue};
 use reqwest::multipart::Form;
 use reqwest::multipart::Part;
 use reqwest::Client;
@@ -36,6 +37,7 @@ use crate::stored_inference::StoredInference;
 #[derive(Debug, Clone)]
 pub struct ProductionClickHouseClient {
     database_url: SecretString,
+    sanitized_database_url: String,
     cluster_name: Option<String>,
     database: String,
     client: Client,
@@ -50,11 +52,61 @@ impl ProductionClickHouseClient {
         database: String,
         batch_config: BatchWritesConfig,
     ) -> Result<Self, Error> {
+        let parsed_database_url = Url::parse(database_url.expose_secret()).map_err(|e| {
+            Error::new(ErrorDetails::Config {
+                message: format!("Invalid ClickHouse database URL: {e}"),
+            })
+        })?;
+
+        let username = if parsed_database_url.username().is_empty() {
+            None
+        } else {
+            Some(
+                urlencoding::decode(parsed_database_url.username())
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("Failed to decode ClickHouse username from URL: {e}"),
+                        })
+                    })?
+                    .into_owned(),
+            )
+        };
+
+        let password = match parsed_database_url.password() {
+            Some(password) => Some(SecretString::from(
+                urlencoding::decode(password)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::Config {
+                            message: format!("Failed to decode ClickHouse password from URL: {e}"),
+                        })
+                    })?
+                    .into_owned(),
+            )),
+            None => None,
+        };
+
+        let mut sanitized_database_url = parsed_database_url.clone();
+        if !parsed_database_url.username().is_empty() {
+            sanitized_database_url.set_username("").map_err(|()| {
+                Error::new(ErrorDetails::Config {
+                    message: "Failed to sanitize ClickHouse URL username".to_string(),
+                })
+            })?;
+        }
+        if parsed_database_url.password().is_some() {
+            sanitized_database_url.set_password(None).map_err(|()| {
+                Error::new(ErrorDetails::Config {
+                    message: "Failed to sanitize ClickHouse URL password".to_string(),
+                })
+            })?;
+        }
+
         let mut client = Self {
             database_url,
+            sanitized_database_url: sanitized_database_url.to_string(),
             cluster_name,
             database,
-            client: make_clickhouse_http_client()?,
+            client: make_clickhouse_http_client(username, password)?,
             batch_sender: None,
         };
 
@@ -78,8 +130,32 @@ impl ProductionClickHouseClient {
     }
 }
 
-fn make_clickhouse_http_client() -> Result<Client, Error> {
+fn make_clickhouse_http_client(
+    username: Option<String>,
+    password: Option<SecretString>,
+) -> Result<Client, Error> {
+    let mut headers = HeaderMap::new();
+    if let Some(username) = username.as_ref() {
+        headers.insert(
+        "X-ClickHouse-User",
+        HeaderValue::from_str(username).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseConnection {
+                message: format!("Failed to build ClickHouse HTTP client because username contains invalid bytes: {e}"),
+            })
+        })?,
+    );
+    }
+    if let Some(password) = password {
+        let mut password_header_value = HeaderValue::from_str(password.expose_secret()).map_err(|e| {
+            Error::new(ErrorDetails::ClickHouseConnection {
+                message: format!("Failed to build ClickHouse HTTP client because password contains invalid bytes: {e}"),
+            })
+        })?;
+        password_header_value.set_sensitive(true);
+        headers.insert("X-ClickHouse-Key", password_header_value);
+    }
     Client::builder()
+        .default_headers(headers)
         // https://github.com/ClickHouse/clickhouse-rs/blob/56c5dd3fc95693acc5aa3d02db1f910a26fe5b1c/src/http_client.rs#L45
         .pool_idle_timeout(Duration::from_secs(2))
         // https://github.com/ClickHouse/clickhouse-rs/blob/56c5dd3fc95693acc5aa3d02db1f910a26fe5b1c/src/http_client.rs#L41
@@ -121,8 +197,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         table: TableName,
     ) -> Result<(), Error> {
         write_production(
-            &self.database_url,
-            &self.client,
+            self,
             Rows::<String>::Serialized(&rows),
             table,
             self.batch_sender.as_deref(),
@@ -135,14 +210,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         rows: Vec<String>,
         table: TableName,
     ) -> Result<(), Error> {
-        write_production(
-            &self.database_url,
-            &self.client,
-            Rows::<String>::Serialized(&rows),
-            table,
-            None,
-        )
-        .await
+        write_production(self, Rows::<String>::Serialized(&rows), table, None).await
     }
 
     async fn run_query_synchronous(
@@ -160,7 +228,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         parameters: &HashMap<&str, &str>,
         err_logging: bool,
     ) -> Result<ClickHouseResponse, Error> {
-        let mut database_url = Url::parse(self.database_url.expose_secret()).map_err(|e| Error::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
+        let mut database_url = Url::parse(&self.sanitized_database_url).map_err(|e| Error::new(ErrorDetails::ClickHouseQuery { message: format!("Error parsing ClickHouse URL: {e}. This should never happen. Please submit a bug report at https://github.com/tensorzero/tensorzero/issues/new") }))?;
         // Add query parameters if provided
         for (key, value) in parameters {
             let param_key = format!("param_{key}");
@@ -247,7 +315,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
         external_data: ExternalDataInfo,
         query: String,
     ) -> Result<ClickHouseResponse, Error> {
-        let database_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
+        let database_url = Url::parse(&self.sanitized_database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
@@ -314,7 +382,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
     }
 
     async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error> {
-        let database_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
+        let database_url = Url::parse(&self.sanitized_database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
@@ -381,7 +449,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
     }
 
     async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
-        let database_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
+        let database_url = Url::parse(&self.sanitized_database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
@@ -538,7 +606,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
 impl HealthCheckable for ProductionClickHouseClient {
     async fn health(&self) -> Result<(), Error> {
         // We need to ping the /ping endpoint to check if ClickHouse is healthy
-        let mut ping_url = Url::parse(self.database_url.expose_secret()).map_err(|_| {
+        let mut ping_url = Url::parse(&self.sanitized_database_url).map_err(|_| {
             Error::new(ErrorDetails::Config {
                 message: "Invalid ClickHouse database URL".to_string(),
             })
@@ -567,8 +635,7 @@ impl HealthCheckable for ProductionClickHouseClient {
 }
 
 async fn write_production<T: Serialize + Send + Sync>(
-    database_url: &SecretString,
-    client: &Client,
+    client: &ProductionClickHouseClient,
     rows: Rows<'_, T>,
     table: TableName,
     batch: Option<&BatchSender>,
@@ -602,7 +669,8 @@ async fn write_production<T: Serialize + Send + Sync>(
     );
 
     let response = client
-        .post(database_url.expose_secret())
+        .client
+        .post(client.sanitized_database_url.as_str())
         .body(query)
         .send()
         .await

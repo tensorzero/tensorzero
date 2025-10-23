@@ -4,7 +4,7 @@ use axum::{
     extract::{DefaultBodyLimit, Request},
     middleware::Next,
     response::Response,
-    routing::{delete, get, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
@@ -13,7 +13,10 @@ use tensorzero_core::{
     endpoints::{self, openai_compatible::RouterExt},
     utils::gateway::AppStateData,
 };
-use tower_http::trace::{DefaultOnFailure, TraceLayer};
+use tower_http::{
+    metrics::{in_flight_requests::InFlightRequestsCounter, InFlightRequestsLayer},
+    trace::{DefaultOnFailure, TraceLayer},
+};
 use tracing::Level;
 
 /// Builds the final Axum router for the gateway,
@@ -23,7 +26,7 @@ pub fn build_axum_router(
     otel_tracer: Option<Arc<TracerWrapper>>,
     app_state: AppStateData,
     metrics_handle: PrometheusHandle,
-) -> Router {
+) -> (Router, InFlightRequestsCounter) {
     let api_routes = build_api_routes(otel_tracer, metrics_handle);
     // The path was just `/` (or multiple slashes)
     let router = if base_path.is_empty() {
@@ -32,16 +35,24 @@ pub fn build_axum_router(
         Router::new().nest(base_path, api_routes)
     };
 
-    router
+    let (in_flight_requests_layer, in_flight_requests_counter) = InFlightRequestsLayer::pair();
+
+    let final_router = router
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
+        .layer(axum::middleware::from_fn(
+            crate::warn_early_drop::warn_on_early_connection_drop,
+        ))
         // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
         // This is only used to output request/response information to our logs
         // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
         // We log failed requests messages at 'DEBUG', since we already have our own error-logging code,
         .layer(TraceLayer::new_for_http().on_failure(DefaultOnFailure::new().level(Level::DEBUG)))
-        .with_state(app_state.clone())
+        // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
+        .layer(in_flight_requests_layer)
+        .with_state(app_state.clone());
+    (final_router, in_flight_requests_counter)
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
@@ -133,6 +144,10 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         .route(
             "/datasets/{dataset_name}/datapoints/{datapoint_id}",
             get(endpoints::datasets::get_datapoint_handler),
+        )
+        .route(
+            "/v1/datasets/{dataset_name}/datapoints",
+            patch(endpoints::datasets::v1::update_datapoints_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",

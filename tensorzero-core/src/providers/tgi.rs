@@ -24,10 +24,10 @@ use std::time::Duration;
 use tokio::time::Instant;
 use url::Url;
 
+use super::helpers::convert_stream_error;
 use super::openai::{
-    convert_stream_error, get_chat_url, prepare_openai_messages, prepare_openai_tools,
-    OpenAIRequestMessage, OpenAITool, OpenAIToolChoice, OpenAIToolType, StreamOptions,
-    SystemOrDeveloper,
+    get_chat_url, prepare_openai_messages, prepare_openai_tools, OpenAIRequestMessage, OpenAITool,
+    OpenAIToolChoice, OpenAIToolType, StreamOptions, SystemOrDeveloper,
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;

@@ -609,7 +609,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                 serde_json::from_str(row).map_err(|e| {
                     Error::new(ErrorDetails::ClickHouseDeserialization {
                         message: format!(
-                            "Failed to deserialize CumulativeFeedbackTimeSeriesPoint: {e}"
+                            "Failed to deserialize InternalCumulativeFeedbackTimeSeriesPoint: {e}"
                         ),
                     })
                 })
