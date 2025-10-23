@@ -328,6 +328,7 @@ fn stream_google_ai_studio_gemini(
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
+        let mut last_unknown_chunk_id = 0;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -360,6 +361,7 @@ fn stream_google_ai_studio_gemini(
                             start_time.elapsed(),
                             &mut last_tool_name,
                             &mut last_tool_idx,
+                            &mut last_unknown_chunk_id,
                             &mut last_thought_id,
                             discard_unknown_chunks,
                         )
@@ -871,6 +873,7 @@ fn content_part_to_tensorzero_chunk(
     last_thought_id: &mut u32,
     discard_unknown_chunks: bool,
     output: &mut Vec<ContentBlockChunk>,
+    last_unknown_chunk_id: &mut u32,
 ) -> Result<(), Error> {
     if part.thought {
         match part.data {
@@ -973,9 +976,10 @@ fn content_part_to_tensorzero_chunk(
                 return Ok(());
             }
             output.push(ContentBlockChunk::Unknown {
-                id: "0".to_string(),
+                id: last_unknown_chunk_id.to_string(),
                 data: part.into_owned(),
             });
+            last_unknown_chunk_id += 1
         }
     }
     Ok(())
@@ -1224,6 +1228,7 @@ fn convert_stream_response_with_metadata_to_chunk(
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
     last_thought_id: &mut u32,
+    last_unknown_chunk_id: &mut u32,
     discard_unknown_chunks: bool,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
@@ -1247,6 +1252,7 @@ fn convert_stream_response_with_metadata_to_chunk(
                     last_thought_id,
                     discard_unknown_chunks,
                     &mut output,
+                    last_unknown_chunk_id,
                 )?;
             }
             output
@@ -1346,6 +1352,7 @@ mod tests {
 
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
+        let mut last_unknown_chunk_id = 0;
         let res = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
@@ -1353,6 +1360,7 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             &mut last_thought_id,
+            &mut last_unknown_chunk_id,
             true,
         )
         .unwrap();

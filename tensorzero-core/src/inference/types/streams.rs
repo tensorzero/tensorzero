@@ -42,7 +42,11 @@ pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
     Thought(ThoughtChunk),
-    Unknown { id: String, data: Value },
+    Unknown {
+        id: String,
+        data: Value,
+        provider_type: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
