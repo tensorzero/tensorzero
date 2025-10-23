@@ -113,7 +113,7 @@ EXPERIMENT_SETS = {
         # "environments": ["bernoulli", "beta", "gaussian"],
         "environments": ["bernoulli"],
         # "difficulties": ["easy", "medium", "hard"],
-        "difficulties": ["medium"],
+        "difficulties": ["easy"],
         "K_values": K_VALUES,
         "algorithms": BANDIT_ALGORITHMS,
         "n_runs": N_INDEPENDENT_RUNS,
