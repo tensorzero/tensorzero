@@ -775,6 +775,7 @@ jobs:
       contents: read
       # Permission to fetch GitHub OIDC token authentication
       id-token: write
+      actions: write
     uses: ./.github/workflows/merge-queue.yml
     secrets: inherit
 

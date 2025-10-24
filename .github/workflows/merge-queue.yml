@@ -412,7 +412,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   # See 'ci/README.md' at the repository root for more details.
-  check-all-live-tests-passed:
+  check-all-tests-passed:
     permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
