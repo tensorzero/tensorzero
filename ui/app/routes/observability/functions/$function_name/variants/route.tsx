@@ -201,13 +201,6 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
     [metricsWithFeedback],
   );
 
-  const [time_granularity, setTimeGranularity] = useState<TimeWindow>("week");
-  const handleTimeGranularityChange = (granularity: TimeWindow) => {
-    setTimeGranularity(granularity);
-    const searchParams = new URLSearchParams(window.location.search);
-    searchParams.set("time_granularity", granularity);
-    navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
-  };
   const function_type = function_config.type;
   return (
     <PageLayout>
@@ -233,8 +226,7 @@ export default function VariantDetails({ loaderData }: Route.ComponentProps) {
             <VariantPerformance
               variant_performances={variant_performances}
               metric_name={metric_name}
-              time_granularity={time_granularity}
-              onTimeGranularityChange={handleTimeGranularityChange}
+              singleVariantMode
             />
           )}
         </SectionLayout>

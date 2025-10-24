@@ -33,12 +33,12 @@ export async function computeTrackAndStopOptimalProbabilities(
   function_config: FunctionConfig,
   config: Config,
 ): Promise<Record<string, number> | undefined> {
+  const dbClient = await getNativeDatabaseClient();
   if (function_config.experimentation.type !== "track_and_stop") {
     return undefined;
   }
 
   try {
-    const dbClient = await getNativeDatabaseClient();
     const experimentationConfig = function_config.experimentation;
     const metric_config = config.metrics[experimentationConfig.metric];
 
