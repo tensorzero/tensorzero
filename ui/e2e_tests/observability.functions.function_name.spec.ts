@@ -154,3 +154,49 @@ test("should show experimentation section with pie chart for write_haiku functio
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();
 });
+
+test("should display feedback timeseries charts for extract_entities function", async ({
+  page,
+}) => {
+  await page.goto("/observability/functions/extract_entities");
+
+  // Wait for the Experimentation section to be visible
+  await expect(
+    page.getByRole("heading", { name: "Experimentation" }),
+  ).toBeVisible();
+
+  // Check that the Mean Reward tab is visible and selected by default
+  await expect(page.getByRole("tab", { name: "Mean Reward" })).toBeVisible();
+
+  // Verify the Mean Reward chart is displayed
+  await expect(page.getByText("Metrics Over Time")).toBeVisible();
+
+  // Check that the metric name appears in the description
+  await expect(
+    page.getByText(/Experimentation is configured to optimize metric/),
+  ).toBeVisible();
+  await expect(page.getByText(/jaro_winkler_similarity/)).toBeVisible();
+
+  // Verify the chart is rendered
+  const charts = page.locator("[data-chart]");
+  await expect(charts.first()).toBeVisible();
+
+  // Switch to Feedback Counts tab
+  await page.getByRole("tab", { name: "Feedback Counts" }).click();
+
+  // Verify the Feedback Counts chart is displayed
+  await expect(
+    page.getByText("Cumulative Feedback Counts Over Time"),
+  ).toBeVisible();
+
+  // Check that the metric name appears in the counts description
+  await expect(
+    page.getByText(/Cumulative count of feedback samples for metric/),
+  ).toBeVisible();
+
+  // Verify the chart is rendered (still checking for chart presence)
+  await expect(charts.first()).toBeVisible();
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+});
