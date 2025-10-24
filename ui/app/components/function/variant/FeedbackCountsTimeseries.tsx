@@ -2,7 +2,13 @@ import type { TimeWindow } from "tensorzero-node";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
 
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/components/ui/card";
 import {
   ChartContainer,
   ChartLegend,
@@ -15,10 +21,12 @@ export function FeedbackCountsTimeseries({
   countsData,
   variantNames,
   timeGranularity,
+  metricName,
 }: {
   countsData: FeedbackCountsTimeseriesData[];
   variantNames: string[];
   timeGranularity: TimeWindow;
+  metricName: string;
 }) {
   // Convert date strings to timestamps for proper spacing
   const countsDataWithTimestamps = countsData.map((row) => ({
@@ -62,6 +70,10 @@ export function FeedbackCountsTimeseries({
     <Card>
       <CardHeader>
         <CardTitle>Cumulative Feedback Counts Over Time</CardTitle>
+        <CardDescription>
+          Cumulative count of feedback samples for metric {metricName} received
+          by each variant over time.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-80 w-full">

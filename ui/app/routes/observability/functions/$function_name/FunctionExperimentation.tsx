@@ -114,6 +114,12 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     ? transformFeedbackTimeseries(feedbackTimeseries!, timeGranularity)
     : { countsData: [], meansData: [], variantNames: [] };
 
+  // Extract metric name for track_and_stop experimentation
+  const metricName =
+    functionConfig.experimentation.type === "track_and_stop"
+      ? functionConfig.experimentation.metric
+      : "";
+
   return (
     <>
       <ExperimentationPieChart variantWeights={variantWeights} />
@@ -137,6 +143,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
                 countsData={countsData}
                 variantNames={variantNames}
                 timeGranularity={timeGranularity}
+                metricName={metricName}
               />
             </TabsContent>
             <TabsContent value="counts">
@@ -144,6 +151,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
                 countsData={countsData}
                 variantNames={variantNames}
                 timeGranularity={timeGranularity}
+                metricName={metricName}
               />
             </TabsContent>
           </Tabs>

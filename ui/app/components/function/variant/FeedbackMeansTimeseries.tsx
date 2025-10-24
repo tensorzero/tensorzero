@@ -33,11 +33,13 @@ export function FeedbackMeansTimeseries({
   countsData,
   variantNames,
   timeGranularity,
+  metricName,
 }: {
   meansData: FeedbackMeansTimeseriesData[];
   countsData: FeedbackCountsTimeseriesData[];
   variantNames: string[];
   timeGranularity: TimeWindow;
+  metricName: string;
 }) {
   const meanDataWithTimestamps: Array<
     FeedbackMeansTimeseriesData & { timestamp: number }
@@ -153,9 +155,11 @@ export function FeedbackMeansTimeseries({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Mean Reward Over Time</CardTitle>
+        <CardTitle>Metrics Over Time</CardTitle>
         <CardDescription>
-          Per-variant mean rewards, with confidence sequences when available.
+          Experimentation is configured to optimize metric {metricName}. Here we
+          display per-variant mean metric values, with confidence sequences when
+          available.
         </CardDescription>
       </CardHeader>
       <CardContent>
