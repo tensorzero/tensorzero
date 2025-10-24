@@ -1364,35 +1364,43 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping => Ok(None),
         AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Unknown(delta),
-            index: _,
+            index,
         } => {
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(delta.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: index.to_string(),
+                    data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
         AnthropicStreamMessage::ContentBlockStart {
             content_block: FlattenUnknown::Unknown(content_block),
-            index: _,
+            index,
         } => {
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(content_block.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: index.to_string(),
+                    data: content_block.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
         AnthropicStreamMessage::MessageDelta {
             usage: _,
@@ -1402,13 +1410,17 @@ fn anthropic_to_tensorzero_stream_message(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for MessageDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(delta.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: "message_delta".to_string(),
+                    data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
     }
 }
@@ -3116,8 +3128,8 @@ mod tests {
     }
 
     #[test]
-    fn test_convert_unknown_chunk_error() {
-        let err = anthropic_to_tensorzero_stream_message(
+    fn test_convert_unknown_chunk_returns_chunk() {
+        let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             AnthropicStreamMessage::ContentBlockStart {
                 content_block: FlattenUnknown::Unknown(Cow::Owned(
@@ -3130,14 +3142,20 @@ mod tests {
             &mut Default::default(),
             false,
         )
-        .unwrap_err()
-        .to_string();
-        assert!(
-            err.contains(
-                "Error from anthropic server: Unsupported content block type for ContentBlockStart"
-            ),
-            "Unexpected error message: {err}"
-        );
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::Unknown { id, data, .. } => {
+                assert_eq!(id, "0");
+                assert_eq!(
+                    data.get("my_unknown").and_then(|v| v.as_str()),
+                    Some("content_block")
+                );
+            }
+            _ => panic!("Expected Unknown chunk"),
+        }
     }
 
     #[test]
