@@ -8,7 +8,8 @@ import {
 } from "~/components/experimentation/PieChart";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { memo } from "react";
-import { FeedbackSamplesTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
+import { FeedbackCountsTimeseries } from "~/components/function/variant/FeedbackCountsTimeseries";
+import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackMeansTimeseries";
 
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
@@ -100,7 +101,10 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
       {functionConfig.experimentation.type === "track_and_stop" &&
         feedbackTimeseries &&
         feedbackTimeseries.length > 0 && (
-          <FeedbackSamplesTimeseries feedbackTimeseries={feedbackTimeseries} />
+          <>
+            <FeedbackCountsTimeseries feedbackTimeseries={feedbackTimeseries} />
+            <FeedbackMeansTimeseries feedbackTimeseries={feedbackTimeseries} />
+          </>
         )}
     </>
   );
