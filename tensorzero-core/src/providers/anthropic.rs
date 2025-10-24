@@ -669,6 +669,15 @@ impl<'a> AnthropicMessage<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum AnthropicSystemBlock<'a> {
+    Text {
+        text: &'a str,
+        // This also contains cache control and citations but we will ignore these for now.
+    },
+}
+
+#[derive(Debug, PartialEq, Serialize)]
 struct AnthropicRequestBody<'a> {
     model: &'a str,
     messages: Vec<AnthropicMessage<'a>>,
@@ -677,7 +686,7 @@ struct AnthropicRequestBody<'a> {
     stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     // This is the system message
-    system: Option<&'a str>,
+    system: Option<Vec<AnthropicSystemBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -710,7 +719,12 @@ impl<'a> AnthropicRequestBody<'a> {
             fetch_and_encode_input_files_before_inference: request
                 .fetch_and_encode_input_files_before_inference,
         };
-        let system = request.system.as_deref();
+        // We use the content block form rather than string so people can use
+        // extra_body for cache control.
+        let system = match request.system.as_deref() {
+            Some(text) => Some(vec![AnthropicSystemBlock::Text { text }]),
+            None => None,
+        };
         let request_messages: Vec<AnthropicMessage> = try_join_all(
             request
                 .messages
@@ -1350,35 +1364,43 @@ fn anthropic_to_tensorzero_stream_message(
         AnthropicStreamMessage::MessageStop | AnthropicStreamMessage::Ping => Ok(None),
         AnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Unknown(delta),
-            index: _,
+            index,
         } => {
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(delta.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: index.to_string(),
+                    data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
         AnthropicStreamMessage::ContentBlockStart {
             content_block: FlattenUnknown::Unknown(content_block),
-            index: _,
+            index,
         } => {
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(content_block.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: index.to_string(),
+                    data: content_block.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
         AnthropicStreamMessage::MessageDelta {
             usage: _,
@@ -1388,13 +1410,17 @@ fn anthropic_to_tensorzero_stream_message(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for MessageDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(delta.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: "message_delta".to_string(),
+                    data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
     }
 }
@@ -1422,7 +1448,7 @@ mod tests {
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
-    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
+    use crate::tool::{AllowedTools, DynamicToolConfig, ToolConfig, ToolResult};
     use serde_json::json;
     use tracing_test::traced_test;
     use uuid::Uuid;
@@ -1435,6 +1461,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
@@ -1449,6 +1476,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1464,6 +1492,7 @@ mod tests {
             parallel_tool_calls: Some(true),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1479,6 +1508,7 @@ mod tests {
             parallel_tool_calls: Some(false),
             tools_available: vec![],
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1722,7 +1752,9 @@ mod tests {
                 ],
                 max_tokens: 64_000,
                 stream: Some(false),
-                system: Some("test_system"),
+                system: Some(vec![AnthropicSystemBlock::Text {
+                    text: "test_system"
+                }]),
                 temperature: None,
                 top_p: None,
                 tool_choice: None,
@@ -1787,7 +1819,9 @@ mod tests {
                 ],
                 max_tokens: 100,
                 stream: Some(true),
-                system: Some("test_system"),
+                system: Some(vec![AnthropicSystemBlock::Text {
+                    text: "test_system"
+                }]),
                 temperature: Some(0.5),
                 top_p: None,
                 tool_choice: None,
@@ -3094,8 +3128,8 @@ mod tests {
     }
 
     #[test]
-    fn test_convert_unknown_chunk_error() {
-        let err = anthropic_to_tensorzero_stream_message(
+    fn test_convert_unknown_chunk_returns_chunk() {
+        let result = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             AnthropicStreamMessage::ContentBlockStart {
                 content_block: FlattenUnknown::Unknown(Cow::Owned(
@@ -3108,14 +3142,20 @@ mod tests {
             &mut Default::default(),
             false,
         )
-        .unwrap_err()
-        .to_string();
-        assert!(
-            err.contains(
-                "Error from anthropic server: Unsupported content block type for ContentBlockStart"
-            ),
-            "Unexpected error message: {err}"
-        );
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::Unknown { id, data, .. } => {
+                assert_eq!(id, "0");
+                assert_eq!(
+                    data.get("my_unknown").and_then(|v| v.as_str()),
+                    Some("content_block")
+                );
+            }
+            _ => panic!("Expected Unknown chunk"),
+        }
     }
 
     #[test]

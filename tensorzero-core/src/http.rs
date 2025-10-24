@@ -18,6 +18,7 @@ use reqwest::{Client, IntoUrl, NoProxy, Proxy, RequestBuilder};
 use reqwest_eventsource::{CannotCloneRequestError, Event, EventSource, RequestBuilderExt};
 use serde::{de::DeserializeOwned, Serialize};
 
+use crate::endpoints::status::TENSORZERO_VERSION;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::{
     error::{DisplayOrDebugGateway, Error, ErrorDetails},
@@ -453,7 +454,9 @@ impl<'a> TensorzeroRequestBuilder<'a> {
 const DEFAULT_HTTP_CLIENT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
 fn build_client() -> Result<Client, Error> {
-    let mut http_client_builder = Client::builder().timeout(DEFAULT_HTTP_CLIENT_TIMEOUT);
+    let mut http_client_builder = Client::builder()
+        .timeout(DEFAULT_HTTP_CLIENT_TIMEOUT)
+        .user_agent(format!("TensorZero/{TENSORZERO_VERSION}"));
 
     if cfg!(feature = "e2e_tests") {
         if let Ok(proxy_url) = std::env::var("TENSORZERO_E2E_PROXY") {

@@ -6,11 +6,7 @@ import {
 } from "./types";
 import { FunctionFormField } from "~/components/function/FunctionFormField";
 import { DatasetFormField } from "~/components/dataset/DatasetFormField";
-import {
-  useAllFunctionConfigs,
-  useConfig,
-  useFunctionConfig,
-} from "~/context/config";
+import { useConfig, useFunctionConfig } from "~/context/config";
 import CurationMetricSelector from "~/components/metric/CurationMetricSelector";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { useFetcher } from "react-router";
@@ -161,7 +157,6 @@ export function DatasetBuilderForm() {
           <FunctionFormField
             control={form.control}
             name="function"
-            functions={useAllFunctionConfigs()}
             onSelect={() => {
               form.resetField("variant");
             }}

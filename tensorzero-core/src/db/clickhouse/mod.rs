@@ -10,15 +10,12 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::config::BatchWritesConfig;
-use crate::config::Config;
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
 use crate::db::clickhouse::clickhouse_client::DisabledClickHouseClient;
 use crate::db::clickhouse::clickhouse_client::ProductionClickHouseClient;
-use crate::db::clickhouse::query_builder::ListInferencesParams;
 use crate::db::HealthCheckable;
 use crate::error::{Error, ErrorDetails};
-use crate::stored_inference::StoredInference;
 
 pub use clickhouse_client::ClickHouseClient;
 pub use table_name::TableName;
@@ -30,6 +27,7 @@ mod batching;
 pub mod clickhouse_client; // Public because tests will use clickhouse_client::FakeClickHouseClient and clickhouse_client::MockClickHouseClient
 pub mod dataset_queries;
 pub mod feedback;
+pub mod inference_queries;
 pub mod migration_manager;
 pub mod query_builder;
 mod select_queries;
@@ -275,14 +273,6 @@ impl ClickHouseConnectionInfo {
 
     pub async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
         self.inner.create_database_and_migrations_table().await
-    }
-
-    pub async fn list_inferences(
-        &self,
-        config: &Config,
-        opts: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error> {
-        self.inner.list_inferences(config, opts).await
     }
 
     pub fn get_on_cluster_name(&self) -> String {

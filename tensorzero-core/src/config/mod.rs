@@ -197,7 +197,7 @@ impl ObjectStoreInfo {
                 // These env vars have the highest priority, overriding whatever was set from 'AmazonS3Builder::from_env()'
                 if let Ok(s3_access_key) = std::env::var("S3_ACCESS_KEY_ID") {
                     let s3_secret_key = std::env::var("S3_SECRET_ACCESS_KEY").ok().ok_or_else(|| Error::new(ErrorDetails::Config {
-                        message: "S3_ACCESS_KEY_ID is set but S3_SECRET_ACCESS_KEY is not. Please set either both or none".to_string()
+                        message: "S3_ACCESS_KEY_ID is set but S3_SECRET_ACCESS_KEY is not. Please set neither or both.".to_string()
                     }))?;
                     builder = builder
                         .with_access_key_id(s3_access_key)
@@ -784,7 +784,9 @@ impl Config {
             )?;
 
         let mut config = Config {
-            gateway: uninitialized_config.gateway.load()?,
+            gateway: uninitialized_config
+                .gateway
+                .load(object_store_info.as_ref())?,
             models: Arc::new(models),
             embedding_models: Arc::new(embedding_models),
             functions,

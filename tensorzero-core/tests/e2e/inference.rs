@@ -21,6 +21,7 @@ use tensorzero::{
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::inference::types::StoredInput;
+use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
     db::clickhouse::test_helpers::{
@@ -1934,6 +1935,8 @@ model = "dummy::flaky_model"
     "#,
     )
     .await;
+
+    let _guard = enter_fake_http_request_otel();
 
     let params = ClientInferenceParams {
         function_name: Some("mixture_of_n".to_string()),

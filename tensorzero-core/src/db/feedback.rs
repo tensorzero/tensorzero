@@ -65,8 +65,11 @@ pub trait FeedbackQueries {
 #[ts(export)]
 pub struct FeedbackByVariant {
     pub variant_name: String,
+    // Mean of feedback values for the variant
     pub mean: f32,
-    pub variance: f32,
+    // Variance of feedback values for the variant
+    // Equal to None for sample size 1 because ClickHouse uses sample variance with (n - 1) in the denominator
+    pub variance: Option<f32>,
     #[serde(deserialize_with = "deserialize_u64")]
     pub count: u64,
 }
@@ -78,8 +81,9 @@ pub struct InternalCumulativeFeedbackTimeSeriesPoint {
     pub variant_name: String,
     // Mean of feedback values up to time point `period_end`
     pub mean: f32,
-    // Variance of feedback values up to time point `period_end`
-    pub variance: f32,
+    // Variance of feedback values up to time point `period_end`.
+    // Equal to None for sample size 1 because ClickHouse uses sample variance with (n - 1) in the denominator
+    pub variance: Option<f32>,
     #[serde(deserialize_with = "deserialize_u64")]
     // Number of feedback values up to time point `period_end`
     pub count: u64,
@@ -94,15 +98,15 @@ pub struct CumulativeFeedbackTimeSeriesPoint {
     // Mean of feedback values up to time point `period_end`
     pub mean: f32,
     // Variance of feedback values up to time point `period_end`
-    pub variance: f32,
+    pub variance: Option<f32>,
     #[serde(deserialize_with = "deserialize_u64")]
     // Number of feedback values up to time point `period_end`
     pub count: u64,
     // 1 - confidence level for the asymptotic confidence sequence
     pub alpha: f32,
     // Confidence sequence lower and upper bounds
-    pub cs_lower: f32,
-    pub cs_upper: f32,
+    pub cs_lower: Option<f32>,
+    pub cs_upper: Option<f32>,
 }
 
 // Feedback by target ID types

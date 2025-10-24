@@ -613,6 +613,15 @@ impl<'a> GCPVertexAnthropicMessage<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum GCPVertexAnthropicSystemBlock<'a> {
+    Text {
+        text: &'a str,
+        // This also contains cache control and citations but we will ignore these for now.
+    },
+}
+
+#[derive(Debug, PartialEq, Serialize)]
 struct GCPVertexAnthropicRequestBody<'a> {
     anthropic_version: &'static str,
     messages: Vec<GCPVertexAnthropicMessage<'a>>,
@@ -621,7 +630,7 @@ struct GCPVertexAnthropicRequestBody<'a> {
     stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     // This is the system message
-    system: Option<&'a str>,
+    system: Option<Vec<GCPVertexAnthropicSystemBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -645,7 +654,12 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             }
             .into());
         }
-        let system = request.system.as_deref();
+        // We use the content block form rather than string so people can use
+        // extra_body for cache control.
+        let system = match request.system.as_deref() {
+            Some(text) => Some(vec![GCPVertexAnthropicSystemBlock::Text { text }]),
+            None => None,
+        };
         let request_messages: Vec<GCPVertexAnthropicMessage> = try_join_all(
             request
                 .messages
@@ -1178,35 +1192,43 @@ fn anthropic_to_tensorzero_stream_message(
         }
         GCPVertexAnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Unknown(delta),
-            index: _,
+            index,
         } => {
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(delta.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: index.to_string(),
+                    data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
         GCPVertexAnthropicStreamMessage::ContentBlockStart {
             content_block: FlattenUnknown::Unknown(content_block),
-            index: _,
+            index,
         } => {
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(content_block.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: index.to_string(),
+                    data: content_block.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
         GCPVertexAnthropicStreamMessage::MessageDelta {
             usage: _,
@@ -1216,13 +1238,17 @@ fn anthropic_to_tensorzero_stream_message(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for MessageDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(delta.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: "message_delta".to_string(),
+                    data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
     }
 }
@@ -1512,7 +1538,9 @@ mod tests {
                 ],
                 max_tokens: 32_000,
                 stream: Some(false),
-                system: Some("test_system"),
+                system: Some(vec![GCPVertexAnthropicSystemBlock::Text {
+                    text: "test_system"
+                }]),
                 temperature: None,
                 top_p: None,
                 tool_choice: None,
@@ -1581,7 +1609,9 @@ mod tests {
                 ],
                 max_tokens: 100,
                 stream: Some(true),
-                system: Some("test_system"),
+                system: Some(vec![GCPVertexAnthropicSystemBlock::Text {
+                    text: "test_system"
+                }]),
                 temperature: Some(0.5),
                 top_p: Some(0.9),
                 tool_choice: None,
@@ -1649,7 +1679,9 @@ mod tests {
                 ],
                 max_tokens: 100,
                 stream: Some(true),
-                system: Some("test_system"),
+                system: Some(vec![GCPVertexAnthropicSystemBlock::Text {
+                    text: "test_system"
+                }]),
                 temperature: Some(0.5),
                 top_p: Some(0.9),
                 tool_choice: Some(GCPVertexAnthropicToolChoice::Tool {

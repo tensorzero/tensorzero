@@ -18,6 +18,7 @@ use futures::stream::Peekable;
 use futures::Stream;
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,6 +42,11 @@ pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
     Thought(ThoughtChunk),
+    Unknown {
+        id: String,
+        data: Value,
+        provider_type: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -161,6 +167,10 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
                 ContentBlockChunk::Text(text_chunk) => raw = Some(text_chunk.text.to_owned()),
                 ContentBlockChunk::Thought(thought_chunk) => {
                     thought = thought_chunk.text;
+                }
+                ContentBlockChunk::Unknown { .. } => {
+                    // Unknown chunks are ignored for JSON functions
+                    // They don't contribute to the JSON output
                 }
             }
         }
@@ -465,6 +475,23 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                     );
                                 }
                             }
+                        }
+                        ContentBlockChunk::Unknown { id, data, .. } => {
+                            // Unknown chunks are not merged/coalesced - each one gets a unique entry
+                            // We use the chunk ID as part of the key to ensure uniqueness
+                            if ttft.is_none() {
+                                ttft = Some(chunk.latency);
+                            }
+                            blocks.insert(
+                                (ContentBlockOutputType::Unknown, id.clone()),
+                                ContentBlockOutput::Unknown {
+                                    data: data.clone(),
+                                    model_provider_name: Some(crate::model::fully_qualified_name(
+                                        &model_name,
+                                        &model_provider_name,
+                                    )),
+                                },
+                            );
                         }
                     }
                 }

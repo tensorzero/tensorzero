@@ -25,7 +25,7 @@ export function TimeGranularitySelector({
   return (
     <div className="flex flex-col justify-center">
       <Select value={timeGranularity} onValueChange={onTimeGranularityChange}>
-        <SelectTrigger>
+        <SelectTrigger className="w-fit">
           <SelectValue placeholder="Choose time granularity" />
         </SelectTrigger>
         <SelectContent>

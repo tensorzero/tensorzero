@@ -4,9 +4,9 @@ export type CumulativeFeedbackTimeSeriesPoint = {
   period_end: string;
   variant_name: string;
   mean: number;
-  variance: number;
+  variance: number | null;
   count: bigint;
   alpha: number;
-  cs_lower: number;
-  cs_upper: number;
+  cs_lower: number | null;
+  cs_upper: number | null;
 };
