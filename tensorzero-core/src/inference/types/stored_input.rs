@@ -93,7 +93,7 @@ impl StoredInputMessage {
             content: try_join_all(
                 self.content
                     .into_iter()
-                    .map(|content| content.reresolve(self.role, resolver)),
+                    .map(|content| content.reresolve(resolver)),
             )
             .await?,
         })
@@ -222,7 +222,6 @@ pub enum StoredInputMessageContent {
 impl StoredInputMessageContent {
     pub async fn reresolve(
         self,
-        _role: Role,
         resolver: &impl StoragePathResolver,
     ) -> Result<ResolvedInputMessageContent, Error> {
         match self {
