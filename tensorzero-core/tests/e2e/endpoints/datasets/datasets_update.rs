@@ -1185,9 +1185,9 @@ async fn test_update_metadata_chat_datapoint() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: "Test message".to_string().into(),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Test message".to_string(),
+                })],
             }],
         },
         output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -1284,9 +1284,9 @@ async fn test_update_metadata_json_datapoint() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!({"query": "test"}).to_string().into(),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: json!({"query": "test"}).to_string(),
+                })],
             }],
         },
         output: Some(JsonInferenceOutput {
@@ -1370,9 +1370,9 @@ async fn test_update_metadata_set_name_to_null() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: "Test".to_string().into(),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Test".to_string(),
+                })],
             }],
         },
         output: None,
@@ -1448,9 +1448,9 @@ async fn test_update_metadata_batch() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: "Test 1".to_string().into(),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Test 1".to_string(),
+                })],
             }],
         },
         output: None,
@@ -1472,9 +1472,9 @@ async fn test_update_metadata_batch() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: "Test 2".to_string().into(),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Test 2".to_string(),
+                })],
             }],
         },
         output: None,
