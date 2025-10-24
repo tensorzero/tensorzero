@@ -13,6 +13,7 @@ import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackM
 import { TimeGranularitySelector } from "~/components/function/variant/TimeGranularitySelector";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 import { transformFeedbackTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
@@ -125,16 +126,27 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
             includeMinute={false}
             includeHour={true}
           />
-          <FeedbackCountsTimeseries
-            countsData={countsData}
-            variantNames={variantNames}
-            timeGranularity={timeGranularity}
-          />
-          <FeedbackMeansTimeseries
-            meansData={meansData}
-            variantNames={variantNames}
-            timeGranularity={timeGranularity}
-          />
+          <Tabs defaultValue="means" className="w-full">
+            <TabsList>
+              <TabsTrigger value="means">Mean Reward</TabsTrigger>
+              <TabsTrigger value="counts">Feedback Counts</TabsTrigger>
+            </TabsList>
+            <TabsContent value="means">
+              <FeedbackMeansTimeseries
+                meansData={meansData}
+                countsData={countsData}
+                variantNames={variantNames}
+                timeGranularity={timeGranularity}
+              />
+            </TabsContent>
+            <TabsContent value="counts">
+              <FeedbackCountsTimeseries
+                countsData={countsData}
+                variantNames={variantNames}
+                timeGranularity={timeGranularity}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       )}
     </>

@@ -23,14 +23,19 @@ import {
   ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
-import type { FeedbackMeansTimeseriesData } from "./FeedbackSamplesTimeseries";
+import type {
+  FeedbackMeansTimeseriesData,
+  FeedbackCountsTimeseriesData,
+} from "./FeedbackSamplesTimeseries";
 
 export function FeedbackMeansTimeseries({
   meansData,
+  countsData,
   variantNames,
   timeGranularity,
 }: {
   meansData: FeedbackMeansTimeseriesData[];
+  countsData: FeedbackCountsTimeseriesData[];
   variantNames: string[];
   timeGranularity: TimeWindow;
 }) {
@@ -40,6 +45,14 @@ export function FeedbackMeansTimeseries({
     ...row,
     timestamp: new Date(row.date).getTime(),
   }));
+
+  // Create a mapping from date to counts for tooltip
+  const countsDataByDate = countsData.reduce<
+    Record<string, FeedbackCountsTimeseriesData>
+  >((acc, row) => {
+    acc[row.date] = row;
+    return acc;
+  }, {});
 
   const getMeanValue = (
     row: (typeof meanDataWithTimestamps)[number],
@@ -204,6 +217,13 @@ export function FeedbackMeansTimeseries({
                     upper !== null &&
                     upper !== undefined;
 
+                  // Get count from counts data
+                  const dateStr = dataPoint.date as string;
+                  const count =
+                    (countsDataByDate[dateStr]?.[variantName] as
+                      | number
+                      | undefined) ?? 0;
+
                   rows.push(
                     <div
                       key={variantName}
@@ -221,6 +241,9 @@ export function FeedbackMeansTimeseries({
                         </span>
                         <span className="text-foreground font-mono font-medium tabular-nums">
                           {formatDetailedNumber(mean)}
+                        </span>
+                        <span className="text-muted-foreground font-mono text-[10px]">
+                          n = {count.toLocaleString()}
                         </span>
                         {hasBounds ? (
                           <span className="text-muted-foreground font-mono text-[10px] tabular-nums">
