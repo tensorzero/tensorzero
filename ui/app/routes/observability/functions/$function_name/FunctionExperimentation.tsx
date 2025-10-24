@@ -129,7 +129,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
             time_granularity={timeGranularity}
             onTimeGranularityChange={onTimeGranularityChange}
             includeCumulative={false}
-            includeMinute={false}
+            includeMinute={true}
             includeHour={true}
           />
           <Tabs defaultValue="means" className="w-full">

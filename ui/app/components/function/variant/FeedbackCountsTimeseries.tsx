@@ -49,6 +49,10 @@ export function FeedbackCountsTimeseries({
   // Format x-axis labels based on time granularity
   const formatXAxisTick = (value: number) => {
     const date = new Date(value);
+    if (timeGranularity === "minute") {
+      // Show month-day and hour:minute for minute granularity (without year)
+      return date.toISOString().slice(5, 16).replace("T", " ");
+    }
     if (timeGranularity === "hour") {
       // Show month-day and hour for hourly granularity (without year)
       return date.toISOString().slice(5, 13).replace("T", " ") + ":00";
@@ -60,6 +64,9 @@ export function FeedbackCountsTimeseries({
   // Format tooltip labels based on time granularity
   const formatTooltipLabel = (value: number) => {
     const date = new Date(value);
+    if (timeGranularity === "minute") {
+      return date.toISOString().slice(0, 16).replace("T", " ");
+    }
     if (timeGranularity === "hour") {
       return date.toISOString().slice(0, 13).replace("T", " ") + ":00";
     }
