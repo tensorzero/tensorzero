@@ -118,7 +118,7 @@ impl ClickHouseClient for DisabledClickHouseClient {
     async fn list_inferences(
         &self,
         _config: &Config,
-        _opts: &ListInferencesParams<'_>,
+        _opts: &ListInferencesParams,
     ) -> Result<Vec<StoredInference>, Error> {
         Ok(Vec::new())
     }

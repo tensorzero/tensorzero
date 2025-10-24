@@ -420,3 +420,49 @@ pub fn estimate_track_and_stop_optimal_probabilities(
 
     serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
 }
+
+#[napi]
+pub async fn launch_optimization_workflow_internal(
+    clickhouse_url: String,
+    config_path: String,
+    params: String,
+) -> Result<String, napi::Error> {
+    use tensorzero_core::endpoints::optimization::launch_optimization_workflow;
+    use tensorzero_core::http::TensorzeroHttpClient;
+
+    // Parse params
+    let params: tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowInternalParams =
+        serde_json::from_str(&params)
+            .map_err(|e| napi::Error::from_reason(format!("Failed to parse params: {e}")))?;
+
+    // Load config
+    let config_glob = ConfigFileGlob::new_from_path(Path::new(&config_path))
+        .map_err(|e| napi::Error::from_reason(format!("Failed to resolve config: {e}")))?;
+
+    let config = Arc::new(
+        Config::load_from_path_optional_verify_credentials(&config_glob, false)
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Failed to load config: {e}")))?,
+    );
+
+    // Setup ClickHouse
+    let clickhouse = ClickHouseConnectionInfo::new(
+        &clickhouse_url,
+        config.gateway.observability.batch_writes.clone(),
+    )
+    .await
+    .map_err(|e| napi::Error::from_reason(format!("Failed to connect to ClickHouse: {e}")))?;
+
+    // Create HTTP client
+    let http_client = TensorzeroHttpClient::new()
+        .map_err(|e| napi::Error::from_reason(format!("Failed to create HTTP client: {e}")))?;
+
+    // Launch optimization
+    let job_handle = launch_optimization_workflow(&http_client, config, &clickhouse, params)
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("Failed to launch optimization: {e}")))?;
+
+    // Serialize result
+    serde_json::to_string(&job_handle)
+        .map_err(|e| napi::Error::from_reason(format!("Failed to serialize job handle: {e}")))
+}

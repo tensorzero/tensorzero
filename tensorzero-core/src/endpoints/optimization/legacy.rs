@@ -1,14 +1,11 @@
-use std::{collections::HashMap, sync::Arc};
-
 use axum::{
     body::Body,
     extract::{Path, State},
     response::{IntoResponse, Response},
     Json,
 };
-
-use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     config::Config,
@@ -17,7 +14,7 @@ use crate::{
         ClickHouseConnectionInfo, ClickhouseFormat,
     },
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
-    error::{Error, ErrorDetails},
+    error::Error,
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -49,6 +46,7 @@ pub struct LaunchOptimizationWorkflowParams {
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
+/// TODO: We should deprecate this method/endpoint once the new `launch_optimization_workflow` is more stable and exposed externally.
 pub async fn launch_optimization_workflow_handler(
     State(AppStateData {
         config,
@@ -94,18 +92,18 @@ pub async fn launch_optimization_workflow(
         .list_inferences(
             &config,
             &ListInferencesParams {
-                function_name: &function_name,
-                variant_name: query_variant_name.as_deref(),
-                filters: filters.as_ref(),
+                function_name: function_name.clone(),
+                variant_name: query_variant_name,
+                filters,
                 output_source,
                 limit,
                 offset,
                 format,
-                order_by: order_by.as_deref(),
+                order_by,
             },
         )
         .await?;
-    let variants = HashMap::from([(function_name.clone(), template_variant_name.clone())]);
+    let variants = HashMap::from([(function_name, template_variant_name)]);
     // Template the inferences and fetch any network resources needed
     let rendered_inferences = render_samples(config.clone(), stored_inferences, variants).await?;
 
@@ -116,7 +114,8 @@ pub async fn launch_optimization_workflow(
         .collect::<Vec<_>>();
 
     // Split the inferences into train and val sets
-    let (train_examples, val_examples) = split_examples(rendered_inferences, val_fraction)?;
+    let (train_examples, val_examples) =
+        super::helpers::split_examples(rendered_inferences, val_fraction)?;
     let default_credentials = &config.models.default_credentials;
 
     // Launch the optimization job
@@ -203,44 +202,4 @@ pub async fn poll_optimization(
             default_credentials,
         )
         .await
-}
-
-/// Randomly split examples into train and val sets.
-/// Returns a tuple of (train_examples, val_examples).
-/// val_examples is None if val_fraction is None.
-fn split_examples<T>(
-    stored_inferences: Vec<T>,
-    val_fraction: Option<f64>,
-) -> Result<(Vec<T>, Option<Vec<T>>), Error> {
-    if let Some(val_fraction) = val_fraction {
-        if val_fraction <= 0.0 || val_fraction >= 1.0 {
-            // If val_fraction is not in (0, 1), treat as no split
-            return Err(Error::new(ErrorDetails::InvalidValFraction {
-                val_fraction,
-            }));
-        }
-        let mut rng = rand::rng();
-        let mut examples = stored_inferences;
-        let n = examples.len();
-        let n_val = ((n as f64) * val_fraction).round() as usize;
-        // Shuffle the examples
-        examples.as_mut_slice().shuffle(&mut rng);
-
-        // Split examples into val and train sets
-        let mut val = Vec::with_capacity(n_val);
-        let mut train = Vec::with_capacity(n - n_val);
-
-        // Move elements from examples into val and train
-        for (i, example) in examples.into_iter().enumerate() {
-            if i < n_val {
-                val.push(example);
-            } else {
-                train.push(example);
-            }
-        }
-
-        Ok((train, Some(val)))
-    } else {
-        Ok((stored_inferences, None))
-    }
 }

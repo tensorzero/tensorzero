@@ -538,7 +538,7 @@ impl ClickHouseClient for ProductionClickHouseClient {
     async fn list_inferences(
         &self,
         config: &Config,
-        opts: &ListInferencesParams<'_>,
+        opts: &ListInferencesParams,
     ) -> Result<Vec<StoredInference>, Error> {
         let (sql, params) = generate_list_inferences_sql(config, opts)?;
         let params_map = params
