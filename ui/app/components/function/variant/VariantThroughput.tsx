@@ -1,6 +1,11 @@
 import type { VariantThroughput } from "~/utils/clickhouse/function";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
+import {
+  CHART_COLORS,
+  formatChartNumber,
+  formatXAxisTimestamp,
+  formatTooltipTimestamp,
+} from "~/utils/chart";
 
 import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import {
@@ -55,7 +60,7 @@ export function VariantThroughput({
                 tickMargin={10}
                 axisLine={true}
                 tickFormatter={(value) =>
-                  new Date(value).toISOString().slice(0, 10)
+                  formatXAxisTimestamp(new Date(value), time_granularity)
                 }
               />
               <YAxis
@@ -81,7 +86,10 @@ export function VariantThroughput({
                   return (
                     <div className="border-border/50 bg-background grid min-w-[8rem] items-start gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
                       <div className="font-medium">
-                        {new Date(label).toISOString().slice(0, 10)}
+                        {formatTooltipTimestamp(
+                          new Date(label),
+                          time_granularity,
+                        )}
                       </div>
                       <div className="grid gap-1.5">
                         {payload

@@ -8,7 +8,12 @@ import {
   YAxis,
 } from "recharts";
 import { type ReactNode } from "react";
-import { CHART_COLORS, formatDetailedNumber } from "~/utils/chart";
+import {
+  CHART_COLORS,
+  formatDetailedNumber,
+  formatXAxisTimestamp,
+  formatTooltipTimestamp,
+} from "~/utils/chart";
 
 import {
   Card,
@@ -133,31 +138,12 @@ export function FeedbackMeansTimeseries({
         }));
 
   // Format x-axis labels based on time granularity
-  const formatXAxisTick = (value: number) => {
-    const date = new Date(value);
-    if (timeGranularity === "minute") {
-      // Show month-day and hour:minute for minute granularity (without year)
-      return date.toISOString().slice(5, 16).replace("T", " ");
-    }
-    if (timeGranularity === "hour") {
-      // Show month-day and hour for hourly granularity (without year)
-      return date.toISOString().slice(5, 13).replace("T", " ") + ":00";
-    }
-    // Show just the date for day, week, month
-    return date.toISOString().slice(0, 10);
-  };
+  const formatXAxisTick = (value: number) =>
+    formatXAxisTimestamp(new Date(value), timeGranularity);
 
   // Format tooltip labels based on time granularity
-  const formatTooltipLabel = (value: number) => {
-    const date = new Date(value);
-    if (timeGranularity === "minute") {
-      return date.toISOString().slice(0, 16).replace("T", " ");
-    }
-    if (timeGranularity === "hour") {
-      return date.toISOString().slice(0, 13).replace("T", " ") + ":00";
-    }
-    return date.toISOString().slice(0, 10);
-  };
+  const formatTooltipLabel = (value: number) =>
+    formatTooltipTimestamp(new Date(value), timeGranularity);
 
   return (
     <Card>

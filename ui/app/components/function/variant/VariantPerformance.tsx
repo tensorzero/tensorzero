@@ -4,6 +4,8 @@ import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,
   formatDetailedNumber,
+  formatXAxisTimestamp,
+  formatTooltipTimestamp,
   CHART_COLORS,
 } from "~/utils/chart";
 
@@ -91,7 +93,9 @@ export function VariantPerformance({
                 tickLine={false}
                 tickMargin={10}
                 axisLine={true}
-                tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                tickFormatter={(value) =>
+                  formatXAxisTimestamp(new Date(value), time_granularity)
+                }
               />
               <YAxis
                 tickLine={false}
@@ -103,7 +107,7 @@ export function VariantPerformance({
                 content={
                   <ChartTooltipContent
                     labelFormatter={(label) =>
-                      new Date(label).toLocaleDateString()
+                      formatTooltipTimestamp(new Date(label), time_granularity)
                     }
                     formatter={(value, name, entry) => {
                       const numInferences =

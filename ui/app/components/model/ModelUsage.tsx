@@ -3,6 +3,8 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,
   formatDetailedNumber,
+  formatXAxisTimestamp,
+  formatTooltipTimestamp,
   CHART_COLORS,
 } from "~/utils/chart";
 import { useState, Suspense } from "react";
@@ -105,7 +107,6 @@ export function ModelUsage({
           <CardTitle>Model Usage Over Time</CardTitle>
           <CardDescription>
             {METRIC_TYPE_CONFIG[selectedMetric].description} by model
-            {timeGranularity === "hour" && " (times shown in UTC)"}
           </CardDescription>
         </div>
         <div className="flex flex-col justify-center gap-2">
@@ -152,17 +153,7 @@ export function ModelUsage({
                         tickMargin={10}
                         axisLine={true}
                         tickFormatter={(value) =>
-                          timeGranularity === "hour"
-                            ? new Date(value).toLocaleString("en-US", {
-                                timeZone: "UTC",
-                                month: "short",
-                                day: "numeric",
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })
-                            : new Date(value).toLocaleDateString("en-US", {
-                                timeZone: "UTC",
-                              })
+                          formatXAxisTimestamp(new Date(value), timeGranularity)
                         }
                       />
                     )}
@@ -178,17 +169,10 @@ export function ModelUsage({
                           labelFormatter={(label) =>
                             timeGranularity === "cumulative"
                               ? "Total"
-                              : timeGranularity === "hour"
-                                ? new Date(label).toLocaleString("en-US", {
-                                    timeZone: "UTC",
-                                    month: "short",
-                                    day: "numeric",
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                  })
-                                : new Date(label).toLocaleDateString("en-US", {
-                                    timeZone: "UTC",
-                                  })
+                              : formatTooltipTimestamp(
+                                  new Date(label),
+                                  timeGranularity,
+                                )
                           }
                           formatter={(value, name, entry) => {
                             const count = entry.payload[`${name}_count`];
