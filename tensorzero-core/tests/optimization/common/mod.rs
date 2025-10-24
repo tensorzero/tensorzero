@@ -14,7 +14,7 @@ use tensorzero_core::{
     cache::CacheOptions,
     config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
     db::{
-        clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
+        clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,
     },
     endpoints::inference::InferenceClients,
@@ -240,7 +240,6 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
         limit: Some(10),
         offset: None,
         val_fraction: None,
-        format: ClickhouseFormat::JsonEachRow,
         // We always mock the client tests since this is tested above
         optimizer_config: test_case.get_optimizer_info(true),
     };
