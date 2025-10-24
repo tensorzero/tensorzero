@@ -175,9 +175,12 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
 
     # Check that we didn't log warnings about dropping a stream early
     captured = capfd.readouterr()
-    out_lines = captured.out.splitlines()
-    assert len(out_lines) == 1
-    assert "Pseudonymous usage analytic" in out_lines[0]
+    lines = list(captured.out.splitlines())
+    print("Output lines: ", lines)
+    # Allow TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS to be set when running this test
+    assert len(lines) <= 1
+    if len(lines) == 1:
+        assert "Pseudonymous usage analytic" in lines[0]
     assert captured.err == ""
 
 
@@ -213,8 +216,23 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
 
     # The stream should have been closed early, so we should see a warning about it
     captured = capfd.readouterr()
-    out_lines = captured.out.splitlines()
-    assert len(out_lines) == 2
-    assert "Pseudonymous usage analytic" in out_lines[0]
-    assert "Client closed the connection before the response was sent" in out_lines[-1]
+    out_lines = list(captured.out.splitlines())
+    print("Output lines: ", captured)
+
+    # The exact lines that we output depends on whether or not 'TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS' is set,
+    # so we just check that any lines that do get output are ones that we know about.
+    assert "Client closed the connection before the response was sent" in captured.out
+    assert len(out_lines) <= 4
+    out_lines_copy = list(out_lines)
+    for line in out_lines:
+        if "Pseudonymous usage analytic" in line:
+            out_lines_copy.remove(line)
+        if "Client closed the connection before the response was sent" in line:
+            out_lines_copy.remove(line)
+        if "Waiting for deferred tasks to finish" in line:
+            out_lines_copy.remove(line)
+        if "Deferred task finished" in line:
+            out_lines_copy.remove(line)
+
+    assert out_lines_copy == [], "Unexpected lines in output: " + str(out_lines_copy)
     assert captured.err == ""
