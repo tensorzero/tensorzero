@@ -1712,9 +1712,7 @@ mod tests {
             mock_db
                 .expect_insert_datapoints()
                 .withf(move |datapoints_inserts| {
-                    if datapoints_inserts.len() != 1 {
-                        panic!("Expected 1 datapoint insert");
-                    }
+                    assert_eq!(datapoints_inserts.len(), 1, "Expected 1 datapoint insert");
                     let datapoint_insert = &datapoints_inserts[0];
                     // ID should stay the same.
                     assert_eq!(datapoint_insert.id(), datapoint_id);
@@ -1768,9 +1766,7 @@ mod tests {
             mock_db
                 .expect_insert_datapoints()
                 .withf(move |datapoints_inserts| {
-                    if datapoints_inserts.len() != 1 {
-                        panic!("Expected 1 datapoint insert");
-                    }
+                    assert_eq!(datapoints_inserts.len(), 1, "Expected 1 datapoint insert");
                     let datapoint_insert = &datapoints_inserts[0];
                     // ID should stay the same.
                     assert_eq!(datapoint_insert.id(), datapoint_id);
