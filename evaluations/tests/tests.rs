@@ -20,6 +20,7 @@ use tensorzero_core::inference::types::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, TemplateInput, Text,
 };
 use tokio::time::sleep;
+use tracing_subscriber::EnvFilter;
 use url::Url;
 
 use crate::common::write_json_fixture_to_dataset;
@@ -48,7 +49,9 @@ use tokio::sync::Semaphore;
 use uuid::Uuid;
 
 pub fn init_tracing_for_tests() {
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::new("debug"))
+        .init();
 }
 
 #[tokio::test(flavor = "multi_thread")]
