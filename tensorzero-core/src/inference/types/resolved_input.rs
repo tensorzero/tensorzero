@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
-use super::{storage::StoragePath, Base64File, Role, Thought};
+use super::{storage::StoragePath, Base64File, Role, Text, Thought};
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
@@ -354,9 +354,7 @@ impl ResolvedInputMessage {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
-    Text {
-        text: String,
-    },
+    Text(Text),
     Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
@@ -376,9 +374,7 @@ pub enum ResolvedInputMessageContent {
 impl ResolvedInputMessageContent {
     pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
         match self {
-            ResolvedInputMessageContent::Text { text } => StoredInputMessageContent::Text {
-                value: Value::String(text),
-            },
+            ResolvedInputMessageContent::Text(text) => StoredInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 StoredInputMessageContent::Template(template)
             }
@@ -409,8 +405,8 @@ impl ResolvedInputMessageContent {
 
     pub fn into_lazy_resolved_input_message_content(self) -> LazyResolvedInputMessageContent {
         match self {
-            ResolvedInputMessageContent::Text { text } => {
-                LazyResolvedInputMessageContent::Text { text }
+            ResolvedInputMessageContent::Text(text) => {
+                LazyResolvedInputMessageContent::Text { text: text.text }
             }
             ResolvedInputMessageContent::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)

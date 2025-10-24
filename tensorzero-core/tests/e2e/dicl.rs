@@ -20,6 +20,7 @@ use tensorzero_core::{
     inference::types::{
         ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
         ResolvedInputMessageContent, Role, StoredContentBlock, StoredRequestMessage, TemplateInput,
+        Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     rate_limiting::ScopeInfo,
@@ -465,9 +466,9 @@ pub async fn test_dicl_inference_request_simple() {
         system: Some(json!({"assistant_name": "Dr. Mehta"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "What is the boiling point of water?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> = vec!["100 degrees Celsius".to_string().into()];
@@ -485,9 +486,9 @@ pub async fn test_dicl_inference_request_simple() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "What the capital city of India?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> =
@@ -506,9 +507,9 @@ pub async fn test_dicl_inference_request_simple() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "What is an example of a computationally hard problem?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> = vec![
@@ -529,9 +530,9 @@ pub async fn test_dicl_inference_request_simple() {
         system: Some(json!({"assistant_name": "Pinocchio"})),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "Who wrote Lord of the Rings?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> =
@@ -1402,9 +1403,9 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "What is the capital of France?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> = vec!["Paris".to_string().into()];
@@ -1421,9 +1422,9 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "What is the capital of Germany?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> = vec!["Berlin".to_string().into()];
@@ -1440,9 +1441,9 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "What is the capital of Italy?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> = vec!["Rome".to_string().into()];
@@ -1574,9 +1575,9 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "What the capital city of India?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> =
@@ -1594,9 +1595,9 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "What is an example of a computationally hard problem?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> = vec![
@@ -1617,9 +1618,9 @@ max_tokens = 100
         system: None,
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Text {
+            content: vec![ResolvedInputMessageContent::Text(Text {
                 text: "Who wrote Lord of the Rings?".to_string(),
-            }],
+            })],
         }],
     };
     let output: Vec<ContentBlockChatOutput> =

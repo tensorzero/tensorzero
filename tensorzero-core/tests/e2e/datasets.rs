@@ -279,14 +279,7 @@ async fn test_create_delete_datapoint_chat() {
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(
-            first_content,
-            StoredInputMessageContent::Text { .. }
-        ));
-        assert!(matches!(
-            first_content,
-            StoredInputMessageContent::Text { value: _, .. }
-        ));
+        assert!(matches!(first_content, StoredInputMessageContent::Text(_)));
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
@@ -302,10 +295,7 @@ async fn test_create_delete_datapoint_chat() {
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(
-            first_content,
-            StoredInputMessageContent::Text { .. }
-        ));
+        assert!(matches!(first_content, StoredInputMessageContent::Text(_)));
 
         // Verify output if present
         if let Some(output) = &datapoint.output {

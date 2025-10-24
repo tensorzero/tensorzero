@@ -470,9 +470,9 @@ function displayInputMessageContentToStoredInputMessageContent(
 ): StoredInputMessageContent {
   switch (content.type) {
     case "text":
-      return { type: "text", value: content.text };
+      return { type: "text", text: content.text };
     case "missing_function_text":
-      return { type: "text", value: content.value };
+      return { type: "text", text: content.value };
     case "file":
       return {
         type: "file",

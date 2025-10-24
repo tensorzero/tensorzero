@@ -3907,11 +3907,11 @@ async fn test_multiple_text_blocks_in_message() {
     assert_eq!(input.messages[0].content.len(), 2);
     assert!(matches!(
         input.messages[0].content[0],
-        StoredInputMessageContent::Text { .. }
+        StoredInputMessageContent::Text(_)
     ));
     assert!(matches!(
         input.messages[0].content[1],
-        StoredInputMessageContent::Text { .. }
+        StoredInputMessageContent::Text(_)
     ));
 }
 
