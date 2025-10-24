@@ -75,6 +75,31 @@ For `json` functions, each datapoint object must have the following fields:
 - `tags` (map of string to string, optional)
 - `name` (string, optional)
 
+### Update datapoint metadata
+
+This endpoint updates metadata fields for one or more datapoints in a dataset.
+Unlike updating the full datapoint, this operation updates the datapoint in-place without creating a new version.
+
+- **Gateway Endpoint:** `PATCH /v1/datasets/{dataset_name}/datapoints/metadata`
+- **Client Method:** `update_datapoints_metadata`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `datapoints` (list of objects, see below)
+
+The `datapoints` field must contain a list of objects.
+
+Each object must have the field `id` (string, UUIDv7).
+
+The following field is optional:
+
+- `metadata` (object) - updates metadata fields:
+  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+
+If the `metadata` field is omitted or `null`, no changes will be made to the datapoint.
+
+The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the updated datapoints.
+These IDs are the same as the input IDs since the datapoints are updated in-place.
+
 ### Delete a datapoint
 
 This endpoint performs a **soft deletion**: the datapoint is marked as stale and will be disregarded by the system in the future (e.g. when listing datapoints or running evaluations), but the data remains in the database.
