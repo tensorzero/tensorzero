@@ -67,13 +67,13 @@ pub(crate) fn generate_list_inferences_sql(
 ) -> Result<(String, Vec<QueryParameter>), Error> {
     let mut query_params: Vec<QueryParameter> = Vec::new();
     let mut param_idx_counter = 0;
-    let mut joins = JoinRegistry::new();
 
     let mut sql = match opts.function_name {
         // If function_name is provided, we know which table to query
         // TODO(#4181): list_inferences requests with function name should also query both tables
-        // and UNION ALL. The Metric filter join is complicated and we need to reason about it.
+        // and UNION ALL. The ORDER BY metric join is complicated and net new, so we'll tackle it later.
         Some(function_name) => {
+            let mut joins = JoinRegistry::new();
             let function_config = config.get_function(function_name)?;
             let mut query = generate_single_table_query_for_type(
                 config,
@@ -118,25 +118,47 @@ pub(crate) fn generate_list_inferences_sql(
         }
         None => {
             // Otherwise, we need to query both tables with UNION ALL
-            let chat_sql = generate_single_table_query_for_type(
+            let mut chat_joins = JoinRegistry::new();
+            let mut chat_sql = generate_single_table_query_for_type(
                 config,
                 opts,
                 "ChatInference",
                 true, // is_chat
-                &mut joins,
+                &mut chat_joins,
                 &mut query_params,
                 &mut param_idx_counter,
             )?;
 
-            let json_sql = generate_single_table_query_for_type(
+            // Insert joins for chat query before WHERE clause
+            if !chat_joins.get_clauses().is_empty() {
+                if let Some(where_pos) = chat_sql.find("\nWHERE") {
+                    chat_sql.insert_str(where_pos, &chat_joins.get_clauses().join("\n"));
+                } else {
+                    // No WHERE clause, append at end
+                    chat_sql.push_str(&chat_joins.get_clauses().join("\n"));
+                }
+            }
+
+            let mut json_joins = JoinRegistry::new();
+            let mut json_sql = generate_single_table_query_for_type(
                 config,
                 opts,
                 "JsonInference",
                 false, // is_chat
-                &mut joins,
+                &mut json_joins,
                 &mut query_params,
                 &mut param_idx_counter,
             )?;
+
+            // Insert joins for json query before WHERE clause
+            if !json_joins.get_clauses().is_empty() {
+                if let Some(where_pos) = json_sql.find("\nWHERE") {
+                    json_sql.insert_str(where_pos, &json_joins.get_clauses().join("\n"));
+                } else {
+                    // No WHERE clause, append at end
+                    json_sql.push_str(&json_joins.get_clauses().join("\n"));
+                }
+            }
 
             // Combine with UNION ALL
             let combined_query = format!("{chat_sql}\nUNION ALL\n{json_sql}");
@@ -218,26 +240,40 @@ fn generate_single_table_query_for_type(
 ) -> Result<String, Error> {
     // Use a Vec to maintain explicit column order for UNION ALL compatibility
     // Base columns that are always present, in fixed order
-    let mut select_clauses: Vec<String> = vec![
-        "i.id as inference_id".to_string(),
-        "i.function_name as function_name".to_string(),
-        "i.variant_name as variant_name".to_string(),
-        "i.episode_id as episode_id".to_string(),
-        "i.input as input".to_string(),
-        "formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp".to_string(),
-        "i.tags as tags".to_string(),
-    ];
+    let mut select_clauses: Vec<String> = vec![];
 
+    // Add type-specific columns first
+    if is_chat {
+        select_clauses.push("'chat' as type".to_string());
+    } else {
+        select_clauses.push("'json' as type".to_string());
+    }
+
+    // Add remaining columns in alphabetical order
+    select_clauses
+        .push("formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp".to_string());
+    select_clauses.push("i.episode_id as episode_id".to_string());
+    select_clauses.push("i.function_name as function_name".to_string());
+    select_clauses.push("i.id as inference_id".to_string());
+    select_clauses.push("i.input as input".to_string());
+
+    // output will be added later based on output_source
     // Add type-specific columns with consistent names for UNION ALL
     if is_chat {
         select_clauses.push("'' as output_schema".to_string());
-        select_clauses.push("i.tool_params as tool_params".to_string());
-        select_clauses.push("'chat' as type".to_string());
     } else {
         select_clauses.push("i.output_schema as output_schema".to_string());
-        select_clauses.push("'' as tool_params".to_string());
-        select_clauses.push("'json' as type".to_string());
     }
+
+    select_clauses.push("i.tags as tags".to_string());
+
+    if is_chat {
+        select_clauses.push("i.tool_params as tool_params".to_string());
+    } else {
+        select_clauses.push("'' as tool_params".to_string());
+    }
+
+    select_clauses.push("i.variant_name as variant_name".to_string());
 
     let mut where_clauses: Vec<String> = Vec::new();
 
@@ -356,7 +392,7 @@ mod tests {
         FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy, OrderByTerm,
         OrderDirection, QueryParameter,
     };
-    use crate::db::inferences::ListInferencesParams;
+    use crate::db::inferences::{InferenceOutputSource, ListInferencesParams};
 
     use super::generate_list_inferences_sql;
 
@@ -387,16 +423,16 @@ mod tests {
         assert_query_contains(
             &sql,
             "SELECT
-            i.id as inference_id,
-            i.function_name as function_name,
-            i.variant_name as variant_name,
-            i.episode_id as episode_id,
-            i.input as input,
-            formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-            i.tags as tags,
-            '' as output_schema,
-            i.tool_params as tool_params,
             'chat' as type,
+            formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+            i.episode_id as episode_id,
+            i.function_name as function_name,
+            i.id as inference_id,
+            i.input as input,
+            '' as output_schema,
+            i.tags as tags,
+            i.tool_params as tool_params,
+            i.variant_name as variant_name,
             i.output as output
         FROM
             ChatInference AS i
@@ -406,16 +442,16 @@ mod tests {
         UNION ALL
 
         SELECT
-            i.id as inference_id,
-            i.function_name as function_name,
-            i.variant_name as variant_name,
-            i.episode_id as episode_id,
-            i.input as input,
-            formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-            i.tags as tags,
-            i.output_schema as output_schema,
-            '' as tool_params,
             'json' as type,
+            formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+            i.episode_id as episode_id,
+            i.function_name as function_name,
+            i.id as inference_id,
+            i.input as input,
+            i.output_schema as output_schema,
+            i.tags as tags,
+            '' as tool_params,
+            i.variant_name as variant_name,
             i.output as output
         FROM
             JsonInference AS i
@@ -568,5 +604,102 @@ mod tests {
             err.to_string().contains("ORDER BY metric"),
             "Error message should indicate metric ordering not supported without function_name"
         );
+    }
+
+    #[tokio::test]
+    async fn test_query_by_ids_joins_demonstration_output_in_both_subqueries() {
+        let config = get_e2e_config().await;
+        let id1 = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+        let id2 = Uuid::parse_str("fedcba98-7654-3210-fedc-ba9876543210").unwrap();
+        let ids = vec![id1, id2];
+
+        let opts = ListInferencesParams {
+            ids: Some(&ids),
+            output_source: InferenceOutputSource::Demonstration,
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        // Verify UNION ALL is present
+        assert_query_contains(&sql, "UNION ALL");
+
+        assert_query_contains(
+            &sql,
+            r"
+        FROM ChatInference AS i
+        JOIN (SELECT inference_id, argMax(value, timestamp) as value
+        FROM DemonstrationFeedback
+        GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id",
+        );
+
+        assert_query_contains(
+            &sql,
+            r"
+        FROM JsonInference AS i
+        JOIN (SELECT inference_id, argMax(value, timestamp) as value
+        FROM DemonstrationFeedback
+        GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id",
+        );
+    }
+
+    #[tokio::test]
+    async fn test_query_by_ids_without_function_name_with_metric_filter() {
+        use crate::db::clickhouse::query_builder::{
+            FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+        };
+
+        let config = get_e2e_config().await;
+        let id1 = Uuid::parse_str("01234567-89ab-cdef-0123-456789abcdef").unwrap();
+        let id2 = Uuid::parse_str("fedcba98-7654-3210-fedc-ba9876543210").unwrap();
+        let ids = vec![id1, id2];
+
+        let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
+            metric_name: "task_success".to_string(),
+            comparison_operator: FloatComparisonOperator::GreaterThan,
+            value: 0.5,
+        });
+
+        let opts = ListInferencesParams {
+            ids: Some(&ids),
+            filters: Some(&filter_node),
+            ..Default::default()
+        };
+
+        let (sql, _params) = generate_list_inferences_sql(&config, &opts).unwrap();
+
+        // Verify UNION ALL is present
+        assert_query_contains(&sql, "UNION ALL");
+
+        // Verify metric filter join is present
+        // The bug would cause this to fail because joins are not inserted
+        assert_query_contains(
+            &sql,
+            r"FROM ChatInference AS i
+            LEFT JOIN (
+                SELECT
+                    target_id,
+                    argMax(value, timestamp) as value
+                FROM FloatMetricFeedback
+                WHERE metric_name = {p0:String}
+                GROUP BY target_id
+            ) AS j0 ON i.id = j0.target_id",
+        );
+
+        assert_query_contains(
+            &sql,
+            r"FROM JsonInference AS i
+            LEFT JOIN (
+                SELECT
+                    target_id,
+                    argMax(value, timestamp) as value
+                FROM FloatMetricFeedback
+                WHERE metric_name = {p0:String}
+                GROUP BY target_id
+            ) AS j0 ON i.id = j0.target_id",
+        );
+
+        // Verify the metric filter condition is in WHERE
+        assert_query_contains(&sql, "j0.value >");
     }
 }
