@@ -119,6 +119,9 @@ impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJso
     }
 }
 
+/// Structs that almost map to the storage format of inferences, but contains a dispreferred_outputs field.
+/// When querying inferences, if the user requests a join with the DemonstrationFeedback table, we use the
+/// demonstration feedback as `output` and set the original output as `dispreferred_outputs`.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(super) enum ClickHouseStoredInferenceWithDispreferredOutputs {
@@ -143,11 +146,15 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
     }
 }
 
+/// Source of an inference output when querying inferences. Users can choose this because there may be
+/// demonstration feedback (manually-curated output) for the inference that should be preferred.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 pub enum InferenceOutputSource {
+    /// The inference output is the original output from the inference.
     Inference,
+    /// The inference output is the demonstration feedback for the inference.
     Demonstration,
 }
 
