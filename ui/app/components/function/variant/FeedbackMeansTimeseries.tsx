@@ -192,7 +192,14 @@ export function FeedbackMeansTimeseries({
                 const dataPoint = payload[0]?.payload;
                 if (!dataPoint) return null;
 
-                const rows: ReactNode[] = [];
+                // Collect variant data and sort by mean descending
+                const variantData: Array<{
+                  name: string;
+                  mean: number;
+                  lower: number | null | undefined;
+                  upper: number | null | undefined;
+                  count: number;
+                }> = [];
 
                 variantsWithMeanData.forEach((variantName) => {
                   const mean = dataPoint[variantName];
@@ -208,11 +215,6 @@ export function FeedbackMeansTimeseries({
                     | number
                     | null
                     | undefined;
-                  const hasBounds =
-                    lower !== null &&
-                    lower !== undefined &&
-                    upper !== null &&
-                    upper !== undefined;
 
                   // Get count from counts data
                   const dateStr = dataPoint.date as string;
@@ -221,41 +223,58 @@ export function FeedbackMeansTimeseries({
                       | number
                       | undefined) ?? 0;
 
-                  rows.push(
-                    <div
-                      key={variantName}
-                      className="flex w-full flex-wrap items-start gap-2"
-                    >
-                      <div
-                        className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
-                        style={{
-                          backgroundColor: chartConfig[variantName].color,
-                        }}
-                      />
-                      <div className="flex flex-1 flex-col gap-0.5">
-                        <span className="text-muted-foreground font-mono text-xs">
-                          {variantName}
-                        </span>
-                        <span className="text-foreground font-mono font-medium tabular-nums">
-                          {formatDetailedNumber(mean)}
-                        </span>
-                        <span className="text-muted-foreground font-mono text-[10px]">
-                          n = {count.toLocaleString()}
-                        </span>
-                        {hasBounds ? (
-                          <span className="text-muted-foreground font-mono text-[10px] tabular-nums">
-                            {formatDetailedNumber(lower as number)} –{" "}
-                            {formatDetailedNumber(upper as number)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-[10px]">
-                            Confidence pending
-                          </span>
-                        )}
-                      </div>
-                    </div>,
-                  );
+                  variantData.push({
+                    name: variantName,
+                    mean,
+                    lower,
+                    upper,
+                    count,
+                  });
                 });
+
+                // Sort by mean descending
+                variantData.sort((a, b) => b.mean - a.mean);
+
+                const rows: ReactNode[] = variantData.map(
+                  ({ name, mean, lower, upper, count }) => {
+                    const hasBounds =
+                      lower !== null &&
+                      lower !== undefined &&
+                      upper !== null &&
+                      upper !== undefined;
+
+                    return (
+                      <div
+                        key={name}
+                        className="flex w-full items-center gap-2"
+                      >
+                        <div
+                          className="h-2.5 w-2.5 shrink-0 rounded-[2px]"
+                          style={{
+                            backgroundColor: chartConfig[name].color,
+                          }}
+                        />
+                        <span className="text-muted-foreground font-mono text-xs">
+                          {name}
+                        </span>
+                        <div className="flex items-center gap-1.5 font-mono tabular-nums">
+                          <span className="text-foreground font-medium">
+                            {formatDetailedNumber(mean)}
+                          </span>
+                          {hasBounds && (
+                            <span className="text-muted-foreground text-[10px]">
+                              ({formatDetailedNumber(lower as number)},{" "}
+                              {formatDetailedNumber(upper as number)})
+                            </span>
+                          )}
+                          <span className="text-muted-foreground ml-3 text-[10px]">
+                            n={count.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  },
+                );
 
                 if (!rows.length) return null;
 
