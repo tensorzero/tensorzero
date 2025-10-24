@@ -301,7 +301,7 @@ fn convert_legacy_content(
         MaybeLegacyStoredInputMessageContent::Text { value } => match value {
             Value::String(text) => Ok(StoredInputMessageContent::Text(Text { text })),
             Value::Object(obj) => Ok(StoredInputMessageContent::Template(TemplateInput {
-                name: role.to_string(),
+                name: role.implicit_template_name().to_string(),
                 arguments: obj,
             })),
             _ => Err(Error::new(ErrorDetails::InvalidMessage {
@@ -350,22 +350,16 @@ fn convert_legacy_message(
     Ok(StoredInputMessage { role, content })
 }
 
-/// Convert:
-///    `MaybeLegacyStoredInput`: how we store in the database, with potentially legacy data schemas)
-///  ->`StoredInput`: a cleaned version that fixed legacy data schemas
-impl TryFrom<MaybeLegacyStoredInput> for StoredInput {
-    type Error = Error;
+/// Helper function to convert a legacy input to a modern input
+pub fn convert_legacy_input(input: MaybeLegacyStoredInput) -> Result<StoredInput, Error> {
+    let messages: Vec<StoredInputMessage> = input
+        .messages
+        .into_iter()
+        .map(convert_legacy_message)
+        .collect::<Result<Vec<_>, Error>>()?;
 
-    fn try_from(input: MaybeLegacyStoredInput) -> Result<Self, Error> {
-        let messages: Vec<StoredInputMessage> = input
-            .messages
-            .into_iter()
-            .map(convert_legacy_message)
-            .collect::<Result<Vec<_>, Error>>()?;
-
-        Ok(Self {
-            system: input.system,
-            messages,
-        })
-    }
+    Ok(StoredInput {
+        system: input.system,
+        messages,
+    })
 }

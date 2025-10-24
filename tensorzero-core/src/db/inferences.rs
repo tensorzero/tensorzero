@@ -13,7 +13,9 @@ use crate::config::Config;
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
 use crate::db::clickhouse::ClickhouseFormat;
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
+use crate::inference::types::{
+    convert_legacy_input, ContentBlockChatOutput, JsonInferenceOutput, MaybeLegacyStoredInput,
+};
 use crate::serde_util::{deserialize_defaulted_string, deserialize_json_string};
 use crate::stored_inference::{StoredChatInference, StoredInference, StoredJsonInference};
 use crate::tool::ToolCallConfigDatabaseInsert;
@@ -26,7 +28,7 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub inference_id: Uuid,
     pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
+    pub input: MaybeLegacyStoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
@@ -57,7 +59,7 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
         Ok(StoredChatInference {
             function_name: value.function_name,
             variant_name: value.variant_name,
-            input: value.input,
+            input: convert_legacy_input(value.input)?,
             output: value.output,
             dispreferred_outputs,
             episode_id: value.episode_id,
@@ -77,7 +79,7 @@ pub(super) struct ClickHouseStoredJsonInferenceWithDispreferredOutputs {
     pub inference_id: Uuid,
     pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
+    pub input: MaybeLegacyStoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
     #[serde(default)]
@@ -107,7 +109,7 @@ impl TryFrom<ClickHouseStoredJsonInferenceWithDispreferredOutputs> for StoredJso
         Ok(StoredJsonInference {
             function_name: value.function_name,
             variant_name: value.variant_name,
-            input: value.input,
+            input: convert_legacy_input(value.input)?,
             output: value.output,
             dispreferred_outputs,
             episode_id: value.episode_id,

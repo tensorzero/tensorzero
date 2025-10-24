@@ -117,8 +117,8 @@ pub mod streams;
 
 pub use resolved_input::ResolvedRequestMessage;
 pub use stored_input::{
-    MaybeLegacyStoredInput, StoredInput, StoredInputMessage, StoredInputMessageContent,
-    StoredRequestMessage,
+    convert_legacy_input, MaybeLegacyStoredInput, StoredInput, StoredInputMessage,
+    StoredInputMessageContent, StoredRequestMessage,
 };
 pub use streams::{
     collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
