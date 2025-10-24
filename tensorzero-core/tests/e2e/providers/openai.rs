@@ -2619,6 +2619,7 @@ model = "test-model"
     let mut chunks = vec![];
     let mut inference_id: Option<Uuid> = None;
     let mut full_text = String::new();
+    let mut unknown_chunks = vec![];
 
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result.unwrap();
@@ -2630,11 +2631,17 @@ model = "test-model"
             }
         }
 
-        // Concatenate text from chunks
+        // Collect text and unknown chunks
         if let InferenceResponseChunk::Chat(chat_chunk) = &chunk {
             for content_block in &chat_chunk.content {
-                if let ContentBlockChunk::Text(text_chunk) = content_block {
-                    full_text.push_str(&text_chunk.text);
+                match content_block {
+                    ContentBlockChunk::Text(text_chunk) => {
+                        full_text.push_str(&text_chunk.text);
+                    }
+                    ContentBlockChunk::Unknown { id, data, .. } => {
+                        unknown_chunks.push((id.clone(), data.clone()));
+                    }
+                    _ => {}
                 }
             }
         }
@@ -2674,6 +2681,24 @@ model = "test-model"
             "Expected the last chunk to have a finish_reason, but it was None"
         );
     }
+
+    // Assert that we received Unknown chunks for web_search_call
+    assert!(
+        !unknown_chunks.is_empty(),
+        "Expected at least one Unknown chunk during streaming, but found none"
+    );
+
+    // Verify that at least one Unknown chunk contains web_search_call type
+    let has_web_search_chunk = unknown_chunks.iter().any(|(_, data)| {
+        data.get("type")
+            .and_then(|t| t.as_str())
+            .map(|t| t == "web_search_call")
+            .unwrap_or(false)
+    });
+    assert!(
+        has_web_search_chunk,
+        "Expected at least one Unknown chunk with type 'web_search_call', but found none. Unknown chunks: {unknown_chunks:#?}",
+    );
 
     // Assert that the concatenated text contains citations (markdown links)
     assert!(

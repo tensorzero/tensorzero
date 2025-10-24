@@ -21,6 +21,9 @@ on:
       regen_cache:
         required: true
         type: boolean
+      is_merge_group:
+        required: true
+        type: boolean
 
 permissions:
   contents: read
@@ -32,7 +35,7 @@ jobs:
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
-    if: github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || github.event_name == 'merge_group' || github.event_name == 'workflow_dispatch')
+    if: github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group || github.event_name == 'workflow_dispatch')
 
     steps:
       # TODO - investigate why using the Namespace checkout action causes
