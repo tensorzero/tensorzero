@@ -694,7 +694,7 @@ mod tests {
                     target_id,
                     argMax(value, timestamp) as value
                 FROM FloatMetricFeedback
-                WHERE metric_name = {p0:String}
+                WHERE metric_name = {p2:String}
                 GROUP BY target_id
             ) AS j0 ON i.id = j0.target_id",
         );
