@@ -41,7 +41,7 @@ async fn verify_variant_stored(
 
 #[sqlx::test(migrations = "src/db/postgres/migrations")]
 async fn test_cas_basic_functionality(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool);
+    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let episode_id = Uuid::now_v7();
     let function_name = generate_function_name("basic");
@@ -78,7 +78,7 @@ async fn test_cas_basic_functionality(pool: PgPool) {
 
 #[sqlx::test(migrations = "src/db/postgres/migrations")]
 async fn test_cas_isolation(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool);
+    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     // Create comprehensive test matrix: 3 episodes × 3 functions = 9 combinations
     let episodes: Vec<Uuid> = (0..3).map(|_| Uuid::now_v7()).collect();
@@ -136,7 +136,7 @@ async fn test_cas_isolation(pool: PgPool) {
 
 #[sqlx::test(migrations = "src/db/postgres/migrations")]
 async fn test_cas_concurrency_and_atomicity(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool);
+    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let episode_id = Uuid::now_v7();
     let function_name = generate_function_name("concurrency");
@@ -191,7 +191,7 @@ async fn test_cas_concurrency_and_atomicity(pool: PgPool) {
 
 #[sqlx::test(migrations = "src/db/postgres/migrations")]
 async fn test_cas_edge_case_values(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool);
+    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let episode_id = Uuid::now_v7();
 
@@ -301,7 +301,7 @@ async fn test_cas_edge_case_values(pool: PgPool) {
 
 #[sqlx::test(migrations = "src/db/postgres/migrations")]
 async fn test_cas_stress_test(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool);
+    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let num_episodes = 5;
     let num_functions = 4;
@@ -389,7 +389,7 @@ async fn test_cas_stress_test(pool: PgPool) {
 
 #[sqlx::test(migrations = "src/db/postgres/migrations")]
 async fn test_cas_failure_recovery(pool: PgPool) {
-    let conn = PostgresConnectionInfo::new_with_pool(pool);
+    let conn = PostgresConnectionInfo::new_with_pool(pool, None);
 
     let episode_id = Uuid::now_v7();
     let function_name = generate_function_name("failure_recovery");

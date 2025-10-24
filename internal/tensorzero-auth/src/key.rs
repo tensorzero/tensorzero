@@ -108,6 +108,8 @@ pub enum TensorZeroAuthError {
     InvalidKeyFormat(&'static str),
     #[error("Database error: {0}")]
     Sqlx(#[from] sqlx::Error),
+    #[error("Migration error: {message}")]
+    Migration { message: String },
 }
 
 #[cfg(test)]
