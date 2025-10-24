@@ -4,10 +4,7 @@ use tensorzero::{
     InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagFilter,
     TimeComparisonOperator, TimeFilter,
 };
-use tensorzero_core::db::clickhouse::{
-    query_builder::{OrderBy, OrderByTerm, OrderDirection},
-    ClickhouseFormat,
-};
+use tensorzero_core::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_json_function() {
@@ -17,14 +14,10 @@ pub async fn test_simple_query_json_function() {
         direction: OrderDirection::Desc,
     }];
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
-        filters: None,
-        output_source: InferenceOutputSource::Inference,
+        function_name: Some("extract_entities"),
         limit: Some(2),
-        offset: None,
         order_by: Some(&order_by),
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 2);
@@ -63,14 +56,12 @@ pub async fn test_simple_query_chat_function() {
         direction: OrderDirection::Asc,
     }];
     let opts = ListInferencesParams {
-        function_name: "write_haiku",
-        variant_name: None,
-        filters: None,
+        function_name: Some("write_haiku"),
         output_source: InferenceOutputSource::Demonstration,
         limit: Some(3),
         offset: Some(3),
         order_by: Some(&order_by),
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 3);
@@ -116,14 +107,11 @@ pub async fn test_simple_query_with_float_filter() {
         direction: OrderDirection::Desc,
     }];
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
+        function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        output_source: InferenceOutputSource::Inference,
         limit: Some(3),
-        offset: None,
         order_by: Some(&order_by),
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 3);
@@ -140,14 +128,11 @@ pub async fn test_simple_query_with_float_filter() {
 pub async fn test_demonstration_output_source() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
-        filters: None,
+        function_name: Some("extract_entities"),
         output_source: InferenceOutputSource::Demonstration,
         limit: Some(5),
         offset: Some(1),
-        order_by: None,
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
 
     let res = client.experimental_list_inferences(opts).await.unwrap();
@@ -169,14 +154,11 @@ pub async fn test_boolean_metric_filter() {
         value: true,
     });
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
+        function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        output_source: InferenceOutputSource::Inference,
         limit: Some(5),
         offset: Some(1),
-        order_by: None,
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 5);
@@ -207,14 +189,10 @@ pub async fn test_and_filter_multiple_float_metrics() {
         ],
     };
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
+        function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        output_source: InferenceOutputSource::Inference,
         limit: Some(1),
-        offset: None,
-        order_by: None,
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 1);
@@ -249,14 +227,10 @@ async fn test_or_filter_mixed_metrics() {
         ],
     };
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
+        function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        output_source: InferenceOutputSource::Inference,
         limit: Some(1),
-        offset: None,
-        order_by: None,
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 1);
@@ -287,14 +261,9 @@ async fn test_not_filter() {
         }),
     };
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
+        function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        output_source: InferenceOutputSource::Inference,
-        limit: None,
-        offset: None,
-        order_by: None,
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 0);
@@ -320,14 +289,11 @@ async fn test_simple_time_filter() {
         },
     ];
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
+        function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        output_source: InferenceOutputSource::Inference,
         limit: Some(5),
-        offset: None,
         order_by: Some(&order_by),
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 5);
@@ -366,14 +332,10 @@ async fn test_simple_tag_filter() {
         comparison_operator: TagComparisonOperator::Equal,
     });
     let opts = ListInferencesParams {
-        function_name: "extract_entities",
-        variant_name: None,
+        function_name: Some("extract_entities"),
         filters: Some(&filter_node),
-        output_source: InferenceOutputSource::Inference,
         limit: Some(200),
-        offset: None,
-        order_by: None,
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 200);
@@ -407,14 +369,10 @@ async fn test_combined_time_and_tag_filter() {
         ],
     };
     let opts = ListInferencesParams {
-        function_name: "write_haiku",
-        variant_name: None,
+        function_name: Some("write_haiku"),
         filters: Some(&filter_node),
-        output_source: InferenceOutputSource::Inference,
         limit: Some(50),
-        offset: None,
-        order_by: None,
-        format: ClickhouseFormat::JsonEachRow,
+        ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 50);
@@ -426,4 +384,262 @@ async fn test_combined_time_and_tag_filter() {
         assert_eq!(chat_inference.tags["tensorzero::evaluation_name"], "haiku");
         assert!(chat_inference.timestamp >= DateTime::from_timestamp(1744673400, 0).unwrap());
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_query_by_ids_json_only() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    // First, get some JSON inference IDs
+    let opts = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: Some(3),
+        ..Default::default()
+    };
+    let initial_res = client.experimental_list_inferences(opts).await.unwrap();
+    assert_eq!(initial_res.len(), 3);
+
+    // Extract the IDs
+    let ids: Vec<_> = initial_res
+        .iter()
+        .map(|inf| match inf {
+            StoredInference::Json(j) => j.inference_id,
+            StoredInference::Chat(_) => panic!("Expected JSON inference"),
+        })
+        .collect();
+
+    // Now query by IDs without function_name
+    let opts = ListInferencesParams {
+        function_name: None,
+        ids: Some(&ids),
+        ..Default::default()
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+
+    // Should get back the same 3 inferences
+    assert_eq!(res.len(), 3);
+    for inference in &res {
+        let StoredInference::Json(json_inference) = inference else {
+            panic!("Expected JSON inference");
+        };
+        assert!(ids.contains(&json_inference.inference_id));
+        assert_eq!(json_inference.function_name, "extract_entities");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_query_by_ids_chat_only() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    // First, get some Chat inference IDs
+    let opts = ListInferencesParams {
+        function_name: Some("write_haiku"),
+        limit: Some(2),
+        ..Default::default()
+    };
+    let initial_res = client.experimental_list_inferences(opts).await.unwrap();
+    assert_eq!(initial_res.len(), 2);
+
+    // Extract the IDs
+    let ids: Vec<_> = initial_res
+        .iter()
+        .map(|inf| match inf {
+            StoredInference::Chat(c) => c.inference_id,
+            StoredInference::Json(_) => panic!("Expected Chat inference"),
+        })
+        .collect();
+
+    // Now query by IDs without function_name
+    let opts = ListInferencesParams {
+        ids: Some(&ids),
+        ..Default::default()
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+
+    // Should get back the same 2 inferences
+    assert_eq!(res.len(), 2);
+    for inference in &res {
+        let StoredInference::Chat(chat_inference) = inference else {
+            panic!("Expected Chat inference");
+        };
+        assert!(ids.contains(&chat_inference.inference_id));
+        assert_eq!(chat_inference.function_name, "write_haiku");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_query_by_ids_mixed_types() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    // Get some JSON inference IDs
+    let json_opts = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: Some(2),
+        ..Default::default()
+    };
+    let json_res = client
+        .experimental_list_inferences(json_opts)
+        .await
+        .unwrap();
+
+    // Get some Chat inference IDs
+    let chat_opts = ListInferencesParams {
+        function_name: Some("write_haiku"),
+        limit: Some(2),
+        ..Default::default()
+    };
+    let chat_res = client
+        .experimental_list_inferences(chat_opts)
+        .await
+        .unwrap();
+
+    // Combine the IDs
+    let mut ids: Vec<_> = json_res
+        .iter()
+        .map(|inf| match inf {
+            StoredInference::Json(j) => j.inference_id,
+            StoredInference::Chat(_) => panic!("Expected JSON inference"),
+        })
+        .collect();
+    ids.extend(chat_res.iter().map(|inf| match inf {
+        StoredInference::Chat(c) => c.inference_id,
+        StoredInference::Json(_) => panic!("Expected Chat inference"),
+    }));
+
+    // Now query by mixed IDs without function_name
+    let opts = ListInferencesParams {
+        ids: Some(&ids),
+        ..Default::default()
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+
+    // Should get back 4 inferences (2 JSON + 2 Chat)
+    assert_eq!(res.len(), 4);
+
+    let mut json_count = 0;
+    let mut chat_count = 0;
+    for inference in &res {
+        match inference {
+            StoredInference::Json(json_inference) => {
+                assert!(ids.contains(&json_inference.inference_id));
+                assert_eq!(json_inference.function_name, "extract_entities");
+                json_count += 1;
+            }
+            StoredInference::Chat(chat_inference) => {
+                assert!(ids.contains(&chat_inference.inference_id));
+                assert_eq!(chat_inference.function_name, "write_haiku");
+                chat_count += 1;
+            }
+        }
+    }
+    assert_eq!(json_count, 2);
+    assert_eq!(chat_count, 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_query_by_ids_with_order_by_timestamp() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    // Get some mixed inference IDs
+    let json_opts = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: Some(3),
+        ..Default::default()
+    };
+    let json_res = client
+        .experimental_list_inferences(json_opts)
+        .await
+        .unwrap();
+
+    let chat_opts = ListInferencesParams {
+        function_name: Some("write_haiku"),
+        limit: Some(3),
+        ..Default::default()
+    };
+    let chat_res = client
+        .experimental_list_inferences(chat_opts)
+        .await
+        .unwrap();
+
+    let mut ids: Vec<_> = json_res
+        .iter()
+        .map(|inf| match inf {
+            StoredInference::Json(j) => j.inference_id,
+            StoredInference::Chat(_) => panic!("Expected JSON inference"),
+        })
+        .collect();
+    ids.extend(chat_res.iter().map(|inf| match inf {
+        StoredInference::Chat(c) => c.inference_id,
+        StoredInference::Json(_) => panic!("Expected Chat inference"),
+    }));
+
+    // Query with ORDER BY timestamp DESC
+    let order_by = vec![OrderBy {
+        term: OrderByTerm::Timestamp,
+        direction: OrderDirection::Desc,
+    }];
+    let opts = ListInferencesParams {
+        ids: Some(&ids),
+        order_by: Some(&order_by),
+        ..Default::default()
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+
+    assert_eq!(res.len(), 6);
+
+    // Verify timestamps are in descending order
+    let mut prev_timestamp = None;
+    for inference in &res {
+        let timestamp = match inference {
+            StoredInference::Json(j) => j.timestamp,
+            StoredInference::Chat(c) => c.timestamp,
+        };
+        if let Some(prev) = prev_timestamp {
+            assert!(
+                timestamp <= prev,
+                "Timestamps should be in descending order. Got: {timestamp} <= {prev}"
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_query_by_ids_with_order_by_metric_errors() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    // Get some JSON inference IDs
+    let opts = ListInferencesParams {
+        function_name: Some("extract_entities"),
+        limit: Some(2),
+        ..Default::default()
+    };
+    let initial_res = client.experimental_list_inferences(opts).await.unwrap();
+
+    let ids: Vec<_> = initial_res
+        .iter()
+        .map(|inf| match inf {
+            StoredInference::Json(j) => j.inference_id,
+            StoredInference::Chat(_) => panic!("Expected JSON inference"),
+        })
+        .collect();
+
+    // Try to ORDER BY a metric without function_name - should error
+    let order_by = vec![OrderBy {
+        term: OrderByTerm::Metric {
+            name: "jaccard_similarity".to_string(),
+        },
+        direction: OrderDirection::Desc,
+    }];
+    let opts = ListInferencesParams {
+        ids: Some(&ids),
+        order_by: Some(&order_by),
+        ..Default::default()
+    };
+    let res = client.experimental_list_inferences(opts).await;
+
+    // Should error because ORDER BY metric is not supported without function_name
+    assert!(res.is_err());
+    let err_msg = format!("{:?}", res.unwrap_err());
+    assert!(err_msg.contains("not supported"));
 }

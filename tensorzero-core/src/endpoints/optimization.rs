@@ -97,8 +97,10 @@ pub async fn launch_optimization_workflow(
         .list_inferences(
             &config,
             &ListInferencesParams {
-                function_name: &function_name,
+                function_name: Some(&function_name),
+                ids: None,
                 variant_name: query_variant_name.as_deref(),
+                episode_id: None,
                 filters: filters.as_ref(),
                 output_source,
                 limit,
