@@ -78,7 +78,7 @@ For `json` functions, each datapoint object must have the following fields:
 ### Update datapoints in a dataset
 
 This endpoint updates one or more datapoints in a dataset by creating new versions.
-If you update a non-`metadata` field, the original datapoint is marked as stale (i.e. a soft deletion), and a new datapoint is created with the updated values and a new ID; if you only update `metadata`, the original datapoint is updated in place.
+The original datapoint is marked as stale (i.e. a soft deletion), and a new datapoint is created with the updated values and a new ID.
 The response returns the newly created IDs.
 
 - **Gateway Endpoint:** `PATCH /v1/datasets/{dataset_name}/datapoints`
