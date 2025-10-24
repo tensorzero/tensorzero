@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     fmt::{self, Display},
 };
 
@@ -14,6 +14,9 @@ use crate::{
 mod datapoint_queries;
 pub(super) mod parameters;
 pub use datapoint_queries::DatapointFilter;
+
+#[cfg(test)]
+pub mod test_util;
 
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -290,7 +293,7 @@ impl InferenceFilter {
         &self,
         config: &Config,
         params_map: &mut Vec<QueryParameter>,
-        _select_clauses: &mut BTreeSet<String>,
+        _select_clauses: &mut Vec<String>,
         joins: &mut JoinRegistry,
         param_idx_counter: &mut usize,
     ) -> Result<String, Error> {
@@ -522,7 +525,6 @@ mod tests {
     use uuid::Uuid;
 
     use crate::db::clickhouse::inference_queries::generate_list_inferences_sql;
-    use crate::db::clickhouse::ClickhouseFormat;
     use crate::db::inferences::{
         ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource,
         ListInferencesParams,
@@ -557,16 +559,17 @@ mod tests {
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
@@ -590,16 +593,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'chat' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.tags as tags,
-    i.tool_params as tool_params,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    '' as output_schema,
+    i.tool_params as tool_params,
+    'chat' as type,
+    i.output as output
 FROM
     ChatInference AS i
 WHERE
@@ -629,16 +633,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -717,17 +722,18 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    [i.output] as dispreferred_outputs,
-    demo_f.value AS output,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    demo_f.value AS output,
+    [i.output] as dispreferred_outputs
 FROM
     JsonInference AS i
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
@@ -757,16 +763,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -813,16 +820,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -885,16 +893,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -976,16 +985,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1076,16 +1086,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1156,16 +1167,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1243,16 +1255,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1282,16 +1295,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
@@ -1323,16 +1337,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
@@ -1385,16 +1400,17 @@ FORMAT JSONEachRow";
             let expected_sql = format!(
                 r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {{p0:String}} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1444,16 +1460,17 @@ FORMAT JSONEachRow",
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
@@ -1493,16 +1510,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'chat' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.tags as tags,
-    i.tool_params as tool_params,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    '' as output_schema,
+    i.tool_params as tool_params,
+    'chat' as type,
+    i.output as output
 FROM
     ChatInference AS i
 WHERE
@@ -1551,16 +1569,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
@@ -1617,16 +1636,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1694,17 +1714,18 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    [i.output] as dispreferred_outputs,
-    demo_f.value AS output,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    demo_f.value AS output,
+    [i.output] as dispreferred_outputs
 FROM
     JsonInference AS i
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
@@ -1785,16 +1806,17 @@ FORMAT JSONEachRow";
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
@@ -1840,16 +1862,17 @@ FORMAT JSONEachRow";
             let expected_sql = format!(
                 r"
 SELECT
-    'chat' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.tags as tags,
-    i.tool_params as tool_params,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {{p0:String}} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    '' as output_schema,
+    i.tool_params as tool_params,
+    'chat' as type,
+    i.output as output
 FROM
     ChatInference AS i
 WHERE
@@ -1901,16 +1924,17 @@ FORMAT JSONEachRow",
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -2283,29 +2307,25 @@ FORMAT JSONEachRow";
             direction: OrderDirection::Desc,
         }];
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
-            filters: None,
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
+            function_name: Some("extract_entities"),
             order_by: Some(&order_by),
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
@@ -2339,16 +2359,17 @@ FORMAT JSONEachRow";
         // NOTE: This test case enforces that the joins account for metrics that are only used in the order by clause.
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -2402,16 +2423,17 @@ FORMAT JSONEachRow";
 
         let expected_sql = r"
 SELECT
-    'json' as type,
-    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
-    i.episode_id as episode_id,
     i.id as inference_id,
-    i.input as input,
-    i.output as output,
-    i.output_schema as output_schema,
-    i.tags as tags,
+    i.function_name as function_name,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.episode_id as episode_id,
+    i.input as input,
+    formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
+    i.tags as tags,
+    i.output_schema as output_schema,
+    '' as tool_params,
+    'json' as type,
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
