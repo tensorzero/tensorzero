@@ -1,7 +1,6 @@
 import type {
   CumulativeFeedbackTimeSeriesPoint,
   FunctionConfig,
-  TimeWindow,
 } from "tensorzero-node";
 import {
   ExperimentationPieChart,
@@ -16,8 +15,6 @@ interface FunctionExperimentationProps {
   functionName: string;
   optimalProbabilities?: Record<string, number>;
   feedbackTimeseries?: CumulativeFeedbackTimeSeriesPoint[];
-  feedback_time_granularity?: TimeWindow;
-  onCumulativeFeedbackTimeGranularityChange?: (granularity: TimeWindow) => void;
 }
 
 function extractVariantWeights(
@@ -81,8 +78,6 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
   functionName,
   optimalProbabilities,
   feedbackTimeseries,
-  feedback_time_granularity,
-  onCumulativeFeedbackTimeGranularityChange,
 }: FunctionExperimentationProps) {
   // Don't render experimentation section for the default function
   if (functionName === DEFAULT_FUNCTION) {
@@ -104,16 +99,8 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
       <ExperimentationPieChart variantWeights={variantWeights} />
       {functionConfig.experimentation.type === "track_and_stop" &&
         feedbackTimeseries &&
-        feedbackTimeseries.length > 0 &&
-        feedback_time_granularity &&
-        onCumulativeFeedbackTimeGranularityChange && (
-          <FeedbackSamplesTimeseries
-            feedbackTimeseries={feedbackTimeseries}
-            time_granularity={feedback_time_granularity}
-            onCumulativeFeedbackTimeGranularityChange={
-              onCumulativeFeedbackTimeGranularityChange
-            }
-          />
+        feedbackTimeseries.length > 0 && (
+          <FeedbackSamplesTimeseries feedbackTimeseries={feedbackTimeseries} />
         )}
     </>
   );

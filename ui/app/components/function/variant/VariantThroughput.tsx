@@ -1,5 +1,4 @@
 import type { VariantThroughput } from "~/utils/clickhouse/function";
-import type { TimeWindow } from "tensorzero-node";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
 
@@ -11,16 +10,17 @@ import {
   ChartTooltip,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
+import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 export function VariantThroughput({
   variant_throughput,
-  time_granularity,
-  onTimeGranularityChange,
 }: {
   variant_throughput: VariantThroughput[];
-  time_granularity: TimeWindow;
-  onTimeGranularityChange: (time_granularity: TimeWindow) => void;
 }) {
+  const [time_granularity, onTimeGranularityChange] = useTimeGranularityParam(
+    "throughput_time_granularity",
+    "week",
+  );
   const { data, variantNames } = transformVariantThroughput(variant_throughput);
 
   const chartConfig: Record<string, { label: string; color: string }> =

@@ -33,18 +33,17 @@ import {
   ChartTooltip,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
+import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 export function FeedbackSamplesTimeseries({
   feedbackTimeseries,
-  time_granularity,
-  onCumulativeFeedbackTimeGranularityChange: onTimeGranularityChange,
 }: {
   feedbackTimeseries: CumulativeFeedbackTimeSeriesPoint[];
-  time_granularity: TimeWindow;
-  onCumulativeFeedbackTimeGranularityChange: (
-    time_granularity: TimeWindow,
-  ) => void;
 }) {
+  const [time_granularity, onTimeGranularityChange] = useTimeGranularityParam(
+    "cumulative_feedback_time_granularity",
+    "week",
+  );
   const { countsData, meansData, variantNames } = transformFeedbackTimeseries(
     feedbackTimeseries,
     time_granularity,

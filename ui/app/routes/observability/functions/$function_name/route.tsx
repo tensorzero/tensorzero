@@ -58,7 +58,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     "throughput_time_granularity",
   ) || "week") as TimeWindow;
   const feedback_time_granularity = (url.searchParams.get(
-    "feedback_time_granularity",
+    "cumulative_feedback_time_granularity",
   ) || "week") as TimeWindow;
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
@@ -276,34 +276,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     [metricsWithFeedback],
   );
 
-  const time_granularity = (searchParams.get("time_granularity") ||
-    "week") as TimeWindow;
-  const handleTimeGranularityChange = (granularity: TimeWindow) => {
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("time_granularity", granularity);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const throughput_time_granularity = (searchParams.get(
-    "throughput_time_granularity",
-  ) || "week") as TimeWindow;
-  const handleThroughputTimeGranularityChange = (granularity: TimeWindow) => {
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("throughput_time_granularity", granularity);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const feedback_time_granularity = (searchParams.get(
-    "cumulative_feedback_time_granularity",
-  ) || "week") as TimeWindow;
-  const handleCumulativeFeedbackTimeGranularityChange = (
-    granularity: TimeWindow,
-  ) => {
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("cumulative_feedback_time_granularity", granularity);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
   return (
     <PageLayout>
       <PageHeader
@@ -332,21 +304,13 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               functionName={function_name}
               optimalProbabilities={optimal_probabilities}
               feedbackTimeseries={feedback_timeseries}
-              feedback_time_granularity={feedback_time_granularity}
-              onCumulativeFeedbackTimeGranularityChange={
-                handleCumulativeFeedbackTimeGranularityChange
-              }
             />
           </SectionLayout>
         )}
 
         <SectionLayout>
           <SectionHeader heading="Throughput" />
-          <VariantThroughput
-            variant_throughput={variant_throughput}
-            time_granularity={throughput_time_granularity}
-            onTimeGranularityChange={handleThroughputTimeGranularityChange}
-          />
+          <VariantThroughput variant_throughput={variant_throughput} />
         </SectionLayout>
 
         <SectionLayout>
@@ -360,8 +324,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             <VariantPerformance
               variant_performances={variant_performances}
               metric_name={metric_name}
-              time_granularity={time_granularity}
-              onTimeGranularityChange={handleTimeGranularityChange}
             />
           )}
         </SectionLayout>

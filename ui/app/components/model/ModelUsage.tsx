@@ -1,4 +1,4 @@
-import type { TimeWindow, ModelUsageTimePoint } from "tensorzero-node";
+import type { ModelUsageTimePoint } from "tensorzero-node";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,
@@ -30,6 +30,7 @@ import {
   SelectValue,
   SelectTrigger,
 } from "~/components/ui/select";
+import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 export type ModelUsageMetric =
   | "inferences"
@@ -87,13 +88,13 @@ function MetricSelector({
 
 export function ModelUsage({
   modelUsageDataPromise,
-  timeGranularity,
-  onTimeGranularityChange,
 }: {
   modelUsageDataPromise: Promise<ModelUsageTimePoint[]>;
-  timeGranularity: TimeWindow;
-  onTimeGranularityChange: (timeGranularity: TimeWindow) => void;
 }) {
+  const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
+    "usageTimeGranularity",
+    "week",
+  );
   const [selectedMetric, setSelectedMetric] =
     useState<ModelUsageMetric>("inferences");
 
