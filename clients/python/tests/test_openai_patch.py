@@ -177,10 +177,10 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
     captured = capfd.readouterr()
     lines = list(captured.out.splitlines())
     print("Output lines: ", lines)
-    # Allow TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS to be set when running this test
-    assert len(lines) <= 1
-    if len(lines) == 1:
-        assert "Pseudonymous usage analytic" in lines[0]
+    # Allow various env vars to be set when running this test
+    assert len(lines) <= 2
+    for line in lines:
+        assert "Pseudonymous usage analytic" in line or "Using proxy URL from TENSORZERO_E2E_PROXY" in line
     assert captured.err == ""
 
 
@@ -222,7 +222,7 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
     # The exact lines that we output depends on whether or not 'TENSORZERO_DISABLE_PSEUDONYMOUS_USAGE_ANALYTICS' is set,
     # so we just check that any lines that do get output are ones that we know about.
     assert "Client closed the connection before the response was sent" in captured.out
-    assert len(out_lines) <= 4
+    assert len(out_lines) <= 5
     out_lines_copy = list(out_lines)
     for line in out_lines:
         if "Pseudonymous usage analytic" in line:
@@ -232,6 +232,8 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
         if "Waiting for deferred tasks to finish" in line:
             out_lines_copy.remove(line)
         if "Deferred task finished" in line:
+            out_lines_copy.remove(line)
+        if "Using proxy URL from TENSORZERO_E2E_PROXY" in line:
             out_lines_copy.remove(line)
 
     assert out_lines_copy == [], "Unexpected lines in output: " + str(out_lines_copy)
