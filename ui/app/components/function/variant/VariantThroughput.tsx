@@ -162,7 +162,9 @@ export function transformVariantThroughput(parsedRows: VariantThroughput[]): {
   data: VariantThroughputData[];
   variantNames: string[];
 } {
-  const variantNames = [...new Set(parsedRows.map((row) => row.variant_name))];
+  const variantNames = [
+    ...new Set(parsedRows.map((row) => row.variant_name)),
+  ].sort();
 
   // Group by date
   const groupedByDate = parsedRows.reduce<

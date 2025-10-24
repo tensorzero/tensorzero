@@ -203,7 +203,9 @@ export function transformVariantPerformances(
   // Remove rows with n=0 inferences
   const filtered = parsedRows.filter((row) => row.count > 0);
 
-  const variantNames = [...new Set(filtered.map((row) => row.variant_name))];
+  const variantNames = [
+    ...new Set(filtered.map((row) => row.variant_name)),
+  ].sort();
 
   // First group by date
   const groupedByDate = filtered.reduce<PerformanceDataGroupedByDate>(

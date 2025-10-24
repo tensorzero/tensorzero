@@ -29,7 +29,9 @@ export function transformFeedbackTimeseries(
   meansData: FeedbackMeansTimeseriesData[];
   variantNames: string[];
 } {
-  const variantNames = [...new Set(parsedRows.map((row) => row.variant_name))];
+  const variantNames = [
+    ...new Set(parsedRows.map((row) => row.variant_name)),
+  ].sort();
 
   // If no data, return empty
   if (parsedRows.length === 0) {
