@@ -165,10 +165,12 @@ test("should display feedback timeseries charts for extract_entities function", 
     page.getByRole("heading", { name: "Experimentation" }),
   ).toBeVisible();
 
-  // Check that the Mean Reward tab is visible and selected by default
-  await expect(page.getByRole("tab", { name: "Mean Reward" })).toBeVisible();
+  // Check that the Mean Feedback Estimates tab is visible and selected by default
+  await expect(
+    page.getByRole("tab", { name: "Mean Feedback Estimates" }),
+  ).toBeVisible();
 
-  // Verify the Mean Reward chart is displayed
+  // Verify the Mean Feedback Estimates chart is displayed
   await expect(page.getByText("Metrics Over Time")).toBeVisible();
 
   // Check that the metric name appears in the description

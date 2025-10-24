@@ -181,7 +181,7 @@ export function FeedbackMeansTimeseries({
               tickMargin={10}
               axisLine={true}
               label={{
-                value: "Mean Reward",
+                value: "Mean Feedback Estimates",
                 angle: -90,
                 position: "insideLeft",
                 style: { textAnchor: "middle" },

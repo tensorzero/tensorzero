@@ -134,7 +134,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
           />
           <Tabs defaultValue="means" className="w-full">
             <TabsList>
-              <TabsTrigger value="means">Mean Reward</TabsTrigger>
+              <TabsTrigger value="means">Mean Feedback Estimates</TabsTrigger>
               <TabsTrigger value="counts">Feedback Counts</TabsTrigger>
             </TabsList>
             <TabsContent value="means">
