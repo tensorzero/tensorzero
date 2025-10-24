@@ -70,22 +70,45 @@ pub(crate) fn generate_list_inferences_sql(
     let mut params_map: Vec<QueryParameter> = Vec::new();
     let mut param_idx_counter = 0; // Counter for unique parameter names
 
-    let function_config = config.get_function(opts.function_name)?;
-    let function_name_param_placeholder = add_parameter(
-        opts.function_name,
-        ClickhouseType::String,
-        &mut params_map,
-        &mut param_idx_counter,
-    );
-    let mut select_clauses = get_select_clauses(&function_config, &function_name_param_placeholder);
+    let mut select_clauses: BTreeSet<String> = BTreeSet::from([
+        "i.function_name as function_name".to_string(),
+        "i.input as input".to_string(),
+        "i.variant_name as variant_name".to_string(),
+        "i.episode_id as episode_id".to_string(),
+        "i.id as inference_id".to_string(),
+        "formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp".to_string(),
+        "i.tags as tags".to_string(),
+        // We don't select output here because it's handled separately based on the output_source
+    ]);
+    // TODO DO NOT SUBMIT (shuyangli): Figure out how to do this without function name.
+    match function_config {
+        FunctionConfig::Json(_) => {
+            select_clauses.insert("i.output_schema as output_schema".to_string());
+            select_clauses.insert("'json' as type".to_string());
+        }
+        FunctionConfig::Chat(_) => {
+            select_clauses.insert("i.tool_params as tool_params".to_string());
+            select_clauses.insert("'chat' as type".to_string());
+        }
+    }
+
     let mut joins = JoinRegistry::new();
     let mut where_clauses: Vec<String> = Vec::new();
 
-    let inference_table_name = function_config.table_name();
+    if let Some(function_name) = opts.function_name {
+        let function_config = config.get_function(function_name)?;
+        let function_name_param_placeholder = add_parameter(
+            function_name,
+            ClickhouseType::String,
+            &mut params_map,
+            &mut param_idx_counter,
+        );
+        where_clauses.push(format!(
+            "i.function_name = {function_name_param_placeholder}"
+        ));
+    }
 
-    where_clauses.push(format!(
-        "i.function_name = {function_name_param_placeholder}"
-    ));
+    let inference_table_name = function_config.table_name();
 
     // Add `variant_name` filter
     if let Some(variant_name) = opts.variant_name {
@@ -190,33 +213,6 @@ FROM
     }
 
     Ok((sql, params_map))
-}
-
-fn get_select_clauses(
-    function_config: &FunctionConfig,
-    function_name_param_placeholder: &str,
-) -> BTreeSet<String> {
-    let mut select_clauses = BTreeSet::from([
-        format!("{function_name_param_placeholder} as function_name"),
-        "i.input as input".to_string(),
-        "i.variant_name as variant_name".to_string(),
-        "i.episode_id as episode_id".to_string(),
-        "i.id as inference_id".to_string(),
-        "formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp".to_string(),
-        "i.tags as tags".to_string(),
-        // We don't select output here because it's handled separately based on the output_source
-    ]);
-    match function_config {
-        FunctionConfig::Json(_) => {
-            select_clauses.insert("i.output_schema as output_schema".to_string());
-            select_clauses.insert("'json' as type".to_string());
-        }
-        FunctionConfig::Chat(_) => {
-            select_clauses.insert("i.tool_params as tool_params".to_string());
-            select_clauses.insert("'chat' as type".to_string());
-        }
-    }
-    select_clauses
 }
 
 mod tests {
