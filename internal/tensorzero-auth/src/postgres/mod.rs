@@ -19,8 +19,9 @@ pub struct MigrationsData {
 
 /// Helper function to retrieve the set of applied migrations from the database.
 /// We pull this out so that the error can be mapped in one place.
-/// This is almost the same as the corresponding function in 'tensorzero_core', but with a different table name,
+/// This is almost the same as the corresponding `get_applied_migrations` function in 'tensorzero_core', but with a different table name,
 /// and using sqlx_alpha
+/// TODO - consolidate these functions into a single `get_applied_migrations`function  once we're using a single sqlx version.
 async fn get_applied_migrations(pool: &PgPool) -> Result<HashSet<i64>, sqlx::Error> {
     let mut applied_migrations: HashSet<i64> = HashSet::new();
     let mut rows =
