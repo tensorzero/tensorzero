@@ -71,7 +71,7 @@ export function FunctionSelector({
               {selectedFn ? (
                 <div className="flex w-full min-w-0 flex-1 items-center gap-x-2">
                   <FunctionTypeIcon type={selectedFn.type} />
-                  <span className="truncate text-sm">{selected}</span>
+                  <span className="truncate font-mono">{selected}</span>
                 </div>
               ) : (
                 <div className="text-fg-muted flex items-center gap-x-2">
@@ -123,7 +123,7 @@ export function FunctionSelector({
                         className="flex items-center gap-2"
                       >
                         <FunctionTypeIcon type={fn.type} />
-                        <span className="truncate">{name}</span>
+                        <span className="truncate font-mono">{name}</span>
                       </CommandItem>
                     ),
                 )}

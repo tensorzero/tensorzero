@@ -152,7 +152,7 @@ describe("OpenAI Responses API", () => {
       expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
       expect(result.usage?.completion_tokens).toBeGreaterThan(0);
     },
-    90000
+    120_000
   );
 
   it.concurrent(
@@ -218,7 +218,7 @@ describe("OpenAI Responses API", () => {
 
       // TODO (#4044): check for unknown web search events when we start returning them
     },
-    90000
+    120_000
   );
 
   it.concurrent("should handle tool calls", async () => {
@@ -402,7 +402,7 @@ describe("OpenAI Responses API", () => {
       expect(result.usage?.prompt_tokens).toBeGreaterThan(0);
       expect(result.usage?.completion_tokens).toBeGreaterThan(0);
     },
-    90000
+    120_000
   );
 
   it.concurrent("should handle shorthand model name", async () => {

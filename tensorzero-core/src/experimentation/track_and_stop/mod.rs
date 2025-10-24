@@ -737,7 +737,8 @@ impl TrackAndStopState {
                             winner = winner_variant_name,
                             competitors = ?competitors,
                             "Track-and-Stop experiment stopped: winner identified. This variant will be used exclusively
-                            going forward unless new variants are introduced."
+                            going forward, unless new variants are introduced, or unless additional feedback data suggests
+                            that this variant is not actually a winning variant."
                         );
                         Ok(TrackAndStopState::Stopped {
                             winner_variant_name,

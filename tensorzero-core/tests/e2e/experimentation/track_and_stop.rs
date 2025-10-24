@@ -1410,8 +1410,6 @@ async fn test_new_variant_triggers_reexploration() {
     // Give the new client time to initialize
     tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
-    // Run batch 0 to verify that only the winner and new variant receive pulls
-
     // Run all inferences
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
 
@@ -1470,12 +1468,14 @@ async fn test_new_variant_triggers_reexploration() {
 // ============================================================================
 
 /// Test that removing the winner variant after stopping causes re-exploration
+/// or runner up to be declared the winner. (Either is possible depending on the
+/// data that's generated before the winner is removed.)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_remove_winner_variant_after_stopping() {
     let initial_bandit_distribution = vec![
-        ("variant_a", 0.50, 0.10),
-        ("variant_b", 0.90, 0.10), // Clear winner
-        ("variant_c", 0.50, 0.11), // Slightly different variance
+        ("variant_a", 0.95, 0.05), // Strong winner
+        ("variant_b", 0.70, 0.05), // Runner-up
+        ("variant_c", 0.20, 0.05),
     ];
     let seed = 42;
 
@@ -1491,7 +1491,7 @@ async fn test_remove_winner_variant_after_stopping() {
         fallback_variants: &[],
         min_samples_per_variant: 20,
         delta: 0.05,
-        epsilon: 0.05,
+        epsilon: 0.01,
         update_period_s: 1,
         min_prob: None,
     });
@@ -1540,29 +1540,30 @@ async fn test_remove_winner_variant_after_stopping() {
         "Expected stopping to occur in Phase 1"
     );
 
-    // Phase 2: Remove variant_b (the winner) and verify re-exploration
+    // Phase 2: Remove variant_a (the original winner) and verify that variant_b becomes
+    // the new winner or at least gets substantial probability mass (i.e. verify that
+    // variant_c does not get labeled the winner)
 
     drop(client);
     drop(bandit);
     tokio::time::sleep(Duration::from_millis(CLICKHOUSE_FLUSH_DELAY_MS)).await;
 
-    // Create new config without variant_b
-    // Set high minimum probability. Just want to confirm that neither variant gets labeled the winner.
+    // Create new config without variant_a (the original winner)
     let new_config = make_track_and_stop_config(TrackAndStopTestConfig {
         metric_name: "performance_score",
         metric_type: "float",
         optimize: "max",
-        candidate_variants: &["variant_a", "variant_c"], // Removed variant_b
+        candidate_variants: &["variant_b", "variant_c"], // Removed variant_a
         fallback_variants: &[],
         min_samples_per_variant: 20,
         delta: 0.01,
-        epsilon: 0.05,
+        epsilon: 0.01,
         update_period_s: 1,
-        min_prob: Some(0.48),
+        min_prob: None,
     });
 
     // Create new bandit for remaining variants
-    let new_bandit_distribution = vec![("variant_a", 0.50, 0.10), ("variant_c", 0.50, 0.11)];
+    let new_bandit_distribution = vec![("variant_b", 0.70, 0.05), ("variant_c", 0.20, 0.05)];
     let new_bandit = GaussianBandit::new(new_bandit_distribution, Some(seed));
 
     let (new_client, new_clickhouse) =
@@ -1572,7 +1573,7 @@ async fn test_remove_winner_variant_after_stopping() {
 
     tokio::time::sleep(Duration::from_millis(BACKGROUND_TASK_INIT_DELAY_MS)).await;
 
-    // Run a batch and verify both remaining variants are explored
+    // Run a batch and verify the system immediately locks onto the new winner
     let inference_results = run_inference_batch(&new_client, inferences_per_batch).await;
 
     clickhouse_flush_async_insert(&new_clickhouse).await;
@@ -1591,22 +1592,20 @@ async fn test_remove_winner_variant_after_stopping() {
         *variant_counts.entry(name.clone()).or_insert(0) += 1;
     }
 
-    let variant_a_count = *variant_counts.get("variant_a").unwrap_or(&0);
+    let total = variant_names.len();
+    let variant_b_count = *variant_counts.get("variant_b").unwrap_or(&0);
     let variant_c_count = *variant_counts.get("variant_c").unwrap_or(&0);
 
-    // Both variants should receive non-trivial exploration
-    let variant_a_fraction = variant_a_count as f64 / variant_names.len() as f64;
-    let variant_c_fraction = variant_c_count as f64 / variant_names.len() as f64;
+    let variant_b_fraction = variant_b_count as f64 / total as f64;
+    let variant_c_fraction = variant_c_count as f64 / total as f64;
 
-    assert!(
-        variant_a_fraction >= MIN_EXPLORATION_FRACTION,
-        "Expected variant_a to receive non-trivial exploration after winner removal, got {:.2}%",
-        variant_a_fraction * 100.0
+    // After removing the original winner, variant_b should now be the winner or at least get most of the pulls
+    assert!(variant_b_fraction >= 0.80,
+        "Expected variant_b to receive at least 80% of pulls after removing variant_a, but variant_b got {variant_b_fraction}% of pulls"
     );
     assert!(
-        variant_c_fraction >= MIN_EXPLORATION_FRACTION,
-        "Expected variant_c to receive non-trivial exploration after winner removal, got {:.2}%",
-        variant_c_fraction * 100.0
+        variant_c_fraction <= 0.20,
+        "Expected variant_c to receive no more than 20% of pulls after removing variant_a, but variant_c got {variant_c_fraction}% of pulls"
     );
 
     clickhouse_flush_async_insert(&new_clickhouse).await;

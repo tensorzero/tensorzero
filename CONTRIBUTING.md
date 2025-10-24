@@ -197,6 +197,7 @@ To set it up, follow these steps from the `ui` directory:
 2. Build the internal N-API client for TensorZero using `pnpm -r build`. If you have changed your Rust code, you may also have to run `pnpm build-bindings` from `../internal/tensorzero-node`.
 3. Create a `fixtures/.env` following the `fixtures/.env.example`.
 4. Set the following environment variables in your cwd `ui/` (note the previous steps edited the vars in `fixtures/`):
+
    ```bash
    TENSORZERO_GATEWAY_URL="http://localhost:3000"
    TENSORZERO_CLICKHOUSE_URL="http://chuser:chpassword@localhost:8123/tensorzero_ui_fixtures"
@@ -207,8 +208,9 @@ To set it up, follow these steps from the `ui` directory:
    FIREWORKS_API_KEY="..."
    FIREWORKS_ACCOUNT_ID="..."
    ```
+
 5. Launch the dependencies: `docker compose -f fixtures/docker-compose.yml up --build --force-recreate`.
-You can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway.
+   You can omit these last 2 flags to skip the build step, but they ensure you're using the latest gateway.
 6. Launch the development server: `pnpm dev`
 
 Separately, you can run headless tests with `pnpm test` and Playwright tests with `pnpm test-e2e` (the latter will require a `pnpm exec playwright install`).

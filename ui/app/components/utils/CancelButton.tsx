@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { Button } from "~/components/ui/button";
+import { Button, type ButtonVariant } from "~/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -10,15 +10,20 @@ import {
 interface CancelButtonProps {
   onClick: () => void;
   className?: string;
+  variant?: ButtonVariant;
 }
 
-export function CancelButton({ onClick, className }: CancelButtonProps) {
+export function CancelButton({
+  onClick,
+  className,
+  variant = "outline",
+}: CancelButtonProps) {
   return (
     <TooltipProvider>
       <Tooltip delayDuration={100}>
         <TooltipTrigger asChild>
           <Button
-            variant="outline"
+            variant={variant}
             size="iconSm"
             onClick={onClick}
             className={className}

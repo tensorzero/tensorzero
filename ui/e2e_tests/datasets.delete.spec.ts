@@ -1,62 +1,12 @@
-import { test, expect, type Page } from "@playwright/test";
-
-// Helper function to create a unique dataset for testing
-async function createTestDataset(
-  page: Page,
-  baseName: string = "test-delete-dataset",
-): Promise<string> {
-  const datasetName = `${baseName}-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-
-  await page.goto(
-    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
-  );
-  await page.waitForLoadState("networkidle");
-
-  // Click on the Add to dataset button
-  await page.getByText("Add to dataset").click();
-  await page.waitForTimeout(500);
-
-  // Find the CommandInput and create the dataset
-  const commandInput = page.getByPlaceholder("Create or find a dataset...");
-  await commandInput.waitFor({ state: "visible" });
-  await commandInput.fill(datasetName);
-  await page.waitForTimeout(500);
-
-  // Click on the CommandItem to create the dataset
-  const createOption = page.locator('div[data-value^="create-"][cmdk-item]');
-  await createOption.click();
-
-  // Click on the "Inference Output" button
-  await page.getByText("Inference Output").click();
-
-  // Wait for the toast to appear with success message
-  await expect(
-    page
-      .getByRole("region", { name: /notifications/i })
-      .getByText("New Datapoint"),
-  ).toBeVisible();
-
-  // Wait for and click on the "View" button in the toast
-  const viewButton = page
-    .getByRole("region", { name: /notifications/i })
-    .getByText("View");
-  await viewButton.waitFor({ state: "visible" });
-  await viewButton.click();
-
-  // Wait for navigation to the new page
-  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
-    timeout: 5000,
-  });
-
-  return datasetName;
-}
+import { test, expect } from "@playwright/test";
+import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 
 test.describe("Dataset Deletion", () => {
   test("should delete individual datapoint with confirmation dialog", async ({
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createTestDataset(page, "datapoint-delete-test");
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -100,7 +50,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createTestDataset(page, "datapoint-cancel-test");
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -132,7 +82,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createTestDataset(page, "dataset-delete-test");
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -166,7 +116,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createTestDataset(page, "dataset-cancel-test");
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 
@@ -204,7 +154,7 @@ test.describe("Dataset Deletion", () => {
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createTestDataset(page, "last-datapoint-test");
+    const datasetName = await createDatapointFromInference(page);
 
     await page.goto(`/datasets/${datasetName}`);
 

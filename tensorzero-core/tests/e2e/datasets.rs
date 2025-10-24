@@ -6,8 +6,12 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role};
 use tensorzero_core::{
-    db::clickhouse::test_helpers::{
-        select_chat_dataset_clickhouse, select_json_dataset_clickhouse, stale_datapoint_clickhouse,
+    db::{
+        clickhouse::test_helpers::{
+            select_chat_dataset_clickhouse, select_json_dataset_clickhouse,
+            stale_datapoint_clickhouse,
+        },
+        datasets::GetDatapointsParams,
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
@@ -3008,7 +3012,15 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
 
     // Verify the initial datapoint has the correct tool call IDs
     let datapoint = clickhouse
-        .get_datapoints(dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.to_string()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
     let Datapoint::Chat(chat_datapoint) = &datapoint[0] else {
@@ -3063,7 +3075,15 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
 
     // Verify IDs are still preserved after update
     let datapoint = clickhouse
-        .get_datapoints(dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.to_string()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
     let Datapoint::Chat(chat_datapoint) = &datapoint[0] else {

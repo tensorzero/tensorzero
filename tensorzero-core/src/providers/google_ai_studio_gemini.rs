@@ -327,6 +327,7 @@ fn stream_google_ai_studio_gemini(
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
+        let mut last_unknown_chunk_id = 0;
         while let Some(ev) = event_source.next().await {
             match ev {
                 Err(e) => {
@@ -354,13 +355,16 @@ fn stream_google_ai_studio_gemini(
                             }
                         };
                         yield convert_stream_response_with_metadata_to_chunk(
-                            message.data,
-                            data,
-                            start_time.elapsed(),
-                            &mut last_tool_name,
-                            &mut last_tool_idx,
-                            &mut last_thought_id,
-                            discard_unknown_chunks,
+                            ConvertStreamResponseArgs {
+                                raw_response: message.data,
+                                response: data,
+                                latency: start_time.elapsed(),
+                                last_tool_name: &mut last_tool_name,
+                                last_tool_idx: &mut last_tool_idx,
+                                last_thought_id: &mut last_thought_id,
+                                last_unknown_chunk_id: &mut last_unknown_chunk_id,
+                                discard_unknown_chunks,
+                            },
                         )
                     }
                 }
@@ -870,6 +874,7 @@ fn content_part_to_tensorzero_chunk(
     last_thought_id: &mut u32,
     discard_unknown_chunks: bool,
     output: &mut Vec<ContentBlockChunk>,
+    last_unknown_chunk_id: &mut u32,
 ) -> Result<(), Error> {
     if part.thought {
         match part.data {
@@ -971,12 +976,12 @@ fn content_part_to_tensorzero_chunk(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
                 return Ok(());
             }
-            return Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Unknown content part in Google AI Studio Gemini response".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(part.to_string()),
-            }));
+            output.push(ContentBlockChunk::Unknown {
+                id: last_unknown_chunk_id.to_string(),
+                data: part.into_owned(),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
+            });
+            *last_unknown_chunk_id += 1;
         }
     }
     Ok(())
@@ -1218,15 +1223,30 @@ impl<'a> TryFrom<GeminiResponseWithMetadata<'a>> for ProviderInferenceResponse {
     }
 }
 
-fn convert_stream_response_with_metadata_to_chunk(
+struct ConvertStreamResponseArgs<'a> {
     raw_response: String,
     response: GeminiResponse,
     latency: Duration,
-    last_tool_name: &mut Option<String>,
-    last_tool_idx: &mut Option<u32>,
-    last_thought_id: &mut u32,
+    last_tool_name: &'a mut Option<String>,
+    last_tool_idx: &'a mut Option<u32>,
+    last_thought_id: &'a mut u32,
+    last_unknown_chunk_id: &'a mut u32,
     discard_unknown_chunks: bool,
+}
+
+fn convert_stream_response_with_metadata_to_chunk(
+    args: ConvertStreamResponseArgs,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
+    let ConvertStreamResponseArgs {
+        raw_response,
+        response,
+        latency,
+        last_tool_name,
+        last_tool_idx,
+        last_thought_id,
+        last_unknown_chunk_id,
+        discard_unknown_chunks,
+    } = args;
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
             message: "Google AI Studio Gemini response has no candidates".to_string(),
@@ -1248,6 +1268,7 @@ fn convert_stream_response_with_metadata_to_chunk(
                     last_thought_id,
                     discard_unknown_chunks,
                     &mut output,
+                    last_unknown_chunk_id,
                 )?;
             }
             output
@@ -1315,7 +1336,7 @@ mod tests {
     use super::*;
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{ToolCallConfig, ToolResult};
+    use crate::tool::{AllowedTools, ToolCallConfig, ToolResult};
 
     #[test]
     #[traced_test]
@@ -1347,15 +1368,17 @@ mod tests {
 
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
-        let res = convert_stream_response_with_metadata_to_chunk(
-            "raw_response".to_string(),
+        let mut last_unknown_chunk_id = 0;
+        let res = convert_stream_response_with_metadata_to_chunk(ConvertStreamResponseArgs {
+            raw_response: "raw_response".to_string(),
             response,
             latency,
-            &mut last_tool_name,
-            &mut last_tool_idx,
-            &mut last_thought_id,
-            true,
-        )
+            last_tool_name: &mut last_tool_name,
+            last_tool_idx: &mut last_tool_idx,
+            last_thought_id: &mut last_thought_id,
+            last_unknown_chunk_id: &mut last_unknown_chunk_id,
+            discard_unknown_chunks: true,
+        })
         .unwrap();
         assert_eq!(res.content, []);
         assert!(
@@ -1549,6 +1572,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -2305,16 +2329,19 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
-        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
-            "my_raw_chunk".to_string(),
-            response,
-            Duration::from_millis(100),
-            &mut last_tool_name,
-            &mut last_tool_idx,
-            &mut last_thought_id,
-            false,
-        )
-        .unwrap();
+        let mut last_unknown_chunk_id = 0;
+        let chunk: ProviderInferenceResponseChunk =
+            convert_stream_response_with_metadata_to_chunk(ConvertStreamResponseArgs {
+                raw_response: "my_raw_chunk".to_string(),
+                response,
+                latency: Duration::from_millis(100),
+                last_tool_name: &mut last_tool_name,
+                last_tool_idx: &mut last_tool_idx,
+                last_thought_id: &mut last_thought_id,
+                last_unknown_chunk_id: &mut last_unknown_chunk_id,
+                discard_unknown_chunks: false,
+            })
+            .unwrap();
 
         // Verify tool call tracking state - should remain None for text chunks
         assert_eq!(last_tool_idx, None);
@@ -2365,16 +2392,19 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
-        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
-            "my_raw_chunk".to_string(),
-            response,
-            Duration::from_millis(50),
-            &mut last_tool_name,
-            &mut last_tool_idx,
-            &mut last_thought_id,
-            false,
-        )
-        .unwrap();
+        let mut last_unknown_chunk_id = 0;
+        let chunk: ProviderInferenceResponseChunk =
+            convert_stream_response_with_metadata_to_chunk(ConvertStreamResponseArgs {
+                raw_response: "my_raw_chunk".to_string(),
+                response,
+                latency: Duration::from_millis(50),
+                last_tool_name: &mut last_tool_name,
+                last_tool_idx: &mut last_tool_idx,
+                last_thought_id: &mut last_thought_id,
+                last_unknown_chunk_id: &mut last_unknown_chunk_id,
+                discard_unknown_chunks: false,
+            })
+            .unwrap();
 
         // Verify tool call tracking state - should remain None for text chunks
         assert_eq!(last_tool_idx, None);
@@ -2429,16 +2459,19 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
-        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
-            "my_raw_chunk".to_string(),
-            response,
-            Duration::from_millis(75),
-            &mut last_tool_name,
-            &mut last_tool_idx,
-            &mut last_thought_id,
-            false,
-        )
-        .unwrap();
+        let mut last_unknown_chunk_id = 0;
+        let chunk: ProviderInferenceResponseChunk =
+            convert_stream_response_with_metadata_to_chunk(ConvertStreamResponseArgs {
+                raw_response: "my_raw_chunk".to_string(),
+                response,
+                latency: Duration::from_millis(75),
+                last_tool_name: &mut last_tool_name,
+                last_tool_idx: &mut last_tool_idx,
+                last_thought_id: &mut last_thought_id,
+                last_unknown_chunk_id: &mut last_unknown_chunk_id,
+                discard_unknown_chunks: false,
+            })
+            .unwrap();
 
         // Verify tool call tracking state - should remain None for text chunks
         assert_eq!(last_tool_idx, None);
@@ -2483,16 +2516,19 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
-        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
-            "my_raw_chunk".to_string(),
-            response,
-            Duration::from_millis(120),
-            &mut last_tool_name,
-            &mut last_tool_idx,
-            &mut last_thought_id,
-            false,
-        )
-        .unwrap();
+        let mut last_unknown_chunk_id = 0;
+        let chunk: ProviderInferenceResponseChunk =
+            convert_stream_response_with_metadata_to_chunk(ConvertStreamResponseArgs {
+                raw_response: "my_raw_chunk".to_string(),
+                response,
+                latency: Duration::from_millis(120),
+                last_tool_name: &mut last_tool_name,
+                last_tool_idx: &mut last_tool_idx,
+                last_thought_id: &mut last_thought_id,
+                last_unknown_chunk_id: &mut last_unknown_chunk_id,
+                discard_unknown_chunks: false,
+            })
+            .unwrap();
 
         // Verify tool call tracking state - should be Some(0) for first tool call
         assert_eq!(last_tool_idx, Some(0));
@@ -2534,16 +2570,19 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
-        let chunk: ProviderInferenceResponseChunk = convert_stream_response_with_metadata_to_chunk(
-            "my_raw_chunk".to_string(),
-            response,
-            Duration::from_millis(60),
-            &mut last_tool_name,
-            &mut last_tool_idx,
-            &mut last_thought_id,
-            false,
-        )
-        .unwrap();
+        let mut last_unknown_chunk_id = 0;
+        let chunk: ProviderInferenceResponseChunk =
+            convert_stream_response_with_metadata_to_chunk(ConvertStreamResponseArgs {
+                raw_response: "my_raw_chunk".to_string(),
+                response,
+                latency: Duration::from_millis(60),
+                last_tool_name: &mut last_tool_name,
+                last_tool_idx: &mut last_tool_idx,
+                last_thought_id: &mut last_thought_id,
+                last_unknown_chunk_id: &mut last_unknown_chunk_id,
+                discard_unknown_chunks: false,
+            })
+            .unwrap();
 
         // Verify tool call tracking state - should remain None for responses without content
         assert_eq!(last_tool_idx, None);
@@ -2576,15 +2615,17 @@ mod tests {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
         let mut last_thought_id = 0;
-        let result = convert_stream_response_with_metadata_to_chunk(
-            "my_raw_chunk".to_string(),
+        let mut last_unknown_chunk_id = 0;
+        let result = convert_stream_response_with_metadata_to_chunk(ConvertStreamResponseArgs {
+            raw_response: "my_raw_chunk".to_string(),
             response,
-            Duration::from_millis(30),
-            &mut last_tool_name,
-            &mut last_tool_idx,
-            &mut last_thought_id,
-            false,
-        );
+            latency: Duration::from_millis(30),
+            last_tool_name: &mut last_tool_name,
+            last_tool_idx: &mut last_tool_idx,
+            last_thought_id: &mut last_thought_id,
+            last_unknown_chunk_id: &mut last_unknown_chunk_id,
+            discard_unknown_chunks: false,
+        });
 
         // Should remain None when there's an error
         assert_eq!(last_tool_idx, None);
@@ -2651,15 +2692,18 @@ mod tests {
                 let mut last_tool_name = None;
                 let mut last_tool_idx = None;
                 let mut last_thought_id = 0;
-                let result = convert_stream_response_with_metadata_to_chunk(
-                    "my_raw_chunk".to_string(),
-                    response,
-                    Duration::from_millis(10),
-                    &mut last_tool_name,
-                    &mut last_tool_idx,
-                    &mut last_thought_id,
-                    false,
-                );
+                let mut last_unknown_chunk_id = 0;
+                let result =
+                    convert_stream_response_with_metadata_to_chunk(ConvertStreamResponseArgs {
+                        raw_response: "my_raw_chunk".to_string(),
+                        response,
+                        latency: Duration::from_millis(10),
+                        last_tool_name: &mut last_tool_name,
+                        last_tool_idx: &mut last_tool_idx,
+                        last_thought_id: &mut last_thought_id,
+                        last_unknown_chunk_id: &mut last_unknown_chunk_id,
+                        discard_unknown_chunks: false,
+                    });
                 // Verify tool call tracking state
                 assert_eq!(last_tool_idx, None);
                 result

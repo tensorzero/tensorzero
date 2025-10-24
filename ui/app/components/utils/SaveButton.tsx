@@ -1,5 +1,5 @@
 import { Save } from "lucide-react";
-import { Button } from "~/components/ui/button";
+import { Button, type ButtonVariant } from "~/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -11,19 +11,21 @@ interface SaveButtonProps {
   onClick: () => void;
   className?: string;
   disabled?: boolean;
+  variant?: ButtonVariant;
 }
 
 export function SaveButton({
   onClick,
   className,
   disabled = false,
+  variant = "outline",
 }: SaveButtonProps) {
   return (
     <TooltipProvider>
       <Tooltip delayDuration={100}>
         <TooltipTrigger asChild>
           <Button
-            variant="outline"
+            variant={variant}
             size="iconSm"
             onClick={onClick}
             className={className}

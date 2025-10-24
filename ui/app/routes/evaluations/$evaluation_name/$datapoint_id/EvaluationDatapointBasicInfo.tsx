@@ -19,7 +19,6 @@ import { Badge } from "~/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
@@ -59,6 +58,7 @@ export default function BasicInfo({
             defaultLabel="—"
             font="mono"
             onSetLabel={onRenameDatapoint}
+            tooltipLabel={"Rename"}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
@@ -109,18 +109,16 @@ export default function BasicInfo({
               font="mono"
             />
             {datapoint_staled_at && (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="secondary" className="cursor-help">
-                      Stale
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    This datapoint has since been edited or deleted.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="cursor-help">
+                    Stale
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  This datapoint has since been edited or deleted.
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </BasicInfoItemContent>

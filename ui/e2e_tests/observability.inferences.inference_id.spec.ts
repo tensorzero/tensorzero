@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 
 test("should show the inference detail page", async ({ page }) => {
   const inference_id = "0196367a-842d-74c2-9e62-67e058632503";
@@ -103,7 +104,7 @@ test("tag navigation works by evaluation_name", async ({ page }) => {
   // Use a more specific selector for the code element with entity_extraction
   // Look for a table cell containing the exact text "entity_extraction"
   const entityExtractionCell = page
-    .locator("code")
+    .locator("span")
     .filter({ hasText: /^entity_extraction$/ })
     .first();
 
@@ -495,53 +496,9 @@ test("should be able to add a datapoint from the inference page", async ({
 }) => {
   // NOTE: this datapoint has auxiliary_content as "" so was failing to insert into dataset
   // We want to make sure that we can add it to a dataset now that we've fixed that issue.
-  await page.goto(
-    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
-  );
-  // Generate a dataset name
-  const datasetName =
-    "test_json_dataset_" + Math.random().toString(36).substring(2, 15);
-  // Wait for the page to load
-  await page.waitForLoadState("networkidle");
-  // Click on the Add to dataset button
-  await page.getByText("Add to dataset").click();
-
-  // Wait for the dropdown to appear
-  await page.waitForTimeout(500);
-
-  // Find the CommandInput by its placeholder text
-  const commandInput = page.getByPlaceholder("Create or find a dataset...");
-  await commandInput.waitFor({ state: "visible" });
-  await commandInput.fill(datasetName);
-
-  // Wait a moment for the filtered results to appear
-  await page.waitForTimeout(500);
-
-  // Click on the CommandItem that contains the dataset name
-  // Using a more flexible selector that looks for text containing "Create"
-  const createOption = page.locator('div[data-value^="create-"][cmdk-item]');
-  await createOption.click();
-
-  // Click on the "Inference Output" button
-  await page.getByText("Inference Output").click();
-
-  // Wait for the toast to appear with success message
-  await expect(
-    page
-      .getByRole("region", { name: /notifications/i })
-      .getByText("New Datapoint"),
-  ).toBeVisible();
-
-  // Wait for and click on the "View" button in the toast
-  const viewButton = page
-    .getByRole("region", { name: /notifications/i })
-    .getByText("View");
-  await viewButton.waitFor({ state: "visible" });
-  await viewButton.click();
-
-  // Wait for navigation to the new datapoint page
-  await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
-    timeout: 5000,
+  // Create a new datapoint from an inference
+  const datasetName = await createDatapointFromInference(page, {
+    inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307", // `extract_entities`
   });
 
   // Assert that the page URL starts with /datasets/test_json_dataset/datapoint/

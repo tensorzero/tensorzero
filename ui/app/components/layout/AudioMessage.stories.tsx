@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { AudioMessage } from "./SnippetContent";
-import mp3Url from "../inference/InputSnippet.stories.fixture.tensorzero.mp3?url";
+import mp3Url from "../inference/Input.stories.fixture.tensorzero.mp3?url";
 
 async function getBase64File(url: string): Promise<string> {
   const response = await fetch(url);

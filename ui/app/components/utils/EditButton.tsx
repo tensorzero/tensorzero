@@ -1,5 +1,5 @@
 import { Pencil } from "lucide-react";
-import { Button } from "~/components/ui/button";
+import { Button, type ButtonVariant } from "~/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -12,6 +12,7 @@ interface EditButtonProps {
   className?: string;
   disabled?: boolean;
   tooltip?: string;
+  variant?: ButtonVariant;
 }
 
 export function EditButton({
@@ -19,6 +20,7 @@ export function EditButton({
   className,
   disabled = false,
   tooltip = "Edit",
+  variant = "outline",
 }: EditButtonProps) {
   if (disabled) {
     // For disabled buttons, wrap in a span to ensure tooltip works
@@ -28,7 +30,7 @@ export function EditButton({
           <TooltipTrigger asChild>
             <span className="inline-block">
               <Button
-                variant="outline"
+                variant={variant}
                 size="iconSm"
                 className={className}
                 disabled={disabled}
@@ -52,7 +54,7 @@ export function EditButton({
       <Tooltip delayDuration={100}>
         <TooltipTrigger asChild>
           <Button
-            variant="outline"
+            variant={variant}
             size="iconSm"
             onClick={onClick}
             className={className}

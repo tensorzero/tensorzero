@@ -16,7 +16,6 @@ import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-  TooltipProvider,
 } from "~/components/ui/tooltip";
 
 const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
@@ -100,23 +99,21 @@ const DatapointPlaygroundOutput = memo<ClientInferenceInputArgs>(
           {props.variant.type === "edited" && (
             <div className="mt-2 text-xs">
               Inference ID:{" "}
-              <TooltipProvider delayDuration={300}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="text-muted-foreground cursor-help underline decoration-dotted">
-                      none
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">
-                    <p className="text-xs">
-                      Edited variants currently run with{" "}
-                      <span className="font-mono text-xs">dryrun</span> set to{" "}
-                      <span className="font-mono text-xs">true</span>, so the
-                      inference was not stored.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-muted-foreground cursor-help underline decoration-dotted">
+                    none
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p className="text-xs">
+                    Edited variants currently run with{" "}
+                    <span className="font-mono text-xs">dryrun</span> set to{" "}
+                    <span className="font-mono text-xs">true</span>, so the
+                    inference was not stored.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             </div>
           )}
         </div>

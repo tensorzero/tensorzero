@@ -797,7 +797,7 @@ mod tests {
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{ToolCallConfig, ToolChoice};
+    use crate::tool::{AllowedTools, ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
         inference::types::{ContentBlockChunk, Role, TextChunk},
@@ -2585,6 +2585,7 @@ mod tests {
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
                 provider_tools: None,
+                allowed_tools: AllowedTools::default(),
             },
             description: None,
             all_explicit_template_names: HashSet::new(),

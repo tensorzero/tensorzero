@@ -298,7 +298,15 @@ async fn test_otel_config_and_dynamic_header_override() {
         target_span: function_inference_span,
         span_by_id,
         resources: _,
-    } = get_tempo_spans(episode_id, start_time, &tempo_semaphore).await;
+    } = get_tempo_spans(
+        ("episode_id", &episode_id.to_string()),
+        start_time,
+        &tempo_semaphore,
+    )
+    .await;
+
+    let function_inference_span =
+        function_inference_span.expect("No function_inference span found");
 
     // Get the HTTP span (parent of function_inference)
     let parent_id = function_inference_span["parentSpanId"].as_str().unwrap();

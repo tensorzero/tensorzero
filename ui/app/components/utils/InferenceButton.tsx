@@ -3,7 +3,6 @@ import { Button } from "~/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 import { Inferences } from "~/components/icons/Icons";
@@ -21,25 +20,20 @@ export function InferenceButton({
   tooltipText = "View inference",
 }: InferenceButtonProps) {
   return (
-    <TooltipProvider>
-      <Tooltip delayDuration={100}>
-        <TooltipTrigger asChild>
-          <Link to={toInferenceUrl(inferenceId)} target="_blank">
-            <Button
-              variant="outline"
-              size="iconSm"
-              className={className}
-              aria-label={tooltipText}
-              title={tooltipText}
-            >
-              <Inferences className="h-4 w-4" />
-            </Button>
-          </Link>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{tooltipText}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link to={toInferenceUrl(inferenceId)} target="_blank">
+          <Button
+            variant="outline"
+            size="iconSm"
+            className={className}
+            aria-label={tooltipText}
+          >
+            <Inferences className="h-4 w-4" />
+          </Button>
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent>{tooltipText}</TooltipContent>
+    </Tooltip>
   );
 }

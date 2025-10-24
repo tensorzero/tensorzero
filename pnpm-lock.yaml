@@ -103,7 +103,7 @@ importers:
     dependencies:
       buildkite-test-collector:
         specifier: ^1.9.1
-        version: 1.9.1
+        version: 1.9.2
     devDependencies:
       '@eslint/js':
         specifier: ^9.37.0
@@ -2797,6 +2797,10 @@ packages:
 
   buildkite-test-collector@1.9.1:
     resolution: {integrity: sha512-sWEGHyCuHMrCQ6EryOFf/BxYMyzkRRveye7yJooaK47hVsTvINRAt9uW696UPmUDSTU4JokiUOxU4E3QkRd7nQ==}
+    engines: {npm: '>=7.0.0'}
+
+  buildkite-test-collector@1.9.2:
+    resolution: {integrity: sha512-LacjsmPczb6JlwFLb0tf82epA5jVAyfuzEs2A4yXG3/NseGNFrfQiW+xFLk1afFwGaoSSrPHBQc2k4qN2YcNTA==}
     engines: {npm: '>=7.0.0'}
 
   bytes@3.1.2:
@@ -7953,6 +7957,16 @@ snapshots:
   buffer-from@1.1.2: {}
 
   buildkite-test-collector@1.9.1:
+    dependencies:
+      axios: 1.11.0
+      dotenv: 16.6.1
+      request-spy: 0.0.10
+      strip-ansi: 6.0.1
+      uuid: 8.3.2
+    transitivePeerDependencies:
+      - debug
+
+  buildkite-test-collector@1.9.2:
     dependencies:
       axios: 1.11.0
       dotenv: 16.6.1

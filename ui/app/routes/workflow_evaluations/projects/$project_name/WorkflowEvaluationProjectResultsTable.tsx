@@ -13,7 +13,6 @@ import { toEpisodeUrl } from "~/utils/urls";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
@@ -231,33 +230,31 @@ const MetricHeader = ({
     return null;
   }
   return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="cursor-help">
-            <div className="font-mono">{metric_name}</div>
-            <MetricProperties
-              metricConfig={metricProperties}
-              summaryStats={summaryStats}
-            />
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="cursor-help">
+          <div className="font-mono">{metric_name}</div>
+          <MetricProperties
+            metricConfig={metricProperties}
+            summaryStats={summaryStats}
+          />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="p-3">
+        <div className="space-y-1 text-left text-xs">
+          <div>
+            <span className="font-medium">Type:</span>
+            <span className="ml-2 font-medium">{metricProperties.type}</span>
           </div>
-        </TooltipTrigger>
-        <TooltipContent side="top" className="p-3">
-          <div className="space-y-1 text-left text-xs">
-            <div>
-              <span className="font-medium">Type:</span>
-              <span className="ml-2 font-medium">{metricProperties.type}</span>
-            </div>
-            <div>
-              <span className="font-medium">Optimize:</span>
-              <span className="ml-2 font-medium">
-                {metricProperties.optimize}
-              </span>
-            </div>
+          <div>
+            <span className="font-medium">Optimize:</span>
+            <span className="ml-2 font-medium">
+              {metricProperties.optimize}
+            </span>
           </div>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+        </div>
+      </TooltipContent>
+    </Tooltip>
   );
 };
 
@@ -327,18 +324,16 @@ const EvaluationRunCircle = ({ runId }: { runId: string }) => {
   const colorClass = getColor(runId);
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className={`${colorClass} h-4 w-4 cursor-help rounded-full`} />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="p-2">
-          <p className="text-xs">
-            Run ID: <span className="font-mono text-xs">{runId}</span>
-          </p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className={`${colorClass} h-4 w-4 cursor-help rounded-full`} />
+      </TooltipTrigger>
+      <TooltipContent side="top" className="p-2">
+        <p className="text-xs">
+          Run ID: <span className="font-mono text-xs">{runId}</span>
+        </p>
+      </TooltipContent>
+    </Tooltip>
   );
 };
 

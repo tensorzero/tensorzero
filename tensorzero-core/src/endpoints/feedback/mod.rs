@@ -911,7 +911,7 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
-    use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
+    use crate::tool::{AllowedTools, StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -1331,6 +1331,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         });
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
@@ -1356,6 +1357,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         });
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
@@ -1389,6 +1391,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         });
         let err = validate_parse_demonstration(
             function_config_chat_tools,
@@ -1413,6 +1416,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         });
         let err = validate_parse_demonstration(
             function_config_chat_tools,
@@ -1512,6 +1516,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         });
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await

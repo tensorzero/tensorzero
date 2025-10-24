@@ -5,6 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use futures::FutureExt;
+use futures_core::FusedStream;
 use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -183,7 +184,7 @@ pub async fn inference_handler(
 }
 
 pub type InferenceStream =
-    Pin<Box<dyn Stream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
+    Pin<Box<dyn FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
 
 pub enum InferenceOutput {
     NonStreaming(InferenceResponse),
@@ -763,7 +764,7 @@ fn create_stream(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
+) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
         let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());

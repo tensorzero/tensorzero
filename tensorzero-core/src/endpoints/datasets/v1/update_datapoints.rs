@@ -9,7 +9,8 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
+    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
+    JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{
     validate_dataset_name, ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
@@ -92,7 +93,15 @@ async fn update_datapoints(
         .collect();
     let datapoints_vec = app_state
         .clickhouse_connection_info
-        .get_datapoints(dataset_name, &datapoint_ids, false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.to_string()),
+            function_name: None,
+            ids: Some(datapoint_ids),
+            page_size: u32::MAX, // No limit - fetch all matching datapoints
+            offset: 0,
+            allow_stale: false,
+            filter: None, // No filtering when updating datapoints
+        })
         .await?;
 
     // Build a HashMap to construct new DatapointInserts
