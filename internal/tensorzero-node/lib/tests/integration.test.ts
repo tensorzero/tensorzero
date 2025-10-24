@@ -44,7 +44,7 @@ async function buildClient() {
   return await TensorZeroClient.buildEmbedded(
     UI_FIXTURES_CONFIG_PATH,
     undefined,
-    undefined,
+    process.env.TENSORZERO_POSTGRES_URL,
     undefined,
   );
 }

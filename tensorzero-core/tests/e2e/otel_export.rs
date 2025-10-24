@@ -26,7 +26,7 @@ struct ExistingTraceData {
 
 #[tokio::test]
 async fn test_otel_export_trace_export_no_parent() {
-    test_otel_export_trace_export(None, None, None, Arc::new(Semaphore::new(1))).await;
+    test_otel_export_trace_export(None, None, None, None, Arc::new(Semaphore::new(1))).await;
 }
 
 #[tokio::test]
@@ -36,6 +36,7 @@ async fn test_otel_export_trace_export_with_parent() {
     let span_id = id_gen.new_span_id();
     test_otel_export_trace_export(
         Some(ExistingTraceData { trace_id, span_id }),
+        None,
         None,
         None,
         Arc::new(Semaphore::new(1)),
@@ -60,6 +61,10 @@ async fn test_otel_export_trace_export_with_custom_header() {
                 "my-custom-resource",
                 Uuid::now_v7().to_string(),
             )),
+            Some(KeyValue::new(
+                "my-custom-attribute",
+                format!("My attr value: {}", Uuid::now_v7()),
+            )),
             semaphore.clone(),
         ));
     }
@@ -69,6 +74,42 @@ async fn test_otel_export_trace_export_with_custom_header() {
         println!("Completed task {i}/{num_tasks}");
         i += 1;
     }
+}
+
+#[tokio::test]
+async fn test_otel_reject_invalid_attribute_values() {
+    let client = reqwest::Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "episode_id": episode_id,
+        "model_name": "openai::missing-model-name",
+        "input":
+            {
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .header(
+            "tensorzero-otlp-traces-extra-attribute-my-custom-attribute",
+            "non-quoted-string",
+        )
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let res = response.text().await.unwrap();
+    assert!(res.contains("Failed to parse `tensorzero-otlp-traces-extra-attribute-` header `my-custom-attribute` value as valid JSON: expected ident at line 1 column 2"), "Unexpected error message: {res}");
 }
 
 #[tokio::test]
@@ -107,7 +148,15 @@ async fn test_otel_export_http_error() {
         target_span: function_inference_span,
         span_by_id,
         resources: _,
-    } = get_tempo_spans(episode_id, start_time, &Semaphore::new(1)).await;
+    } = get_tempo_spans(
+        ("episode_id", &episode_id.to_string()),
+        start_time,
+        &Semaphore::new(1),
+    )
+    .await;
+
+    let function_inference_span =
+        function_inference_span.expect("No function_inference span found");
 
     let parent_id = function_inference_span["parentSpanId"].as_str().unwrap();
     let parent_span = span_by_id.get(parent_id).unwrap();
@@ -136,13 +185,13 @@ async fn test_otel_export_http_error() {
 }
 
 pub struct TempoSpans {
-    pub target_span: Value,
+    pub target_span: Option<Value>,
     pub span_by_id: HashMap<String, Value>,
     pub resources: Vec<Value>,
 }
 
 pub async fn get_tempo_spans(
-    episode_id: Uuid,
+    (tag_key, tag_value): (&str, &str),
     start_time: DateTime<Utc>,
     tempo_semaphore: &Semaphore,
 ) -> TempoSpans {
@@ -158,7 +207,7 @@ pub async fn get_tempo_spans(
         .unwrap_or_else(|_| "http://localhost:3200".to_string());
 
     let get_url = Url::parse(&format!(
-        "{tempo_base_url}/api/search?tags=episode_id={episode_id}&start={start_time}&end={now}"
+        "{tempo_base_url}/api/search?tags={tag_key}={tag_value}&start={start_time}&end={now}"
     ))
     .unwrap();
     println!("Requesting URL: {get_url}");
@@ -169,6 +218,14 @@ pub async fn get_tempo_spans(
     let res = jaeger_result.text().await.unwrap();
     println!("Tempo result: {res}");
     let tempo_traces = serde_json::from_str::<Value>(&res).unwrap();
+
+    if tempo_traces["traces"].as_array().unwrap().is_empty() {
+        return TempoSpans {
+            target_span: None,
+            span_by_id: HashMap::new(),
+            resources: Vec::new(),
+        };
+    }
     let trace_id = tempo_traces["traces"][0]["traceID"].as_str().unwrap();
 
     let trace_res = client
@@ -204,12 +261,12 @@ pub async fn get_tempo_spans(
                                 "Bad span: {span:?}"
                             );
                         }
-                        if attr["key"].as_str().unwrap() == "episode_id" {
+                        if attr["key"].as_str().unwrap() == tag_key {
                             let inference_id_jaeger =
                                 attr["value"]["stringValue"].as_str().unwrap();
-                            if episode_id.to_string() == inference_id_jaeger {
+                            if tag_value == inference_id_jaeger {
                                 if target_span.is_some() {
-                                    panic!("Found multiple function_inference spans with episode id: {episode_id}");
+                                    panic!("Found multiple function_inference spans with `{tag_key}`: {tag_value}");
                                 } else {
                                     target_span = Some(span.clone());
                                 }
@@ -221,12 +278,118 @@ pub async fn get_tempo_spans(
         }
     }
     TempoSpans {
-        target_span: target_span.unwrap_or_else(|| {
-            panic!("No function_inference span found with matching episode: {episode_id}")
-        }),
+        target_span,
         span_by_id,
         resources,
     }
+}
+
+#[tokio::test]
+async fn test_otel_health_not_exported() {
+    let client = reqwest::Client::new();
+
+    let start_time = Utc::now();
+    let tempo_semaphore = Arc::new(Semaphore::new(1));
+
+    // Check that the /health endpoint is not exported to OTEL
+    let response = client
+        .get(get_gateway_endpoint("/health"))
+        .header(
+            "tensorzero-otlp-traces-extra-attribute-my-health-attr",
+            "\"my-attr-value\"",
+        )
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let spans = get_tempo_spans(
+        ("my-health-attr", "my-attr-value"),
+        start_time,
+        &tempo_semaphore,
+    )
+    .await;
+
+    assert_eq!(spans.target_span, None, "Target span should be none");
+    assert_eq!(
+        spans.span_by_id,
+        HashMap::new(),
+        "Span by ID should be empty"
+    );
+    assert_eq!(
+        spans.resources,
+        Vec::<Value>::new(),
+        "Resources should be empty"
+    );
+}
+
+#[tokio::test]
+async fn test_otel_export_custom_attribute_override() {
+    let client = reqwest::Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "episode_id": episode_id,
+        "input":
+            {
+               "system": {"assistant_name": "Dr. Mehta"},
+               "messages": [
+                {
+                    "role": "user",
+                    "content": "What is the name of the capital city of Japan?"
+                }
+            ]},
+        "stream": false,
+        "tags": {"foo": "bar"},
+    });
+
+    let start_time = Utc::now();
+    let tempo_semaphore = Arc::new(Semaphore::new(1));
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .header(
+            "tensorzero-otlp-traces-extra-attribute-function_name",
+            "\"my-overridden-function-name\"",
+        )
+        .send()
+        .await
+        .unwrap();
+
+    // Check that the API response is ok
+    assert_eq!(response.status(), StatusCode::OK);
+    let _response_json = response.json::<Value>().await.unwrap();
+    let TempoSpans {
+        target_span: function_inference_span,
+        span_by_id: _,
+        resources: _,
+    } = get_tempo_spans(
+        ("episode_id", &episode_id.to_string()),
+        start_time,
+        &tempo_semaphore,
+    )
+    .await;
+
+    let function_inference_span =
+        function_inference_span.expect("No function_inference span found");
+
+    assert_eq!(function_inference_span["name"], "function_inference");
+    assert_eq!(function_inference_span["kind"], "SPAN_KIND_INTERNAL");
+    let attrs: HashMap<&str, serde_json::Value> = function_inference_span["attributes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| (a["key"].as_str().unwrap(), a["value"].clone()))
+        .collect();
+
+    println!("Attrs: {attrs:?}");
+
+    assert_eq!(
+        attrs["function_name"]["stringValue"],
+        "my-overridden-function-name"
+    );
 }
 
 // TODO - investigate why this test is sometimes flaky when running locally
@@ -234,6 +397,7 @@ async fn test_otel_export_trace_export(
     existing_trace_parent: Option<ExistingTraceData>,
     custom_header: Option<(String, String)>,
     custom_resource: Option<KeyValue>,
+    custom_attribute: Option<KeyValue>,
     tempo_semaphore: Arc<Semaphore>,
 ) {
     let client = reqwest::Client::new();
@@ -274,6 +438,19 @@ async fn test_otel_export_trace_export(
         );
     }
 
+    if let Some(custom_attribute) = &custom_attribute {
+        builder = builder.header(
+            format!(
+                "tensorzero-otlp-traces-extra-attribute-{}",
+                custom_attribute.key
+            ),
+            serde_json::to_string(&serde_json::Value::String(
+                custom_attribute.value.to_string(),
+            ))
+            .unwrap(),
+        );
+    }
+
     let existing_trace_header = existing_trace_parent
         // Version 00, with the 'sampled' flag set to 1
         .map(|trace_parent| format!("00-{}-{}-01", trace_parent.trace_id, trace_parent.span_id));
@@ -291,7 +468,33 @@ async fn test_otel_export_trace_export(
         target_span: function_inference_span,
         span_by_id,
         resources,
-    } = get_tempo_spans(episode_id, start_time, &tempo_semaphore).await;
+    } = get_tempo_spans(
+        ("episode_id", &episode_id.to_string()),
+        start_time,
+        &tempo_semaphore,
+    )
+    .await;
+
+    let function_inference_span =
+        function_inference_span.expect("No function_inference span found");
+
+    if let Some(custom_attribute) = &custom_attribute {
+        for span in span_by_id.values() {
+            let attrs: HashMap<&str, serde_json::Value> = span["attributes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|a| (a["key"].as_str().unwrap(), a["value"].clone()))
+                .collect();
+
+            assert_eq!(
+                attrs[custom_attribute.key.as_str()]["stringValue"]
+                    .as_str()
+                    .unwrap(),
+                custom_attribute.value.to_string()
+            );
+        }
+    }
 
     // Each tempo 'batch' has its own resources object
     for batch_resources in resources {

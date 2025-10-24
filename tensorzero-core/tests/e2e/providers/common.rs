@@ -1297,6 +1297,7 @@ pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETest
         },
         &format!(
             r#"
+        gateway.fetch_and_encode_input_files_before_inference = true
         [object_storage]
         type = "filesystem"
         path = "{}"
@@ -1551,7 +1552,10 @@ pub async fn test_image_inference_with_provider_s3_compatible(
         Err(object_store::Error::NotFound { .. }) => {
             // Expected - object should not exist
         }
-        _ => {
+        Err(e) => {
+            panic!("Unexpected error: {e}");
+        }
+        Ok(_) => {
             panic!("Object should not exist after deletion");
         }
     }

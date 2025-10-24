@@ -7,15 +7,16 @@ import {
   ScrollRestoration,
 } from "react-router";
 
-import { ConfigProvider } from "./context/config";
+import { ConfigProvider } from "~/context/config";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
-import { getConfig } from "./utils/config/index.server";
-import { AppSidebar } from "./components/layout/app.sidebar";
-import { SidebarProvider } from "./components/ui/sidebar";
-import { ContentLayout } from "./components/layout/ContentLayout";
-import { startPeriodicCleanup } from "./utils/evaluations.server";
-import { ReactQueryProvider } from "./providers/react-query";
+import { getConfig } from "~/utils/config/index.server";
+import { AppSidebar } from "~/components/layout/app.sidebar";
+import { SidebarProvider } from "~/components/ui/sidebar";
+import { ContentLayout } from "~/components/layout/ContentLayout";
+import { startPeriodicCleanup } from "~/utils/evaluations.server";
+import { ReactQueryProvider } from "~/providers/react-query";
+import { TooltipProvider } from "~/components/ui/tooltip";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -65,12 +66,14 @@ export default function App({ loaderData: config }: Route.ComponentProps) {
     <ReactQueryProvider>
       <ConfigProvider value={config}>
         <SidebarProvider>
-          <div className="fixed inset-0 flex">
-            <AppSidebar />
-            <ContentLayout>
-              <Outlet />
-            </ContentLayout>
-          </div>
+          <TooltipProvider>
+            <div className="fixed inset-0 flex">
+              <AppSidebar />
+              <ContentLayout>
+                <Outlet />
+              </ContentLayout>
+            </div>
+          </TooltipProvider>
         </SidebarProvider>
       </ConfigProvider>
     </ReactQueryProvider>

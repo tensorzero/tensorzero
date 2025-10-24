@@ -18,10 +18,12 @@ function extractVariantWeights(
 ): VariantWeight[] {
   const experimentationConfig = functionConfig.experimentation;
 
+  let variantWeights: VariantWeight[];
+
   if (experimentationConfig.type === "static_weights") {
     // Extract candidate variants and their weights
     const candidateVariants = experimentationConfig.candidate_variants;
-    return Object.entries(candidateVariants)
+    variantWeights = Object.entries(candidateVariants)
       .filter(([, weight]) => weight !== undefined)
       .map(([variant_name, weight]) => ({
         variant_name,
@@ -32,35 +34,41 @@ function extractVariantWeights(
     // For uniform distribution, all variants get equal weight
     const variantNames = Object.keys(functionConfig.variants);
     const equalWeight = 1.0 / variantNames.length;
-    return variantNames.sort().map((variant_name) => ({
+    variantWeights = variantNames.map((variant_name) => ({
       variant_name,
       weight: equalWeight,
     }));
   } else if (experimentationConfig.type === "track_and_stop") {
     // For track_and_stop, use optimal probabilities if available
     if (optimalProbabilities) {
-      return Object.entries(optimalProbabilities)
-        .map(([variant_name, weight]) => ({
+      variantWeights = Object.entries(optimalProbabilities).map(
+        ([variant_name, weight]) => ({
           variant_name,
           weight,
-        }))
-        .sort((a, b) => a.variant_name.localeCompare(b.variant_name));
+        }),
+      );
+    } else {
+      // If no optimal probabilities yet (e.g., due to null variances or insufficient data),
+      // show equal weights for all candidate variants (nursery phase)
+      const candidateVariants = experimentationConfig.candidate_variants;
+      const equalWeight = 1.0 / candidateVariants.length;
+      variantWeights = candidateVariants.map((variant_name) => ({
+        variant_name,
+        weight: equalWeight,
+      }));
     }
-    // If no optimal probabilities yet (e.g., due to null variances or insufficient data),
-    // show equal weights for all candidate variants (nursery phase)
-    const candidateVariants = experimentationConfig.candidate_variants;
-    const equalWeight = 1.0 / candidateVariants.length;
-    return candidateVariants.sort().map((variant_name) => ({
-      variant_name,
-      weight: equalWeight,
-    }));
+  } else {
+    // Default case (shouldn't happen, but TypeScript requires it)
+    variantWeights = [];
   }
 
-  // Default case (shouldn't happen, but TypeScript requires it)
-  return [];
+  // Sort alphabetically for consistent display order (affects pie chart segment order and reload stability)
+  return variantWeights.sort((a, b) =>
+    a.variant_name.localeCompare(b.variant_name),
+  );
 }
 
-const FunctionExperimentation = memo(function FunctionExperimentation({
+export const FunctionExperimentation = memo(function FunctionExperimentation({
   functionConfig,
   functionName,
   optimalProbabilities,
@@ -82,5 +90,3 @@ const FunctionExperimentation = memo(function FunctionExperimentation({
 
   return <ExperimentationPieChart variantWeights={variantWeights} />;
 });
-
-export default FunctionExperimentation;

@@ -15,7 +15,7 @@ import { getConfig, getFunctionConfig } from "~/utils/config/index.server";
 import FunctionInferenceTable from "./FunctionInferenceTable";
 import BasicInfo from "./FunctionBasicInfo";
 import FunctionSchema from "./FunctionSchema";
-import FunctionExperimentation from "./FunctionExperimentation";
+import { FunctionExperimentation } from "./FunctionExperimentation";
 import { useFunctionConfig } from "~/context/config";
 import {
   getVariantCounts,
@@ -41,15 +41,14 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import {
-  estimateTrackAndStopOptimalProbabilities,
-  type TimeWindow,
-} from "tensorzero-node";
+import { computeTrackAndStopOptimalProbabilities } from "~/utils/experimentation.server";
+import { type TimeWindow } from "tensorzero-node";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
   const config = await getConfig();
+  const dbClient = await getNativeDatabaseClient();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
@@ -111,30 +110,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Get feedback timeseries
   // For now, we only fetch this for track_and_stop experimentation
   // but the underlying query is general and could be used for other experimentation types
-  let feedbackTimeseriesPromise: Promise<
-    | Awaited<
-        ReturnType<
-          Awaited<
-            ReturnType<typeof getNativeDatabaseClient>
-          >["getCumulativeFeedbackTimeseries"]
-        >
-      >
-    | undefined
-  > = Promise.resolve(undefined);
-
-  if (function_config.experimentation.type === "track_and_stop") {
-    const experimentationConfig = function_config.experimentation;
-    feedbackTimeseriesPromise = (async () => {
-      const dbClient = await getNativeDatabaseClient();
-      return dbClient.getCumulativeFeedbackTimeseries({
-        function_name,
-        metric_name: experimentationConfig.metric,
-        variant_names: experimentationConfig.candidate_variants,
-        time_window: feedback_time_granularity as TimeWindow,
-        max_periods: 10,
-      });
-    })();
-  }
+  const feedbackParams =
+    function_config.experimentation.type === "track_and_stop"
+      ? {
+          metric_name: function_config.experimentation.metric,
+          variant_names: function_config.experimentation.candidate_variants,
+        }
+      : null;
+  const feedbackTimeseriesPromise = feedbackParams
+    ? (async () => {
+        return dbClient.getCumulativeFeedbackTimeseries({
+          function_name,
+          ...feedbackParams,
+          time_window: feedback_time_granularity as TimeWindow,
+          max_periods: 10,
+        });
+      })()
+    : Promise.resolve(undefined);
 
   const [
     inferences,
@@ -157,79 +149,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   // Compute optimal probabilities for track_and_stop experimentation
-  let optimal_probabilities: Record<string, number> | undefined;
-  if (function_config.experimentation.type === "track_and_stop") {
-    try {
-      const dbClient = await getNativeDatabaseClient();
-      const experimentationConfig = function_config.experimentation;
-      if (experimentationConfig.type !== "track_and_stop") {
-        throw new Error("Expected track_and_stop experimentation type");
-      }
-      const metric_config = config.metrics[experimentationConfig.metric];
-
-      if (metric_config) {
-        const feedback = await dbClient.getFeedbackByVariant({
-          metric_name: experimentationConfig.metric,
-          function_name,
-          variant_names: experimentationConfig.candidate_variants,
-        });
-
-        // Build feedback count map
-        const feedbackCounts = new Map(
-          feedback.map((f) => [f.variant_name, f.count]),
-        );
-
-        // Separate nursery and bandit variants
-        const K = experimentationConfig.candidate_variants.length;
-        const nurseryVariants = experimentationConfig.candidate_variants.filter(
-          (v) =>
-            (feedbackCounts.get(v) || 0) <
-            Number(experimentationConfig.min_samples_per_variant),
-        );
-        const banditVariants = experimentationConfig.candidate_variants.filter(
-          (v) =>
-            (feedbackCounts.get(v) || 0) >=
-            Number(experimentationConfig.min_samples_per_variant),
-        );
-
-        const B = banditVariants.length;
-
-        // Initialize probabilities
-        optimal_probabilities = {};
-
-        // Assign 1/K to each nursery variant
-        for (const variant of nurseryVariants) {
-          optimal_probabilities[variant] = 1 / K;
-        }
-
-        // Compute and scale optimal probabilities for bandit variants
-        if (B > 0) {
-          const banditFeedback = feedback.filter((f) =>
-            banditVariants.includes(f.variant_name),
-          );
-
-          if (banditFeedback.length > 0) {
-            const banditOptimalProbs = estimateTrackAndStopOptimalProbabilities(
-              {
-                feedback: banditFeedback,
-                epsilon: experimentationConfig.epsilon,
-                metric_optimize: metric_config.optimize,
-              },
-            );
-
-            // Scale bandit probabilities by B/K
-            const scale = B / K;
-            for (const [variant, prob] of Object.entries(banditOptimalProbs)) {
-              optimal_probabilities[variant] = prob * scale;
-            }
-          }
-        }
-      }
-    } catch (error) {
-      logger.error("Failed to compute optimal probabilities:", error);
-      optimal_probabilities = undefined;
-    }
-  }
+  const optimal_probabilities = await computeTrackAndStopOptimalProbabilities(
+    function_name,
+    function_config,
+    config,
+  );
 
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
     let variant_config = function_config.variants[

@@ -3,8 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
+#[cfg(test)]
+use mockall::automock;
+
 use crate::config::{MetricConfigLevel, MetricConfigType};
-use crate::db::clickhouse::query_builder::FloatComparisonOperator;
+use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
 use crate::endpoints::datasets::{Datapoint, DatapointKind};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
@@ -13,7 +16,7 @@ use crate::serde_util::{
 };
 use crate::tool::ToolCallConfigDatabaseInsert;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -24,7 +27,17 @@ pub enum DatapointInsert {
     Json(JsonInferenceDatapointInsert),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[cfg(any(test, feature = "e2e_tests"))]
+impl DatapointInsert {
+    pub fn id(&self) -> Uuid {
+        match self {
+            DatapointInsert::Chat(datapoint) => datapoint.id,
+            DatapointInsert::Json(datapoint) => datapoint.id,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct ChatInferenceDatapointInsert {
@@ -49,7 +62,7 @@ pub struct ChatInferenceDatapointInsert {
     pub is_custom: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapointInsert {
@@ -191,6 +204,7 @@ pub struct GetAdjacentDatapointIdsParams {
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+/// Legacy struct for old get_datapoint clickhouse query. To be deprecated.
 pub struct GetDatapointParams {
     pub dataset_name: String,
     pub datapoint_id: Uuid,
@@ -198,7 +212,40 @@ pub struct GetDatapointParams {
     pub allow_stale: Option<bool>,
 }
 
+#[derive(Deserialize)]
+/// A struct representing query params for a SELECT datapoints query.
+pub struct GetDatapointsParams {
+    /// Dataset name to query. If not provided, all datasets will be queried.
+    /// At least one of `dataset_name` or `ids` must be provided.
+    #[serde(default)]
+    pub dataset_name: Option<String>,
+
+    /// Function name to filter by. If provided, only datapoints from this function will be returned.
+    #[serde(default)]
+    pub function_name: Option<String>,
+
+    /// IDs of the datapoints to query. If not provided, all datapoints will be queried.
+    /// At least one of `dataset_name` or `ids` must be provided.
+    #[serde(default)]
+    pub ids: Option<Vec<Uuid>>,
+
+    /// Maximum number of datapoints to return.
+    pub page_size: u32,
+
+    /// Number of datapoints to skip before starting to return results.
+    pub offset: u32,
+
+    /// Whether to include stale datapoints in the query.
+    pub allow_stale: bool,
+
+    /// Optional filter to apply when querying datapoints.
+    /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
+    #[serde(default)]
+    pub filter: Option<DatapointFilter>,
+}
+
 #[async_trait]
+#[cfg_attr(test, automock)]
 pub trait DatasetQueries {
     /// Counts rows for a dataset based on query parameters
     async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
@@ -225,8 +272,14 @@ pub trait DatasetQueries {
     /// Marks a datapoint as stale by inserting a new row with staled_at set to now
     async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error>;
 
-    /// Inserts a new datapoint into the dataset
+    /// Inserts a single new datapoint into the dataset
+    /// TODO(shuyangli): To deprecate in favor of `insert_datapoints`
     async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error>;
+
+    /// Inserts a batch of datapoints into the database
+    /// Internally separates chat and JSON datapoints and writes them to the appropriate tables
+    /// Returns the number of rows written.
+    async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error>;
 
     /// Counts datapoints for a specific dataset and function
     async fn count_datapoints_for_dataset_function(
@@ -241,13 +294,9 @@ pub trait DatasetQueries {
     ) -> Result<AdjacentDatapointIds, Error>;
 
     /// Gets a single datapoint by dataset name and ID
+    /// TODO(shuyangli): To deprecate in favor of `get_datapoints`
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error>;
 
-    /// Gets multiple datapoints by dataset name and IDs
-    async fn get_datapoints(
-        &self,
-        dataset_name: &str,
-        datapoint_ids: &[Uuid],
-        allow_stale: bool,
-    ) -> Result<Vec<Datapoint>, Error>;
+    /// Gets multiple datapoints with various filters and pagination
+    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error>;
 }

@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
@@ -66,27 +65,22 @@ export function DeleteButton({
   }
 
   return (
-    <TooltipProvider>
-      <Tooltip delayDuration={100}>
-        <TooltipTrigger asChild>
-          <span className="inline-block">
-            <Button
-              variant="outline"
-              size="iconSm"
-              className={className}
-              disabled={disabled || isLoading}
-              onClick={handleInitialClick}
-              aria-label={tooltip}
-              title={tooltip}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>
-          <p>{tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-block">
+          <Button
+            variant="outline"
+            size="iconSm"
+            className={className}
+            disabled={disabled || isLoading}
+            onClick={handleInitialClick}
+            aria-label={tooltip}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }

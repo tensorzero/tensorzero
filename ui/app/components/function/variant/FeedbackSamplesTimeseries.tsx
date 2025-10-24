@@ -12,7 +12,12 @@ import {
   YAxis,
 } from "recharts";
 import { type ReactNode } from "react";
-import { CHART_COLORS, formatDetailedNumber } from "~/utils/chart";
+import {
+  CHART_COLORS,
+  formatChartNumber,
+  formatDetailedNumber,
+} from "~/utils/chart";
+import { addPeriod, normalizePeriod } from "~/utils/date";
 
 import {
   Card,
@@ -190,15 +195,7 @@ export function FeedbackSamplesTimeseries({
                   style: { textAnchor: "middle" },
                   offset: 10,
                 }}
-                tickFormatter={(value) => {
-                  const num = Number(value);
-                  if (num >= 1000000) {
-                    return (num / 1000000).toFixed(1) + "M";
-                  } else if (num >= 1000) {
-                    return (num / 1000).toFixed(1) + "K";
-                  }
-                  return num.toString();
-                }}
+                tickFormatter={(value) => formatChartNumber(Number(value))}
               />
               <ChartTooltip
                 content={({ active, payload, label }) => {
@@ -520,63 +517,6 @@ export function transformFeedbackTimeseries(
   // Get all unique periods from the data, sorted chronologically
   const allPeriods = Object.keys(groupedByDate).sort();
 
-  // Helper to normalize a date to match ClickHouse's period format
-  const normalizePeriod = (date: Date): Date => {
-    const normalized = new Date(date);
-    switch (timeGranularity) {
-      case "minute":
-        // Truncate to minute
-        normalized.setUTCSeconds(0, 0);
-        break;
-      case "hour":
-        // Truncate to hour
-        normalized.setUTCMinutes(0, 0, 0);
-        break;
-      case "day":
-        // Truncate to day
-        normalized.setUTCHours(0, 0, 0, 0);
-        break;
-      case "week":
-        // Truncate to day
-        normalized.setUTCHours(0, 0, 0, 0);
-        break;
-      case "month":
-        // Truncate to day
-        normalized.setUTCHours(0, 0, 0, 0);
-        break;
-      case "cumulative":
-        // No truncation needed for cumulative
-        break;
-    }
-    return normalized;
-  };
-
-  // Helper to add one period to a date based on granularity
-  const addPeriod = (date: Date): string => {
-    const result = new Date(date);
-    switch (timeGranularity) {
-      case "minute":
-        result.setUTCMinutes(result.getUTCMinutes() + 1);
-        break;
-      case "hour":
-        result.setUTCHours(result.getUTCHours() + 1);
-        break;
-      case "day":
-        result.setUTCDate(result.getUTCDate() + 1);
-        break;
-      case "week":
-        result.setUTCDate(result.getUTCDate() + 7);
-        break;
-      case "month":
-        result.setUTCMonth(result.getUTCMonth() + 1);
-        break;
-      case "cumulative":
-        // No period addition for cumulative
-        break;
-    }
-    return normalizePeriod(result).toISOString();
-  };
-
   // Fill in missing periods between the ones we have from ClickHouse
   const filledPeriods: string[] = [];
   for (let i = 0; i < allPeriods.length; i++) {
@@ -591,7 +531,7 @@ export function transformFeedbackTimeseries(
 
       // Fill in any missing periods between current and next
       while (true) {
-        const nextPeriodStr = addPeriod(current);
+        const nextPeriodStr = addPeriod(current, timeGranularity);
         current = new Date(nextPeriodStr);
         if (current.getTime() >= next.getTime()) break;
         filledPeriods.push(nextPeriodStr);
@@ -627,7 +567,7 @@ export function transformFeedbackTimeseries(
           // No period subtraction for cumulative
           break;
       }
-      const normalized = normalizePeriod(period);
+      const normalized = normalizePeriod(period, timeGranularity);
       additionalPeriods.unshift(normalized.toISOString());
     }
 

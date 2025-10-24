@@ -22,6 +22,10 @@ on:
         required: true
         type: boolean
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   ui-tests-e2e-model-inference-cache:
     runs-on: namespace-profile-tensorzero-8x16

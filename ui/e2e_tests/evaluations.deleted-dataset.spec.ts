@@ -1,52 +1,14 @@
-import { test, expect, type Page } from "@playwright/test";
-import { randomUUID } from "crypto";
-
-// Helper function to create a unique dataset for testing
-async function createTestDataset(
-  page: Page,
-  baseName: string = "test-eval-dataset",
-): Promise<string> {
-  const datasetName = `${baseName}-${Date.now()}-${randomUUID()}`;
-
-  await page.goto(
-    "/observability/inferences/0196368f-1ae8-7551-b5df-9a61593eb307",
-  );
-  await page.waitForLoadState("networkidle");
-
-  // Click on the Add to dataset button
-  await page.getByText("Add to dataset").click();
-
-  // Find the CommandInput and create the dataset
-  const commandInput = page.getByPlaceholder("Create or find a dataset...");
-  await commandInput.waitFor({ state: "visible" });
-  await commandInput.fill(datasetName);
-
-  // Click on the CommandItem to create the dataset
-  const createOption = page.locator('div[data-value^="create-"][cmdk-item]');
-  await expect(createOption).toBeVisible();
-  await createOption.click();
-
-  // Click on the "Inference Output" button
-  const inferenceOutputButton = page.getByText("Inference Output");
-  await expect(inferenceOutputButton).toBeVisible();
-  await inferenceOutputButton.click();
-
-  // Wait for the toast to appear with success message
-  await expect(
-    page
-      .getByRole("region", { name: /notifications/i })
-      .getByText("New Datapoint"),
-  ).toBeVisible();
-
-  return datasetName;
-}
+import { test, expect } from "@playwright/test";
+import { createDatapointFromInference } from "./helpers/datapoint-helpers";
 
 test.describe("Launch Evaluation Modal - Deleted Dataset", () => {
   test("should clear deleted dataset from localStorage when modal reopens", async ({
     page,
   }) => {
     // Create a unique test dataset
-    const datasetName = await createTestDataset(page, "eval-localstorage-test");
+    const datasetName = await createDatapointFromInference(page, {
+      inferenceId: "0196368f-1ae8-7551-b5df-9a61593eb307", // `extract_entities`
+    });
 
     // Navigate to evaluations page
     await page.goto("/evaluations");
