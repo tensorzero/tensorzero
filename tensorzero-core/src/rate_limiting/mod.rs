@@ -128,8 +128,27 @@ impl RateLimitingConfig {
             .collect::<Vec<_>>()
     }
 
-    #[tracing::instrument(err, skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences))]
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences))]
     pub async fn consume_tickets<'a>(
+        &'a self,
+        client: &impl RateLimitQueries,
+        scope_info: &'a ScopeInfo,
+        rate_limited_request: &impl RateLimitedRequest,
+    ) -> Result<TicketBorrows, Error> {
+        let res = self
+            .consume_tickets_inner(client, scope_info, rate_limited_request)
+            .await;
+        if let Err(e) = &res {
+            // We want rate-limiting errors to show up as errors in OpenTelemetry,
+            // even though they only get logged as warnings to the console.
+            e.ensure_otel_span_errored(&Span::current());
+        }
+        res
+    }
+
+    // The actual implementation of `consume_tickets`. This is a separate function so that we can
+    // handle `Result::Err` inside `consume_tickets`
+    async fn consume_tickets_inner<'a>(
         &'a self,
         client: &impl RateLimitQueries,
         scope_info: &'a ScopeInfo,
@@ -682,6 +701,22 @@ impl TicketBorrows {
 
     #[tracing::instrument(err, skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, underestimate))]
     pub async fn return_tickets(
+        self,
+        client: &impl RateLimitQueries,
+        actual_usage: RateLimitResourceUsage,
+    ) -> Result<(), Error> {
+        let res = self.return_tickets_inner(client, actual_usage).await;
+        if let Err(e) = &res {
+            // We want rate-limiting errors to show up as errors in OpenTelemetry,
+            // even though they only get logged as warnings to the console.
+            e.ensure_otel_span_errored(&Span::current());
+        }
+        res
+    }
+
+    // The actual implementation of `return_tickets`. This is a separate function so that we can
+    // handle `Result::Err` inside `return_tickets`
+    async fn return_tickets_inner(
         self,
         client: &impl RateLimitQueries,
         actual_usage: RateLimitResourceUsage,
