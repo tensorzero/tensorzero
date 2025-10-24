@@ -25,7 +25,6 @@ import { ChevronUp, ChevronDown, Search } from "lucide-react";
 
 type VariantCountsWithMetadata = VariantCounts & {
   type: string;
-  weight: number | null;
 };
 
 const columnHelper = createColumnHelper<VariantCountsWithMetadata>();
@@ -58,10 +57,6 @@ export default function FunctionVariantTable({
       columnHelper.accessor("type", {
         header: "Type",
         cell: (info) => <Code>{info.getValue()}</Code>,
-      }),
-      columnHelper.accessor("weight", {
-        header: "Weight",
-        cell: (info) => info.getValue(),
       }),
       columnHelper.accessor("count", {
         header: "Count",
