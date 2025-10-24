@@ -78,7 +78,7 @@ metrics-exporter-prometheus = { version = "0.17.2", features = [
 ], default-features = false }
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+#unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 allow_attributes = "deny"

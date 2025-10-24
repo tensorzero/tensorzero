@@ -26,6 +26,7 @@ futures = { workspace = true }
 indicatif = "0.18.0"
 
 [dev-dependencies]
+backtrace-on-stack-overflow = "0.3.0"
 tensorzero = { path = "../clients/rust" }
 
 [lints]

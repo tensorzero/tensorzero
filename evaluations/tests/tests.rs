@@ -1823,6 +1823,7 @@ async fn run_evaluations_best_of_3() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn run_evaluations_mixture_of_3() {
+    unsafe { backtrace_on_stack_overflow::enable() };
     init_tracing_for_tests();
     let clickhouse = get_clickhouse().await;
     let dataset_name = format!("extract_entities_0.8-{}", Uuid::now_v7());
