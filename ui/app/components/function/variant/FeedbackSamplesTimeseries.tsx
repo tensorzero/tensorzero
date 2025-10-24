@@ -37,11 +37,13 @@ import { TimeGranularitySelector } from "./TimeGranularitySelector";
 export function FeedbackSamplesTimeseries({
   feedbackTimeseries,
   time_granularity,
-  onTimeGranularityChange,
+  onCumulativeFeedbackTimeGranularityChange: onTimeGranularityChange,
 }: {
   feedbackTimeseries: CumulativeFeedbackTimeSeriesPoint[];
   time_granularity: TimeWindow;
-  onTimeGranularityChange: (time_granularity: TimeWindow) => void;
+  onCumulativeFeedbackTimeGranularityChange: (
+    time_granularity: TimeWindow,
+  ) => void;
 }) {
   const { countsData, meansData, variantNames } = transformFeedbackTimeseries(
     feedbackTimeseries,

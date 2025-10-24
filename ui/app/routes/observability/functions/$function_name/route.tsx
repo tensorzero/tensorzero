@@ -295,11 +295,13 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
   };
 
   const feedback_time_granularity = (searchParams.get(
-    "feedback_time_granularity",
+    "cumulative_feedback_time_granularity",
   ) || "week") as TimeWindow;
-  const handleFeedbackTimeGranularityChange = (granularity: TimeWindow) => {
+  const handleCumulativeFeedbackTimeGranularityChange = (
+    granularity: TimeWindow,
+  ) => {
     const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("feedback_time_granularity", granularity);
+    newSearchParams.set("cumulative_feedback_time_granularity", granularity);
     navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
   };
 
@@ -335,7 +337,9 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               <FeedbackSamplesTimeseries
                 feedbackTimeseries={feedback_timeseries}
                 time_granularity={feedback_time_granularity}
-                onTimeGranularityChange={handleFeedbackTimeGranularityChange}
+                onCumulativeFeedbackTimeGranularityChange={
+                  handleCumulativeFeedbackTimeGranularityChange
+                }
               />
             )}
           </SectionLayout>
