@@ -57,7 +57,7 @@ pub struct FunctionConfigJsonPyClass {
     pub inner: Arc<FunctionConfig>,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum FunctionConfigType {
     Chat,
