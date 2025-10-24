@@ -11,7 +11,6 @@ use mockall::automock;
 
 use crate::config::Config;
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
-use crate::db::clickhouse::ClickhouseFormat;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
 use crate::serde_util::{deserialize_defaulted_string, deserialize_json_string};
@@ -191,7 +190,6 @@ pub struct ListInferencesParams<'a> {
     /// Number of inferences to skip.
     pub offset: Option<u64>,
     pub order_by: Option<&'a [OrderBy]>,
-    pub format: ClickhouseFormat,
 }
 
 impl Default for ListInferencesParams<'_> {
@@ -206,7 +204,6 @@ impl Default for ListInferencesParams<'_> {
             limit: None,
             offset: None,
             order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
         }
     }
 }

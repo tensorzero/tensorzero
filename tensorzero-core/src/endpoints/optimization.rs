@@ -15,7 +15,7 @@ use crate::{
     db::{
         clickhouse::{
             query_builder::{InferenceFilter, OrderBy},
-            ClickHouseConnectionInfo, ClickhouseFormat,
+            ClickHouseConnectionInfo,
         },
         inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
@@ -47,8 +47,6 @@ pub struct LaunchOptimizationWorkflowParams {
     #[serde(deserialize_with = "deserialize_option_u64")]
     pub offset: Option<u64>,
     pub val_fraction: Option<f64>,
-    #[serde(default)]
-    pub format: ClickhouseFormat,
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
@@ -89,7 +87,6 @@ pub async fn launch_optimization_workflow(
         limit,
         offset,
         val_fraction,
-        format,
         optimizer_config,
     } = params;
     // Query the database for the stored inferences
@@ -105,7 +102,6 @@ pub async fn launch_optimization_workflow(
                 output_source,
                 limit,
                 offset,
-                format,
                 order_by: order_by.as_deref(),
             },
         )

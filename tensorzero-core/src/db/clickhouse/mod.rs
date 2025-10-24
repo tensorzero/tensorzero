@@ -492,17 +492,6 @@ where
     s.parse::<u64>().map_err(serde::de::Error::custom)
 }
 
-/// The format of the data that will be returned from / sent to ClickHouse.
-/// Currently only used in the query builder.
-/// TODO: use across the codebase.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
-pub enum ClickhouseFormat {
-    #[default]
-    JsonEachRow,
-}
-
 #[cfg(test)]
 mod tests {
 
