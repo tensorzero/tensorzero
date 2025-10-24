@@ -13,7 +13,6 @@ use crate::db::inferences::{
 use crate::function::FunctionConfigType;
 use crate::{
     config::Config,
-    db::clickhouse::ClickhouseFormat,
     error::{Error, ErrorDetails},
     stored_inference::StoredInference,
 };
@@ -218,11 +217,7 @@ pub(crate) fn generate_list_inferences_sql(
         );
         sql.push_str(&format!("\nOFFSET {offset_param_placeholder}"));
     }
-    match opts.format {
-        ClickhouseFormat::JsonEachRow => {
-            sql.push_str("\nFORMAT JSONEachRow");
-        }
-    }
+    sql.push_str("\nFORMAT JSONEachRow");
 
     Ok((sql, query_params))
 }
