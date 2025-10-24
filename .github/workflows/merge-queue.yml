@@ -216,6 +216,7 @@ jobs:
           ./ci/run-provider-proxy.sh ci
 
       - name: Launch the gateway for E2E tests
+        timeout-minutes: 2
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
