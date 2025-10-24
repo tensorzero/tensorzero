@@ -75,6 +75,47 @@ For `json` functions, each datapoint object must have the following fields:
 - `tags` (map of string to string, optional)
 - `name` (string, optional)
 
+### Update datapoints in a dataset
+
+This endpoint updates one or more datapoints in a dataset by creating new versions.
+If you update a non-`metadata` field, the original datapoint is marked as stale (i.e. a soft deletion), and a new datapoint is created with the updated values and a new ID; if you only update `metadata`, the original datapoint is updated in place.
+The response returns the newly created IDs.
+
+- **Gateway Endpoint:** `PATCH /v1/datasets/{dataset_name}/datapoints`
+- **Client Method:** `update_datapoints`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `datapoints` (list of objects, see below)
+
+The `datapoints` field must contain a list of objects.
+
+Each object must have the fields `id` (string, UUIDv7) and `type` (`"chat"` or `"json"`).
+
+The following fields are optional.
+If provided, they will update the corresponding fields in the datapoint.
+If omitted, the fields will remain unchanged.
+If set to `null`, the fields will be cleared (as long as they are nullable).
+
+For `chat` functions, you can update the following fields:
+
+- `input` (object) - replaces the datapoint's input
+- `output` (list of content blocks) - replaces the datapoint's output
+- `tool_params` (object or null) - replaces the tool configuration (can be set to `null` to clear)
+- `tags` (map of string to string) - replaces all tags
+- `metadata` (object) - updates metadata fields:
+  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+
+For `json` functions, you can update the following fields:
+
+- `input` (object) - replaces the datapoint's input
+- `output` (object or null) - replaces the output (validated against the output schema; can be set to `null` to clear)
+- `output_schema` (object) - replaces the output schema
+- `tags` (map of string to string) - replaces all tags
+- `metadata` (object) - updates metadata fields:
+  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+
+The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the newly created datapoints.
+
 ### Delete a datapoint
 
 This endpoint performs a **soft deletion**: the datapoint is marked as stale and will be disregarded by the system in the future (e.g. when listing datapoints or running evaluations), but the data remains in the database.
