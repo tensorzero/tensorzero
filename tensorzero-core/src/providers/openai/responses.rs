@@ -1134,6 +1134,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                         vec![ContentBlockChunk::Unknown {
                             id: output_index.to_string(),
                             data: item,
+                            provider_type: Some(PROVIDER_TYPE.to_string()),
                         }],
                         None,
                         raw_message,
@@ -1256,6 +1257,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 vec![ContentBlockChunk::Unknown {
                     id: "unknown".to_string(),
                     data,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }],
                 None,
                 raw_message,
@@ -2054,7 +2056,7 @@ mod tests {
         // Unknown events should return an Unknown chunk
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data } => {
+            ContentBlockChunk::Unknown { id, data, .. } => {
                 assert_eq!(id, "unknown");
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),

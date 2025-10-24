@@ -476,7 +476,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 }
                             }
                         }
-                        ContentBlockChunk::Unknown { id, data } => {
+                        ContentBlockChunk::Unknown { id, data, .. } => {
                             // Unknown chunks are not merged/coalesced - each one gets a unique entry
                             // We use the chunk ID as part of the key to ensure uniqueness
                             if ttft.is_none() {

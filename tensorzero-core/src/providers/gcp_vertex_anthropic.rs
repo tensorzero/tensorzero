@@ -1189,6 +1189,7 @@ fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown {
                     id: index.to_string(),
                     data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }],
                 None,
                 raw_message,
@@ -1208,6 +1209,7 @@ fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown {
                     id: index.to_string(),
                     data: content_block.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }],
                 None,
                 raw_message,
@@ -1227,6 +1229,7 @@ fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown {
                     id: "message_delta".to_string(),
                     data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
                 }],
                 None,
                 raw_message,

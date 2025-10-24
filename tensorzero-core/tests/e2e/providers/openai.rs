@@ -2638,7 +2638,7 @@ model = "test-model"
                     ContentBlockChunk::Text(text_chunk) => {
                         full_text.push_str(&text_chunk.text);
                     }
-                    ContentBlockChunk::Unknown { id, data } => {
+                    ContentBlockChunk::Unknown { id, data, .. } => {
                         unknown_chunks.push((id.clone(), data.clone()));
                     }
                     _ => {}
