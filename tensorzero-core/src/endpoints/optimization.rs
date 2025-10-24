@@ -12,9 +12,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::Config,
-    db::clickhouse::{
-        query_builder::{InferenceFilter, InferenceOutputSource, ListInferencesParams, OrderBy},
-        ClickHouseConnectionInfo, ClickhouseFormat,
+    db::{
+        clickhouse::{
+            query_builder::{InferenceFilter, OrderBy},
+            ClickHouseConnectionInfo, ClickhouseFormat,
+        },
+        inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
