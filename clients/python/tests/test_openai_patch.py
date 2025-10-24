@@ -231,7 +231,7 @@ async def test_patch_openai_client_with_async_client_async_setup_false_streaming
             out_lines_copy.remove(line)
         if "Waiting for deferred tasks to finish" in line:
             out_lines_copy.remove(line)
-        if "Deferred task finished" in line:
+        if "Deferred tasks finished" in line:
             out_lines_copy.remove(line)
         if "Using proxy URL from TENSORZERO_E2E_PROXY" in line:
             out_lines_copy.remove(line)
