@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FileMessage } from "./SnippetContent";
-import pdfUrl from "../inference/InputSnippet.stories.fixture.tensorzero.pdf?url";
+import pdfUrl from "../inference/Input.stories.fixture.tensorzero.pdf?url";
 
 async function getBase64File(url: string): Promise<string> {
   const response = await fetch(url);

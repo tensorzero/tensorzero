@@ -4,7 +4,6 @@ import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-  TooltipProvider,
 } from "~/components/ui/tooltip";
 import { cn } from "~/utils/common";
 
@@ -71,14 +70,12 @@ const Chip: React.FC<ChipProps> = ({
   );
 
   return tooltip ? (
-    <TooltipProvider>
-      <Tooltip delayDuration={100}>
-        <TooltipTrigger asChild>{chipContent}</TooltipTrigger>
-        <TooltipContent className="border-border bg-bg-secondary text-fg-primary border shadow-lg">
-          {tooltip}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>{chipContent}</TooltipTrigger>
+      <TooltipContent className="border-border bg-bg-secondary text-fg-primary border shadow-lg">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
   ) : (
     chipContent
   );

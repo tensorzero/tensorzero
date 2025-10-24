@@ -3,14 +3,14 @@ use itertools::Itertools;
 use serde_json::json;
 use std::collections::HashMap;
 use std::num::ParseIntError;
-use uuid::Uuid;
 
+use crate::db::clickhouse::query_builder::QueryParameter;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
 // TODO: move things somewhere sensible
 use crate::db::datasets::{
     AdjacentDatapointIds, ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams,
     DatapointInsert, DatasetDetailRow, DatasetMetadata, DatasetOutputSource, DatasetQueries,
-    DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
+    DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams, GetDatasetRowsParams, JsonInferenceDatapointInsert,
     StaleDatapointParams,
 };
@@ -456,7 +456,15 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             .unwrap_or(DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT);
 
         let mut datapoints = self
-            .get_datapoints(&params.dataset_name, &[params.datapoint_id], allow_stale)
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some(params.dataset_name.clone()),
+                function_name: None,
+                ids: Some(vec![params.datapoint_id]),
+                page_size: 1,
+                offset: 0,
+                allow_stale,
+                filter: None,
+            })
             .await?;
         if datapoints.is_empty() {
             return Err(Error::new(ErrorDetails::DatapointNotFound {
@@ -470,30 +478,93 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(first_datapoint)
     }
 
-    async fn get_datapoints(
-        &self,
-        dataset_name: &str,
-        datapoint_ids: &[Uuid],
-        allow_stale: bool,
-    ) -> Result<Vec<Datapoint>, Error> {
-        if datapoint_ids.is_empty() {
-            return Ok(Vec::new());
+    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error> {
+        let GetDatapointsParams {
+            dataset_name,
+            function_name,
+            ids,
+            page_size,
+            offset,
+            allow_stale,
+            filter,
+        } = params;
+        let page_size_str = page_size.to_string();
+        let offset_str = offset.to_string();
+        let subquery_page_size_str = (page_size + offset).to_string();
+
+        // If neither IDs nor dataset are provided, reject the query.
+        if dataset_name.is_none() && ids.is_none() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "At least one of dataset_name or ids must be provided".to_string(),
+            }));
         }
 
-        let allow_stale_clause = if allow_stale {
+        // If IDs are provided, they must not be empty.
+        if let Some(ids_vec) = ids {
+            if ids_vec.is_empty() {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: "ids must not be an empty list".to_string(),
+                }));
+            }
+        }
+
+        // Build params and where clauses.
+        let mut query_params = HashMap::new();
+        query_params.insert("page_size", page_size_str.as_str());
+        query_params.insert("offset", offset_str.as_str());
+        query_params.insert("subquery_page_size", subquery_page_size_str.as_str());
+
+        let dataset_name_clause = match dataset_name {
+            Some(dataset_name) => {
+                query_params.insert("dataset_name", dataset_name.as_str());
+                "AND dataset_name = {dataset_name:String}"
+            }
+            None => "",
+        };
+
+        let function_name_clause = match function_name {
+            Some(function_name) => {
+                query_params.insert("function_name", function_name.as_str());
+                "AND function_name = {function_name:String}"
+            }
+            None => "",
+        };
+
+        let ids_clause = match ids {
+            None => String::new(),
+            Some(ids_vec) => {
+                // Our current production_clickhouse_client uses the HTTP client under the hood, which
+                // passes parameters in the URL. This will likely hit URL length limits, so instead of passing IDs
+                // as a bound parameter, we will write it directly into the query.
+                let joined_ids = ids_vec.iter().map(|id| format!("'{id}'")).join(",");
+                format!("AND id IN [{joined_ids}]")
+            }
+        };
+
+        let allow_stale_clause = if *allow_stale {
             ""
         } else {
             "AND staled_at IS NULL"
         };
 
-        // Build the IN clause for datapoint IDs.
-        //
-        // Our current production_clickhouse_client uses the HTTP client under the hood, which
-        // passes parameters in the URL. This will likely hit URL length limits, so instead of passing IDs
-        // as a bound parameter, we will write it directly into the query.
-        let joined_ids = datapoint_ids.iter().map(|id| format!("'{id}'")).join(",");
-        let ids_clause = format!("AND id IN [{joined_ids}]");
+        // Generate filter SQL clause if provided
+        let (filter_clause, filter_params) = if let Some(filter) = filter {
+            let (filter_sql, filter_params) = filter.to_clickhouse_sql("i");
+            (format!("AND {filter_sql}"), filter_params)
+        } else {
+            (String::new(), Vec::new())
+        };
 
+        // Add filter parameters to query_params.
+        for QueryParameter { name, value } in &filter_params {
+            query_params.insert(name.as_str(), value.as_str());
+        }
+
+        // TODO(shuyangli): Consider supporting custom ordering.
+        let order_by_clause = "ORDER BY updated_at DESC, id DESC";
+
+        // When constructing the query, all filters are pushed down to the subqueries for Chat/Json table, and the final
+        // SELECT only handles merging and ordering for pagination.
         let query = format!(
             r"
         WITH dataset as (
@@ -515,10 +586,15 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 is_custom,
                 staled_at,
                 formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
-            FROM ChatInferenceDatapoint FINAL
-            WHERE dataset_name = {{dataset_name:String}}
+            FROM ChatInferenceDatapoint AS i FINAL
+            WHERE true
+                {dataset_name_clause}
+                {function_name_clause}
                 {ids_clause}
                 {allow_stale_clause}
+                {filter_clause}
+            {order_by_clause}
+            LIMIT {{subquery_page_size:UInt32}}
             UNION ALL
             SELECT
                 'json' as type,
@@ -538,17 +614,23 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 is_custom,
                 staled_at,
                 formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
-            FROM JsonInferenceDatapoint FINAL
-            WHERE dataset_name = {{dataset_name:String}}
+            FROM JsonInferenceDatapoint AS i FINAL
+            WHERE true
+                {dataset_name_clause}
+                {function_name_clause}
                 {ids_clause}
                 {allow_stale_clause}
+                {filter_clause}
+            {order_by_clause}
+            LIMIT {{subquery_page_size:UInt32}}
         )
         SELECT * FROM dataset
+        {order_by_clause}
+        LIMIT {{page_size:UInt32}}
+        OFFSET {{offset:UInt32}}
         FORMAT JSONEachRow
         "
         );
-
-        let query_params = HashMap::from([("dataset_name", dataset_name)]);
 
         let result = self
             .run_query_synchronous(query.to_string(), &query_params)
@@ -559,7 +641,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         }
 
         // Parse each line as a separate datapoint
-        let mut datapoints = Vec::with_capacity(datapoint_ids.len());
+        let mut datapoints = Vec::with_capacity(params.ids.as_ref().map_or(0, Vec::len));
         for line in result.response.lines() {
             if line.trim().is_empty() {
                 continue;
@@ -968,7 +1050,9 @@ mod tests {
 
     use crate::config::{MetricConfigLevel, MetricConfigType};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
-    use crate::db::clickhouse::query_builder::FloatComparisonOperator;
+    use crate::db::clickhouse::query_builder::{
+        DatapointFilter, FloatComparisonOperator, TagComparisonOperator, TagFilter,
+    };
     use crate::db::clickhouse::ClickHouseResponse;
     use crate::db::clickhouse::ClickHouseResponseMetadata;
     use crate::db::datasets::{
@@ -3026,19 +3110,71 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
-                assert_query_contains(query, "WITH dataset as (");
-                assert_query_contains(query, "'chat' as type");
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
-                assert_query_contains(query, "formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
-                assert_query_contains(query, "dataset_name = {dataset_name:String}");
-                assert_query_contains(query, "staled_at IS NULL");
+                assert_query_contains(query, "WITH dataset as (
+                SELECT
+                    'chat' as type,
+                    dataset_name,
+                    function_name,
+                    name,
+                    id,
+                    episode_id,
+                    input,
+                    output,
+                    tool_params,
+                    '' as output_schema,");
+                assert_query_contains(query,
+                    "tags,
+                    auxiliary, 
+                    source_inference_id, 
+                    is_deleted, 
+                    is_custom, 
+                    staled_at, 
+                    formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL
+                    WHERE true
+                    AND dataset_name = {dataset_name:String}
+                    AND id IN ['123e4567-e89b-12d3-a456-426614174000']
+                    AND staled_at IS NULL");
+                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC 
+                    LIMIT {subquery_page_size:UInt32}");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "'json' as type");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
-                assert_query_contains(query, "id IN ['123e4567-e89b-12d3-a456-426614174000']");
-                assert_query_contains(query, "FORMAT JSONEachRow");
+                assert_query_contains(query, "
+                SELECT
+                    'json' as type,
+                    dataset_name,
+                    function_name,
+                    name,
+                    id,
+                    episode_id,
+                    input,
+                    output,
+                    '' as tool_params,");
+                assert_query_contains(query,
+                "output_schema,
+                    tags,
+                    auxiliary,
+                    source_inference_id,
+                    is_deleted,
+                    is_custom,
+                    staled_at,
+                    formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL
+                    WHERE true
+                    AND dataset_name = {dataset_name:String}
+                    AND id IN ['123e4567-e89b-12d3-a456-426614174000']
+                    AND staled_at IS NULL");
+                assert_query_contains(query, "SELECT *
+                    FROM dataset
+                    ORDER BY updated_at DESC, id DESC
+                    LIMIT {page_size:UInt32}
+                    OFFSET {offset:UInt32}
+                FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+                assert_eq!(parameters.get("page_size"), Some(&"1"));
+                assert_eq!(parameters.get("offset"), Some(&"0"));
+                assert_eq!(parameters.get("subquery_page_size"), Some(&"1"));
+
                 assert!(!parameters.contains_key("datapoint_id"), "Datapoint ID should be passed as a list of IDs");
 
                 true
@@ -3082,9 +3218,9 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "WITH dataset as (");
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "id IN ['323e4567-e89b-12d3-a456-426614174000']");
                 assert_query_contains(query, "staled_at IS NULL");
 
@@ -3241,15 +3377,46 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_datapoints_with_empty_ids() {
-        let mock_clickhouse_client = MockClickHouseClient::new();
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                // When ids is empty, there should be no ID filter
+                assert_query_does_not_contain(query, "id IN");
+                assert_query_contains(query, "dataset_name = {dataset_name:String}");
+                assert_query_contains(query, "staled_at IS NULL");
+                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
         let result = conn
-            .get_datapoints("test_dataset", &[], false)
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: None,
+                page_size: u32::MAX,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+            })
             .await
             .unwrap();
 
-        assert_eq!(result.len(), 0, "Should return empty vector for empty IDs");
+        assert_eq!(
+            result.len(),
+            0,
+            "Should return empty vector when dataset has no datapoints"
+        );
     }
 
     #[tokio::test]
@@ -3259,9 +3426,9 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "WITH dataset as (");
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "id IN ['123e4567-e89b-12d3-a456-426614174000']");
                 assert_query_contains(query, "staled_at IS NULL");
                 assert_query_contains(query, "FORMAT JSONEachRow");
@@ -3283,7 +3450,15 @@ mod tests {
 
         let ids = vec![Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap()];
         let result = conn
-            .get_datapoints("test_dataset", &ids, false)
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: Some(ids),
+                page_size: u32::MAX,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+            })
             .await
             .unwrap();
 
@@ -3307,9 +3482,9 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_contains(query, "WITH dataset as (");
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "id IN ['123e4567-e89b-12d3-a456-426614174000','223e4567-e89b-12d3-a456-426614174000','323e4567-e89b-12d3-a456-426614174000']");
                 assert_query_contains(query, "staled_at IS NULL");
 
@@ -3336,7 +3511,15 @@ mod tests {
             Uuid::parse_str("323e4567-e89b-12d3-a456-426614174000").unwrap(),
         ];
         let result = conn
-            .get_datapoints("test_dataset", &ids, false)
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: Some(ids),
+                page_size: u32::MAX,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+            })
             .await
             .unwrap();
 
@@ -3373,7 +3556,15 @@ mod tests {
 
         let ids = vec![Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap()];
         let result = conn
-            .get_datapoints("test_dataset", &ids, false)
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: Some(ids),
+                page_size: u32::MAX,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+            })
             .await
             .unwrap();
 
@@ -3408,7 +3599,15 @@ mod tests {
 
         let ids = vec![Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap()];
         let result = conn
-            .get_datapoints("test_dataset", &ids, true)
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: Some(ids),
+                page_size: u32::MAX,
+                offset: 0,
+                allow_stale: true,
+                filter: None,
+            })
             .await
             .unwrap();
 
@@ -3433,9 +3632,9 @@ mod tests {
         mock_clickhouse_client
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
-                assert_query_contains(query, "FROM ChatInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "UNION ALL");
-                assert_query_contains(query, "FROM JsonInferenceDatapoint FINAL");
+                assert_query_contains(query, "FROM JsonInferenceDatapoint AS i FINAL");
                 assert_query_contains(query, "id IN ['123e4567-e89b-12d3-a456-426614174000','223e4567-e89b-12d3-a456-426614174000']");
 
                 assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
@@ -3459,7 +3658,15 @@ mod tests {
             Uuid::parse_str("223e4567-e89b-12d3-a456-426614174000").unwrap(),
         ];
         let result = conn
-            .get_datapoints("test_dataset", &ids, false)
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: Some(ids),
+                page_size: u32::MAX,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+            })
             .await
             .unwrap();
 
@@ -3521,7 +3728,15 @@ mod tests {
 
         let ids = vec![Uuid::parse_str("999e4567-e89b-12d3-a456-426614174000").unwrap()];
         let result = conn
-            .get_datapoints("test_dataset", &ids, false)
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: Some(ids),
+                page_size: u32::MAX,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+            })
             .await
             .unwrap();
 
@@ -3530,5 +3745,90 @@ mod tests {
             0,
             "Should return empty vector for non-existent IDs"
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_datapoints_with_function_name_filter() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                assert_query_contains(query, "AND function_name = {function_name:String}");
+
+                assert_eq!(parameters.get("function_name"), Some(&"test_function"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":"223e4567-e89b-12d3-a456-426614174000","input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: Some("test_function".to_string()),
+                ids: None,
+                page_size: 20,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_get_datapoints_with_tag_filter() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                assert_query_contains(query, "AND i.tags[{p0:String}] = {p1:String}");
+
+                assert_eq!(parameters.get("p0"), Some(&"environment"));
+                assert_eq!(parameters.get("p1"), Some(&"production"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::from(r#"{"type":"chat","dataset_name":"test_dataset","function_name":"test_function","name":"test_name","id":"123e4567-e89b-12d3-a456-426614174000","episode_id":"223e4567-e89b-12d3-a456-426614174000","input":"{\"messages\":[]}","output":"[{\"type\":\"text\",\"text\":\"test output\"}]","tool_params":"{\"tools_available\":[],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}","tags":{"environment":"production"},"auxiliary":"","source_inference_id":null,"is_deleted":false,"is_custom":true,"staled_at":null,"updated_at":"2023-01-01T00:00:00Z"}"#),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let filter = DatapointFilter::Tag(TagFilter {
+            key: "environment".to_string(),
+            value: "production".to_string(),
+            comparison_operator: TagComparisonOperator::Equal,
+        });
+
+        let result = conn
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some("test_dataset".to_string()),
+                function_name: None,
+                ids: None,
+                page_size: 20,
+                offset: 0,
+                allow_stale: false,
+                filter: Some(filter),
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1, "Should return one datapoint");
     }
 }

@@ -1,12 +1,11 @@
 import type { Control, FieldPath, FieldValues } from "react-hook-form";
 import { FormField, FormItem, FormLabel } from "~/components/ui/form";
 import { FunctionSelector } from "./FunctionSelector";
-import type { FunctionConfig } from "tensorzero-node";
+import { useAllFunctionConfigs } from "~/context/config";
 
 interface FunctionFormFieldProps<T extends FieldValues> {
   control: Control<T>;
   name: FieldPath<T>;
-  functions: { [x: string]: FunctionConfig | undefined };
   hideDefaultFunction?: boolean;
   label?: string;
   onSelect?: (value: string) => void;
@@ -15,11 +14,12 @@ interface FunctionFormFieldProps<T extends FieldValues> {
 export function FunctionFormField<T extends FieldValues>({
   control,
   name,
-  functions,
   hideDefaultFunction = false,
   label = "Function",
   onSelect,
 }: FunctionFormFieldProps<T>) {
+  const functions = useAllFunctionConfigs();
+
   return (
     <FormField
       control={control}

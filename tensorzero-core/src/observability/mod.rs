@@ -43,9 +43,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use once_cell::sync::OnceCell;
+#[cfg(feature = "e2e_tests")]
+use opentelemetry::ContextGuard;
 use tokio_stream::wrappers::IntervalStream;
+use tracing::field::Empty;
 
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
 use axum::extract::MatchedPath;
 use axum::extract::State;
@@ -71,9 +73,12 @@ use tokio_util::task::TaskTracker;
 use tonic::metadata::AsciiMetadataKey;
 use tonic::metadata::MetadataValue;
 use tracing::level_filters::LevelFilter;
-use tracing::Span;
+use tracing::{Metadata, Span};
 use tracing_futures::Instrument;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+use tracing_opentelemetry_instrumentation_sdk::http::{
+    http_flavor, http_host, url_scheme, user_agent,
+};
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::{filter, EnvFilter, Registry};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -429,18 +434,53 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
                     message: format!("Failed to initialize OTLP propagator: {e}"),
                 })
             })?;
+
             // Avoid exposing all of our internal spans, as we don't want customers to start depending on them.
-            // We only expose spans that explicitly contain field prefixed with "http." or "otel."
+            // We only expose spans that explicitly contain field prefixed with "otel."
             // For example, `#[instrument(fields(otel.name = "my_otel_name"))]` will be exported
-            let filter = filter::filter_fn(|metadata| {
+            fn accept_errors_and_otel(metadata: &Metadata<'_>) -> bool {
                 if metadata.is_event() {
                     matches!(metadata.level(), &tracing::Level::ERROR)
                 } else {
-                    metadata.fields().iter().any(|field| {
-                        field.name().starts_with("http.") || field.name().starts_with("otel.")
-                    })
+                    // We only expose spans that explicitly contain field prefixed with "otel.",
+                    // *and* that are a descendant of a top-level HTTP span (as determined by the presence of an `InFlightSpan` in the context).
+                    // This ensures that we can call into instrumented code (e.g. `Variant::infer`, or any authorization middleware)
+                    // from a non-OTEL http route (e.g. a ui route that internally makes some inferences) without causing
+                    // parent-less OTEL spans to get emitted by the instrumented code.
+                    metadata
+                        .fields()
+                        .iter()
+                        .any(|field| field.name().starts_with("otel."))
+                        && Context::map_current(|c| c.get::<InFlightOtelOnlySpan>().is_some())
                 }
-            });
+            }
+
+            // We mark this as a dynamic filter so that `tracing` doesn't cache the result
+            // (it depends on the current call stack via the opentelemetry `Context`),
+            // not just the static call site of the immediate span/event being filtered.
+            #[allow(unused_mut, clippy::allow_attributes)]
+            let mut filter =
+                filter::dynamic_filter_fn(|metadata, _context| accept_errors_and_otel(metadata));
+
+            #[cfg(any(test, feature = "e2e_tests"))]
+            {
+                if tracing_bug::DISABLE_TRACING_BUG_WORKAROUND
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                {
+                    // When we're attempting to reproduce the tracing bug, we turn *on* callsite caching.
+                    // This is effectively the same behavior as when 'filter::filter_fn' is used instead of
+                    // 'filter::dynamic_filter_fn'.
+                    // We do this to avoid needing to do anything weird in the main production code
+                    // (this entire block is only compiled in test code)
+                    filter = filter.with_callsite_filter(|metadata| {
+                        if accept_errors_and_otel(metadata) {
+                            tracing::subscriber::Interest::always()
+                        } else {
+                            tracing::subscriber::Interest::never()
+                        }
+                    });
+                }
+            }
 
             reload_handle
                 .modify(|l| {
@@ -484,7 +524,11 @@ pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
 /// `router.layer(some_layer)` as if we were writing everything inline
 /// in `tensorzero-gateway`, without every needing to name a return type.
 pub trait RouterExt<S> {
-    fn apply_otel_http_trace_layer(self, otel_tracer: Option<Arc<TracerWrapper>>) -> Self;
+    fn apply_top_level_otel_http_trace_layer(
+        self,
+        otel_tracer: Option<Arc<TracerWrapper>>,
+        otel_enabled_routes: OtelEnabledRoutes,
+    ) -> Self;
 }
 
 /// A special header prefix used to attach an additional header to the OTLP export for this trace.
@@ -646,16 +690,36 @@ fn extract_tensorzero_headers(
 /// we attach an `InFlightSpan` to the `Context`
 /// The `tracing-opentelemetry` library will propagate the `Context` to all descendant spans,
 /// which ensures that our `InFlightSpan` is only dropped once all descendant spans are dropped.
-/// In particular, it will be dropped after any background tasks (e.g. rate-limiting `return_tickets` calls)
-/// have finished executing, even if they continue executing after we finish processing the original
-/// incoming HTTP request from the client.
+/// In particular, it will be dropped after any background tasks that have otel-enabled spans (e.g. rate-limiting `return_tickets` calls)
+/// have finished executing, even if they outlive the original HTTP connection.
 ///
-/// During gateway shutdown, we wait for the parent `TaskTracker` to finish,
+/// During gateway shutdown, we wait for the parent `TaskTracker` to finish before shutting down our OTEL exporters,
 /// which ensures that we only try to shut down all of our OTEL exporters after all in-flight spans have finished.
-pub struct InFlightSpan {
+///
+/// Note that this is *only* created for OpenTelemetry-enabled routes, and will not be created at all when OTEL is disabled.
+/// Its purpose it to allow us to delay OTEL shutdown until we know that we won't miss exporting any spans.
+///
+/// If you want to ensure that a generic tokio task is processed before the gateway shuts down,
+/// then you should spawn a task on `AppStateData.deferred_tasks`.
+pub struct InFlightOtelOnlySpan {
     // This field just holds on to the token until the `InFlightSpan` is dropped.
     #[expect(dead_code)]
     token: TaskTrackerToken,
+}
+
+/// Enters into a fake HTTP request context for testing purposes, which will allow OTEL spans to be reported
+/// This is used by OTEL tests that use an embedded client - since they don't go through our axum router,
+/// we would normally (correctly) suppress any nested OTEL spans (e.g. `function_inference`)
+/// This method simulates the relevant parts of our axum otel logic
+/// We also have fully end-to-end tests that use a live gateway, so this is just to allow us to write
+/// in-memory tests
+#[cfg(feature = "e2e_tests")]
+pub fn enter_fake_http_request_otel() -> ContextGuard {
+    Context::current()
+        .with_value(InFlightOtelOnlySpan {
+            token: TaskTracker::new().token(),
+        })
+        .attach()
 }
 
 /// Creates the top-level span for an incoming HTTP request, with the correct
@@ -674,7 +738,7 @@ fn make_otel_http_span<B>(
     let mut context =
         tracing_opentelemetry_instrumentation_sdk::http::extract_context(req.headers())
             // See the docs on `InFlightSpan` for more information.
-            .with_value(InFlightSpan {
+            .with_value(InFlightOtelOnlySpan {
                 token: tracer_wrapper.in_flight_spans.token(),
             });
     // If we had custom OTEL headers, and we've enabled otel export, then create a custom tracer
@@ -684,28 +748,43 @@ fn make_otel_http_span<B>(
     if let Some(custom_tracer_key) = key {
         context = tracer_wrapper.get_or_create_custom_tracer(&custom_tracer_key, context);
     }
-
-    let span =
-        tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request(req);
-    match span.set_parent(context) {
-        Ok(()) => (),
-        Err(e) => {
-            tracing::error!("Failed to set parent context: {e}. {IMPOSSIBLE_ERROR_MESSAGE}");
-        }
-    }
+    let _guard = context.attach();
 
     let route = req
         .extensions()
         .get::<MatchedPath>()
         .map(MatchedPath::as_str);
+
+    let http_method = req.method();
+
+    // Copied from `tracing_opentelemetry_instrumentation_sdk::http::http_server::make_span_from_request` (https://github.com/davidB/tracing-opentelemetry-instrumentation-sdk/blob/5a64c55228645be87f21c628093dbd044104a10a/tracing-opentelemetry-instrumentation-sdk/src/http/http_server.rs#L10)
+    // with `otel.name` added (so that it can be detected by our filtering layer)
+    let span = tracing::info_span!(
+        "HTTP request",
+        http.request.method = %http_method,
+        http.route = Empty, // to set by router of "webframework" after
+        network.protocol.version = %http_flavor(req.version()),
+        server.address = http_host(req),
+        // server.port = req.uri().port(),
+        http.client.address = Empty, //%$request.connection_info().realip_remote_addr().unwrap_or(""),
+        user_agent.original = user_agent(req),
+        http.response.status_code = Empty, // to set on response
+        url.path = req.uri().path(),
+        url.query = req.uri().query(),
+        url.scheme = url_scheme(req.uri()),
+        otel.kind = ?opentelemetry::trace::SpanKind::Server,
+        otel.status_code = Empty, // to set on response
+        trace_id = Empty, // to set on response
+        request_id = Empty, // to set
+        exception.message = Empty, // to set on response
+        "span.type" = "web", // non-official open-telemetry key, only supported by Datadog
+        otel.name = format!("{} {}", req.method(), route.unwrap_or_default()).trim(),
+    );
+
     if let Some(route) = route {
         span.record("http.route", route);
     }
 
-    span.record(
-        "otel.name",
-        format!("{} {}", req.method(), route.unwrap_or_default()).trim(),
-    );
     span
 }
 
@@ -730,13 +809,28 @@ fn handle_response<B>(res: &Response<B>, span: &Span) {
     }
 }
 
-/// Applies a span to an incoming HTTP request.
+/// Applies an OpenTelemetry span to an incoming HTTP request.
 /// Also handles OTLP-related headers (`traceparent`/`tracestate`) and custom TensorZero OTLP headers
-async fn tensorzero_tracing_middleware(
-    State(tracer_wrapper): State<Arc<TracerWrapper>>,
+///
+/// We use this middleware to wrap *all* of our routes, not just OpenTelemetry-enabled routes.
+/// This allows us to run this middleware before any other middleware, such as authorization.
+/// As a result, the duration (and child spans) of this span include *all* processing associated with the request.
+/// For example, authorization might require a Postgres lookup - we want to include this duration (and any associated spans
+/// inside the top-level HTTP span that we export, even though this logic runs *before* we reach the route handler - in particular,
+/// before any middleware that's applied in the 'middle' of the stack (e.g. only on certain routes).
+///
+/// Since it wraps all routes, we need to detect if the target route should actually create an OpenTelemetry span.
+/// This is done through the `otel_enabled_routes`, which is initially constructed when we build our Axum router.
+async fn tensorzero_otel_tracing_middleware(
+    State(TracingMiddlewareState {
+        tracer_wrapper,
+        otel_enabled_routes,
+    }): State<TracingMiddlewareState>,
     req: axum::extract::Request,
     next: Next,
 ) -> Response {
+    // We parse headers even if the route is not OpenTelemetry-enabled, to prevent users from sending invalid headers
+    // to a route (and then having their code break if we later decide to enable OpenTelemetry for that route).
     let custom_tracer_key = match extract_tensorzero_headers(&tracer_wrapper, req.headers()) {
         Ok(key) => key,
         Err(e) => {
@@ -744,26 +838,63 @@ async fn tensorzero_tracing_middleware(
         }
     };
 
-    // Note - we intentionally create this span this *after* `extract_tensorzero_headers`
-    // As a result, if we reject a request due to a failure to parse custom OTLP headers,
-    // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
-    // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
-    let span = make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper);
-    let response = next.run(req).instrument(span.clone()).await;
-    handle_response(&response, &span);
-    response
+    let route = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str);
+
+    // If this is an OpenTelemetry-enabled route, then wrap the route handling in a new span
+    // See the docstring on this method for why we need this check
+    if let Some(route) = route {
+        if otel_enabled_routes.routes.contains(&route) {
+            // Note - we intentionally create this span this *after* `extract_tensorzero_headers`
+            // As a result, if we reject a request due to a failure to parse custom OTLP headers,
+            // we will *not* create an OpenTelemetry span. Custom headers can be required to correctly
+            // process an OpenTelemetry span (e.g. to set the Arize API key), so this is correct behavior.
+            let span = make_otel_http_span(&req, custom_tracer_key, &tracer_wrapper);
+            let response = next.run(req).instrument(span.clone()).await;
+            handle_response(&response, &span);
+            return response;
+        }
+    }
+
+    // Otherwise, just process the request without creating a span.
+    // Since `make_otel_http_span` didn't run, we won't have an `InFlightOtelOnlySpan` in the context,
+    next.run(req).await
+}
+
+pub struct OtelEnabledRoutes {
+    // The list of routes (i.e. the strings passed to `Router.route`)
+    // that have OpenTelemetry span exporting enabled.
+    // This is constructed by `build_otel_enabled_routes` - we have a small number of routes,
+    // so we use a Vec rather than a HashSet
+    pub routes: Vec<&'static str>,
+}
+
+#[derive(Clone)]
+pub struct TracingMiddlewareState {
+    tracer_wrapper: Arc<TracerWrapper>,
+    otel_enabled_routes: Arc<OtelEnabledRoutes>,
 }
 
 impl<S: Clone + Send + Sync + 'static> RouterExt<S> for Router<S> {
     /// Creates tracing spans for HTTP requests, specialized for OpenTelemetry traces
-    /// This is only applied to certain routes (e.g. `/inference`), and
-    /// is *not* used to log requests to the console.
-    fn apply_otel_http_trace_layer(self, otel_tracer: Option<Arc<TracerWrapper>>) -> Self {
+    /// Note that this is applied to *all* routes, not just OpenTelemetry-enabled routes.
+    /// The `otel_enabled_routes` parameter is used to determine whether to create a span for the request.
+    /// See the docs on `tensorzero_otel_tracing_middleware` for more details.
+    fn apply_top_level_otel_http_trace_layer(
+        self,
+        otel_tracer: Option<Arc<TracerWrapper>>,
+        otel_enabled_routes: OtelEnabledRoutes,
+    ) -> Self {
         // If OpenTelemetry is disable, then we don't need to create extra spans
         if let Some(tracer) = otel_tracer {
             self.layer(middleware::from_fn_with_state(
-                tracer,
-                tensorzero_tracing_middleware,
+                TracingMiddlewareState {
+                    tracer_wrapper: tracer,
+                    otel_enabled_routes: Arc::new(otel_enabled_routes),
+                },
+                tensorzero_otel_tracing_middleware,
             ))
         } else {
             self
