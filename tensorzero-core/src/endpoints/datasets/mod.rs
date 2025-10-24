@@ -1,5 +1,5 @@
 pub mod v1;
 
-mod legacy;
+pub mod legacy;
 
 pub use legacy::*;

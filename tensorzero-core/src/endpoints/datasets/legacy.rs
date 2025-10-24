@@ -22,9 +22,9 @@ use crate::endpoints::feedback::{
 };
 use crate::function::{FunctionConfig, FunctionConfigType};
 use crate::http::TensorzeroHttpClient;
-use crate::inference::types::stored_input::StoredInput;
+use crate::inference::types::stored_input::{MaybeLegacyStoredInput, StoredInput};
 use crate::inference::types::{
-    ContentBlockChatOutput, FetchContext, Input, JsonInferenceOutput,
+    convert_legacy_input, ContentBlockChatOutput, FetchContext, Input, JsonInferenceOutput,
     TaggedInferenceDatabaseInsert, Text,
 };
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
@@ -909,7 +909,7 @@ pub async fn list_datapoints(
             name,
             id,
             episode_id,
-            input,
+            input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
             output,
             tool_params,
             '\N' as output_schema, -- for column alignment in UNION ALL
@@ -939,7 +939,7 @@ pub async fn list_datapoints(
             name,
             id,
             episode_id,
-            input,
+            input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
             output,
             '\N' as tool_params, -- for column alignment in UNION ALL
             output_schema,
@@ -1119,6 +1119,14 @@ pub struct InsertDatapointResponse {
 pub enum Datapoint {
     Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(feature = "e2e_tests", derive(Serialize))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MaybeLegacyDatapoint {
+    Chat(MaybeLegacyChatInferenceDatapoint),
+    Json(MaybeLegacyJsonInferenceDatapoint),
 }
 
 impl Datapoint {
@@ -1325,6 +1333,44 @@ pub struct ChatInferenceDatapoint {
     pub name: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(feature = "e2e_tests", derive(Serialize))]
+pub struct MaybeLegacyChatInferenceDatapoint {
+    pub dataset_name: String,
+    pub function_name: String,
+    pub id: Uuid,
+    pub episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
+    pub input: MaybeLegacyStoredInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub tags: Option<HashMap<String, String>>,
+    #[serde(skip_serializing, default)] // this will become an object
+    pub auxiliary: String,
+    pub is_deleted: bool,
+    #[serde(default)]
+    pub is_custom: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub source_inference_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub staled_at: Option<String>,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
 impl std::fmt::Display for ChatInferenceDatapoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -1394,6 +1440,104 @@ pub struct JsonInferenceDatapoint {
     #[serde(default)]
     #[cfg_attr(test, ts(optional))]
     pub name: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(feature = "e2e_tests", derive(Serialize))]
+pub struct MaybeLegacyJsonInferenceDatapoint {
+    pub dataset_name: String,
+    pub function_name: String,
+    pub id: Uuid,
+    pub episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
+    pub input: MaybeLegacyStoredInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub output: Option<JsonInferenceOutput>,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
+    pub output_schema: serde_json::Value,
+    // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub tags: Option<HashMap<String, String>>,
+    #[serde(skip_serializing, default)] // this will become an object
+    pub auxiliary: String,
+    pub is_deleted: bool,
+    #[serde(default)]
+    pub is_custom: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub source_inference_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub staled_at: Option<String>,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// Helper function to convert a MaybeLegacyDatapoint to a Datapoint
+pub fn convert_legacy_datapoint(datapoint: MaybeLegacyDatapoint) -> Result<Datapoint, Error> {
+    match datapoint {
+        MaybeLegacyDatapoint::Chat(chat_datapoint) => Ok(Datapoint::Chat(
+            convert_legacy_chat_datapoint(chat_datapoint)?,
+        )),
+        MaybeLegacyDatapoint::Json(json_datapoint) => Ok(Datapoint::Json(
+            convert_legacy_json_datapoint(json_datapoint)?,
+        )),
+    }
+}
+
+/// Helper function to convert a MaybeLegacyChatInferenceDatapoint to a ChatInferenceDatapoint
+fn convert_legacy_chat_datapoint(
+    datapoint: MaybeLegacyChatInferenceDatapoint,
+) -> Result<ChatInferenceDatapoint, Error> {
+    let input = convert_legacy_input(datapoint.input)?;
+
+    Ok(ChatInferenceDatapoint {
+        dataset_name: datapoint.dataset_name,
+        function_name: datapoint.function_name,
+        id: datapoint.id,
+        episode_id: datapoint.episode_id,
+        input,
+        output: datapoint.output,
+        tool_params: datapoint.tool_params,
+        tags: datapoint.tags,
+        auxiliary: datapoint.auxiliary,
+        is_deleted: datapoint.is_deleted,
+        is_custom: datapoint.is_custom,
+        source_inference_id: datapoint.source_inference_id,
+        staled_at: datapoint.staled_at,
+        updated_at: datapoint.updated_at,
+        name: datapoint.name,
+    })
+}
+
+/// Helper function to convert a MaybeLegacyJsonInferenceDatapoint to a JsonInferenceDatapoint
+fn convert_legacy_json_datapoint(
+    datapoint: MaybeLegacyJsonInferenceDatapoint,
+) -> Result<JsonInferenceDatapoint, Error> {
+    let input = convert_legacy_input(datapoint.input)?;
+
+    Ok(JsonInferenceDatapoint {
+        dataset_name: datapoint.dataset_name,
+        function_name: datapoint.function_name,
+        id: datapoint.id,
+        episode_id: datapoint.episode_id,
+        input,
+        output: datapoint.output,
+        output_schema: datapoint.output_schema,
+        tags: datapoint.tags,
+        auxiliary: datapoint.auxiliary,
+        is_deleted: datapoint.is_deleted,
+        is_custom: datapoint.is_custom,
+        source_inference_id: datapoint.source_inference_id,
+        staled_at: datapoint.staled_at,
+        updated_at: datapoint.updated_at,
+        name: datapoint.name,
+    })
 }
 
 impl std::fmt::Display for JsonInferenceDatapoint {
@@ -1680,7 +1824,7 @@ mod test {
         let json_str = r#"{
             "function_name": "test_function",
             "input": {"system": {"assistant_name": "Test"}, "messages": []},
-            "output": [{"type": "text", "value": "Hello"}],
+            "output": [{"type": "text", "text": "Hello"}],
             "tool_params": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
             "tags": {"source": "test"},
             "auxiliary": "extra data",
@@ -1792,7 +1936,7 @@ mod test {
 
     #[test]
     fn test_deserialize_synthetic_json_datapoint() {
-        let json_str = r#"{"id":"0196368f-1ae8-7551-b5df-9a61593eb307","function_name":"extract_entities","variant_name":"gpt4o_mini_initial_prompt","episode_id":"0196368f-1ae8-7551-b5df-9a7df7e83048","input":"{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2\"}]}]}","output":"{\"raw\":\"{\\n    \\\"person\\\": [\\\"Mark Philippoussis\\\", \\\"Andrei Olhovskiy\\\"],\\n    \\\"organization\\\": [],\\n    \\\"location\\\": [\\\"Australia\\\", \\\"Russia\\\"],\\n    \\\"miscellaneous\\\": [\\\"6 - 3\\\", \\\"6-4\\\", \\\"6-2\\\"]\\n}\",\"parsed\":{\"person\":[\"Mark Philippoussis\",\"Andrei Olhovskiy\"],\"organization\":[],\"location\":[\"Australia\",\"Russia\"],\"miscellaneous\":[\"6 - 3\",\"6-4\",\"6-2\"]}}","tool_params":"","inference_params":"{\"chat_completion\":{}}","processing_time_ms":12,"output_schema":"{\"$schema\":\"http:\/\/json-schema.org\/draft-07\/schema#\",\"type\":\"object\",\"properties\":{\"person\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"organization\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"location\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"miscellaneous\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"person\",\"organization\",\"location\",\"miscellaneous\"],\"additionalProperties\":false}","auxiliary_content":"","timestamp":"2025-04-14T23:07:50Z","tags":{"tensorzero::dataset_name":"foo","tensorzero::datapoint_id":"0193829b-cd48-7731-9df0-4e325119d96d","tensorzero::evaluation_name":"entity_extraction","tensorzero::evaluation_run_id":"0196368f-19bd-7082-a677-1c0bf346ff24"},"function_type":"json","extra_body":"[]"}"#;
+        let json_str = r#"{"id":"0196368f-1ae8-7551-b5df-9a61593eb307","function_name":"extract_entities","variant_name":"gpt4o_mini_initial_prompt","episode_id":"0196368f-1ae8-7551-b5df-9a7df7e83048","input":"{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Mark Philippoussis ( Australia ) beat Andrei Olhovskiy ( Russia ) 6 - 3 6-4 6-2\"}]}]}","output":"{\"raw\":\"{\\n    \\\"person\\\": [\\\"Mark Philippoussis\\\", \\\"Andrei Olhovskiy\\\"],\\n    \\\"organization\\\": [],\\n    \\\"location\\\": [\\\"Australia\\\", \\\"Russia\\\"],\\n    \\\"miscellaneous\\\": [\\\"6 - 3\\\", \\\"6-4\\\", \\\"6-2\\\"]\\n}\",\"parsed\":{\"person\":[\"Mark Philippoussis\",\"Andrei Olhovskiy\"],\"organization\":[],\"location\":[\"Australia\",\"Russia\"],\"miscellaneous\":[\"6 - 3\",\"6-4\",\"6-2\"]}}","tool_params":"","inference_params":"{\"chat_completion\":{}}","processing_time_ms":12,"output_schema":"{\"$schema\":\"http:\/\/json-schema.org\/draft-07\/schema#\",\"type\":\"object\",\"properties\":{\"person\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"organization\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"location\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"miscellaneous\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"person\",\"organization\",\"location\",\"miscellaneous\"],\"additionalProperties\":false}","auxiliary_content":"","timestamp":"2025-04-14T23:07:50Z","tags":{"tensorzero::dataset_name":"foo","tensorzero::datapoint_id":"0193829b-cd48-7731-9df0-4e325119d96d","tensorzero::evaluation_name":"entity_extraction","tensorzero::evaluation_run_id":"0196368f-19bd-7082-a677-1c0bf346ff24"},"function_type":"json","extra_body":"[]"}"#;
         let _: TaggedInferenceDatabaseInsert = serde_json::from_str(json_str).unwrap();
     }
 }

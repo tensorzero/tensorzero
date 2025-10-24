@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint};
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero::{
+    MaybeLegacyChatInferenceDatapoint, MaybeLegacyDatapoint, MaybeLegacyJsonInferenceDatapoint,
+};
+use tensorzero_core::endpoints::datasets::{convert_legacy_datapoint, Datapoint};
 use tensorzero_core::{db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 use tracing::{debug, info, instrument};
 
@@ -45,20 +47,38 @@ pub async fn query_dataset(
         FunctionConfig::Chat(_) => {
             debug!("Parsing as chat datapoints");
             let chat_datapoints: serde_json::Value = serde_json::from_str(&result.response)?;
-            let chat_datapoints: Vec<ChatInferenceDatapoint> =
+            let chat_datapoints: Vec<MaybeLegacyChatInferenceDatapoint> =
                 serde_json::from_value(chat_datapoints["data"].clone())?;
-            let datapoints: Vec<Datapoint> =
-                chat_datapoints.into_iter().map(Datapoint::Chat).collect();
+            let maybe_legacy_datapoints: Vec<MaybeLegacyDatapoint> = chat_datapoints
+                .into_iter()
+                .map(MaybeLegacyDatapoint::Chat)
+                .collect();
+            let datapoints = maybe_legacy_datapoints
+                .into_iter()
+                .map(|datapoint| {
+                    convert_legacy_datapoint(datapoint)
+                        .map_err(|e| anyhow::anyhow!("Failed to convert legacy datapoint {e}"))
+                })
+                .collect::<Result<Vec<_>>>()?;
             debug!(count = datapoints.len(), "Chat datapoints parsed");
             datapoints
         }
         FunctionConfig::Json(_) => {
             debug!("Parsing as JSON datapoints");
             let json_value: serde_json::Value = serde_json::from_str(&result.response)?;
-            let json_datapoints: Vec<JsonInferenceDatapoint> =
+            let json_datapoints: Vec<MaybeLegacyJsonInferenceDatapoint> =
                 serde_json::from_value(json_value["data"].clone())?;
-            let datapoints: Vec<Datapoint> =
-                json_datapoints.into_iter().map(Datapoint::Json).collect();
+            let maybe_legacy_datapoints: Vec<MaybeLegacyDatapoint> = json_datapoints
+                .into_iter()
+                .map(MaybeLegacyDatapoint::Json)
+                .collect();
+            let datapoints = maybe_legacy_datapoints
+                .into_iter()
+                .map(|datapoint| {
+                    convert_legacy_datapoint(datapoint)
+                        .map_err(|e| anyhow::anyhow!("Failed to convert legacy datapoint {e}"))
+                })
+                .collect::<Result<Vec<_>>>()?;
             debug!(count = datapoints.len(), "JSON datapoints parsed");
             datapoints
         }

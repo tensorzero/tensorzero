@@ -14,7 +14,10 @@ use crate::db::datasets::{
     GetDatasetMetadataParams, GetDatasetRowsParams, JsonInferenceDatapointInsert,
     StaleDatapointParams,
 };
-use crate::endpoints::datasets::{validate_dataset_name, Datapoint, DatapointKind};
+use crate::endpoints::datasets::legacy::convert_legacy_datapoint;
+use crate::endpoints::datasets::{
+    validate_dataset_name, Datapoint, DatapointKind, MaybeLegacyDatapoint,
+};
 use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
@@ -330,7 +333,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 id,
                 name,
                 episode_id,
-                input,
+                input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                 output,
                 {type_specific_field},
                 tags,
@@ -347,7 +350,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 id,
                 name,
                 episode_id,
-                input,
+                input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                 output,
                 {type_specific_field},
                 tags,
@@ -384,7 +387,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         params: &CountDatapointsForDatasetFunctionParams,
     ) -> Result<u32, Error> {
         let query = "
-        SELECT toUInt32(count()) as count 
+        SELECT toUInt32(count()) as count
         FROM {table:Identifier}
         WHERE dataset_name = {dataset_name:String}
             AND function_name = {function_name:String}";
@@ -575,7 +578,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 name,
                 id,
                 episode_id,
-                input,
+                input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                 output,
                 tool_params,
                 '' as output_schema, -- for column alignment in UNION ALL
@@ -603,7 +606,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 name,
                 id,
                 episode_id,
-                input,
+                input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                 output,
                 '' as tool_params, -- for column alignment in UNION ALL
                 output_schema,
@@ -646,11 +649,13 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             if line.trim().is_empty() {
                 continue;
             }
-            let datapoint: Datapoint = serde_json::from_str(line).map_err(|e| {
-                Error::new(ErrorDetails::ClickHouseDeserialization {
-                    message: format!("Failed to deserialize datapoint: {e}"),
-                })
-            })?;
+            let maybe_legacy_datapoint: MaybeLegacyDatapoint =
+                serde_json::from_str(line).map_err(|e| {
+                    Error::new(ErrorDetails::ClickHouseDeserialization {
+                        message: format!("Failed to deserialize datapoint: {e}"),
+                    })
+                })?;
+            let datapoint = convert_legacy_datapoint(maybe_legacy_datapoint)?;
             datapoints.push(datapoint);
         }
 
@@ -785,7 +790,7 @@ impl ClickHouseConnectionInfo {
             name,
             id,
             episode_id,
-            input,
+            input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
             output,
             tool_params,
             tags,
@@ -853,7 +858,7 @@ impl ClickHouseConnectionInfo {
             name,
             id,
             episode_id,
-            input,
+            input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
             output,
             output_schema,
             tags,
@@ -934,7 +939,7 @@ fn build_select_inferences_matching_dataset_subquery(
             NULL as name,
             id,
             episode_id,
-            input,
+            input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
             {output_field},
             {type_specific_field},
             tags,
@@ -1116,7 +1121,7 @@ mod tests {
                 NULL as name,
                 id,
                 episode_id,
-                input,
+                input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                 output,
                 tool_params,
                 tags,
@@ -1147,7 +1152,7 @@ mod tests {
                 NULL as name,
                 id,
                 episode_id,
-                input,
+                input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                 output,
                 output_schema,
                 tags,
@@ -1231,7 +1236,8 @@ mod tests {
 
         let (query, _) = build_select_inferences_matching_dataset_subquery(&params).unwrap();
 
-        assert_query_contains(&query, "input, NULL AS output, tool_params");
+        assert_query_contains(&query, "input,");
+        assert_query_contains(&query, "NULL AS output, tool_params");
     }
 
     #[test]
@@ -1242,7 +1248,8 @@ mod tests {
         let (query, _) = build_select_inferences_matching_dataset_subquery(&params).unwrap();
 
         // Should just select "output" field directly
-        assert_query_contains(&query, "input, output, tool_params");
+        assert_query_contains(&query, "input,");
+        assert_query_contains(&query, "output, tool_params");
         assert!(!query.contains("NULL AS output"));
         assert!(!query.contains("demo.value"));
     }
@@ -1254,7 +1261,8 @@ mod tests {
 
         let (query, _) = build_select_inferences_matching_dataset_subquery(&params).unwrap();
 
-        assert_query_contains(&query, "input, demo.value as output, tool_params");
+        assert_query_contains(&query, "input,");
+        assert_query_contains(&query, "demo.value as output, tool_params");
         assert_query_contains(
             &query,
             "
@@ -2305,7 +2313,7 @@ mod tests {
                     name,
                     id,
                     episode_id,
-                    input,
+                    input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                     output,
                     tool_params,
                     tags,
@@ -2477,7 +2485,7 @@ mod tests {
                         name,
                         id,
                         episode_id,
-                        input,
+                        input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                         output,
                         output_schema,
                         tags,
@@ -3118,24 +3126,24 @@ mod tests {
                     name,
                     id,
                     episode_id,
-                    input,
+                    input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                     output,
                     tool_params,
                     '' as output_schema,");
                 assert_query_contains(query,
                     "tags,
-                    auxiliary, 
-                    source_inference_id, 
-                    is_deleted, 
-                    is_custom, 
-                    staled_at, 
+                    auxiliary,
+                    source_inference_id,
+                    is_deleted,
+                    is_custom,
+                    staled_at,
                     formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
                 assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL
                     WHERE true
                     AND dataset_name = {dataset_name:String}
                     AND id IN ['123e4567-e89b-12d3-a456-426614174000']
                     AND staled_at IS NULL");
-                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC 
+                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC
                     LIMIT {subquery_page_size:UInt32}");
                 assert_query_contains(query, "UNION ALL");
                 assert_query_contains(query, "
@@ -3146,7 +3154,7 @@ mod tests {
                     name,
                     id,
                     episode_id,
-                    input,
+                    input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                     output,
                     '' as tool_params,");
                 assert_query_contains(query,

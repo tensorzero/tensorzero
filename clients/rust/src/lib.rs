@@ -84,6 +84,10 @@ pub use tensorzero_core::inference::types::{
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 
+pub use tensorzero_core::endpoints::datasets::legacy::{
+    MaybeLegacyChatInferenceDatapoint, MaybeLegacyDatapoint, MaybeLegacyJsonInferenceDatapoint,
+};
+
 // Export quantile array from migration_0035
 pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
 

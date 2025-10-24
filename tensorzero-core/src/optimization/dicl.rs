@@ -725,7 +725,7 @@ pub async fn insert_dicl_examples_with_batching(
                 function_name,
                 variant_name,
                 namespace,
-                input,
+                input, -- IMPORTANT: when reading, must deserialize into `MaybeLegacyStoredInput`
                 output,
                 embedding
             )

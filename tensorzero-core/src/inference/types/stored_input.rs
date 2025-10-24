@@ -27,6 +27,7 @@ use pyo3::prelude::*;
 /// The input type that we directly store in ClickHouse.
 /// As soon as we retrieve it, we should convert it to a `StoredInput` below.
 #[derive(Clone, Debug, Deserialize, PartialEq, Default)]
+#[cfg_attr(feature = "e2e_tests", derive(Serialize))]
 #[serde(deny_unknown_fields)]
 pub struct MaybeLegacyStoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -86,7 +87,8 @@ impl StoredInput {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(feature = "e2e_tests", derive(Serialize))]
 #[serde(deny_unknown_fields)]
 pub struct MaybeLegacyStoredInputMessage {
     pub role: Role,
@@ -120,7 +122,8 @@ impl StoredInputMessage {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[cfg_attr(feature = "e2e_tests", derive(Serialize))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum MaybeLegacyStoredInputMessageContent {
     Text {
@@ -160,7 +163,6 @@ pub enum StoredInputMessageContent {
         data: Value,
         model_provider_name: Option<String>,
     },
-    // We may extend this in the future to include other types of content
 }
 
 impl StoredInputMessageContent {
@@ -291,7 +293,35 @@ pub struct StoredRequestMessage {
     pub content: Vec<StoredContentBlock>,
 }
 
-/// Helper function to convert legacy content to modern content format
+/// Helper function to convert a MaybeLegacyStoredInput to a StoredInput
+pub fn convert_legacy_input(input: MaybeLegacyStoredInput) -> Result<StoredInput, Error> {
+    let messages: Vec<StoredInputMessage> = input
+        .messages
+        .into_iter()
+        .map(convert_legacy_message)
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    Ok(StoredInput {
+        system: input.system,
+        messages,
+    })
+}
+
+/// Helper function to convert a MaybeLegacyStoredInputMessage to a StoredInputMessage
+fn convert_legacy_message(
+    message: MaybeLegacyStoredInputMessage,
+) -> Result<StoredInputMessage, Error> {
+    let role = message.role;
+    let content: Vec<StoredInputMessageContent> = message
+        .content
+        .into_iter()
+        .map(|c| convert_legacy_content(c, role))
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    Ok(StoredInputMessage { role, content })
+}
+
+/// Helper function to convert a MaybeLegacyStoredInputMessageContent to a StoredInputMessageContent
 fn convert_legacy_content(
     content: MaybeLegacyStoredInputMessageContent,
     role: Role,
@@ -334,32 +364,4 @@ fn convert_legacy_content(
             model_provider_name,
         }),
     }
-}
-
-/// Helper function to convert a legacy message to a modern message
-fn convert_legacy_message(
-    message: MaybeLegacyStoredInputMessage,
-) -> Result<StoredInputMessage, Error> {
-    let role = message.role;
-    let content: Vec<StoredInputMessageContent> = message
-        .content
-        .into_iter()
-        .map(|c| convert_legacy_content(c, role))
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    Ok(StoredInputMessage { role, content })
-}
-
-/// Helper function to convert a legacy input to a modern input
-pub fn convert_legacy_input(input: MaybeLegacyStoredInput) -> Result<StoredInput, Error> {
-    let messages: Vec<StoredInputMessage> = input
-        .messages
-        .into_iter()
-        .map(convert_legacy_message)
-        .collect::<Result<Vec<_>, Error>>()?;
-
-    Ok(StoredInput {
-        system: input.system,
-        messages,
-    })
 }
