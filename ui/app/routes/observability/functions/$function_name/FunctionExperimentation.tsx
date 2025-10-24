@@ -10,6 +10,9 @@ import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { memo } from "react";
 import { FeedbackCountsTimeseries } from "~/components/function/variant/FeedbackCountsTimeseries";
 import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackMeansTimeseries";
+import { TimeGranularitySelector } from "~/components/function/variant/TimeGranularitySelector";
+import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
+import { transformFeedbackTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
 
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
@@ -80,6 +83,11 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
   optimalProbabilities,
   feedbackTimeseries,
 }: FunctionExperimentationProps) {
+  const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
+    "cumulative_feedback_time_granularity",
+    "week",
+  );
+
   // Don't render experimentation section for the default function
   if (functionName === DEFAULT_FUNCTION) {
     return null;
@@ -95,17 +103,40 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     return null;
   }
 
+  // Transform feedback timeseries data once for both charts
+  const shouldShowTimeseries =
+    functionConfig.experimentation.type === "track_and_stop" &&
+    feedbackTimeseries &&
+    feedbackTimeseries.length > 0;
+
+  const { countsData, meansData, variantNames } = shouldShowTimeseries
+    ? transformFeedbackTimeseries(feedbackTimeseries!, timeGranularity)
+    : { countsData: [], meansData: [], variantNames: [] };
+
   return (
     <>
       <ExperimentationPieChart variantWeights={variantWeights} />
-      {functionConfig.experimentation.type === "track_and_stop" &&
-        feedbackTimeseries &&
-        feedbackTimeseries.length > 0 && (
-          <>
-            <FeedbackCountsTimeseries feedbackTimeseries={feedbackTimeseries} />
-            <FeedbackMeansTimeseries feedbackTimeseries={feedbackTimeseries} />
-          </>
-        )}
+      {shouldShowTimeseries && (
+        <div className="space-y-4">
+          <TimeGranularitySelector
+            time_granularity={timeGranularity}
+            onTimeGranularityChange={onTimeGranularityChange}
+            includeCumulative={false}
+            includeMinute={false}
+            includeHour={true}
+          />
+          <FeedbackCountsTimeseries
+            countsData={countsData}
+            variantNames={variantNames}
+            timeGranularity={timeGranularity}
+          />
+          <FeedbackMeansTimeseries
+            meansData={meansData}
+            variantNames={variantNames}
+            timeGranularity={timeGranularity}
+          />
+        </div>
+      )}
     </>
   );
 });

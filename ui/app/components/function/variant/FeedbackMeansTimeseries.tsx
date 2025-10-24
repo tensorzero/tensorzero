@@ -1,4 +1,4 @@
-import type { CumulativeFeedbackTimeSeriesPoint } from "tensorzero-node";
+import type { TimeWindow } from "tensorzero-node";
 import {
   Area,
   CartesianGrid,
@@ -23,28 +23,17 @@ import {
   ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
-import { TimeGranularitySelector } from "./TimeGranularitySelector";
-import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
-import {
-  transformFeedbackTimeseries,
-  type FeedbackMeansTimeseriesData,
-} from "./FeedbackSamplesTimeseries";
+import type { FeedbackMeansTimeseriesData } from "./FeedbackSamplesTimeseries";
 
 export function FeedbackMeansTimeseries({
-  feedbackTimeseries,
+  meansData,
+  variantNames,
+  timeGranularity,
 }: {
-  feedbackTimeseries: CumulativeFeedbackTimeSeriesPoint[];
+  meansData: FeedbackMeansTimeseriesData[];
+  variantNames: string[];
+  timeGranularity: TimeWindow;
 }) {
-  const [time_granularity, onTimeGranularityChange] = useTimeGranularityParam(
-    "mean_feedback_time_granularity",
-    "week",
-  );
-
-  const { meansData, variantNames } = transformFeedbackTimeseries(
-    feedbackTimeseries,
-    time_granularity,
-  );
-
   const meanDataWithTimestamps: Array<
     FeedbackMeansTimeseriesData & { timestamp: number }
   > = meansData.map((row) => ({
@@ -131,7 +120,7 @@ export function FeedbackMeansTimeseries({
   // Format x-axis labels based on time granularity
   const formatXAxisTick = (value: number) => {
     const date = new Date(value);
-    if (time_granularity === "hour") {
+    if (timeGranularity === "hour") {
       // Show month-day and hour for hourly granularity (without year)
       return date.toISOString().slice(5, 13).replace("T", " ") + ":00";
     }
@@ -142,7 +131,7 @@ export function FeedbackMeansTimeseries({
   // Format tooltip labels based on time granularity
   const formatTooltipLabel = (value: number) => {
     const date = new Date(value);
-    if (time_granularity === "hour") {
+    if (timeGranularity === "hour") {
       return date.toISOString().slice(0, 13).replace("T", " ") + ":00";
     }
     return date.toISOString().slice(0, 10);
@@ -155,13 +144,6 @@ export function FeedbackMeansTimeseries({
         <CardDescription>
           Per-variant mean rewards, with confidence sequences when available.
         </CardDescription>
-        <TimeGranularitySelector
-          time_granularity={time_granularity}
-          onTimeGranularityChange={onTimeGranularityChange}
-          includeCumulative={false}
-          includeMinute={false}
-          includeHour={true}
-        />
       </CardHeader>
       <CardContent>
         <ChartContainer config={meanContainerConfig} className="h-80 w-full">

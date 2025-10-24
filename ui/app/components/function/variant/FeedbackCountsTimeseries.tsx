@@ -1,4 +1,4 @@
-import type { CumulativeFeedbackTimeSeriesPoint } from "tensorzero-node";
+import type { TimeWindow } from "tensorzero-node";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
 
@@ -9,25 +9,17 @@ import {
   ChartLegendContent,
   ChartTooltip,
 } from "~/components/ui/chart";
-import { TimeGranularitySelector } from "./TimeGranularitySelector";
-import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
-import { transformFeedbackTimeseries } from "./FeedbackSamplesTimeseries";
+import type { FeedbackCountsTimeseriesData } from "./FeedbackSamplesTimeseries";
 
 export function FeedbackCountsTimeseries({
-  feedbackTimeseries,
+  countsData,
+  variantNames,
+  timeGranularity,
 }: {
-  feedbackTimeseries: CumulativeFeedbackTimeSeriesPoint[];
+  countsData: FeedbackCountsTimeseriesData[];
+  variantNames: string[];
+  timeGranularity: TimeWindow;
 }) {
-  const [time_granularity, onTimeGranularityChange] = useTimeGranularityParam(
-    "cumulative_feedback_time_granularity",
-    "week",
-  );
-
-  const { countsData, variantNames } = transformFeedbackTimeseries(
-    feedbackTimeseries,
-    time_granularity,
-  );
-
   // Convert date strings to timestamps for proper spacing
   const countsDataWithTimestamps = countsData.map((row) => ({
     ...row,
@@ -49,7 +41,7 @@ export function FeedbackCountsTimeseries({
   // Format x-axis labels based on time granularity
   const formatXAxisTick = (value: number) => {
     const date = new Date(value);
-    if (time_granularity === "hour") {
+    if (timeGranularity === "hour") {
       // Show month-day and hour for hourly granularity (without year)
       return date.toISOString().slice(5, 13).replace("T", " ") + ":00";
     }
@@ -60,7 +52,7 @@ export function FeedbackCountsTimeseries({
   // Format tooltip labels based on time granularity
   const formatTooltipLabel = (value: number) => {
     const date = new Date(value);
-    if (time_granularity === "hour") {
+    if (timeGranularity === "hour") {
       return date.toISOString().slice(0, 13).replace("T", " ") + ":00";
     }
     return date.toISOString().slice(0, 10);
@@ -70,13 +62,6 @@ export function FeedbackCountsTimeseries({
     <Card>
       <CardHeader>
         <CardTitle>Cumulative Feedback Counts Over Time</CardTitle>
-        <TimeGranularitySelector
-          time_granularity={time_granularity}
-          onTimeGranularityChange={onTimeGranularityChange}
-          includeCumulative={false}
-          includeMinute={false}
-          includeHour={true}
-        />
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-80 w-full">
