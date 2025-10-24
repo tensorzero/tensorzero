@@ -15,7 +15,6 @@ import type {
 } from "~/utils/clickhouse/workflow_evaluations";
 import { TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { Tooltip } from "~/components/ui/tooltip";
-import { TooltipProvider } from "~/components/ui/tooltip";
 import { useConfig } from "~/context/config";
 import { formatMetricSummaryValue } from "~/utils/config/feedback";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
@@ -142,58 +141,52 @@ function MetricHeader({
   const config = useConfig();
   const metricConfig = config.metrics[metricName];
   return (
-    <TooltipProvider delayDuration={300}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <div className="flex cursor-help flex-col items-center">
-            <div className="font-mono">{metricName}</div>
-            {metricStats && metricConfig && (
-              <div className="text-muted-foreground mt-2 text-xs">
-                <span>
-                  {formatMetricSummaryValue(
-                    metricStats.avg_metric,
-                    metricConfig,
-                  )}
-                  {/* Display CI error if it's non-zero and available */}
-                  {metricStats.ci_error != null &&
-                  metricStats.ci_error !== 0 ? (
-                    <>
-                      {" "}
-                      ±{" "}
-                      {formatMetricSummaryValue(
-                        metricStats.ci_error,
-                        metricConfig,
-                      )}
-                    </>
-                  ) : null}{" "}
-                  (n={metricStats.count})
-                </span>
-              </div>
-            )}
-          </div>
-        </TooltipTrigger>
-        {metricConfig && (
-          <TooltipContent side="top" className="p-3">
-            <div className="space-y-1 text-left text-xs">
-              <div>
-                <span className="font-medium">Type:</span>
-                <span className="ml-2 font-medium">{metricConfig.type}</span>
-              </div>
-              <div>
-                {(metricConfig.type === "float" ||
-                  metricConfig.type === "boolean") && (
-                  <div>
-                    <span className="font-medium">Optimize:</span>
-                    <span className="ml-2 font-medium">
-                      {metricConfig.optimize}
-                    </span>
-                  </div>
-                )}
-              </div>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div className="flex cursor-help flex-col items-center">
+          <div className="font-mono">{metricName}</div>
+          {metricStats && metricConfig && (
+            <div className="text-muted-foreground mt-2 text-xs">
+              <span>
+                {formatMetricSummaryValue(metricStats.avg_metric, metricConfig)}
+                {/* Display CI error if it's non-zero and available */}
+                {metricStats.ci_error != null && metricStats.ci_error !== 0 ? (
+                  <>
+                    {" "}
+                    ±{" "}
+                    {formatMetricSummaryValue(
+                      metricStats.ci_error,
+                      metricConfig,
+                    )}
+                  </>
+                ) : null}{" "}
+                (n={metricStats.count})
+              </span>
             </div>
-          </TooltipContent>
-        )}
-      </Tooltip>
-    </TooltipProvider>
+          )}
+        </div>
+      </TooltipTrigger>
+      {metricConfig && (
+        <TooltipContent side="top" className="p-3">
+          <div className="space-y-1 text-left text-xs">
+            <div>
+              <span className="font-medium">Type:</span>
+              <span className="ml-2 font-medium">{metricConfig.type}</span>
+            </div>
+            <div>
+              {(metricConfig.type === "float" ||
+                metricConfig.type === "boolean") && (
+                <div>
+                  <span className="font-medium">Optimize:</span>
+                  <span className="ml-2 font-medium">
+                    {metricConfig.optimize}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </TooltipContent>
+      )}
+    </Tooltip>
   );
 }

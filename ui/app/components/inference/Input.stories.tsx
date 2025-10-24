@@ -1,18 +1,18 @@
-import InputSnippet from "./InputSnippet";
+import Input from "./Input";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import pdfUrl from "./InputSnippet.stories.fixture.tensorzero.pdf?url";
-import mp3Url from "./InputSnippet.stories.fixture.tensorzero.mp3?url";
+import pdfUrl from "./Input.stories.fixture.tensorzero.pdf?url";
+import mp3Url from "./Input.stories.fixture.tensorzero.mp3?url";
 import type { JsonValue } from "tensorzero-node";
 
 const meta = {
-  title: "InputSnippet",
-  component: InputSnippet,
+  title: "Input",
+  component: Input,
   render: (args) => (
     <div className="w-[80vw] p-4">
-      <InputSnippet {...args} />
+      <Input {...args} />
     </div>
   ),
-} satisfies Meta<typeof InputSnippet>;
+} satisfies Meta<typeof Input>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;

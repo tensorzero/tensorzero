@@ -53,9 +53,12 @@ env:
   XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://localhost:4316
   SQLX_OFFLINE: 1
+  TENSORZERO_E2E_PROXY: http://localhost:3003
 
 jobs:
   batch-tests:
+    permissions:
+      contents: read
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
@@ -213,20 +216,19 @@ jobs:
 
       - name: Launch the gateway for E2E tests
         run: |
-          TENSORZERO_E2E_PROXY="http://localhost:3003" cargo run-e2e > e2e_logs.txt 2>&1 &
+          cargo run-e2e > e2e_logs.txt 2>&1 &
           while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
           done
           echo "GATEWAY_PID=$!" >> $GITHUB_ENV
 
-      # We set 'TENSORZERO_E2E_PROXY' here so that embedded gateway tests can use it
       # The 'CARGO_NEXTEST_FLAKY_TESTS' variable allows us to mark tests as flaky without merging a PR (if a provider happens to break or goes down)
       # We run the tests without the flaky tests, and require them to pass
       - name: Run all tests (including E2E tests)
         # When running from a cron job (the 'schedule' event), use '--no-fail-fast' so that we get full coverage of flaky providers.
         run: |
-          TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})" ${{ github.event_name == 'schedule' && '--no-fail-fast' || '' }}
+          cargo test-e2e ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})" ${{ github.event_name == 'schedule' && '--no-fail-fast' || '' }}
 
       # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
       # For now, we only check for deprecation warnings after running the Rust e2e tests
@@ -239,7 +241,7 @@ jobs:
       # so that we can decide to mark them as non-flaky.
       # - name: Run flaky E2E tests
       #   run: |
-      #     TENSORZERO_E2E_PROXY="http://localhost:3003" cargo test-e2e --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
+      #     cargo test-e2e --no-fail-fast ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "${{ vars.CARGO_NEXTEST_FLAKY_TESTS }}"
       #   continue-on-error: true
       - name: Install Python for python async client tests
         run: uv python install 3.9
@@ -270,7 +272,7 @@ jobs:
 
           echo "=== Capturing backtraces with gdb ==="
           # Find all python processes that might be related to our test
-          PYTHON_PIDS=$(pgrep -f "python.*pytest" || true)
+          PYTHON_PIDS=$(pgrep -f "tensorzero.*python" || true)
           if [ -n "$PYTHON_PIDS" ]; then
             for pid in $PYTHON_PIDS; do
               echo "--- Backtrace for Python process $pid ---"
@@ -354,6 +356,8 @@ jobs:
           AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY ./ci/upload-provider-proxy-cache.sh
 
   check-production-docker-container:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     steps:
@@ -390,10 +394,14 @@ jobs:
 
   # Test that the ui e2e tests still pass after we regenerate the model inference cache
   ui-tests-e2e-regen-model-inference-cache:
+    permissions:
+      contents: read
+      actions: write
     if: github.repository == 'tensorzero/tensorzero'
     uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
       regen_cache: true
+      is_merge_group: true
     secrets:
       S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -404,6 +412,7 @@ jobs:
 
   # See 'ci/README.md' at the repository root for more details.
   check-all-live-tests-passed:
+    permissions: {}
     if: always() && github.repository == 'tensorzero/tensorzero'
     needs:
       [

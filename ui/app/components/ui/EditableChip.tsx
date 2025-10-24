@@ -16,6 +16,7 @@ interface EditableChipProps extends Omit<ChipProps, "label"> {
   label: string | null | undefined;
   defaultLabel?: string;
   onSetLabel?: (newValue: string) => void | Promise<void>;
+  tooltipLabel?: string;
 }
 
 /**
@@ -24,6 +25,7 @@ interface EditableChipProps extends Omit<ChipProps, "label"> {
 export default function EditableChip({
   onSetLabel,
   defaultLabel,
+  tooltipLabel,
   ...chipProps
 }: EditableChipProps) {
   const { label, font = "sans" } = chipProps;
@@ -91,8 +93,13 @@ export default function EditableChip({
           onClick={handleConfirm}
           className="size-5"
           disabled={isLoading}
+          variant="ghost"
         />
-        <CancelButton onClick={handleCancel} className="size-5" />
+        <CancelButton
+          onClick={handleCancel}
+          className="size-5"
+          variant="ghost"
+        />
       </div>
     );
   }
@@ -104,7 +111,8 @@ export default function EditableChip({
         <EditButton
           className="size-5"
           onClick={handleEditClick}
-          tooltip="Rename datapoint"
+          tooltip={tooltipLabel}
+          variant="ghost"
         />
       )}
     </div>

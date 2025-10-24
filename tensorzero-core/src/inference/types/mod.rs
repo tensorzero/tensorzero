@@ -910,6 +910,7 @@ enum ContentBlockOutputType {
     Text,
     ToolCall,
     Thought,
+    Unknown,
 }
 
 /// Defines the types of content block that can come out of a model provider
@@ -2091,7 +2092,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{AllowedTools, DynamicToolConfig, ToolChoice, ToolConfig};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2488,6 +2489,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test valid arguments for additional tool
@@ -2611,6 +2613,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test allowed tool call
