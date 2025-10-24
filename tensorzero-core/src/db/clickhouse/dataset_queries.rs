@@ -1050,6 +1050,9 @@ mod tests {
 
     use crate::config::{MetricConfigLevel, MetricConfigType};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::db::clickhouse::query_builder::test_util::{
+        assert_query_contains, assert_query_does_not_contain,
+    };
     use crate::db::clickhouse::query_builder::{
         DatapointFilter, FloatComparisonOperator, TagComparisonOperator, TagFilter,
     };
@@ -1075,30 +1078,6 @@ mod tests {
             limit: None,
             offset: None,
         }
-    }
-
-    /// Normalize whitespace and newlines in a query for comparison
-    fn normalize_whitespace(s: &str) -> String {
-        s.split_whitespace().collect::<Vec<_>>().join(" ")
-    }
-
-    /// Assert that the query contains a section (ignoring whitespace and newline differences)
-    fn assert_query_contains(query: &str, expected_section: &str) {
-        let normalized_query = normalize_whitespace(query);
-        let normalized_section = normalize_whitespace(expected_section);
-        assert!(
-            normalized_query.contains(&normalized_section),
-            "Query does not contain expected section.\nExpected section: {normalized_section}\nFull query: {normalized_query}"
-        );
-    }
-
-    fn assert_query_does_not_contain(query: &str, unexpected_section: &str) {
-        let normalized_query = normalize_whitespace(query);
-        let normalized_section = normalize_whitespace(unexpected_section);
-        assert!(
-            !normalized_query.contains(&normalized_section),
-            "Query contains unexpected section: {normalized_section}\nFull query: {normalized_query}"
-        );
     }
 
     #[test]

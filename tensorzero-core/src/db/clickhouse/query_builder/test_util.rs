@@ -1,0 +1,24 @@
+/// Normalize whitespace and newlines in a query for comparison
+pub fn normalize_whitespace(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Assert that the query contains a section (ignoring whitespace and newline differences)
+pub fn assert_query_contains(query: &str, expected_section: &str) {
+    let normalized_query = normalize_whitespace(query);
+    let normalized_section = normalize_whitespace(expected_section);
+    assert!(
+            normalized_query.contains(&normalized_section),
+            "Query does not contain expected section.\nExpected section: {normalized_section}\nFull query: {normalized_query}"
+        );
+}
+
+/// Assert that the query does not contain a section (ignoring whitespace and newline differences)
+pub fn assert_query_does_not_contain(query: &str, unexpected_section: &str) {
+    let normalized_query = normalize_whitespace(query);
+    let normalized_section = normalize_whitespace(unexpected_section);
+    assert!(
+        !normalized_query.contains(&normalized_section),
+        "Query contains unexpected section: {normalized_section}\nFull query: {normalized_query}"
+    );
+}
