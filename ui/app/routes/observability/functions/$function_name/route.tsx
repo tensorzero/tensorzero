@@ -28,7 +28,6 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
-import { FeedbackSamplesTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
 import FunctionVariantTable from "./FunctionVariantTable";
 import {
   PageHeader,
@@ -332,16 +331,12 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               functionConfig={function_config}
               functionName={function_name}
               optimalProbabilities={optimal_probabilities}
+              feedbackTimeseries={feedback_timeseries}
+              feedback_time_granularity={feedback_time_granularity}
+              onCumulativeFeedbackTimeGranularityChange={
+                handleCumulativeFeedbackTimeGranularityChange
+              }
             />
-            {feedback_timeseries && feedback_timeseries.length > 0 && (
-              <FeedbackSamplesTimeseries
-                feedbackTimeseries={feedback_timeseries}
-                time_granularity={feedback_time_granularity}
-                onCumulativeFeedbackTimeGranularityChange={
-                  handleCumulativeFeedbackTimeGranularityChange
-                }
-              />
-            )}
           </SectionLayout>
         )}
 
