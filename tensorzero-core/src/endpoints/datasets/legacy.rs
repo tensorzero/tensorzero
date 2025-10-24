@@ -536,7 +536,7 @@ pub struct InsertDatapointPathParams {
 
 // The handler for the POST `/datasets/{dataset_name}/datapoints` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
-#[tracing::instrument(name = "create_datapoints_handler", skip(app_state, params))]
+#[tracing::instrument(name = "create_datapoints_handler", skip_all, fields(dataset_name = %path_params.dataset_name))]
 pub async fn create_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
@@ -554,7 +554,7 @@ pub async fn create_datapoints_handler(
 }
 
 /// DEPRECATED: Use the POST `/datasets/{dataset_name}/datapoints` endpoint instead.
-#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+#[tracing::instrument(name = "bulk_insert_datapoints_handler", skip_all, fields(dataset_name = %path_params.dataset_name))]
 pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
@@ -799,7 +799,7 @@ pub struct DeleteDatapointPathParams {
 
 /// The handler for the DELETE `/datasets/:dataset_name/datapoints/:datapoint_id` endpoint.
 /// This endpoint will stale the datapoint from the dataset (soft delete).
-#[tracing::instrument(name = "delete_datapoint_handler", skip(app_state))]
+#[tracing::instrument(name = "delete_datapoint_handler", skip_all, fields(dataset_name = %path_params.dataset_name))]
 pub async fn delete_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<DeleteDatapointPathParams>,
@@ -888,7 +888,11 @@ pub async fn list_datapoints_handler(
     .map(Json)
 }
 
-#[tracing::instrument(name = "list_datapoints", skip(clickhouse))]
+#[tracing::instrument(
+    name = "list_datapoints",
+    skip_all,
+    fields(dataset_name, function_name)
+)]
 pub async fn list_datapoints(
     dataset_name: String,
     clickhouse: &ClickHouseConnectionInfo,

@@ -14,7 +14,7 @@ use tensorzero_core::{
         datasets::GetDatapointsParams,
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
-    inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
+    inference::types::{ContentBlockChatOutput, StoredInputMessageContent, Text},
 };
 
 use uuid::Uuid;
@@ -285,7 +285,7 @@ async fn test_create_delete_datapoint_chat() {
         ));
         assert!(matches!(
             first_content,
-            StoredInputMessageContent::Text { value: _, .. }
+            StoredInputMessageContent::Text(Text { text: _, .. })
         ));
 
         // Verify the list datapoint input structure and content

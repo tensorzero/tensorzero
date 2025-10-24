@@ -307,9 +307,9 @@ fn generate_text_example() -> RenderedSample {
             system: Some(json!(system_prompt)),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: "What is the capital of France?".into(),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "What is the capital of France?".to_string(),
+                })],
             }],
         },
         output: Some(output.clone()),
@@ -399,16 +399,16 @@ fn generate_tool_call_example() -> RenderedSample {
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What is the weather in Paris?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the weather in Paris?".into(),
+                    })],
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: json!("Let me look that up for you."),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "Let me look that up for you.".to_string(),
+                        }),
                         StoredInputMessageContent::ToolCall(ToolCall {
                             name: "get_weather".to_string(),
                             arguments: serde_json::json!({
@@ -432,15 +432,15 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("The weather in Paris is sunny, 25 degrees Celsius."),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "The weather in Paris is sunny, 25 degrees Celsius.".into(),
+                    })],
                 },
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What is the weather in London?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the weather in London?".into(),
+                    })],
                 },
             ],
         },
@@ -512,9 +512,9 @@ fn generate_image_example() -> RenderedSample {
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![
-                    StoredInputMessageContent::Text {
-                        value: json!("What is the main color of this image?"),
-                    },
+                    StoredInputMessageContent::Text(Text {
+                        text: "What is the main color of this image?".into(),
+                    }),
                     StoredInputMessageContent::File(Box::new(StoredFile {
                         file: Base64FileMetadata {
                             url: None,

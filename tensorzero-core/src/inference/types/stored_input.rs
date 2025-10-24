@@ -1,11 +1,11 @@
+use futures::future::try_join_all;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
-use crate::error::Error;
-use crate::error::ErrorDetails;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
+use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
-#[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
 use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Base64File;
 use crate::inference::types::FileWithPath;
@@ -14,15 +14,26 @@ use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
 use crate::inference::types::TemplateInput;
+use crate::inference::types::Text;
 use crate::inference::types::{Role, Thought, ToolCall, ToolResult};
-use futures::future::try_join_all;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 #[cfg(feature = "pyo3")]
+use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
+#[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
+
+/// The input type that we directly store in ClickHouse.
+/// As soon as we retrieve it, we should convert it to a `StoredInput` below.
+#[derive(Clone, Debug, Deserialize, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct MaybeLegacyStoredInput {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system: Option<Value>,
+    #[serde(default)]
+    pub messages: Vec<MaybeLegacyStoredInputMessage>,
+}
 
 /// The input type that we directly store in ClickHouse.
 /// This is almost identical to `ResolvedInput`, but without `File` data.
@@ -77,6 +88,13 @@ impl StoredInput {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(deny_unknown_fields)]
+pub struct MaybeLegacyStoredInputMessage {
+    pub role: Role,
+    pub content: Vec<MaybeLegacyStoredInputMessageContent>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -95,7 +113,7 @@ impl StoredInputMessage {
             content: try_join_all(
                 self.content
                     .into_iter()
-                    .map(|content| content.reresolve(self.role, resolver)),
+                    .map(|content| content.reresolve(resolver)),
             )
             .await?,
         })
@@ -104,12 +122,31 @@ impl StoredInputMessage {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-pub enum StoredInputMessageContent {
+pub enum MaybeLegacyStoredInputMessageContent {
     Text {
         value: Value,
     },
+    Template(TemplateInput),
+    ToolCall(ToolCall),
+    ToolResult(ToolResult),
+    RawText {
+        value: String,
+    },
+    Thought(Thought),
+    #[serde(alias = "image")]
+    File(Box<StoredFile>),
+    Unknown {
+        data: Value,
+        model_provider_name: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub enum StoredInputMessageContent {
+    Text(Text),
     Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
@@ -129,31 +166,10 @@ pub enum StoredInputMessageContent {
 impl StoredInputMessageContent {
     pub async fn reresolve(
         self,
-        role: Role,
         resolver: &impl StoragePathResolver,
     ) -> Result<ResolvedInputMessageContent, Error> {
         match self {
-            StoredInputMessageContent::Text { value } => {
-                match value {
-                    // Plain string input (which might later be templated by an `input_wrapper` template)
-                    Value::String(text) => Ok(ResolvedInputMessageContent::Text { text }),
-                    // Convert legacy `{"type": "text", "arguments": {}}` inputs to `{"type": "template", "name": "<role>", "arguments": {}}` inputs,
-                    // where the template name is determined by the message role.
-                    // We don't store any new entries in ClickHouse using the legacy format - this is needed to handle
-                    // existing entries in our database.
-                    Value::Object(object) => {
-                        Ok(ResolvedInputMessageContent::Template(TemplateInput {
-                            name: role.implicit_template_name().to_string(),
-                            arguments: object,
-                        }))
-                    }
-                    _ => Err(Error::new(ErrorDetails::InternalError {
-                        message: format!(
-                            "Invalid text content: {value:?}. {IMPOSSIBLE_ERROR_MESSAGE}"
-                        ),
-                    })),
-                }
-            }
+            StoredInputMessageContent::Text(text) => Ok(ResolvedInputMessageContent::Text(text)),
             StoredInputMessageContent::Template(template) => {
                 Ok(ResolvedInputMessageContent::Template(template))
             }
@@ -273,4 +289,83 @@ impl StoredInput {
 pub struct StoredRequestMessage {
     pub role: Role,
     pub content: Vec<StoredContentBlock>,
+}
+
+/// Helper function to convert legacy content to modern content format
+fn convert_legacy_content(
+    content: MaybeLegacyStoredInputMessageContent,
+    role: Role,
+) -> Result<StoredInputMessageContent, Error> {
+    match content {
+        // Convert the legacy `value` field to the proper content blocks
+        MaybeLegacyStoredInputMessageContent::Text { value } => match value {
+            Value::String(text) => Ok(StoredInputMessageContent::Text(Text { text })),
+            Value::Object(obj) => Ok(StoredInputMessageContent::Template(TemplateInput {
+                name: role.to_string(),
+                arguments: obj,
+            })),
+            _ => Err(Error::new(ErrorDetails::InvalidMessage {
+                message: r#"The `value` field in a `{"type": "text", "value": ... }` content block must be a string or object"#.to_string(),
+            })),
+        },
+        MaybeLegacyStoredInputMessageContent::Template(template) => {
+            Ok(StoredInputMessageContent::Template(template))
+        }
+        MaybeLegacyStoredInputMessageContent::ToolCall(tool_call) => {
+            Ok(StoredInputMessageContent::ToolCall(tool_call))
+        }
+        MaybeLegacyStoredInputMessageContent::ToolResult(tool_result) => {
+            Ok(StoredInputMessageContent::ToolResult(tool_result))
+        }
+        MaybeLegacyStoredInputMessageContent::RawText { value } => {
+            Ok(StoredInputMessageContent::RawText { value })
+        }
+        MaybeLegacyStoredInputMessageContent::Thought(thought) => {
+            Ok(StoredInputMessageContent::Thought(thought))
+        }
+        MaybeLegacyStoredInputMessageContent::File(file) => {
+            Ok(StoredInputMessageContent::File(file))
+        }
+        MaybeLegacyStoredInputMessageContent::Unknown {
+            data,
+            model_provider_name,
+        } => Ok(StoredInputMessageContent::Unknown {
+            data,
+            model_provider_name,
+        }),
+    }
+}
+
+/// Helper function to convert a legacy message to a modern message
+fn convert_legacy_message(
+    message: MaybeLegacyStoredInputMessage,
+) -> Result<StoredInputMessage, Error> {
+    let role = message.role;
+    let content: Vec<StoredInputMessageContent> = message
+        .content
+        .into_iter()
+        .map(|c| convert_legacy_content(c, role))
+        .collect::<Result<Vec<_>, Error>>()?;
+
+    Ok(StoredInputMessage { role, content })
+}
+
+/// Convert:
+///    `MaybeLegacyStoredInput`: how we store in the database, with potentially legacy data schemas)
+///  ->`StoredInput`: a cleaned version that fixed legacy data schemas
+impl TryFrom<MaybeLegacyStoredInput> for StoredInput {
+    type Error = Error;
+
+    fn try_from(input: MaybeLegacyStoredInput) -> Result<Self, Error> {
+        let messages: Vec<StoredInputMessage> = input
+            .messages
+            .into_iter()
+            .map(convert_legacy_message)
+            .collect::<Result<Vec<_>, Error>>()?;
+
+        Ok(Self {
+            system: input.system,
+            messages,
+        })
+    }
 }

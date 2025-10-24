@@ -399,7 +399,7 @@ pub async fn prepare_request_message(
     let mut content = Vec::new();
     for block in &message.content {
         match block {
-            LazyResolvedInputMessageContent::Text { text } => {
+            LazyResolvedInputMessageContent::Text(text) => {
                 let template = chat_templates.get_implicit_template(message.role);
                 let text_content = match template {
                     Some(template) if template.legacy_definition => {
@@ -411,7 +411,7 @@ pub async fn prepare_request_message(
                             &context,
                         )?
                     }
-                    _ => text.clone(),
+                    _ => text.text.clone(),
                 };
                 content.push(text_content.into());
             }

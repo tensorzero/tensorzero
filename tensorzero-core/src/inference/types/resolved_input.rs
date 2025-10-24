@@ -17,7 +17,7 @@ use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::stored_input::{
     StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
-use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput};
+use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput, Text};
 use crate::rate_limiting::RateLimitedInputContent;
 use crate::tool::{ToolCall, ToolResult};
 
@@ -98,9 +98,7 @@ pub type FileFuture = Shared<Pin<Box<dyn Future<Output = Result<FileWithPath, Er
 
 #[derive(Clone, Debug)]
 pub enum LazyResolvedInputMessageContent {
-    Text {
-        text: String,
-    },
+    Text(Text),
     Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
@@ -354,9 +352,7 @@ impl ResolvedInputMessage {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
-    Text {
-        text: String,
-    },
+    Text(Text),
     Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
@@ -376,9 +372,7 @@ pub enum ResolvedInputMessageContent {
 impl ResolvedInputMessageContent {
     pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
         match self {
-            ResolvedInputMessageContent::Text { text } => StoredInputMessageContent::Text {
-                value: Value::String(text),
-            },
+            ResolvedInputMessageContent::Text(text) => StoredInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 StoredInputMessageContent::Template(template)
             }
@@ -409,9 +403,7 @@ impl ResolvedInputMessageContent {
 
     pub fn into_lazy_resolved_input_message_content(self) -> LazyResolvedInputMessageContent {
         match self {
-            ResolvedInputMessageContent::Text { text } => {
-                LazyResolvedInputMessageContent::Text { text }
-            }
+            ResolvedInputMessageContent::Text(text) => LazyResolvedInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)
             }

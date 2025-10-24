@@ -90,9 +90,9 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             dataset_name: "test".to_string(),
@@ -153,9 +153,9 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             name: None,
@@ -185,9 +185,9 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"foo": "bar"}),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: r#"{"foo":"bar"}"#.to_string(),
+                    })],
                 }],
             },
             dataset_name: "test".to_string(),
@@ -258,9 +258,9 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"foo": "bar"}),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: r#"{"foo":"bar"}"#.to_string(),
+                    })],
                 }],
             },
             dataset_name: "test".to_string(),
@@ -294,9 +294,9 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"foo": "bar"}),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: r#"{"foo":"bar"}"#.to_string(),
+                    })],
                 }],
             },
             dataset_name: "test".to_string(),

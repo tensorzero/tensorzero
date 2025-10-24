@@ -14,7 +14,7 @@ use crate::{
     db::clickhouse::ClickhouseFormat,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, MaybeLegacyStoredInput},
     serde_util::{deserialize_defaulted_string, deserialize_json_string},
     stored_inference::{StoredChatInference, StoredInference, StoredJsonInference},
     tool::ToolCallConfigDatabaseInsert,
@@ -727,7 +727,7 @@ pub(super) struct ClickHouseStoredChatInference {
     pub inference_id: Uuid,
     pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
+    pub input: MaybeLegacyStoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
@@ -756,7 +756,7 @@ impl TryFrom<ClickHouseStoredChatInference> for StoredChatInference {
         Ok(StoredChatInference {
             function_name: value.function_name,
             variant_name: value.variant_name,
-            input: value.input,
+            input: value.input.try_into()?,
             output: value.output,
             dispreferred_outputs,
             episode_id: value.episode_id,
@@ -776,7 +776,7 @@ pub(super) struct ClickHouseStoredJsonInference {
     pub inference_id: Uuid,
     pub timestamp: DateTime<Utc>,
     #[serde(deserialize_with = "deserialize_json_string")]
-    pub input: StoredInput,
+    pub input: MaybeLegacyStoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: JsonInferenceOutput,
     #[serde(default)]
@@ -804,7 +804,7 @@ impl TryFrom<ClickHouseStoredJsonInference> for StoredJsonInference {
         Ok(StoredJsonInference {
             function_name: value.function_name,
             variant_name: value.variant_name,
-            input: value.input,
+            input: value.input.try_into()?,
             output: value.output,
             dispreferred_outputs,
             episode_id: value.episode_id,

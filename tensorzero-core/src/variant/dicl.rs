@@ -22,7 +22,7 @@ use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredInput;
 use crate::inference::types::StoredInputMessageContent;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
+    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Text,
 };
 use crate::model::ModelTable;
 use crate::model_table::ShorthandModelConfig;
@@ -389,9 +389,7 @@ fn lazy_content_to_resolved_discarding_incompatible(
     content: LazyResolvedInputMessageContent,
 ) -> Result<ResolvedInputMessageContent, Error> {
     Ok(match content {
-        LazyResolvedInputMessageContent::Text { text } => {
-            ResolvedInputMessageContent::Text { text }
-        }
+        LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
         LazyResolvedInputMessageContent::Template(template) => {
             // Stringify template as JSON for DICL
             let json_str = serde_json::to_string(&serde_json::json!({
@@ -404,7 +402,7 @@ fn lazy_content_to_resolved_discarding_incompatible(
                     message: format!("Failed to stringify template content block: {e}"),
                 })
             })?;
-            ResolvedInputMessageContent::Text { text: json_str }
+            ResolvedInputMessageContent::Text(Text { text: json_str })
         }
         LazyResolvedInputMessageContent::ToolCall(tool_call) => {
             ResolvedInputMessageContent::ToolCall(tool_call)
@@ -713,7 +711,9 @@ impl DiclConfig {
                                     ),
                                 })
                             })?;
-                            Ok(LazyResolvedInputMessageContent::Text { text: json_str })
+                            Ok(LazyResolvedInputMessageContent::Text(Text {
+                                text: json_str,
+                            }))
                         }
                         other => Ok(other.clone()),
                     }
@@ -937,15 +937,15 @@ mod tests {
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, assistant!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, assistant!".to_string(),
+                    })],
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, user!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, user!".to_string(),
+                    })],
                 },
             ],
         };
@@ -1037,9 +1037,9 @@ mod tests {
                 ResolvedInputMessage {
                     role: Role::User,
                     content: vec![
-                        ResolvedInputMessageContent::Text {
+                        ResolvedInputMessageContent::Text(Text {
                             text: "Hello, assistant!".to_string(),
-                        },
+                        }),
                         ResolvedInputMessageContent::ToolCall(ToolCall {
                             id: "tool_call_1".to_string(),
                             name: "search_tool".to_string(),
@@ -1049,9 +1049,9 @@ mod tests {
                 },
                 ResolvedInputMessage {
                     role: Role::Assistant,
-                    content: vec![ResolvedInputMessageContent::Text {
+                    content: vec![ResolvedInputMessageContent::Text(Text {
                         text: "Here are the search results for rust programming.".to_string(),
-                    }],
+                    })],
                 },
             ],
         };
@@ -1080,9 +1080,9 @@ mod tests {
                     system: Some(json!({"assistant_name": "Dr. Mehta"})),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: "What is the boiling point of water?".into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "What is the boiling point of water?".to_string(),
+                        })],
                     }],
                 })
                 .unwrap(),
@@ -1098,9 +1098,9 @@ mod tests {
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![
-                            StoredInputMessageContent::Text {
-                                value: json!("What is the name of the capital city of Japan?"),
-                            },
+                            StoredInputMessageContent::Text(Text {
+                                text: "What is the name of the capital city of Japan?".to_string(),
+                            }),
                             StoredInputMessageContent::File(Box::new(StoredFile {
                                 file: Base64FileMetadata {
                                     url: None,
@@ -1144,9 +1144,9 @@ mod tests {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "What is the boiling point of water?".into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the boiling point of water?".to_string(),
+                    })],
                 }],
             })
             .unwrap(),
@@ -1183,9 +1183,9 @@ mod tests {
                     system: Some(json!({"assistant_name": "Dr. Mehta"})),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: "What is the boiling point of water?".into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "What is the boiling point of water?".to_string(),
+                        })],
                     }],
                 })
                 .unwrap(),
@@ -1200,9 +1200,9 @@ mod tests {
                     system: Some(json!({"assistant_name": "Pinocchio"})),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: "What is the name of the capital city of Japan?".into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "What is the name of the capital city of Japan?".to_string(),
+                        })],
                     }],
                 })
                 .unwrap(),
@@ -1243,9 +1243,9 @@ mod tests {
                     system: Some(json!({"assistant_name": "JsonTester"})),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: "Provide a sample JSON response.".into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "Provide a sample JSON response.".to_string(),
+                        })],
                     }],
                 })
                 .unwrap(),
@@ -1266,9 +1266,9 @@ mod tests {
                     system: Some(json!({"assistant_name": "JsonTester"})),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: "Provide another JSON response.".into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "Provide another JSON response.".to_string(),
+                        })],
                     }],
                 })
                 .unwrap(),
@@ -1330,15 +1330,15 @@ mod tests {
             messages: vec![
                 LazyResolvedInputMessage {
                     role: Role::User,
-                    content: vec![LazyResolvedInputMessageContent::Text {
+                    content: vec![LazyResolvedInputMessageContent::Text(Text {
                         text: "Hello, how are you?".to_string(),
-                    }],
+                    })],
                 },
                 LazyResolvedInputMessage {
                     role: Role::Assistant,
-                    content: vec![LazyResolvedInputMessageContent::Text {
+                    content: vec![LazyResolvedInputMessageContent::Text(Text {
                         text: "I'm doing great!".to_string(),
-                    }],
+                    })],
                 },
             ],
         };
@@ -1443,9 +1443,9 @@ mod tests {
             system: Some(json!("Custom system from input")),
             messages: vec![LazyResolvedInputMessage {
                 role: Role::User,
-                content: vec![LazyResolvedInputMessageContent::Text {
+                content: vec![LazyResolvedInputMessageContent::Text(Text {
                     text: "Hello!".to_string(),
-                }],
+                })],
             }],
         };
 
@@ -1454,9 +1454,9 @@ mod tests {
             system: Some(json!({"context": "example"})),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Example question"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Example question".to_string(),
+                })],
             }],
         };
         let example = Example::Chat(ChatExample {
@@ -1658,9 +1658,9 @@ mod tests {
     async fn test_prepare_request_message_dicl_without_template() {
         let message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Text {
+            content: vec![LazyResolvedInputMessageContent::Text(Text {
                 text: "Hello".to_string(),
-            }],
+            })],
         };
         let templates = TemplateConfig::default();
 
@@ -1693,8 +1693,8 @@ mod tests {
         let result = lazy_content_to_resolved_discarding_incompatible(template).unwrap();
 
         match result {
-            ResolvedInputMessageContent::Text { text } => {
-                let parsed: serde_json::Value = serde_json::from_str(&text).unwrap();
+            ResolvedInputMessageContent::Text(text_obj) => {
+                let parsed: serde_json::Value = serde_json::from_str(&text_obj.text).unwrap();
                 assert_eq!(parsed["type"], "template");
                 assert_eq!(parsed["name"], "test_template");
                 assert_eq!(parsed["arguments"]["foo"], "bar");

@@ -17,7 +17,7 @@ const DEFAULT_ALLOW_STALE: bool = false;
 /// Handler for the POST `/v1/datasets/{dataset_id}/list_datapoints` endpoint.
 /// Lists datapoints from a dataset with optional filtering and pagination.
 #[axum::debug_handler(state = AppStateData)]
-#[instrument(name = "datasets.v1.list_datapoints", skip(app_state, request))]
+#[instrument(name = "datasets.v1.list_datapoints", skip_all, fields(dataset_name))]
 pub async fn list_datapoints_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
@@ -32,7 +32,7 @@ pub async fn list_datapoints_handler(
 /// Handler for the POST `/v1/datasets/get_datapoints` endpoint.
 /// Retrieves specific datapoints by their IDs.
 #[axum::debug_handler(state = AppStateData)]
-#[instrument(name = "datasets.v1.get_datapoints", skip(app_state, request))]
+#[instrument(name = "datasets.v1.get_datapoints", skip_all)]
 pub async fn get_datapoints_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<GetDatapointsRequest>,

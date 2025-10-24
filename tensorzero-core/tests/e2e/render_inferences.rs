@@ -47,9 +47,9 @@ pub async fn test_render_samples_no_function() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         output: vec![],
@@ -83,9 +83,9 @@ pub async fn test_render_samples_no_variant() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         output: vec![],
@@ -127,9 +127,9 @@ pub async fn test_render_samples_missing_variable() {
             system: Some(json!({"foo": "bar"})),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         output: vec![],
@@ -166,9 +166,9 @@ pub async fn test_render_samples_normal() {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             output: vec![],
@@ -186,9 +186,9 @@ pub async fn test_render_samples_normal() {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"country": "Japan"}),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: r#"{"country":"Japan"}"#.to_string(),
+                    })],
                 }],
             },
             output: JsonInferenceOutput {
@@ -212,9 +212,9 @@ pub async fn test_render_samples_normal() {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             output: vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
@@ -250,9 +250,9 @@ pub async fn test_render_samples_normal() {
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: json!("What is this a picture of?"),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "What is this a picture of?".to_string(),
+                        }),
                         StoredInputMessageContent::File(Box::new(StoredFile {
                             file: Base64FileMetadata {
                                 url: None,
@@ -449,23 +449,23 @@ pub async fn test_render_samples_template_no_schema() {
                 StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: "First user message".into(),
-                        },
-                        StoredInputMessageContent::Text {
-                            value: "Second user message".into(),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "First user message".into(),
+                        }),
+                        StoredInputMessageContent::Text(Text {
+                            text: "Second user message".into(),
+                        }),
                     ],
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: "First assistant message".into(),
-                        },
-                        StoredInputMessageContent::Text {
-                            value: "Second assistant message".into(),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "First assistant message".into(),
+                        }),
+                        StoredInputMessageContent::Text(Text {
+                            text: "Second assistant message".into(),
+                        }),
                     ],
                 },
             ],
@@ -569,9 +569,9 @@ pub async fn test_render_datapoints_no_function() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         output: Some(vec![]),
@@ -610,9 +610,9 @@ pub async fn test_render_datapoints_no_variant() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         output: Some(vec![]),
@@ -659,9 +659,9 @@ pub async fn test_render_datapoints_missing_variable() {
             system: Some(json!({"foo": "bar"})),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         output: Some(vec![]),
@@ -703,9 +703,9 @@ pub async fn test_render_datapoints_normal() {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![]),
@@ -728,9 +728,9 @@ pub async fn test_render_datapoints_normal() {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"country": "Japan"}),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: r#"{"country":"Japan"}"#.to_string(),
+                    })],
                 }],
             },
             output: Some(JsonInferenceOutput {
@@ -756,9 +756,9 @@ pub async fn test_render_datapoints_normal() {
                 system: Some(json!({"assistant_name": "Dr. Mehta"})),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
@@ -797,9 +797,9 @@ pub async fn test_render_datapoints_normal() {
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: json!("What is this a picture of?"),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "What is this a picture of?".to_string(),
+                        }),
                         StoredInputMessageContent::File(Box::new(StoredFile {
                             file: Base64FileMetadata {
                                 url: None,
@@ -986,23 +986,23 @@ pub async fn test_render_datapoints_template_no_schema() {
                 StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: "First user message".into(),
-                        },
-                        StoredInputMessageContent::Text {
-                            value: "Second user message".into(),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "First user message".into(),
+                        }),
+                        StoredInputMessageContent::Text(Text {
+                            text: "Second user message".into(),
+                        }),
                     ],
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: "First assistant message".into(),
-                        },
-                        StoredInputMessageContent::Text {
-                            value: "Second assistant message".into(),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "First assistant message".into(),
+                        }),
+                        StoredInputMessageContent::Text(Text {
+                            text: "Second assistant message".into(),
+                        }),
                     ],
                 },
             ],

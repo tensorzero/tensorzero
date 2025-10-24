@@ -390,7 +390,8 @@ async fn run_exact_match_evaluation_chat() {
         let mut parsed_input = parsed.datapoint.input().clone();
         for message in &mut parsed_input.messages {
             for content in &mut message.content {
-                if let StoredInputMessageContent::Text { value } = content {
+                if let StoredInputMessageContent::Text(text) = content {
+                    let value = &serde_json::Value::String(text.text.clone());
                     if value.is_object() {
                         *content = StoredInputMessageContent::Template(TemplateInput {
                             name: message.role.implicit_template_name().to_string(),
@@ -529,7 +530,8 @@ async fn run_llm_judge_evaluation_chat() {
         let mut parsed_input = parsed.datapoint.input().clone();
         for message in &mut parsed_input.messages {
             for content in &mut message.content {
-                if let StoredInputMessageContent::Text { value } = content {
+                if let StoredInputMessageContent::Text(text) = content {
+                    let value = &serde_json::Value::String(text.text.clone());
                     if value.is_object() {
                         *content = StoredInputMessageContent::Template(TemplateInput {
                             name: message.role.implicit_template_name().to_string(),
@@ -1311,9 +1313,9 @@ async fn test_run_llm_judge_evaluator_chat() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         auxiliary: String::new(),
@@ -1420,9 +1422,9 @@ async fn test_run_llm_judge_evaluator_chat() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         auxiliary: String::new(),
@@ -1486,9 +1488,9 @@ async fn test_run_llm_judge_evaluator_json() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         auxiliary: String::new(),
@@ -1596,9 +1598,9 @@ async fn test_run_llm_judge_evaluator_json() {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         auxiliary: String::new(),

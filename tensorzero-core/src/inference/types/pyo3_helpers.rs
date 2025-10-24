@@ -5,7 +5,6 @@ use pyo3::types::{IntoPyDict, PyDict};
 use pyo3::{intern, prelude::*};
 use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
 use serde::Deserialize;
-use serde_json::Value;
 use uuid::Uuid;
 
 use crate::endpoints::datasets::Datapoint;
@@ -13,6 +12,7 @@ use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
     stored_input::StoredInputMessageContent, ContentBlockChatOutput, ResolvedInputMessageContent,
+    Text,
 };
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
@@ -210,19 +210,10 @@ pub fn stored_input_message_content_to_python(
     content: StoredInputMessageContent,
 ) -> PyResult<Py<PyAny>> {
     match content {
-        StoredInputMessageContent::Text { value } => {
+        StoredInputMessageContent::Text(text_obj) => {
             let text_content_block = import_text_content_block(py)?;
-            match value {
-                Value::String(s) => {
-                    let kwargs = [(intern!(py, "text"), s)].into_py_dict(py)?;
-                    text_content_block.call(py, (), Some(&kwargs))
-                }
-                _ => {
-                    let value = serialize_to_dict(py, value)?;
-                    let kwargs = [(intern!(py, "arguments"), value)].into_py_dict(py)?;
-                    text_content_block.call(py, (), Some(&kwargs))
-                }
-            }
+            let kwargs = [(intern!(py, "text"), text_obj.text)].into_py_dict(py)?;
+            text_content_block.call(py, (), Some(&kwargs))
         }
         StoredInputMessageContent::Template(template) => {
             let template_content_block = import_template_content_block(py)?;
@@ -284,7 +275,7 @@ pub fn resolved_input_message_content_to_python(
     content: ResolvedInputMessageContent,
 ) -> PyResult<Py<PyAny>> {
     match content {
-        ResolvedInputMessageContent::Text { text } => {
+        ResolvedInputMessageContent::Text(Text { text }) => {
             let text_content_block = import_text_content_block(py)?;
             let kwargs = [(intern!(py, "text"), text)].into_py_dict(py)?;
             text_content_block.call(py, (), Some(&kwargs))

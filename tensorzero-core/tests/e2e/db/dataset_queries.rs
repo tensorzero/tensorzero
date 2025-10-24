@@ -978,9 +978,9 @@ async fn test_get_datapoint_returns_correct_json_datapoint_with_specific_id() {
         let input_messages = datapoint.input.messages;
         assert!(input_messages.contains(&StoredInputMessage {
             role: Role::User,
-            content: vec![StoredInputMessageContent::Text {
-                value: "Is it a living thing?".to_string().into(),
-            }],
+            content: vec![StoredInputMessageContent::Text(Text {
+                text: "Is it a living thing?".to_string(),
+            })],
         }));
 
         assert_eq!(
@@ -2351,9 +2351,9 @@ async fn test_datapoint_with_mixed_file_types() {
                 StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: "Here are some files".into(),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "Here are some files".into(),
+                        }),
                         StoredInputMessageContent::File(Box::new(stored_file1.clone())),
                     ],
                 },
@@ -2400,9 +2400,7 @@ async fn test_datapoint_with_mixed_file_types() {
         // Check first message with text and file
         assert_eq!(chat_dp.input.messages[0].content.len(), 2);
         match &chat_dp.input.messages[0].content[0] {
-            StoredInputMessageContent::Text { value } => {
-                // value is a JSON string, so we need to deserialize it
-                let text: String = serde_json::from_value(value.clone()).unwrap();
+            StoredInputMessageContent::Text(Text { text }) => {
                 assert_eq!(text, "Here are some files");
             }
             _ => panic!("Expected Text content"),

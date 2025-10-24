@@ -117,7 +117,8 @@ pub mod streams;
 
 pub use resolved_input::ResolvedRequestMessage;
 pub use stored_input::{
-    StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
+    MaybeLegacyStoredInput, StoredInput, StoredInputMessage, StoredInputMessageContent,
+    StoredRequestMessage,
 };
 pub use streams::{
     collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
@@ -273,7 +274,7 @@ impl InputMessageContent {
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(TextKind::Text { text }) => {
-                LazyResolvedInputMessageContent::Text { text }
+                LazyResolvedInputMessageContent::Text(Text { text })
             }
             InputMessageContent::RawText { value } => {
                 LazyResolvedInputMessageContent::RawText { value }
@@ -304,7 +305,7 @@ impl InputMessageContent {
                     r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
                 );
                 match value {
-                    Value::String(text) => LazyResolvedInputMessageContent::Text { text },
+                    Value::String(text) => LazyResolvedInputMessageContent::Text(Text { text }),
                     Value::Object(arguments) => {
                         LazyResolvedInputMessageContent::Template(TemplateInput {
                             name: role.implicit_template_name().to_string(),
@@ -415,9 +416,7 @@ impl InputMessageContent {
 impl LazyResolvedInputMessageContent {
     pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
-            LazyResolvedInputMessageContent::Text { text } => {
-                ResolvedInputMessageContent::Text { text }
-            }
+            LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
             LazyResolvedInputMessageContent::Template(template) => {
                 ResolvedInputMessageContent::Template(template)
             }
@@ -1467,14 +1466,14 @@ impl From<String> for InputMessageContent {
 #[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        ResolvedInputMessageContent::Text { text }
+        ResolvedInputMessageContent::Text(Text { text })
     }
 }
 
 #[cfg(test)]
 impl From<String> for LazyResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        LazyResolvedInputMessageContent::Text { text }
+        LazyResolvedInputMessageContent::Text(Text { text })
     }
 }
 

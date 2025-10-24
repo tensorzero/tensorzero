@@ -1189,9 +1189,9 @@ fn create_pinocchio_example(
             system: system.clone(),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!(question),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: question.to_string(),
+                })],
             }],
         },
         output: Some(output),
