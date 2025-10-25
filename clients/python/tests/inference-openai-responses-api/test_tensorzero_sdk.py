@@ -17,6 +17,7 @@ from tensorzero import (
 )
 from tensorzero.types import (
     ChatChunk,
+    FinishReason,
     Thought,
     ThoughtSummaryBlock,
     ToolCallChunk,
@@ -46,8 +47,7 @@ async def test_openai_responses_basic_inference(async_client: AsyncTensorZeroGat
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
-    # TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
-    # assert response.finish_reason == FinishReason.STOP
+    assert response.finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -97,7 +97,11 @@ async def test_openai_responses_basic_inference_streaming(
     assert chunks[-1].usage is not None
     assert chunks[-1].usage.input_tokens > 0
     assert chunks[-1].usage.output_tokens > 0
-    # TODO (#4041): Check `finish_reason` when we improve handling of `incomplete_details.reason`.
+
+    # Check finish_reason in streaming response
+    finish_reason_chunks = [chunk for chunk in chunks if chunk.finish_reason]
+    assert len(finish_reason_chunks) > 0
+    assert finish_reason_chunks[-1].finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -130,6 +134,7 @@ async def test_openai_responses_web_search(async_client: AsyncTensorZeroGateway)
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
+    assert response.finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -183,9 +188,16 @@ async def test_openai_responses_web_search_streaming(
 
     # Check that web search actually happened by looking for citations in markdown format
     full_text = "".join(text_chunks)
-    assert "](" in full_text, (
-        f"Expected concatenated text to contain citations in markdown format [text](url), but found none. Text length: {len(full_text)}"
-    )
+    assert (
+        "](" in full_text
+    ), f"Expected concatenated text to contain citations in markdown format [text](url), but found none. Text length: {
+        len(full_text)
+    }"
+
+    # Check finish_reason in streaming response
+    finish_reason_chunks = [chunk for chunk in chunks if chunk.finish_reason]
+    assert len(finish_reason_chunks) > 0
+    assert finish_reason_chunks[-1].finish_reason == FinishReason.STOP
 
     # TODO (#4044): check for unknown web search events when we start returning them
 
@@ -244,6 +256,7 @@ async def test_openai_responses_tool_call(async_client: AsyncTensorZeroGateway):
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
+    assert response.finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -321,6 +334,11 @@ async def test_openai_responses_tool_call_streaming(
     # Should have received a tool call for get_temperature
     assert tool_call_name == "get_temperature"
 
+    # Check finish_reason in streaming response
+    finish_reason_chunks = [chunk for chunk in chunks if chunk.finish_reason]
+    assert len(finish_reason_chunks) > 0
+    assert finish_reason_chunks[-1].finish_reason == FinishReason.STOP
+
 
 @pytest.mark.asyncio
 async def test_openai_responses_reasoning(async_client: AsyncTensorZeroGateway):
@@ -370,6 +388,7 @@ async def test_openai_responses_reasoning(async_client: AsyncTensorZeroGateway):
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
+    assert response.finish_reason == FinishReason.STOP
 
 
 @pytest.mark.asyncio
@@ -426,6 +445,12 @@ async def test_openai_responses_reasoning_streaming(
     # Should have received thought chunks when reasoning is enabled
     assert has_thought, "Expected thought content blocks when reasoning is enabled"
 
+    # Check finish_reason in streaming response
+    finish_reason_chunks = [chunk for chunk in chunks if chunk.finish_reason]
+    assert len(finish_reason_chunks) > 0
+    assert finish_reason_chunks[-1].finish_reason == FinishReason.STOP
+
+    # TODO (#4043): Check summary field when we expose it in the Python SDK
     # Note: Checking streaming summary chunks would require aggregating chunks across
     # multiple messages, which is complex. The summary is fully tested in the
     # non-streaming test above.
@@ -487,3 +512,4 @@ async def test_openai_responses_shorthand(async_client: AsyncTensorZeroGateway):
 
     assert response.usage.input_tokens > 0
     assert response.usage.output_tokens > 0
+    assert response.finish_reason == FinishReason.STOP

@@ -316,7 +316,7 @@ impl From<SGLangFinishReason> for FinishReason {
             SGLangFinishReason::Length => FinishReason::Length,
             SGLangFinishReason::ToolCalls => FinishReason::ToolCall,
             SGLangFinishReason::ContentFilter => FinishReason::ContentFilter,
-            SGLangFinishReason::Unknown => FinishReason::Unknown,
+            SGLangFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

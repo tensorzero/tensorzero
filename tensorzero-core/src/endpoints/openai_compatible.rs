@@ -620,6 +620,9 @@ enum OpenAICompatibleFinishReason {
     ContentFilter,
     ToolCalls,
     // FunctionCall, we never generate this and it is deprecated
+    Unknown,
+    #[serde(untagged)]
+    Other(String),
 }
 
 impl From<FinishReason> for OpenAICompatibleFinishReason {
@@ -630,7 +633,10 @@ impl From<FinishReason> for OpenAICompatibleFinishReason {
             FinishReason::Length => OpenAICompatibleFinishReason::Length,
             FinishReason::ContentFilter => OpenAICompatibleFinishReason::ContentFilter,
             FinishReason::ToolCall => OpenAICompatibleFinishReason::ToolCalls,
-            FinishReason::Unknown => OpenAICompatibleFinishReason::Stop, // OpenAI doesn't have an unknown finish reason so we coerce
+            FinishReason::Unknown(data) => match data {
+                Some(data) => OpenAICompatibleFinishReason::Other(format!("Unknown: {data}")),
+                None => OpenAICompatibleFinishReason::Unknown,
+            },
         }
     }
 }

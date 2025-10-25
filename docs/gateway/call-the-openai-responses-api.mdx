@@ -318,7 +318,7 @@ ChatInferenceResponse(
         )
     ],
     usage=Usage(input_tokens=29904, output_tokens=1921),
-    finish_reason=None,
+    finish_reason=FinishReason.STOP,
     original_response=None
 )
 ```
@@ -891,7 +891,8 @@ Thought summaries are enabled in `tensorzero.toml` via `extra_body` on the model
   "usage": {
     "input_tokens": 21229,
     "output_tokens": 1889
-  }
+  },
+  "finish_reason": "stop"
 }
 ```
 

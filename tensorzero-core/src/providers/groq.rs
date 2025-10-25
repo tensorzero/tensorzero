@@ -1031,7 +1031,7 @@ impl From<GroqFinishReason> for FinishReason {
             GroqFinishReason::ContentFilter => FinishReason::ContentFilter,
             GroqFinishReason::ToolCalls => FinishReason::ToolCall,
             GroqFinishReason::FunctionCall => FinishReason::ToolCall,
-            GroqFinishReason::Unknown => FinishReason::Unknown,
+            GroqFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

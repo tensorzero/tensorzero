@@ -1143,7 +1143,7 @@ impl ModelInput {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum FinishReason {
@@ -1152,7 +1152,7 @@ pub enum FinishReason {
     Length,
     ToolCall,
     ContentFilter,
-    Unknown,
+    Unknown(Option<String>),
 }
 
 /// Each provider transforms a ModelInferenceRequest into a provider-specific (private) inference request type
@@ -1826,7 +1826,7 @@ fn get_finish_reason(
         .iter()
         .sorted_by_key(|r| r.created)
         .next_back()
-        .and_then(|r| r.finish_reason)
+        .and_then(|r| r.finish_reason.clone())
 }
 
 pub async fn parse_chat_output(

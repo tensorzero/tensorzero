@@ -614,9 +614,9 @@ impl From<MistralFinishReason> for FinishReason {
             MistralFinishReason::Stop => FinishReason::Stop,
             MistralFinishReason::Length => FinishReason::Length,
             MistralFinishReason::ModelLength => FinishReason::Length,
-            MistralFinishReason::Error => FinishReason::Unknown,
+            MistralFinishReason::Error => FinishReason::Unknown(None),
             MistralFinishReason::ToolCalls => FinishReason::ToolCall,
-            MistralFinishReason::Unknown => FinishReason::Unknown,
+            MistralFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

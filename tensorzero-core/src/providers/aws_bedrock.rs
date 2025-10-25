@@ -878,7 +878,7 @@ fn aws_stop_reason_to_tensorzero_finish_reason(stop_reason: StopReason) -> Optio
         StopReason::MaxTokens => Some(FinishReason::Length),
         StopReason::StopSequence => Some(FinishReason::StopSequence),
         StopReason::ToolUse => Some(FinishReason::ToolCall),
-        _ => Some(FinishReason::Unknown),
+        _ => Some(FinishReason::Unknown(None)),
     }
 }
 

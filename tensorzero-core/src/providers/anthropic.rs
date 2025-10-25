@@ -1032,7 +1032,7 @@ impl From<AnthropicStopReason> for FinishReason {
             AnthropicStopReason::MaxTokens => FinishReason::Length,
             AnthropicStopReason::StopSequence => FinishReason::StopSequence,
             AnthropicStopReason::ToolUse => FinishReason::ToolCall,
-            AnthropicStopReason::Unknown => FinishReason::Unknown,
+            AnthropicStopReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

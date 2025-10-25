@@ -660,7 +660,7 @@ impl From<TGIFinishReason> for FinishReason {
             TGIFinishReason::ContentFilter => FinishReason::ContentFilter,
             TGIFinishReason::ToolCalls => FinishReason::ToolCall,
             TGIFinishReason::FunctionCall => FinishReason::ToolCall,
-            TGIFinishReason::Unknown => FinishReason::Unknown,
+            TGIFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

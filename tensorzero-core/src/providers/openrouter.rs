@@ -1117,7 +1117,7 @@ impl From<OpenRouterFinishReason> for FinishReason {
             OpenRouterFinishReason::ContentFilter => FinishReason::ContentFilter,
             OpenRouterFinishReason::ToolCalls => FinishReason::ToolCall,
             OpenRouterFinishReason::FunctionCall => FinishReason::ToolCall,
-            OpenRouterFinishReason::Unknown => FinishReason::Unknown,
+            OpenRouterFinishReason::Unknown => FinishReason::Unknown(None),
         }
     }
 }

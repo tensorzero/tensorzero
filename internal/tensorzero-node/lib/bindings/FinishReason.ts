@@ -6,4 +6,4 @@ export type FinishReason =
   | "length"
   | "tool_call"
   | "content_filter"
-  | "unknown";
+  | { unknown: string | null };
