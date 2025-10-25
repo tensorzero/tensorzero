@@ -18,6 +18,7 @@ use tensorzero_core::embeddings::{
     Embedding, EmbeddingEncodingFormat, EmbeddingModelConfig, EmbeddingProviderConfig,
     EmbeddingRequest, UninitializedEmbeddingProviderConfig,
 };
+use tensorzero_core::utils::retries::RetryConfig;
 use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
@@ -1209,6 +1210,7 @@ async fn test_embedding_request() {
             .into_iter()
             .collect(),
         timeout_ms: None,
+        retries: RetryConfig::default(),
     };
 
     let request = EmbeddingRequest {
