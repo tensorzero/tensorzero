@@ -14,6 +14,7 @@ pub use tensorzero_core::db::datasets::{
     DatasetDetailRow, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
     GetDatapointParams, GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams,
 };
+use tensorzero_core::db::inferences::InferenceQueries;
 pub use tensorzero_core::db::ClickHouseConnection;
 use tensorzero_core::db::HealthCheckable;
 pub use tensorzero_core::db::{ModelUsageTimePoint, TimeWindow};
@@ -61,9 +62,9 @@ pub use client_input::{ClientInput, ClientInputMessage, ClientInputMessageConten
 pub use tensorzero_core::cache::CacheParamsOptions;
 pub use tensorzero_core::db::clickhouse::query_builder::{
     BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
-    InferenceOutputSource, ListInferencesParams, TagComparisonOperator, TagFilter,
-    TimeComparisonOperator, TimeFilter,
+    TagComparisonOperator, TagFilter, TimeComparisonOperator, TimeFilter,
 };
+pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
 };

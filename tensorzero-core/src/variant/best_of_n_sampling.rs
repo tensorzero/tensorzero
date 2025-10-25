@@ -23,6 +23,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
+use crate::tool::create_implicit_tool_call_config_with_allowed_tools;
 use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
 use crate::{
@@ -140,7 +141,6 @@ lazy_static! {
         .expect("Failed to create schema for evaluator output")
     };
     static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = {
-        use crate::tool::create_implicit_tool_call_config_with_allowed_tools;
         create_implicit_tool_call_config_with_allowed_tools(
             EVALUATOR_OUTPUT_SCHEMA.clone(),
             AllowedTools {

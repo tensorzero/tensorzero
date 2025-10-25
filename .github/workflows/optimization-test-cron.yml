@@ -12,6 +12,10 @@ on:
     - cron: "0 2 * * 0"
   workflow_dispatch: # Allow manual triggering
 
+permissions:
+  contents: read
+  actions: read
+
 env:
   FORCE_COLOR: 1
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

@@ -7,7 +7,7 @@ use uuid::Uuid;
 use mockall::automock;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
-use crate::db::clickhouse::query_builder::FloatComparisonOperator;
+use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
 use crate::endpoints::datasets::{Datapoint, DatapointKind};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
@@ -25,6 +25,16 @@ pub enum DatapointInsert {
     Chat(ChatInferenceDatapointInsert),
     #[serde(rename = "json")]
     Json(JsonInferenceDatapointInsert),
+}
+
+#[cfg(any(test, feature = "e2e_tests"))]
+impl DatapointInsert {
+    pub fn id(&self) -> Uuid {
+        match self {
+            DatapointInsert::Chat(datapoint) => datapoint.id,
+            DatapointInsert::Json(datapoint) => datapoint.id,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -194,11 +204,44 @@ pub struct GetAdjacentDatapointIdsParams {
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+/// Legacy struct for old get_datapoint clickhouse query. To be deprecated.
 pub struct GetDatapointParams {
     pub dataset_name: String,
     pub datapoint_id: Uuid,
     /// Whether to include stale datapoints in the query; false by default.
     pub allow_stale: Option<bool>,
+}
+
+#[derive(Deserialize)]
+/// A struct representing query params for a SELECT datapoints query.
+pub struct GetDatapointsParams {
+    /// Dataset name to query. If not provided, all datasets will be queried.
+    /// At least one of `dataset_name` or `ids` must be provided.
+    #[serde(default)]
+    pub dataset_name: Option<String>,
+
+    /// Function name to filter by. If provided, only datapoints from this function will be returned.
+    #[serde(default)]
+    pub function_name: Option<String>,
+
+    /// IDs of the datapoints to query. If not provided, all datapoints will be queried.
+    /// At least one of `dataset_name` or `ids` must be provided.
+    #[serde(default)]
+    pub ids: Option<Vec<Uuid>>,
+
+    /// Maximum number of datapoints to return.
+    pub page_size: u32,
+
+    /// Number of datapoints to skip before starting to return results.
+    pub offset: u32,
+
+    /// Whether to include stale datapoints in the query.
+    pub allow_stale: bool,
+
+    /// Optional filter to apply when querying datapoints.
+    /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
+    #[serde(default)]
+    pub filter: Option<DatapointFilter>,
 }
 
 #[async_trait]
@@ -254,11 +297,6 @@ pub trait DatasetQueries {
     /// TODO(shuyangli): To deprecate in favor of `get_datapoints`
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error>;
 
-    /// Gets multiple datapoints by dataset name and IDs
-    async fn get_datapoints(
-        &self,
-        dataset_name: &str,
-        datapoint_ids: &[Uuid],
-        allow_stale: bool,
-    ) -> Result<Vec<Datapoint>, Error>;
+    /// Gets multiple datapoints with various filters and pagination
+    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error>;
 }
