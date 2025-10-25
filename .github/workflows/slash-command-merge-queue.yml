@@ -34,8 +34,8 @@ jobs:
           set -e
           gh workflow run merge-queue.yml --ref ${{ github.event.client_payload.pull_request.head.ref }}
 
-          # Wait a moment for the workflow to be created
-          sleep 3
+          # Wait 30s for the workflow to be created
+          sleep 30
 
           # Get the most recent workflow run for this branch
           RUN_ID=$(gh run list --workflow=merge-queue.yml --branch=${{ github.event.client_payload.pull_request.head.ref }} --limit=1 --json databaseId --jq '.[0].databaseId')
