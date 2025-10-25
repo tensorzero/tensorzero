@@ -30,7 +30,9 @@ export type Role = z.infer<typeof roleSchema>;
 
 export const textInputSchema = z.object({
   type: z.literal("text"),
-  value: JsonValueSchema,
+  // TODO: get this of this type completely, we should not run queries in the UI...
+  value: JsonValueSchema.optional(),
+  text: z.string().optional(),
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 

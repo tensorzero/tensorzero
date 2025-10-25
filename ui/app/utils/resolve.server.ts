@@ -222,6 +222,13 @@ function prepareDisplayText(
     };
   }
 
+  if (textBlock.text !== undefined) {
+    return {
+      type: "text",
+      text: textBlock.text,
+    };
+  }
+
   // Handle the legacy structured prompts that were stored as text content blocks
   if (role === "user" && functionConfig.schemas["user"] !== undefined) {
     return {
