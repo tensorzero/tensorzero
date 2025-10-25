@@ -538,7 +538,7 @@ invoke_all_separate_tests!(
     test_rollback_up_to_migration_index_,
     [
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
-        25, 26, 27, 28, 29, 30, 31, 32, 33
+        25, 26, 27, 28, 29, 30, 31, 32, 33, 34
     ]
 );
 
@@ -763,7 +763,7 @@ async fn test_clickhouse_migration_manager() {
         // for each element in the array.
         [
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 28, 29, 30, 31, 32, 33
+            24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34
         ]
     );
     let rows = get_all_migration_records(&clickhouse).await.unwrap();
