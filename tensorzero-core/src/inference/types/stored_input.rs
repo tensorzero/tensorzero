@@ -27,6 +27,8 @@ use pyo3::prelude::*;
 /// This is almost identical to `ResolvedInput`, but without `File` data.
 /// Only the object-storage path is actually stored in clickhouse
 /// (which can be used to re-fetch the file and produce a `ResolvedInput`).
+///
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -78,6 +80,7 @@ impl StoredInput {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
 pub struct StoredInputMessage {
     pub role: Role,
     pub content: Vec<StoredInputMessageContent>,
