@@ -71,9 +71,12 @@ gateway:
     #    hosts:
     #      - tensorzero-gateway.local
 
-    # Create legacy ingress with old naming pattern for zero-downtime upgrades
-    # Set to false after migrating DNS/load balancers to the new ingress name
-    createLegacyIngress: true
+    # Legacy ingress is automatically detected and maintained if it exists in your cluster
+    # You can explicitly set this to true/false to override the automatic behavior
+    # - If unset: automatically creates legacy ingress only if it already exists
+    # - If true: always creates legacy ingress (may cause conflicts on new installations)
+    # - If false: never creates legacy ingress
+    # createLegacyIngress: false
 
 # UI Configuration
 ui:
