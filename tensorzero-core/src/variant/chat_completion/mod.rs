@@ -70,6 +70,7 @@ pub struct ChatCompletionConfig {
     seed: Option<u32>,
     stop_sequences: Option<Vec<String>>,
     json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
+    parallel_tool_calls: Option<bool>,
     retries: RetryConfig,
     #[cfg_attr(test, ts(skip))]
     extra_body: Option<ExtraBodyConfig>,
@@ -139,6 +140,10 @@ impl ChatCompletionConfig {
     pub fn extra_headers(&self) -> Option<&ExtraHeadersConfig> {
         self.extra_headers.as_ref()
     }
+
+    pub fn parallel_tool_calls(&self) -> Option<bool> {
+        self.parallel_tool_calls
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ts_rs::TS)]
@@ -187,6 +192,8 @@ pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
+    pub parallel_tool_calls: Option<bool>,
+    #[serde(default)]
     pub retries: RetryConfig,
     #[serde(default)]
     #[ts(skip)]
@@ -215,6 +222,7 @@ impl UninitializedChatCompletionConfig {
             seed: self.seed,
             stop_sequences: self.stop_sequences,
             json_mode: self.json_mode,
+            parallel_tool_calls: self.parallel_tool_calls,
             retries: self.retries,
             extra_body: self.extra_body,
             extra_headers: self.extra_headers,
@@ -813,6 +821,7 @@ mod tests {
             weight: Some(1.0),
             templates: ChatTemplates::empty(),
             json_mode: Some(JsonMode::On),
+            parallel_tool_calls: None,
             temperature: None,
             top_p: None,
             presence_penalty: None,

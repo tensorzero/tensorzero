@@ -204,6 +204,7 @@ impl ToolCallConfig {
         function_tools: &[String],
         function_tool_choice: &ToolChoice,
         function_parallel_tool_calls: Option<bool>,
+        variant_parallel_tool_calls: Option<bool>,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
         dynamic_tool_params: DynamicToolParams,
     ) -> Result<Option<Self>, Error> {
@@ -307,8 +308,20 @@ impl ToolCallConfig {
             }
         }
 
+        // Priority order: dynamic > variant > function
+        // If both function and variant are set, log a deprecation warning
+        if function_parallel_tool_calls.is_some() && variant_parallel_tool_calls.is_some() {
+            tracing::warn!(
+                function_parallel_tool_calls = ?function_parallel_tool_calls,
+                variant_parallel_tool_calls = ?variant_parallel_tool_calls,
+                "Deprecation Warning: The property `parallel_tool_calls` is migrating from functions to variants. \
+                 The variant-level value will take precedence. Please remove `parallel_tool_calls` from the function configuration."
+            );
+        }
+
         let parallel_tool_calls = dynamic_tool_params
             .parallel_tool_calls
+            .or(variant_parallel_tool_calls)
             .or(function_parallel_tool_calls);
 
         let tool_call_config_option =
@@ -980,6 +993,7 @@ mod tests {
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -992,6 +1006,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -1012,6 +1027,7 @@ mod tests {
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &EMPTY_TOOLS,
             dynamic_tool_params,
         )
@@ -1033,6 +1049,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1054,6 +1071,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1082,6 +1100,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1109,6 +1128,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1144,6 +1164,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1173,6 +1194,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             DynamicToolParams::default(),
         )
@@ -1232,6 +1254,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             DynamicToolParams {
                 additional_tools: Some(vec![Tool {
@@ -1392,6 +1415,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1494,6 +1518,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1538,6 +1563,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1571,6 +1597,7 @@ mod tests {
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
+            None,
             &TOOLS,
             dynamic_tool_params,
         )
@@ -1592,5 +1619,90 @@ mod tests {
         assert!(logs_contain(
             "Currently, the gateway automatically includes all dynamic tools"
         ));
+    }
+
+    /// Test that a deprecation warning is emitted when both function-level and variant-level
+    /// parallel_tool_calls are set, and that variant-level wins
+    #[traced_test]
+    #[test]
+    fn test_parallel_tool_calls_conflict_warning() {
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true),  // function-level
+            Some(false), // variant-level (should win)
+            &TOOLS,
+            DynamicToolParams::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        // Variant-level should win
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
+
+        // Check that deprecation warning was logged
+        assert!(logs_contain(
+            "Deprecation Warning: The property `parallel_tool_calls` is migrating from functions to variants"
+        ));
+        assert!(logs_contain("variant-level value will take precedence"));
+    }
+
+    /// Test that variant-level parallel_tool_calls is used when function-level is None
+    #[test]
+    fn test_parallel_tool_calls_variant_only() {
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            None,        // function-level (not set)
+            Some(false), // variant-level
+            &TOOLS,
+            DynamicToolParams::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        // Variant-level should be used
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
+    }
+
+    /// Test that function-level parallel_tool_calls is used when variant-level is None
+    #[test]
+    fn test_parallel_tool_calls_function_only() {
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(true), // function-level
+            None,       // variant-level (not set)
+            &TOOLS,
+            DynamicToolParams::default(),
+        )
+        .unwrap()
+        .unwrap();
+
+        // Function-level should be used
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
+    }
+
+    /// Test that dynamic parallel_tool_calls overrides both function and variant level
+    #[test]
+    fn test_parallel_tool_calls_dynamic_override() {
+        let dynamic_tool_params = DynamicToolParams {
+            parallel_tool_calls: Some(true), // dynamic (should win)
+            ..Default::default()
+        };
+
+        let tool_call_config = ToolCallConfig::new(
+            &ALL_FUNCTION_TOOLS,
+            &AUTO_TOOL_CHOICE,
+            Some(false), // function-level
+            Some(false), // variant-level
+            &TOOLS,
+            dynamic_tool_params,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Dynamic should win over both function and variant
+        assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
     }
 }
