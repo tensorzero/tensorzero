@@ -181,7 +181,7 @@ async function resolveModelInferenceContent(
       try {
         return {
           ...content,
-          file: await resolveFile(content as FileContent),
+          file: await resolveFile(content),
         };
       } catch (error) {
         return {
@@ -327,7 +327,7 @@ async function resolveStoredInputMessageContent(
       try {
         return {
           ...content,
-          file: await resolveFile(content as FileContent),
+          file: await resolveFile(content),
         };
       } catch (error) {
         return {
