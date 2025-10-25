@@ -23,7 +23,6 @@ tower-http = { workspace = true, features = ["metrics"] }
 tokio-util = "0.7.15"
 metrics-exporter-prometheus = { workspace = true }
 http = { workspace = true }
-http-body = "1.0.1"
 pin-project = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }

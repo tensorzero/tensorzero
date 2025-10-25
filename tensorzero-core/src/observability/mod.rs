@@ -89,6 +89,7 @@ use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
 mod exporter_wrapper;
 pub mod tracing_bug;
+pub mod warn_early_drop;
 
 #[derive(Clone, Debug, Default, ValueEnum)]
 pub enum LogFormat {
