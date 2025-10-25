@@ -384,7 +384,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         params: &CountDatapointsForDatasetFunctionParams,
     ) -> Result<u32, Error> {
         let query = "
-        SELECT toUInt32(count()) as count 
+        SELECT toUInt32(count()) as count
         FROM {table:Identifier}
         WHERE dataset_name = {dataset_name:String}
             AND function_name = {function_name:String}";
@@ -3124,18 +3124,18 @@ mod tests {
                     '' as output_schema,");
                 assert_query_contains(query,
                     "tags,
-                    auxiliary, 
-                    source_inference_id, 
-                    is_deleted, 
-                    is_custom, 
-                    staled_at, 
+                    auxiliary,
+                    source_inference_id,
+                    is_deleted,
+                    is_custom,
+                    staled_at,
                     formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
                 assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL
                     WHERE true
                     AND dataset_name = {dataset_name:String}
                     AND id IN ['123e4567-e89b-12d3-a456-426614174000']
                     AND staled_at IS NULL");
-                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC 
+                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC
                     LIMIT {subquery_page_size:UInt32}");
                 assert_query_contains(query, "UNION ALL");
                 assert_query_contains(query, "

@@ -2584,7 +2584,7 @@ pub async fn check_base64_pdf_response(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Describe the contents of the PDF"},
+                    {"type": "text", "text": "Describe the contents of the PDF"},
                     {
                         "type": "file",
                         "file": {
@@ -2739,7 +2739,7 @@ pub async fn check_base64_image_response(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Describe the contents of the image"},
+                    {"type": "text", "text": "Describe the contents of the image"},
                     {
                         "type": "file",
                         "file": {
@@ -2894,7 +2894,7 @@ pub async fn check_url_image_response(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Describe the contents of the image"},
+                    {"type": "text", "text": "Describe the contents of the image"},
                     {
                         "type": "file",
                         "file": {
@@ -3058,7 +3058,7 @@ pub async fn check_simple_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -3263,7 +3263,7 @@ pub async fn check_simple_image_inference_response(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "What kind of animal is in this image?"},
+                    {"type": "text", "text": "What kind of animal is in this image?"},
                     {
                         "type": "file",
                         "file": {
@@ -3644,7 +3644,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -4151,7 +4151,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -4419,7 +4419,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -4736,7 +4736,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -5028,7 +5028,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is your name?"}]
+                    "content": [{"type": "text", "text": "What is your name?"}]
                 }
             ]
         }
@@ -5324,7 +5324,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is your name?"}]
+                    "content": [{"type": "text", "text": "What is your name?"}]
                 }
             ]
         }
@@ -5639,7 +5639,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is your name?"}]
+                    "content": [{"type": "text", "text": "What is your name?"}]
                 }
             ]
         }
@@ -5957,7 +5957,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is your name?"}]
+                    "content": [{"type": "text", "text": "What is your name?"}]
                 }
             ]
         }
@@ -6269,7 +6269,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -6546,7 +6546,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -6862,7 +6862,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -7240,7 +7240,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": prompt}]
+                    "content": [{"type": "text", "text": prompt}]
                 }
             ]
         }
@@ -7596,7 +7596,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
+                    "content": [{"type": "text", "text": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -7921,7 +7921,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
+                    "content": [{"type": "text", "text": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -8228,7 +8228,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
             },
             {
                 "role": "assistant",
@@ -8526,7 +8526,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
             },
             {
                 "role": "assistant",
@@ -8980,7 +8980,7 @@ pub async fn check_dynamic_tool_use_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
                 }
             ]
         }
@@ -9296,7 +9296,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
                 }
             ]
         }
@@ -9647,7 +9647,7 @@ pub async fn check_parallel_tool_use_inference_response(
                     "role": "user",
                     "content": [{
                         "type": "text",
-                        "value": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                        "text": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                     }]
                 }
             ]
@@ -10032,7 +10032,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
                 }
             ]
         }
@@ -10286,7 +10286,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -10544,7 +10544,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -10802,7 +10802,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
@@ -11253,7 +11253,7 @@ async fn check_short_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan? Explain your answer."}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan? Explain your answer."}]
             }
         ]
     });
@@ -12063,7 +12063,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
                "messages": [
                    {
                        "role": "user",
-                       "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                       "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                    }
                ]
             },

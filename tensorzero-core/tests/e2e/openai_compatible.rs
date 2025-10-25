@@ -109,7 +109,7 @@ async fn test_openai_compatible_route_with_function_name_as_model(model: &str) {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -382,7 +382,7 @@ async fn test_openai_compatible_route_with_default_function(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -550,7 +550,7 @@ async fn test_openai_compatible_route_with_json_mode_on() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -687,7 +687,7 @@ async fn test_openai_compatible_route_with_json_schema() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });

@@ -132,7 +132,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_dummy_judge_inner(
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": format!("Please write me a sentence about Megumin making an explosion: {random_input}")},
+                        {"type": "text", "text": format!("Please write me a sentence about Megumin making an explosion: {random_input}")},
                     ]
                 }
             ]
@@ -365,7 +365,7 @@ async fn e2e_test_mixture_of_n_dummy_candidates_real_judge_inner(stream: bool) {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "Please write me a sentence about the anime character Megumin."},
+                        {"type": "text", "text": "Please write me a sentence about the anime character Megumin."},
                         {"type": "unknown", "model_provider_name": "tensorzero::model_name::test::provider_name::good", "data": {"type": "text", "text": "My extra test-model input"}},
                     ]
                 }
@@ -626,7 +626,7 @@ async fn e2e_test_mixture_of_n_json_real_judge() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What are the first names of the Beatles? Respond in the format {\"names\": List[str]}"}]
+                    "content": [{"type": "text", "text": "What are the first names of the Beatles? Respond in the format {\"names\": List[str]}"}]
                 }
             ]
         }
@@ -1008,7 +1008,7 @@ async fn e2e_test_mixture_of_n_bad_fuser_streaming() {
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "Please write me a sentence about Megumin making an explosion"},
+                        {"type": "text", "text": "Please write me a sentence about Megumin making an explosion"},
                     ]
                 }
             ]
@@ -1166,7 +1166,7 @@ async fn e2e_test_mixture_of_n_single_candidate_inner(
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "value": "Please write me a sentence about Megumin making an explosion"},
+                        {"type": "text", "text": "Please write me a sentence about Megumin making an explosion"},
                     ]
                 }
             ]

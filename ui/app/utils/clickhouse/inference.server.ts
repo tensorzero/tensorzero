@@ -417,7 +417,7 @@ export async function queryInferenceById(
         c.function_name,
         c.variant_name,
         c.episode_id,
-        c.input,
+        c.input, -- CAREFUL: THIS MIGHT HAVE LEGACY DATA FORMAT!
         c.output,
         c.tool_params,
         c.inference_params,
@@ -442,7 +442,7 @@ export async function queryInferenceById(
         j.function_name,
         j.variant_name,
         j.episode_id,
-        j.input,
+        j.input, -- CAREFUL: THIS MIGHT HAVE LEGACY DATA FORMAT!
         j.output,
         NULL AS tool_params, -- Placeholder for Chat column
         j.inference_params,

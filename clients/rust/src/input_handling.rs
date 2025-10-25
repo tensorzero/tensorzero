@@ -39,8 +39,8 @@ fn resolved_input_message_content_to_client_input_message_content(
     resolved_input_message_content: ResolvedInputMessageContent,
 ) -> ClientInputMessageContent {
     match resolved_input_message_content {
-        ResolvedInputMessageContent::Text { text } => {
-            ClientInputMessageContent::Text(TextKind::Text { text })
+        ResolvedInputMessageContent::Text(text) => {
+            ClientInputMessageContent::Text(TextKind::Text { text: text.text })
         }
         ResolvedInputMessageContent::Template(template) => {
             ClientInputMessageContent::Template(template)

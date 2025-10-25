@@ -635,9 +635,9 @@ mod tests {
                 system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "What is the capital of France?".into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
                 }],
             },
             output: output.clone(),
@@ -700,9 +700,9 @@ mod tests {
                 system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What is the capital of France?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -770,9 +770,9 @@ mod tests {
                 system: Some(json!("You are a helpful assistant.")),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What's the weather like?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What's the weather like?".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![

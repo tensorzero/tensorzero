@@ -1,4 +1,3 @@
-use serde_json::json;
 use std::collections::HashMap;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::inference::types::{
@@ -30,9 +29,9 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!(input),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: input.to_string(),
+                })],
             }],
         },
         output: Some(output_vec.clone()),
