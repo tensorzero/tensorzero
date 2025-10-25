@@ -30,7 +30,7 @@ export type Role = z.infer<typeof roleSchema>;
 
 export const textInputSchema = z.object({
   type: z.literal("text"),
-  value: z.any(), // Value type from Rust maps to any in TS
+  value: JsonValueSchema,
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 
@@ -60,7 +60,7 @@ export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
 // 3) is missing from the config so we don't know
 export const displayMissingFunctionTextInputSchema = z.object({
   type: z.literal("missing_function_text"),
-  value: z.any(),
+  value: z.string(),
 });
 export type DisplayMissingFunctionTextInput = z.infer<
   typeof displayMissingFunctionTextInputSchema
