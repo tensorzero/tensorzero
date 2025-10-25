@@ -1073,7 +1073,7 @@ async fn e2e_test_inference_json_success() {
                 "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -1218,7 +1218,7 @@ async fn e2e_test_variant_failover() {
                     "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"type": "tacos", "quantity": 13}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"type": "tacos", "quantity": 13}}],
                     }
                 ]},
             "stream": false,
@@ -3592,7 +3592,7 @@ async fn test_json_cot_inference_request() {
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -3633,7 +3633,7 @@ async fn test_json_cot_inference_request_implicit_tool() {
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,

@@ -398,7 +398,7 @@ async fn e2e_test_invalid_json_user_input_template_no_schema() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "First user message"},
-                        {"type": "text", "arguments": {"my_invalid": "user message"}},
+                        {"type": "template", "name": "user", "arguments": {"my_invalid": "user message"}},
                     ]
                 },
 
@@ -433,7 +433,7 @@ async fn e2e_test_invalid_user_input_template_no_schema() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "First user message"},
-                        {"type": "text", "arguments": {"my_invalid": "user message"}},
+                        {"type": "template", "name": "user", "arguments": {"my_invalid": "user message"}},
                     ]
                 },
 
@@ -468,7 +468,7 @@ async fn e2e_test_invalid_assistant_input_template_no_schema() {
                 {
                     "role": "assistant",
                     "content": [
-                        {"type": "text", "arguments": {"my_invalid": "assistant message"}},
+                        {"type": "template", "name": "assistant", "arguments": {"my_invalid": "assistant message"}},
                     ]
                 }
             ]},
@@ -502,7 +502,7 @@ async fn e2e_test_invalid_json_assistant_input_template_no_schema() {
                 {
                     "role": "assistant",
                     "content": [
-                        {"type": "text", "arguments": {"my_invalid": "assistant message"}},
+                        {"type": "template", "name": "assistant", "arguments": {"my_invalid": "assistant message"}},
                     ]
                 }
             ]},

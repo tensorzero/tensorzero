@@ -9647,7 +9647,7 @@ pub async fn check_parallel_tool_use_inference_response(
                     "role": "user",
                     "content": [{
                         "type": "text",
-                        "value": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                        "text": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                     }]
                 }
             ]
@@ -10286,7 +10286,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -10544,7 +10544,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -10802,7 +10802,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
@@ -12063,7 +12063,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
                "messages": [
                    {
                        "role": "user",
-                       "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                       "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                    }
                ]
             },
