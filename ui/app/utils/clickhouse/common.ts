@@ -515,7 +515,7 @@ function displayInputMessageToStoredInputMessage(
 /**
  * Converts DisplayInput to StoredInput before we save the datapoints. This is mostly to handle:
  * 1. DisplayInput has { type: "text", "text": "..." } which matches StoredInput's { type: "text", "text": "..." } format
- * 2. missing_function_text and file_error are Frontend-only types, and we convert them back to text and file types for storage.
+ * 2. missing_function_text and file_error are frontend-only types, and we convert them back to text and file types for storage.
  * 3. StorageKind currently has a null / undefined mismatch, so we convert everything to undefined before going to the backend.
  */
 export function displayInputToStoredInput(
