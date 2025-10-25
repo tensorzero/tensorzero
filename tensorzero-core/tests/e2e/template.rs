@@ -113,11 +113,11 @@ async fn e2e_test_template_no_schema() {
         "system":"My system message",
         "messages":[
           {"role":"user","content":[
-            {"type":"text","value":"First user message"},
-            {"type":"text","value":"Second user message"},
+            {"type":"text","text":"First user message"},
+            {"type":"text","text":"Second user message"},
             {"type":"template","name":"my_custom_template","arguments":{"first_variable":"my_content","second_variable":"my_other_content"}}
           ]},
-          {"role":"assistant","content":[{"type":"text","value":"First assistant message"},{"type":"text","value":"Second assistant message"}]}]
+          {"role":"assistant","content":[{"type":"text","text":"First assistant message"},{"type":"text","text":"Second assistant message"}]}]
         })
     );
 }

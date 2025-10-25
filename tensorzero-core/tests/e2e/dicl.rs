@@ -235,7 +235,7 @@ pub async fn test_dicl_inference_request_no_examples(dicl_variant_name: &str) {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -649,7 +649,7 @@ pub async fn test_dicl_inference_request_simple() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Who was the author of the Harry Potter series?"}]
+                "content": [{"type": "text", "text": "Who was the author of the Harry Potter series?"}]
             }
         ]
     });
@@ -893,7 +893,7 @@ pub async fn test_dicl_inference_request_simple() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Who was the author of the Harry Potter series?"}]
+                "content": [{"type": "text", "text": "Who was the author of the Harry Potter series?"}]
             }
         ]
     });

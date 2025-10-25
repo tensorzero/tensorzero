@@ -514,9 +514,8 @@ function displayInputMessageToStoredInputMessage(
 }
 /**
  * Converts DisplayInput to StoredInput before we save the datapoints. This is mostly to handle:
- * 1. DisplayInput has { type: "text", "text": "..." } https://github.com/tensorzero/tensorzero/blob/b018a80797912fef0a86ec0115d9973378fde186/ui/app/utils/clickhouse/common.ts#L41-L44
- *    but StoredInput has { type: "text", "value": "..." } https://github.com/tensorzero/tensorzero/blob/b018a80797912fef0a86ec0115d9973378fde186/tensorzero-core/src/inference/types/stored_input.rs#L107-L109
- * 2. missing_function_text and file_error are Fronend-only types, and we convert them back to text and file types for storage.
+ * 1. DisplayInput has { type: "text", "text": "..." } which matches StoredInput's { type: "text", "text": "..." } format
+ * 2. missing_function_text and file_error are Frontend-only types, and we convert them back to text and file types for storage.
  * 3. StorageKind currently has a null / undefined mismatch, so we convert everything to undefined before going to the backend.
  */
 export function displayInputToStoredInput(

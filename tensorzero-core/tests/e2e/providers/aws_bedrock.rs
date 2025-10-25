@@ -168,7 +168,7 @@ async fn test_inference_with_explicit_region() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "text": "Hello, world!"}]
             }
         ]
     });

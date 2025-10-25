@@ -126,7 +126,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital city of Japan?"}]
             }
         ]
     });
@@ -391,7 +391,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital city of Japan?"}]
             }
         ]
     });

@@ -817,7 +817,7 @@ async fn validate_inference_clickhouse(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Who was the author of the Harry Potter series?"}]
+                "content": [{"type": "text", "text": "Who was the author of the Harry Potter series?"}]
             }
         ]
     });

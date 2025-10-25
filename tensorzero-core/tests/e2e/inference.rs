@@ -166,7 +166,7 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 },
                 {
                     "role": "user",
@@ -314,7 +314,7 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 },
                 {
                     "role": "user",
@@ -459,7 +459,7 @@ async fn e2e_test_inference_model_fallback() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 }
             ]
         }
@@ -616,7 +616,7 @@ async fn e2e_test_tool_call() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
                 }
             ]
         }
@@ -812,7 +812,7 @@ async fn e2e_test_tool_call_malformed() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
                 }
             ]
         }
@@ -989,7 +989,7 @@ async fn e2e_test_inference_json_fail() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "text": "Hello, world!"}]
             }
         ]
     });
@@ -1539,7 +1539,7 @@ async fn e2e_test_streaming() {
             "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "text": "Hello, world!"}]
             }
         ]}
     );
@@ -2215,7 +2215,7 @@ async fn e2e_test_tool_call_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
                 }
             ]
         }
@@ -2429,7 +2429,7 @@ async fn e2e_test_tool_call_streaming_split_tool_name() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
                 }
             ]
         }
@@ -2762,7 +2762,7 @@ pub async fn e2e_test_dynamic_api_key() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -3286,7 +3286,7 @@ async fn test_inference_zero_tokens_helper(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 }
             ]
         }
