@@ -164,11 +164,12 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
                                                 obj.insert("text".to_string(), Value::String(text));
                                             }
                                             Value::Object(arguments) => {
-                                                // Convert to Template format
-                                                obj.insert("type".to_string(), Value::String("template".to_string()));
-                                                obj.insert("name".to_string(), Value::String(role.implicit_template_name().to_string()));
-                                                obj.insert("arguments".to_string(), Value::Object(arguments));
-                                                obj.remove("value");
+                                                // Convert to Template format by constructing a new object
+                                                let mut new_obj = serde_json::Map::new();
+                                                new_obj.insert("type".to_string(), Value::String("template".to_string()));
+                                                new_obj.insert("name".to_string(), Value::String(role.implicit_template_name().to_string()));
+                                                new_obj.insert("arguments".to_string(), Value::Object(arguments));
+                                                *obj = new_obj;
                                             }
                                             _ => {
                                                 return Err(de::Error::custom(
