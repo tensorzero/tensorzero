@@ -1,4 +1,7 @@
 name: UI E2E Tests
+permissions:
+  actions: read
+  contents: read
 
 on:
   workflow_call:
