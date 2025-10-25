@@ -13,12 +13,12 @@ type ChatOutputBlock =
   | { type: "text"; text: string }
   | { type: "thought"; text: string }
   | { type: "tool_call"; name?: string; raw_name?: string }
-  | { type: string; [key: string]: any }; // fallback for unknown types
+  | { type: string; [key: string]: unknown }; // fallback for unknown types
 
 type JsonOutput = {
   parsed?: any;
   raw?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 function truncateText(text: string, maxLength: number): string {
