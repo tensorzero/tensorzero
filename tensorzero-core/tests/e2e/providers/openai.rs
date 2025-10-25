@@ -512,7 +512,7 @@ async fn test_default_function_model_name_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -626,7 +626,7 @@ async fn test_default_function_model_name_non_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -862,7 +862,7 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan (possibly as JSON)?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan (possibly as JSON)?"}]
             }
         ]
     });
@@ -1001,7 +1001,7 @@ async fn test_o4_mini_inference() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -1119,7 +1119,7 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -1588,7 +1588,7 @@ async fn test_content_block_text_field() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -2005,7 +2005,7 @@ pub async fn test_start_batch_inference_write_file() {
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Tell me about this image"},
+                    {"type": "text", "text": "Tell me about this image"},
                     {
                         "type": "file",
                         "file": {
@@ -3035,7 +3035,7 @@ async fn test_responses_api_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of France?"}]
+                "content": [{"type": "text", "text": "What is the capital of France?"}]
             }
         ]
     });

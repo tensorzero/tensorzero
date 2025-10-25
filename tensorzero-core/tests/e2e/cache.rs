@@ -656,7 +656,7 @@ pub async fn check_test_streaming_cache_with_err(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "My test input string"}]
+                "content": [{"type": "text", "text": "My test input string"}]
             }
         ]
     });

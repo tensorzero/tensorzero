@@ -629,9 +629,9 @@ mod tests {
                     system: None,
                     messages: vec![crate::inference::types::StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: json!("original input"),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "original input".to_string(),
+                        })],
                     }],
                 },
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -666,9 +666,9 @@ mod tests {
                     system: None,
                     messages: vec![crate::inference::types::StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: json!("original input"),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "original input".to_string(),
+                        })],
                     }],
                 },
                 output: Some(JsonInferenceOutput {
@@ -800,9 +800,8 @@ mod tests {
             // Input should be updated
             assert_eq!(updated.input.messages.len(), 1);
             match &updated.input.messages[0].content[0] {
-                StoredInputMessageContent::Text { value } => {
-                    let text: String = serde_json::from_value(value.clone()).unwrap();
-                    assert_eq!(text, "new input text");
+                StoredInputMessageContent::Text(text) => {
+                    assert_eq!(text.text, "new input text");
                 }
                 _ => panic!("Expected text content"),
             }

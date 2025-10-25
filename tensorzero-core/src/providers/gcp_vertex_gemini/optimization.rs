@@ -274,9 +274,9 @@ mod tests {
                 system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What is the capital of France?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
                 }],
             },
             output: output.clone(),

@@ -86,7 +86,7 @@ async fn e2e_test_inference_flaky() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 }
             ]
         }
@@ -257,7 +257,7 @@ async fn e2e_test_streaming_flaky() {
             "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "text": "Hello, world!"}]
             }
         ]}
     );
@@ -420,7 +420,7 @@ async fn e2e_test_best_of_n_dummy_candidates_flaky_judge() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Please write me a sentence about Megumin making an explosion."}]
+                    "content": [{"type": "text", "text": "Please write me a sentence about Megumin making an explosion."}]
                 }
             ]
         }
