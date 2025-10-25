@@ -440,8 +440,7 @@ fn prepare_mistral_tools<'a>(
         Some(tool_config) => match &tool_config.tool_choice {
             ToolChoice::Specific(tool_name) => {
                 let tool = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .find(|t| t.name() == tool_name)
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ToolNotFound {
@@ -453,8 +452,7 @@ fn prepare_mistral_tools<'a>(
             }
             ToolChoice::Auto | ToolChoice::Required => {
                 let tools = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(|t| MistralTool::from(OpenAITool::from(t)))
                     .collect();
                 let tool_choice = match tool_config.tool_choice {

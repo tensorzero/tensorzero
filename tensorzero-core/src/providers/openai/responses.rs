@@ -325,8 +325,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .map(|tool_config| {
                 tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
                     .collect()
             })
