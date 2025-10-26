@@ -356,3 +356,77 @@ async def test_async_together_sft(
         if job_info.status == OptimizationJobStatus.Completed:
             break
         sleep(1)
+
+
+# Error handling tests
+def test_invalid_config_missing_type(
+    embedded_sync_client: TensorZeroGateway,
+    mixed_rendered_samples: List[RenderedSample],
+):
+    """Test that a dictionary without a 'type' field produces a helpful error message."""
+    optimization_config = {
+        "model": "gpt-4o-mini",
+        "api_base": "http://localhost:3030/openai/",
+    }
+    with pytest.raises(Exception) as exc_info:
+        embedded_sync_client.experimental_launch_optimization(
+            train_samples=mixed_rendered_samples,
+            val_samples=None,
+            optimization_config=optimization_config,  # type: ignore
+        )
+    error_message = str(exc_info.value)
+    assert "Invalid optimization config" in error_message
+    assert "OpenAISFTConfig" in error_message or "type" in error_message.lower()
+
+
+def test_invalid_config_wrong_type(
+    embedded_sync_client: TensorZeroGateway,
+    mixed_rendered_samples: List[RenderedSample],
+):
+    """Test that a dictionary with an invalid 'type' field produces a helpful error message."""
+    optimization_config = {
+        "type": "invalid_optimizer_type",
+        "model": "gpt-4o-mini",
+    }
+    with pytest.raises(Exception) as exc_info:
+        embedded_sync_client.experimental_launch_optimization(
+            train_samples=mixed_rendered_samples,
+            val_samples=None,
+            optimization_config=optimization_config,  # type: ignore
+        )
+    error_message = str(exc_info.value)
+    assert "Invalid optimization config" in error_message or "unknown variant" in error_message.lower()
+
+
+def test_invalid_config_missing_required_field(
+    embedded_sync_client: TensorZeroGateway,
+    mixed_rendered_samples: List[RenderedSample],
+):
+    """Test that a dictionary missing required fields produces a helpful error message."""
+    optimization_config = {
+        "type": "openai_sft",
+        # Missing required 'model' field
+    }
+    with pytest.raises(Exception) as exc_info:
+        embedded_sync_client.experimental_launch_optimization(
+            train_samples=mixed_rendered_samples,
+            val_samples=None,
+            optimization_config=optimization_config,  # type: ignore
+        )
+    error_message = str(exc_info.value)
+    assert "model" in error_message.lower() or "missing field" in error_message.lower()
+
+
+def test_invalid_config_wrong_object_type(
+    embedded_sync_client: TensorZeroGateway,
+    mixed_rendered_samples: List[RenderedSample],
+):
+    """Test that passing a completely wrong type produces a helpful error message."""
+    with pytest.raises(Exception) as exc_info:
+        embedded_sync_client.experimental_launch_optimization(
+            train_samples=mixed_rendered_samples,
+            val_samples=None,
+            optimization_config="not_a_valid_config",  # type: ignore
+        )
+    error_message = str(exc_info.value)
+    assert "Invalid optimization config" in error_message or "expected" in error_message.lower()

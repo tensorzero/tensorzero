@@ -410,7 +410,11 @@ pub fn deserialize_optimization_config(
         ))
     } else {
         // Fall back to deserializing from a dictionary
-        deserialize_from_pyobj(obj.py(), obj)
+        deserialize_from_pyobj(obj.py(), obj).map_err(|e| {
+            PyValueError::new_err(format!(
+                "Invalid optimization config. Expected one of: OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, GCPVertexGeminiSFTConfig, or DICLOptimizationConfig (as either a class instance or a dictionary with 'type' field). Error: {e}"
+            ))
+        })
     }
 }
 
