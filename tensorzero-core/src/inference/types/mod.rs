@@ -509,8 +509,8 @@ impl LazyResolvedInputMessageContent {
 
     /// Converts the message content into a StoredInputMessageContent for database storage.
     /// This method optimizes file handling by:
-    /// - Skipping fetches when the file is already in object storage (ObjectStorage, ResolvedObjectStorage)
-    /// - Only writing files that aren't already persisted (Url, Base64)
+    /// - Skipping fetches when the file is already in object storage (`ObjectStorage`, `ResolvedObjectStorage`)
+    /// - Only writing files that aren't already persisted (`Url`, `Base64`)
     /// This enables efficient roundtripping: data from the database can be passed back
     /// to new requests without re-fetching or re-writing files.
     pub async fn into_stored_input_message_content(
