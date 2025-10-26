@@ -1007,7 +1007,7 @@ mod tests {
         use crate::{
             inference::types::{
                 ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage,
-                Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+                Role, StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
             },
             stored_inference::StoredOutput,
         };
@@ -1027,7 +1027,7 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("Test system")),
+                system: Some(System::Text("Test system".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text {

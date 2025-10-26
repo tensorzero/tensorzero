@@ -3,7 +3,7 @@ use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
 use tensorzero_core::{
     error::Error,
-    inference::types::{File, InputMessageContent, Role, TemplateInput, TextKind, Thought},
+    inference::types::{File, InputMessageContent, Role, System, TemplateInput, TextKind, Thought},
     tool::{ToolCallInput, ToolResult},
 };
 use tensorzero_derive::TensorZeroDeserialize;
@@ -12,10 +12,11 @@ use tensorzero_derive::TensorZeroDeserialize;
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct ClientInput {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<Value>,
+    #[ts(optional)]
+    pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<ClientInputMessage>,
 }

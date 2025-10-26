@@ -256,6 +256,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_sft_row() {
+        use crate::inference::types::System;
+
         let output = Some(vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Paris.".to_string(),
         })]);
@@ -271,7 +273,9 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                system: Some(System::Text(
+                    "You are a helpful assistant named Dr. M.M. Patel.".to_string(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text {

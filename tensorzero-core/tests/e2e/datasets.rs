@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role};
+use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, System};
 use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{
@@ -267,12 +267,11 @@ async fn test_create_delete_datapoint_chat() {
         let mut is_tool = false;
         // Verify input structure
         let input = &datapoint.input;
-        assert!(input
-            .system
-            .as_ref()
-            .unwrap()
-            .get("assistant_name")
-            .is_some());
+        assert!(match input.system.as_ref().unwrap() {
+            System::Template(map) => map.get("assistant_name"),
+            System::Text(_) => panic!("Expected System::Template"),
+        }
+        .is_some());
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -290,12 +289,11 @@ async fn test_create_delete_datapoint_chat() {
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
-        assert!(input
-            .system
-            .as_ref()
-            .unwrap()
-            .get("assistant_name")
-            .is_some());
+        assert!(match input.system.as_ref().unwrap() {
+            System::Template(map) => map.get("assistant_name"),
+            System::Text(_) => panic!("Expected System::Template"),
+        }
+        .is_some());
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1074,12 +1072,11 @@ async fn test_create_delete_datapoint_json() {
 
         // Verify input structure
         let input = &datapoint.input;
-        assert!(input
-            .system
-            .as_ref()
-            .unwrap()
-            .get("assistant_name")
-            .is_some());
+        assert!(match input.system.as_ref().unwrap() {
+            System::Template(map) => map.get("assistant_name"),
+            System::Text(_) => panic!("Expected System::Template"),
+        }
+        .is_some());
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1093,12 +1090,11 @@ async fn test_create_delete_datapoint_json() {
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
-        assert!(input
-            .system
-            .as_ref()
-            .unwrap()
-            .get("assistant_name")
-            .is_some());
+        assert!(match input.system.as_ref().unwrap() {
+            System::Template(map) => map.get("assistant_name"),
+            System::Text(_) => panic!("Expected System::Template"),
+        }
+        .is_some());
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);

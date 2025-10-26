@@ -3,7 +3,7 @@
 use serde_json::json;
 use tensorzero::{
     input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, ClientInput, ClientInputMessageContent, File,
+    ClientInferenceParams, ClientInput, ClientInputMessageContent, File, System,
 };
 
 use reqwest::Url;
@@ -47,7 +47,12 @@ async fn test_versioning() {
             function_name: Some("basic_test".to_string()),
             episode_id: None,
             input: ClientInput {
-                system: Some(json!({"assistant_name": "John"})),
+                system: Some(System::Template(
+                    json!({"assistant_name": "John"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![],
             },
             ..Default::default()

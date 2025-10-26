@@ -39,7 +39,7 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
-    InputMessage, InputMessageContent, Role, TemplateInput, TextKind, Usage,
+    InputMessage, InputMessageContent, Role, System, TemplateInput, TextKind, Usage,
 };
 use crate::tool::{
     DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
@@ -858,7 +858,11 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 tracing::warn!("Moving system message to the start of the conversation");
             }
             Ok(Input {
-                system: system_messages.pop(),
+                system: system_messages.pop().map(|v| match v {
+                    Value::String(s) => System::Text(s),
+                    Value::Object(map) => System::Template(map),
+                    _ => System::Text(v.to_string()),
+                }),
                 messages,
             })
         } else {
@@ -879,7 +883,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             }
             tracing::warn!("Multiple system messages provided - they will be concatenated and moved to the start of the conversation");
             Ok(Input {
-                system: Some(Value::String(output)),
+                system: Some(System::Text(output)),
                 messages,
             })
         }
@@ -1433,7 +1437,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use crate::cache::CacheEnabledMode;
-    use crate::inference::types::{Text, TextChunk};
+    use crate::inference::types::{System, Text, TextChunk};
     use crate::tool::ToolCallChunk;
 
     #[test]
@@ -1522,7 +1526,7 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::User);
         assert_eq!(
             input.system,
-            Some(Value::String("You are a helpful assistant".to_string()))
+            Some(System::Text("You are a helpful assistant".to_string()))
         );
         // Now try some messages with structured content
         let messages = vec![
@@ -1558,7 +1562,9 @@ mod tests {
         let input: Input = messages.try_into().unwrap();
         assert_eq!(
             input.system,
-            Some("You are a helpful assistant 1.\nYou are a helpful assistant 2.".into())
+            Some(System::Text(
+                "You are a helpful assistant 1.\nYou are a helpful assistant 2.".to_string()
+            ))
         );
         assert_eq!(input.messages.len(), 0);
 
@@ -1637,7 +1643,10 @@ mod tests {
             }),
         ];
         let result: Input = out_of_order_messages.try_into().unwrap();
-        assert_eq!(result.system, Some("System message".into()));
+        assert_eq!(
+            result.system,
+            Some(System::Text("System message".to_string()))
+        );
         assert_eq!(
             result.messages,
             vec![InputMessage {

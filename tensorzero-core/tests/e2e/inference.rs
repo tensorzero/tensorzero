@@ -20,7 +20,7 @@ use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
-use tensorzero_core::inference::types::StoredInput;
+use tensorzero_core::inference::types::{StoredInput, System};
 use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
@@ -1370,7 +1370,12 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
             input: ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "AskJeeves"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
@@ -1413,7 +1418,12 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
             function_name: Some("variant_failover_zero_weight".to_string()),
             variant_name: Some("zero_weight".to_string()),
             input: ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "AskJeeves"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
@@ -1757,7 +1767,12 @@ base_path = "{root}"
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
         input: ClientInput {
-            system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+            system: Some(System::Template(
+                serde_json::json!({"assistant_name": "AskJeeves"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -1799,7 +1814,12 @@ model = "dummy::good"
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
         input: ClientInput {
-            system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+            system: Some(System::Template(
+                serde_json::json!({"assistant_name": "AskJeeves"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -2559,9 +2579,14 @@ pub async fn test_raw_text(client: tensorzero::Client) {
             episode_id: Some(episode_id),
             function_name: Some("json_success".to_string()),
             input: ClientInput {
-                system: Some(serde_json::json!({
-                    "assistant_name": "Dr. Mehta"
-                })),
+                system: Some(System::Template(
+                    serde_json::json!({
+                        "assistant_name": "Dr. Mehta"
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                )),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::RawText {

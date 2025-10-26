@@ -527,7 +527,9 @@ mod tests {
         ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource,
         ListInferencesParams,
     };
-    use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
+    use crate::inference::types::{
+        ContentBlockChatOutput, JsonInferenceOutput, StoredInput, System,
+    };
     use crate::stored_inference::StoredInference;
     use crate::tool::ToolCallConfigDatabaseInsert;
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
@@ -2100,7 +2102,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             chat_inference.input,
             StoredInput {
-                system: Some(json!("you are a helpful assistant")),
+                system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
             }
         );
@@ -2142,7 +2144,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             chat_inference.input,
             StoredInput {
-                system: Some(json!("you are a helpful assistant")),
+                system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
             }
         );
@@ -2251,7 +2253,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             json_inference.input,
             StoredInput {
-                system: Some(json!("you are a helpful assistant")),
+                system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
             }
         );
@@ -2300,7 +2302,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             json_inference.input,
             StoredInput {
-                system: Some(json!("you are a helpful assistant")),
+                system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
             }
         );

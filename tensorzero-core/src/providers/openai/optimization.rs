@@ -617,6 +617,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_sft_row() {
+        use crate::inference::types::System;
+
         let output = Some(vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Paris.".to_string(),
         })]);
@@ -632,7 +634,9 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                system: Some(System::Text(
+                    "You are a helpful assistant named Dr. M.M. Patel.".to_string(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text {
@@ -683,6 +687,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_rft_row() {
+        use crate::inference::types::System;
         use crate::stored_inference::StoredOutput;
 
         let inference = RenderedSample {
@@ -697,7 +702,9 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                system: Some(System::Text(
+                    "You are a helpful assistant named Dr. M.M. Patel.".to_string(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text {
@@ -752,6 +759,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_rft_row_with_tool_calls() {
+        use crate::inference::types::System;
         use crate::stored_inference::StoredOutput;
         use crate::tool::ToolCallOutput;
 
@@ -767,7 +775,7 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant.")),
+                system: Some(System::Text("You are a helpful assistant.".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text {
