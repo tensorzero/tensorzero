@@ -5,6 +5,7 @@ import type { Config } from "~/types/tensorzero";
 import type { InferenceFilter } from "~/types/tensorzero";
 import { FormProvider, useForm } from "react-hook-form";
 import { useState } from "react";
+import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 
 const meta = {
   title: "QueryBuilder/InferenceFilterBuilder",
@@ -12,7 +13,7 @@ const meta = {
   decorators: [
     (Story) => {
       return (
-        <div className="border-border w-2xl rounded border p-4">
+        <div className="w-2xl">
           <Story />
         </div>
       );
@@ -180,22 +181,15 @@ export const Default: Story = {
     return (
       <ConfigProvider value={mockConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );
@@ -216,22 +210,15 @@ export const Filled: Story = {
     return (
       <ConfigProvider value={mockConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );
@@ -257,22 +244,15 @@ export const EmptyMetrics: Story = {
     return (
       <ConfigProvider value={emptyMetricsConfig}>
         <FormProvider {...form}>
-          <InferenceFilterBuilder
-            inferenceFilter={inferenceFilter}
-            setInferenceFilter={setInferenceFilter}
-          />
-          <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="font-semibold text-blue-900">
-                Debug: Inference Filters
-              </h3>
-            </div>
-            <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-              {inferenceFilter
-                ? JSON.stringify(inferenceFilter, null, 2)
-                : "undefined"}
-            </pre>
-          </div>
+          <StoryDebugWrapper
+            debugLabel="inferenceFilter"
+            debugData={inferenceFilter}
+          >
+            <InferenceFilterBuilder
+              inferenceFilter={inferenceFilter}
+              setInferenceFilter={setInferenceFilter}
+            />
+          </StoryDebugWrapper>
         </FormProvider>
       </ConfigProvider>
     );

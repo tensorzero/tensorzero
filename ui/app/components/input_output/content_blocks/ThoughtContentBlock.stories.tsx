@@ -1,32 +1,8 @@
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import ThoughtContentBlock from "./ThoughtContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { Thought } from "~/types/tensorzero";
-
-function StoryWrapper({
-  children,
-  block,
-}: {
-  children: ReactNode;
-  block: Thought;
-}) {
-  return (
-    <div className="w-[80vw] bg-orange-100 p-8">
-      <div className="bg-white p-4">{children}</div>
-      <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="font-semibold text-blue-900">
-            Debug:{" "}
-            <span className="text-md font-mono font-semibold">block</span>
-          </h3>
-        </div>
-        <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-          {JSON.stringify(block, null, 2)}
-        </pre>
-      </div>
-    </div>
-  );
-}
+import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 
 const meta = {
   title: "Input Output/Content Blocks/ThoughtContentBlock",
@@ -45,9 +21,9 @@ export const Text: Story = {
   },
   render: function TextStory(args) {
     return (
-      <StoryWrapper block={args.block}>
+      <StoryDebugWrapper debugLabel="block" debugData={args.block}>
         <ThoughtContentBlock {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -66,13 +42,13 @@ export const TextEditing: Story = {
       text: "I need to analyze the user's request and determine the best approach.",
     });
     return (
-      <StoryWrapper block={block}>
+      <StoryDebugWrapper debugLabel="block" debugData={block}>
         <ThoughtContentBlock
           block={block}
           isEditing={true}
           onChange={setBlock}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -86,9 +62,9 @@ export const Signature: Story = {
   },
   render: function SignatureStory(args) {
     return (
-      <StoryWrapper block={args.block}>
+      <StoryDebugWrapper debugLabel="block" debugData={args.block}>
         <ThoughtContentBlock {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -107,13 +83,13 @@ export const SignatureEditing: Story = {
       signature: "abc123".repeat(1000),
     });
     return (
-      <StoryWrapper block={block}>
+      <StoryDebugWrapper debugLabel="block" debugData={block}>
         <ThoughtContentBlock
           block={block}
           isEditing={true}
           onChange={setBlock}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -132,9 +108,9 @@ export const Summary: Story = {
   },
   render: function SummaryStory(args) {
     return (
-      <StoryWrapper block={args.block}>
+      <StoryDebugWrapper debugLabel="block" debugData={args.block}>
         <ThoughtContentBlock {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -163,13 +139,13 @@ export const SummaryEditing: Story = {
       ],
     });
     return (
-      <StoryWrapper block={block}>
+      <StoryDebugWrapper debugLabel="block" debugData={block}>
         <ThoughtContentBlock
           block={block}
           isEditing={true}
           onChange={setBlock}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -191,9 +167,9 @@ export const Complete: Story = {
   },
   render: function CompleteStory(args) {
     return (
-      <StoryWrapper block={args.block}>
+      <StoryDebugWrapper debugLabel="block" debugData={args.block}>
         <ThoughtContentBlock {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -226,13 +202,13 @@ export const CompleteEditing: Story = {
       ],
     });
     return (
-      <StoryWrapper block={block}>
+      <StoryDebugWrapper debugLabel="block" debugData={block}>
         <ThoughtContentBlock
           block={block}
           isEditing={true}
           onChange={setBlock}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -261,9 +237,9 @@ export const MultipleSummaryBlocks: Story = {
   },
   render: function MultipleSummaryBlocksStory(args) {
     return (
-      <StoryWrapper block={args.block}>
+      <StoryDebugWrapper debugLabel="block" debugData={args.block}>
         <ThoughtContentBlock {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -312,13 +288,13 @@ export const MultipleSummaryBlocksEditing: Story = {
       ],
     });
     return (
-      <StoryWrapper block={block}>
+      <StoryDebugWrapper debugLabel="block" debugData={block}>
         <ThoughtContentBlock
           block={block}
           isEditing={true}
           onChange={setBlock}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -330,9 +306,9 @@ export const Empty: Story = {
   },
   render: function EmptyStory(args) {
     return (
-      <StoryWrapper block={args.block}>
+      <StoryDebugWrapper debugLabel="block" debugData={args.block}>
         <ThoughtContentBlock {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -347,13 +323,13 @@ export const EmptyEditing: Story = {
   render: function EmptyEditingStory() {
     const [block, setBlock] = useState<Thought>({});
     return (
-      <StoryWrapper block={block}>
+      <StoryDebugWrapper debugLabel="block" debugData={block}>
         <ThoughtContentBlock
           block={block}
           isEditing={true}
           onChange={setBlock}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -381,9 +357,9 @@ export const Long: Story = {
   },
   render: function LongStory(args) {
     return (
-      <StoryWrapper block={args.block}>
+      <StoryDebugWrapper debugLabel="block" debugData={args.block}>
         <ThoughtContentBlock {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };

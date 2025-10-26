@@ -30,8 +30,8 @@ import {
   FloatMetricFilterRow,
   BooleanMetricFilterRow,
 } from "./FilterRows";
-import DeleteButton from "./DeleteButton";
 import AddButton from "./AddButton";
+import { DeleteButton } from "../ui/DeleteButton";
 
 // Constants
 const MAX_NESTING_DEPTH = 2;
@@ -191,10 +191,9 @@ const FilterGroup = memo(function FilterGroup({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete filter group"
+          label="Delete filter group"
         />
       </div>
       <div
@@ -263,7 +262,7 @@ function MissingMetricError({
       </span>
       <DeleteButton
         onDelete={onDelete}
-        ariaLabel={`Delete missing metric ${metricName}`}
+        label={`Delete missing metric ${metricName}`}
       />
     </div>
   );

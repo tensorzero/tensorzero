@@ -1,32 +1,8 @@
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import ResolvedInputElement from "./ResolvedInputElement";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ResolvedInput, Role } from "~/types/tensorzero";
-
-function StoryWrapper({
-  children,
-  input,
-}: {
-  children: ReactNode;
-  input: ResolvedInput;
-}) {
-  return (
-    <div className="w-[80vw] bg-orange-100 p-8">
-      <div className="bg-white p-4">{children}</div>
-      <div className="mt-4 rounded border border-blue-300 bg-blue-50 p-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="font-semibold text-blue-900">
-            Debug:{" "}
-            <span className="text-md font-mono font-semibold">input</span>
-          </h3>
-        </div>
-        <pre className="mt-2 overflow-auto rounded bg-white p-2 text-xs">
-          {JSON.stringify(input, null, 2)}
-        </pre>
-      </div>
-    </div>
-  );
-}
+import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
 
 const meta = {
   title: "Input Output/ResolvedInputElement",
@@ -45,9 +21,9 @@ export const Empty: Story = {
   },
   render: function EmptyStory(args) {
     return (
-      <StoryWrapper input={args.input}>
+      <StoryDebugWrapper debugLabel="input" debugData={args.input}>
         <ResolvedInputElement {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -67,14 +43,14 @@ export const EmptyEditing: Story = {
       messages: [],
     });
     return (
-      <StoryWrapper input={input}>
+      <StoryDebugWrapper debugLabel="input" debugData={input}>
         <ResolvedInputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
           onMessagesChange={(messages) => setInput({ ...input, messages })}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -90,9 +66,9 @@ export const SystemText: Story = {
   },
   render: function SystemTextStory(args) {
     return (
-      <StoryWrapper input={args.input}>
+      <StoryDebugWrapper debugLabel="input" debugData={args.input}>
         <ResolvedInputElement {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -114,14 +90,14 @@ export const SystemTextEditing: Story = {
       messages: [],
     });
     return (
-      <StoryWrapper input={input}>
+      <StoryDebugWrapper debugLabel="input" debugData={input}>
         <ResolvedInputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
           onMessagesChange={(messages) => setInput({ ...input, messages })}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -144,9 +120,9 @@ export const SystemTemplate: Story = {
   },
   render: function SystemTemplateStory(args) {
     return (
-      <StoryWrapper input={args.input}>
+      <StoryDebugWrapper debugLabel="input" debugData={args.input}>
         <ResolvedInputElement {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -182,14 +158,14 @@ export const SystemTemplateEditing: Story = {
       messages: [],
     });
     return (
-      <StoryWrapper input={input}>
+      <StoryDebugWrapper debugLabel="input" debugData={input}>
         <ResolvedInputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
           onMessagesChange={(messages) => setInput({ ...input, messages })}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -208,9 +184,9 @@ export const UserMessage: Story = {
   },
   render: function UserMessageStory(args) {
     return (
-      <StoryWrapper input={args.input}>
+      <StoryDebugWrapper debugLabel="input" debugData={args.input}>
         <ResolvedInputElement {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -240,14 +216,14 @@ export const UserMessageEditing: Story = {
       ],
     });
     return (
-      <StoryWrapper input={input}>
+      <StoryDebugWrapper debugLabel="input" debugData={input}>
         <ResolvedInputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
           onMessagesChange={(messages) => setInput({ ...input, messages })}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -271,9 +247,9 @@ export const AssistantMessage: Story = {
   },
   render: function AssistantMessageStory(args) {
     return (
-      <StoryWrapper input={args.input}>
+      <StoryDebugWrapper debugLabel="input" debugData={args.input}>
         <ResolvedInputElement {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -313,14 +289,14 @@ export const AssistantMessageEditing: Story = {
       ],
     });
     return (
-      <StoryWrapper input={input}>
+      <StoryDebugWrapper debugLabel="input" debugData={input}>
         <ResolvedInputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
           onMessagesChange={(messages) => setInput({ ...input, messages })}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -434,9 +410,9 @@ export const Complex: Story = {
   },
   render: function ComplexStory(args) {
     return (
-      <StoryWrapper input={args.input}>
+      <StoryDebugWrapper debugLabel="input" debugData={args.input}>
         <ResolvedInputElement {...args} />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };
@@ -452,14 +428,14 @@ export const ComplexEditing: Story = {
   render: function ComplexEditingStory() {
     const [input, setInput] = useState<ResolvedInput>(COMPLEX_INPUT);
     return (
-      <StoryWrapper input={input}>
+      <StoryDebugWrapper debugLabel="input" debugData={input}>
         <ResolvedInputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
           onMessagesChange={(messages) => setInput({ ...input, messages })}
         />
-      </StoryWrapper>
+      </StoryDebugWrapper>
     );
   },
 };

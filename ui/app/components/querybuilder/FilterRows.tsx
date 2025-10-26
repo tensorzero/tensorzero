@@ -16,7 +16,7 @@ import {
 } from "~/components/ui/select";
 import { cn } from "~/utils/common";
 import { MetricNameWithTooltip } from "~/components/querybuilder/MetricNameWithTooltip";
-import DeleteButton from "~/components/querybuilder/DeleteButton";
+import { DeleteButton } from "../ui/DeleteButton";
 
 // Labels for comparison operators
 export const TAG_OPERATOR_LABELS = {
@@ -228,7 +228,7 @@ export const TagFilterRow = memo(function TagFilterRow({
 
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete tag filter"
+          label="Delete tag filter"
         />
       </div>
     </div>
@@ -300,7 +300,7 @@ export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
 
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete metric filter"
+          label="Delete metric filter"
         />
       </div>
     </div>
@@ -339,7 +339,7 @@ export const BooleanMetricFilterRow = memo(function BooleanMetricFilterRow({
 
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete metric filter"
+          label="Delete metric filter"
         />
       </div>
     </div>
