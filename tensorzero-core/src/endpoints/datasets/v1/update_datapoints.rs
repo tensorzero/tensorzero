@@ -474,9 +474,9 @@ mod tests {
             match &stored_input.messages[0].content[0] {
                 StoredInputMessageContent::File(stored_file) => {
                     assert_eq!(stored_file.storage_path.path, storage_path.path);
-                    assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
+                    assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
                     assert_eq!(
-                        stored_file.file.source_url,
+                        stored_file.source_url,
                         Some("https://example.com/original.png".parse().unwrap())
                     );
                 }
@@ -549,11 +549,11 @@ mod tests {
             match &stored_input.messages[0].content[0] {
                 StoredInputMessageContent::File(stored_file) => {
                     // Should have been processed into a stored file
-                    assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
+                    assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
                     // With disabled storage, path should still be generated
                     assert!(!stored_file.storage_path.path.as_ref().is_empty());
                     // URL should be None since this came from Base64
-                    assert_eq!(stored_file.file.source_url, None);
+                    assert_eq!(stored_file.source_url, None);
                 }
                 _ => panic!("Expected File content"),
             }

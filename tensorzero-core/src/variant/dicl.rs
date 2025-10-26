@@ -917,7 +917,6 @@ mod tests {
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            file::Base64FileMetadata,
             storage::{StorageKind, StoragePath},
             ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
         },
@@ -1101,16 +1100,16 @@ mod tests {
                             StoredInputMessageContent::Text(Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             }),
-                            StoredInputMessageContent::File(Box::new(StoredFile {
-                                file: Base64FileMetadata {
+                            StoredInputMessageContent::File(Box::new(StoredFile(
+                                crate::inference::types::file::ObjectStorageFile {
                                     source_url: None,
                                     mime_type: mime::IMAGE_PNG,
+                                    storage_path: StoragePath {
+                                        kind: StorageKind::Disabled,
+                                        path: Default::default(),
+                                    },
                                 },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: Default::default(),
-                                },
-                            })),
+                            ))),
                         ],
                     }],
                 })

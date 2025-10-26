@@ -185,7 +185,7 @@ pub struct UrlFile {
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ObjectStorageFile {
-    #[serde(alias = "url")] // DEPRECATED
+    #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
     #[ts(optional)]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
@@ -194,6 +194,9 @@ pub struct ObjectStorageFile {
 }
 
 /// Implement a custom deserializer for ObjectStorageFile to show a deprecation warning for the `url` field
+///
+/// IMPORTANT: This deserializer can't be fully removed. Eventually, we'll want to move it from `ObjectStorageFile`
+/// to `StoredFile`, but ClickHouse will still have legacy data with `url`.
 impl<'de> Deserialize<'de> for ObjectStorageFile {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

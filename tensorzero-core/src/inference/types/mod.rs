@@ -472,10 +472,13 @@ impl LazyResolvedInputMessageContent {
                     metadata,
                     storage_path,
                     future: _,
-                } => StoredInputMessageContent::File(Box::new(StoredFile {
-                    file: metadata,
-                    storage_path,
-                })),
+                } => StoredInputMessageContent::File(Box::new(StoredFile(
+                    crate::inference::types::file::ObjectStorageFile {
+                        source_url: metadata.source_url,
+                        mime_type: metadata.mime_type,
+                        storage_path,
+                    },
+                ))),
                 // All other file types need to be resolved first.
                 other => {
                     let file = other.resolve().await?.into_owned();

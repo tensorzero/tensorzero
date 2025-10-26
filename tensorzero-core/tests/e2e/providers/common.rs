@@ -39,7 +39,7 @@ use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
-use tensorzero_core::inference::types::file::{Base64File, Base64FileMetadata, UrlFile};
+use tensorzero_core::inference::types::file::{Base64File, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
@@ -2631,13 +2631,13 @@ pub async fn check_base64_pdf_response(
                 StoredContentBlock::Text(Text {
                     text: "Describe the contents of the PDF".to_string(),
                 }),
-                StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
+                StoredContentBlock::File(Box::new(StoredFile(
+                    tensorzero_core::inference::types::file::ObjectStorageFile {
                         source_url: None,
                         mime_type: mime::APPLICATION_PDF,
+                        storage_path: expected_storage_path.clone(),
                     },
-                    storage_path: expected_storage_path.clone(),
-                }))
+                )))
             ]
         },]
     );
@@ -2786,13 +2786,13 @@ pub async fn check_base64_image_response(
                 StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
+                StoredContentBlock::File(Box::new(StoredFile(
+                    tensorzero_core::inference::types::file::ObjectStorageFile {
                         source_url: None,
                         mime_type: mime::IMAGE_PNG,
+                        storage_path: expected_storage_path.clone(),
                     },
-                    storage_path: expected_storage_path.clone(),
-                }))
+                )))
             ]
         },]
     );
@@ -2935,16 +2935,16 @@ pub async fn check_url_image_response(
                 role: Role::User,
                 content: vec![StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
+                }), StoredContentBlock::File(Box::new(StoredFile(
+                    tensorzero_core::inference::types::file::ObjectStorageFile {
                         source_url: Some(image_url.clone()),
                         mime_type: mime::IMAGE_PNG,
+                        storage_path: StoragePath {
+                            kind: kind.clone(),
+                            path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                        },
                     },
-                    storage_path: StoragePath {
-                        kind: kind.clone(),
-                        path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
-                    }
-                }))]
+                )))]
             },
         ]
     );

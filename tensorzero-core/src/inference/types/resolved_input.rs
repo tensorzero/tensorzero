@@ -459,13 +459,11 @@ impl ResolvedFile {
                 },
             storage_path,
         } = self;
-        StoredFile {
-            file: Base64FileMetadata {
-                source_url,
-                mime_type,
-            },
+        StoredFile(crate::inference::types::file::ObjectStorageFile {
+            source_url,
+            mime_type,
             storage_path,
-        }
+        })
     }
 }
 

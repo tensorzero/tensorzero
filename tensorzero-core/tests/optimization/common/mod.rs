@@ -21,7 +21,6 @@ use tensorzero_core::{
     endpoints::inference::InferenceClients,
     http::TensorzeroHttpClient,
     inference::types::{
-        file::Base64FileMetadata,
         resolved_input::ResolvedFile,
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
@@ -515,18 +514,18 @@ fn generate_image_example() -> RenderedSample {
                     StoredInputMessageContent::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    StoredInputMessageContent::File(Box::new(StoredFile {
-                        file: Base64FileMetadata {
+                    StoredInputMessageContent::File(Box::new(StoredFile(
+                        tensorzero_core::inference::types::file::ObjectStorageFile {
                             source_url: None,
                             mime_type: mime::IMAGE_PNG,
+                            storage_path: StoragePath {
+                                kind: StorageKind::Disabled,
+                                path: object_store::path::Path::parse(
+                                    "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                                ).unwrap(),
+                            },
                         },
-                        storage_path: StoragePath {
-                            kind: StorageKind::Disabled,
-                            path: object_store::path::Path::parse(
-                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
-                            ).unwrap(),
-                        },
-                    })),
+                    ))),
                 ],
             }],
         },
