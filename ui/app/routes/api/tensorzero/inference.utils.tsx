@@ -218,6 +218,10 @@ function tensorZeroStoredContentToInputContent(
 ): InputMessageContent {
   switch (content.type) {
     case "text":
+      return {
+        type: "text",
+        value: content.text,
+      };
     case "template":
     case "raw_text":
       return content;

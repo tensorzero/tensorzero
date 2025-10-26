@@ -168,7 +168,7 @@ async fn test_inference_with_explicit_region() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "text": "Hello, world!"}]
             }
         ]
     });
@@ -275,7 +275,7 @@ async fn test_inference_with_empty_system() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"topic": "artificial intelligence"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"topic": "artificial intelligence"}}]
                 }
             ]},
         "stream": false,

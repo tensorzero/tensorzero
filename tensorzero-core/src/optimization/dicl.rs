@@ -1030,9 +1030,9 @@ mod tests {
                 system: Some(json!("Test system")),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Test message"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test message".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
