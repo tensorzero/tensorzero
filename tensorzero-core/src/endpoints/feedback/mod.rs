@@ -334,7 +334,7 @@ async fn write_demonstration(
         &connection_info,
         inference_id,
         &function_info.name,
-        &function_config,
+        &config,
     )
     .await?;
     let parsed_value =
@@ -730,9 +730,10 @@ async fn get_dynamic_demonstration_info(
     clickhouse_client: &ClickHouseConnectionInfo,
     inference_id: Uuid,
     function_name: &str,
-    function_config: &FunctionConfig,
+    config: &Config,
 ) -> Result<DynamicDemonstrationInfo, Error> {
-    match function_config {
+    let function_config = config.get_function(function_name)?;
+    match &**function_config {
         FunctionConfig::Chat(..) => {
             let parameterized_query = "SELECT tool_params FROM ChatInference WHERE function_name={function_name:String} and id={inference_id:String} FORMAT JSONEachRow".to_string();
             let result = clickhouse_client
@@ -757,7 +758,9 @@ async fn get_dynamic_demonstration_info(
                 // This is consistent with how they are serialized at inference time.
                 tool_params_result
                     .tool_params
-                    .map(ToolCallConfigDatabaseInsert::into)
+                    .map(|x| x.into_tool_call_config(&function_config, &config.tools))
+                    .transpose()?
+                    .flatten()
                     .unwrap_or_default(),
             ))
         }

@@ -12,6 +12,7 @@ use serde_json::Value;
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
     error::{Error, ErrorDetails},
+    function::FunctionConfig,
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
@@ -33,6 +34,25 @@ use strum::AsRefStr;
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub enum Tool {
     ClientSideFunction(ClientSideFunctionTool),
+}
+
+impl Tool {
+    fn name(&self) -> &str {
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.name,
+        }
+    }
+
+    fn into_dynamic_tool_config(self) -> DynamicToolConfig {
+        match self {
+            Tool::ClientSideFunction(tool) => DynamicToolConfig {
+                description: tool.description,
+                parameters: DynamicJSONSchema::new(tool.parameters),
+                name: tool.name,
+                strict: tool.strict,
+            },
+        }
+    }
 }
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
@@ -202,6 +222,15 @@ pub struct AllowedTools {
     pub choice: AllowedToolsChoice,
 }
 
+impl AllowedTools {
+    fn into_dynamic_allowed_tools(self) -> Option<Vec<String>> {
+        match self.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            AllowedToolsChoice::DynamicAllowedTools => Some(self.tools),
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]
 #[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
@@ -230,17 +259,34 @@ pub struct ToolCallConfig {
     pub allowed_tools: AllowedTools,
 }
 
+pub struct ToolCallConfigConstructorArgs<'a> {
+    pub function_tools: &'a [String],
+    pub function_tool_choice: &'a ToolChoice,
+    pub function_parallel_tool_calls: Option<bool>,
+    pub static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
+    pub dynamic_allowed_tools: Option<Vec<String>>,
+    pub dynamic_additional_tools: Option<Vec<Tool>>,
+    pub dynamic_tool_choice: Option<ToolChoice>,
+    pub dynamic_parallel_tool_calls: Option<bool>,
+    pub dynamic_provider_tools: Option<Vec<ProviderTool>>,
+}
+
 impl ToolCallConfig {
-    pub fn new(
-        function_tools: &[String],
-        function_tool_choice: &ToolChoice,
-        function_parallel_tool_calls: Option<bool>,
-        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-        dynamic_tool_params: DynamicToolParams,
-    ) -> Result<Option<Self>, Error> {
+    pub fn new(args: ToolCallConfigConstructorArgs<'_>) -> Result<Option<Self>, Error> {
+        let ToolCallConfigConstructorArgs {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools,
+            dynamic_additional_tools,
+            dynamic_tool_choice,
+            dynamic_parallel_tool_calls,
+            dynamic_provider_tools,
+        } = args;
         // If `allowed_tools` is not provided, use the function's configured tools.
         // This means we allow all tools for the function.
-        let mut allowed_tools = match dynamic_tool_params.allowed_tools {
+        let mut allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
                 tools: allowed_tools,
                 choice: AllowedToolsChoice::DynamicAllowedTools,
@@ -252,10 +298,9 @@ impl ToolCallConfig {
         };
 
         // Make a set for all names in additional tools
-        let additional_tool_names: HashSet<&str> = dynamic_tool_params
-            .additional_tools
+        let additional_tool_names: HashSet<&str> = dynamic_additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(|t| t.name.as_str()).collect())
+            .map(|tools| tools.iter().map(|t| t.name()).collect())
             .unwrap_or_default();
 
         // Get each tool from the static tool config.
@@ -281,27 +326,22 @@ impl ToolCallConfig {
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut dynamic_tools_available = vec![];
-        if let Some(additional_tools) = dynamic_tool_params.additional_tools {
+        if let Some(additional_tools) = dynamic_additional_tools {
             for tool in additional_tools {
                 // Today we automatically add dynamically configured tools to the allowed tools list but in future we may
                 // change this behavior to be more in line with OpenAI's (if allowed_tools is set do not add tools.
-                // This warning is unusable today.
-                if !allowed_tools.tools.contains(&tool.name) {
+                let name = tool.name().to_string();
+                if !allowed_tools.tools.contains(&name) {
                     tracing::info!(
-                        tool_name = %tool.name,
+                        tool_name = name,
                         "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
                          In a near-future release, dynamic tools will no longer be included automatically. \
                          If you intend for your dynamic tools to be allowed, please allow them explicitly; \
                          otherwise, disregard this warning."
                     );
                 }
-                dynamic_tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
-                    description: tool.description,
-                    parameters: DynamicJSONSchema::new(tool.parameters),
-                    name: tool.name.clone(),
-                    strict: tool.strict,
-                }));
-                allowed_tools.tools.push(tool.name);
+                dynamic_tools_available.push(ToolConfig::Dynamic(tool.into_dynamic_tool_config()));
+                allowed_tools.tools.push(name);
             }
         }
 
@@ -320,9 +360,7 @@ impl ToolCallConfig {
             }
         }
 
-        let tool_choice = dynamic_tool_params
-            .tool_choice
-            .unwrap_or_else(|| function_tool_choice.clone());
+        let tool_choice = dynamic_tool_choice.unwrap_or_else(|| function_tool_choice.clone());
 
         // If the tool choice is a specific tool, make sure it's in the list of available tools
         if let ToolChoice::Specific(tool_name) = &tool_choice {
@@ -344,13 +382,11 @@ impl ToolCallConfig {
             }
         }
 
-        let parallel_tool_calls = dynamic_tool_params
-            .parallel_tool_calls
-            .or(function_parallel_tool_calls);
+        let parallel_tool_calls = dynamic_parallel_tool_calls.or(function_parallel_tool_calls);
 
         let tool_call_config_option = if static_tools_available.is_empty()
             && dynamic_tools_available.is_empty()
-            && dynamic_tool_params.provider_tools.is_none()
+            && dynamic_provider_tools.is_none()
         {
             None
         } else {
@@ -358,7 +394,7 @@ impl ToolCallConfig {
                 static_tools_available,
                 dynamic_tools_available,
                 tool_choice,
-                provider_tools: dynamic_tool_params.provider_tools,
+                provider_tools: dynamic_provider_tools,
                 parallel_tool_calls,
                 allowed_tools,
             })
@@ -415,13 +451,52 @@ impl ToolCallConfig {
         }
     }
 }
-/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToolCallConfigDatabaseInsert {
+    dynamic_tools: Vec<Tool>,
+    dynamic_provider_tools: Vec<ProviderTool>,
+    allowed_tools: AllowedTools,
+    tool_choice: ToolChoice,
+    parallel_tool_calls: Option<bool>,
+    // We write this in case any legacy code reads the database; it should not be read in new code
+    tool_config: LegacyToolCallConfigDatabaseInsert,
+}
+
+impl ToolCallConfigDatabaseInsert {
+    /// TODO: document extensively
+    pub fn into_tool_call_config(
+        self,
+        function_config: &FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<Option<ToolCallConfig>, Error> {
+        match function_config {
+            FunctionConfig::Chat(params) => ToolCallConfig::new(ToolCallConfigConstructorArgs {
+                function_tools: &params.tools,
+                function_tool_choice: &params.tool_choice,
+                function_parallel_tool_calls: params.parallel_tool_calls,
+                static_tools,
+                dynamic_allowed_tools: self.allowed_tools.into_dynamic_allowed_tools(),
+                dynamic_additional_tools: Some(self.dynamic_tools),
+                dynamic_parallel_tool_calls: self.parallel_tool_calls,
+                dynamic_provider_tools: Some(self.dynamic_provider_tools),
+                // Note to reviewer: should we store this as an option so that
+                dynamic_tool_choice: Some(self.tool_choice),
+            }),
+            FunctionConfig::Json(_) => Ok(None),
+        }
+    }
+}
+
+/// LegacyToolCallConfigDatabaseInsert is deprecated and should only be written to
+/// by legacy code. It has been subsumed by ToolCallConfigDatabaseInsert (which depends on this for backwards compatibility)
+/// a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct ToolCallConfigDatabaseInsert {
+pub struct LegacyToolCallConfigDatabaseInsert {
     pub tools_available: Vec<ClientSideFunctionTool>,
     pub tool_choice: ToolChoice,
     // TODO: decide what we want the Python interface to be for ToolChoice
@@ -430,7 +505,7 @@ pub struct ToolCallConfigDatabaseInsert {
     pub parallel_tool_calls: Option<bool>,
 }
 
-impl std::fmt::Display for ToolCallConfigDatabaseInsert {
+impl std::fmt::Display for LegacyToolCallConfigDatabaseInsert {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -787,7 +862,7 @@ impl ToolConfig {
     }
 }
 
-impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
+impl From<ToolCallConfig> for LegacyToolCallConfigDatabaseInsert {
     fn from(tool_call_config: ToolCallConfig) -> Self {
         Self {
             tools_available: tool_call_config
@@ -798,6 +873,49 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
                 .collect(),
             tool_choice: tool_call_config.tool_choice,
             parallel_tool_calls: tool_call_config.parallel_tool_calls,
+        }
+    }
+}
+
+fn tool_call_config_to_legacy_tool_database_insert(
+    tool_call_config: &ToolCallConfig,
+) -> LegacyToolCallConfigDatabaseInsert {
+    LegacyToolCallConfigDatabaseInsert {
+        tools_available: tool_call_config
+            .static_tools_available
+            .iter()
+            .chain(tool_call_config.dynamic_tools_available.iter())
+            .cloned()
+            .map(ToolConfig::into)
+            .collect(),
+        tool_choice: tool_call_config.tool_choice.clone(),
+        parallel_tool_calls: tool_call_config.parallel_tool_calls,
+    }
+}
+
+impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
+    fn from(tool_call_config: ToolCallConfig) -> Self {
+        let legacy_config = tool_call_config_to_legacy_tool_database_insert(&tool_call_config);
+        let ToolCallConfig {
+            // We explicitly don't store static_tools_available in the new ToolCallConfigDatabaseInsert
+            // because we want these to be specified by the function and eventually function version.
+            static_tools_available: _,
+            dynamic_tools_available,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            provider_tools,
+        } = tool_call_config;
+        Self {
+            tool_config: legacy_config,
+            dynamic_tools: dynamic_tools_available
+                .into_iter()
+                .map(Tool::from)
+                .collect(),
+            dynamic_provider_tools: provider_tools.unwrap_or_default(),
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
         }
     }
 }
@@ -959,31 +1077,30 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
     }
 }
 
-impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
-    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
-        // TODO(Viraj): Come back and look at this - should these be static or dynamic tools?
-        Self {
-            static_tools_available: db_insert
-                .tools_available
-                .into_iter()
-                .map(|tool| {
-                    ToolConfig::Dynamic(DynamicToolConfig {
-                        description: tool.description,
-                        parameters: DynamicJSONSchema::new(tool.parameters),
-                        name: tool.name,
-                        strict: tool.strict,
-                    })
-                })
-                .collect(),
-            dynamic_tools_available: vec![],
-            tool_choice: db_insert.tool_choice,
-            parallel_tool_calls: db_insert.parallel_tool_calls,
-            // TODO(Viraj): address this once we start storing provider tools
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        }
-    }
-}
+// impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
+//     fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
+//         Self {
+//             static_tools_available: db_insert
+//                 .tools_available
+//                 .into_iter()
+//                 .map(|tool| {
+//                     ToolConfig::Dynamic(DynamicToolConfig {
+//                         description: tool.description,
+//                         parameters: DynamicJSONSchema::new(tool.parameters),
+//                         name: tool.name,
+//                         strict: tool.strict,
+//                     })
+//                 })
+//                 .collect(),
+//             dynamic_tools_available: vec![],
+//             tool_choice: db_insert.tool_choice,
+//             parallel_tool_calls: db_insert.parallel_tool_calls,
+//             // TODO(Viraj): address this once we start storing provider tools
+//             provider_tools: None,
+//             allowed_tools: AllowedTools::default(),
+//         }
+//     }
+// }
 
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments

@@ -33,7 +33,10 @@ use crate::inference::types::{
 use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
+use crate::tool::{
+    DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig, ToolCallConfigConstructorArgs,
+    ToolChoice,
+};
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug, Serialize)]
@@ -321,13 +324,27 @@ impl FunctionConfig {
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
-            FunctionConfig::Chat(params) => Ok(ToolCallConfig::new(
-                &params.tools,
-                &params.tool_choice,
-                params.parallel_tool_calls,
-                static_tools,
-                dynamic_tool_params,
-            )?),
+            FunctionConfig::Chat(params) => {
+                let DynamicToolParams {
+                    allowed_tools,
+                    additional_tools,
+                    parallel_tool_calls,
+                    provider_tools,
+                    tool_choice,
+                } = dynamic_tool_params;
+                ToolCallConfig::new(ToolCallConfigConstructorArgs {
+                    function_tools: &params.tools,
+                    function_tool_choice: &params.tool_choice,
+                    function_parallel_tool_calls: params.parallel_tool_calls,
+                    static_tools,
+                    dynamic_allowed_tools: allowed_tools,
+                    dynamic_additional_tools: additional_tools
+                        .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+                    dynamic_parallel_tool_calls: parallel_tool_calls,
+                    dynamic_provider_tools: provider_tools,
+                    dynamic_tool_choice: tool_choice,
+                })
+            }
             FunctionConfig::Json(_) => {
                 if dynamic_tool_params.allowed_tools.is_some() {
                     return Err(ErrorDetails::InvalidRequest {
