@@ -37,7 +37,7 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
 }
 
 /// A file already encoded as base64
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 #[ts(export)]
 pub struct Base64File {
@@ -51,8 +51,43 @@ pub struct Base64File {
     pub data: String,
 }
 
+/// Implement a custom deserializer for Base64File to show a deprecation warning for the `url` field
+impl<'de> Deserialize<'de> for Base64File {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Base64FileHelper {
+            #[serde(alias = "url")]
+            source_url: Option<Url>,
+            mime_type: MediaType,
+            data: String,
+        }
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        // Check if the deprecated "url" field is present
+        if value.get("url").is_some() && value.get("source_url").is_none() {
+            tracing::warn!(
+                "Deprecation Warning: `url` is deprecated for `Base64File`. \
+                Please use `source_url` instead."
+            );
+        }
+
+        let helper: Base64FileHelper =
+            serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+
+        Ok(Base64File {
+            source_url: helper.source_url,
+            mime_type: helper.mime_type,
+            data: helper.data,
+        })
+    }
+}
+
 /// Like `Base64File`, but without the data field.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
@@ -62,6 +97,39 @@ pub struct Base64FileMetadata {
     pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
+}
+
+/// Implement a custom deserializer for Base64FileMetadata to show a deprecation warning for the `url` field
+impl<'de> Deserialize<'de> for Base64FileMetadata {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Base64FileMetadataHelper {
+            #[serde(alias = "url")]
+            source_url: Option<Url>,
+            mime_type: MediaType,
+        }
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        // Check if the deprecated "url" field is present
+        if value.get("url").is_some() && value.get("source_url").is_none() {
+            tracing::warn!(
+                "Deprecation Warning: `url` is deprecated for `Base64FileMetadata`. \
+                Please use `source_url` instead."
+            );
+        }
+
+        let helper: Base64FileMetadataHelper =
+            serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+
+        Ok(Base64FileMetadata {
+            source_url: helper.source_url,
+            mime_type: helper.mime_type,
+        })
+    }
 }
 
 impl std::fmt::Display for Base64File {
@@ -123,6 +191,41 @@ pub struct ObjectStorageFile {
     #[ts(type = "string")]
     pub mime_type: MediaType,
     pub storage_path: StoragePath,
+}
+
+/// Implement a custom deserializer for ObjectStorageFile to show a deprecation warning for the `url` field
+impl<'de> Deserialize<'de> for ObjectStorageFile {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct ObjectStorageFileHelper {
+            #[serde(alias = "url")]
+            source_url: Option<Url>,
+            mime_type: MediaType,
+            storage_path: StoragePath,
+        }
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        // Check if the deprecated "url" field is present
+        if value.get("url").is_some() && value.get("source_url").is_none() {
+            tracing::warn!(
+                "Deprecation Warning: `url` is deprecated for `ObjectStorageFile`. \
+                Please use `source_url` instead."
+            );
+        }
+
+        let helper: ObjectStorageFileHelper =
+            serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+
+        Ok(ObjectStorageFile {
+            source_url: helper.source_url,
+            mime_type: helper.mime_type,
+            storage_path: helper.storage_path,
+        })
+    }
 }
 
 /// A file for an inference or a datapoint.
