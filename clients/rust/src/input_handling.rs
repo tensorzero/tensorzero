@@ -1,6 +1,6 @@
 use crate::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 use tensorzero_core::inference::types::{
-    File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
+    Base64File, File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
 };
 use tensorzero_core::tool::{ToolCall, ToolCallInput};
 
@@ -61,7 +61,11 @@ fn resolved_input_message_content_to_client_input_message_content(
             let mime_type = file.file.mime_type;
             let data = file.file.data;
 
-            ClientInputMessageContent::File(File::Base64 { mime_type, data })
+            ClientInputMessageContent::File(File::Base64(Base64File {
+                source_url: None,
+                mime_type,
+                data,
+            }))
         }
         ResolvedInputMessageContent::Unknown {
             data,
@@ -78,7 +82,7 @@ mod tests {
     use object_store::path::Path;
 
     use tensorzero_core::inference::types::{
-        resolved_input::FileWithPath,
+        resolved_input::ResolvedFile,
         storage::{StorageKind, StoragePath},
         Base64File,
     };
@@ -128,9 +132,9 @@ mod tests {
         };
 
         // Create the resolved input message content with an image
-        let resolved_content = ResolvedInputMessageContent::File(Box::new(FileWithPath {
+        let resolved_content = ResolvedInputMessageContent::File(Box::new(ResolvedFile {
             file: Base64File {
-                url: Some(Url::parse("http://notaurl.com").unwrap()),
+                source_url: Some(Url::parse("http://notaurl.com").unwrap()),
                 mime_type: mime::IMAGE_JPEG,
                 data: image_data.to_string(),
             },
@@ -143,10 +147,11 @@ mod tests {
 
         // Verify the result
         match result {
-            ClientInputMessageContent::File(File::Base64 {
+            ClientInputMessageContent::File(File::Base64(Base64File {
                 mime_type: result_mime_type,
                 data: result_data,
-            }) => {
+                ..
+            })) => {
                 assert_eq!(result_mime_type, mime::IMAGE_JPEG);
                 assert_eq!(result_data, image_data);
             }

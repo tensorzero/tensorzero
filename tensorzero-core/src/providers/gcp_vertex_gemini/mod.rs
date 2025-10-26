@@ -43,7 +43,7 @@ use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::FileWithPath;
+use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -2051,7 +2051,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
             }
             Cow::Borrowed(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
+                let ResolvedFile {
                     file,
                     storage_path: _,
                 } = &*resolved_file;
@@ -2067,7 +2067,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
             }
             Cow::Owned(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
+                let ResolvedFile {
                     file,
                     storage_path: _,
                 } = &*resolved_file;

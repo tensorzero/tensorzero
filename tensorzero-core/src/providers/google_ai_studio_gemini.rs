@@ -22,7 +22,7 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::resolved_input::FileWithPath;
+use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -604,7 +604,7 @@ async fn convert_non_thought_content_block(
         }
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
-            let FileWithPath {
+            let ResolvedFile {
                 file,
                 storage_path: _,
             } = &*resolved_file;

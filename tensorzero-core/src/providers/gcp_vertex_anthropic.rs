@@ -25,7 +25,7 @@ use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::require_image;
-use crate::inference::types::resolved_input::FileWithPath;
+use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
@@ -555,7 +555,7 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
             ))),
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
+                let ResolvedFile {
                     file,
                     storage_path: _,
                 } = &*resolved_file;

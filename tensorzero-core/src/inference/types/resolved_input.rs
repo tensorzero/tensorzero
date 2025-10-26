@@ -49,7 +49,7 @@ pub enum LazyFile {
         #[serde(skip)]
         future: FileFuture,
     },
-    FileWithPath(FileWithPath),
+    ResolvedFile(ResolvedFile),
     ObjectStorage {
         metadata: Base64FileMetadata,
         storage_path: StoragePath,
@@ -68,13 +68,13 @@ impl std::cmp::PartialEq for LazyFile {
 }
 
 impl LazyFile {
-    pub async fn resolve(&self) -> Result<Cow<'_, FileWithPath>, Error> {
+    pub async fn resolve(&self) -> Result<Cow<'_, ResolvedFile>, Error> {
         match self {
             LazyFile::Url {
                 future,
                 file_url: _,
             } => Ok(Cow::Owned(future.clone().await?)),
-            LazyFile::FileWithPath(file) => Ok(Cow::Borrowed(file)),
+            LazyFile::ResolvedFile(file) => Ok(Cow::Borrowed(file)),
             LazyFile::ObjectStorage { future, .. } => Ok(Cow::Owned(future.clone().await?)),
         }
     }
@@ -94,7 +94,7 @@ pub struct FileUrl {
 /// This future is `Shared`, so that we can `.await` it from multiple different model providers
 /// (if we're not forwarding an image url to the model provider), as well as when writing the
 /// file to the object store (if enabled).
-pub type FileFuture = Shared<Pin<Box<dyn Future<Output = Result<FileWithPath, Error>> + Send>>>;
+pub type FileFuture = Shared<Pin<Box<dyn Future<Output = Result<ResolvedFile, Error>> + Send>>>;
 
 #[derive(Clone, Debug)]
 pub enum LazyResolvedInputMessageContent {
@@ -225,7 +225,7 @@ impl ResolvedInput {
             for message in self.messages {
                 for content_block in message.content {
                     if let ResolvedInputMessageContent::File(file) = content_block {
-                        let FileWithPath {
+                        let ResolvedFile {
                             file: raw,
                             storage_path,
                         } = *file;
@@ -363,7 +363,7 @@ pub enum ResolvedInputMessageContent {
     },
     Thought(Thought),
     #[cfg_attr(any(feature = "pyo3", test), serde(alias = "image"))]
-    File(Box<FileWithPath>),
+    File(Box<ResolvedFile>),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -425,7 +425,7 @@ impl ResolvedInputMessageContent {
                 LazyResolvedInputMessageContent::Thought(thought)
             }
             ResolvedInputMessageContent::File(file) => {
-                LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(*file)))
+                LazyResolvedInputMessageContent::File(Box::new(LazyFile::ResolvedFile(*file)))
             }
             ResolvedInputMessageContent::Unknown {
                 data,
@@ -442,18 +442,18 @@ impl ResolvedInputMessageContent {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-pub struct FileWithPath {
+pub struct ResolvedFile {
     #[serde(alias = "image")]
     pub file: Base64File,
     pub storage_path: StoragePath,
 }
 
-impl FileWithPath {
+impl ResolvedFile {
     pub fn into_stored_file(self) -> StoredFile {
-        let FileWithPath {
+        let ResolvedFile {
             file:
                 Base64File {
-                    url,
+                    source_url: url,
                     mime_type,
                     data: _,
                 },
@@ -466,7 +466,7 @@ impl FileWithPath {
     }
 }
 
-impl std::fmt::Display for FileWithPath {
+impl std::fmt::Display for ResolvedFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -476,14 +476,14 @@ impl std::fmt::Display for FileWithPath {
 impl RateLimitedInputContent for LazyFile {
     fn estimated_input_token_usage(&self) -> u64 {
         match self {
-            LazyFile::FileWithPath(FileWithPath {
+            LazyFile::ResolvedFile(ResolvedFile {
                 file: _,
                 storage_path: _,
             }) => {}
             LazyFile::ObjectStorage { .. } => {}
             // Forwarding a url is inherently incompatible with input token estimation,
             // so we'll need to continue using a hardcoded value here, even if we start
-            // estimating tokens LazyFile::FileWithPath
+            // estimating tokens LazyFile::ResolvedFile
             LazyFile::Url {
                 file_url: _,
                 future: _,
@@ -495,7 +495,7 @@ impl RateLimitedInputContent for LazyFile {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl FileWithPath {
+impl ResolvedFile {
     pub fn __repr__(&self) -> String {
         self.to_string()
     }

@@ -35,7 +35,7 @@ use crate::inference::types::batch::{
 
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::mime_type_to_ext;
-use crate::inference::types::resolved_input::{FileUrl, FileWithPath, LazyFile};
+use crate::inference::types::resolved_input::{FileUrl, LazyFile, ResolvedFile};
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -1575,7 +1575,7 @@ pub(super) async fn prepare_file_message(
         }
         _ => {
             let resolved_file = file.resolve().await?;
-            let FileWithPath {
+            let ResolvedFile {
                 file,
                 storage_path: _,
             } = &*resolved_file;
@@ -4027,9 +4027,9 @@ mod tests {
             kind: StorageKind::Disabled,
             path: object_store::path::Path::parse("dummy-path").unwrap(),
         };
-        let file = LazyFile::FileWithPath(FileWithPath {
+        let file = LazyFile::ResolvedFile(ResolvedFile {
             file: Base64File {
-                url: None,
+                source_url: None,
                 mime_type: mime::TEXT_PLAIN,
                 data: BASE64_STANDARD.encode(b"Hello, world!"),
             },
@@ -4094,9 +4094,9 @@ mod tests {
                     mime_type: None,
                 },
                 future: async move {
-                    Ok(FileWithPath {
+                    Ok(ResolvedFile {
                         file: Base64File {
-                            url: None,
+                            source_url: None,
                             // Deliberately use a different mime type to make sure we adjust the input filename
                             mime_type: mime::IMAGE_JPEG,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
@@ -4148,9 +4148,9 @@ mod tests {
                     mime_type: None,
                 },
                 future: async move {
-                    Ok(FileWithPath {
+                    Ok(ResolvedFile {
                         file: Base64File {
-                            url: None,
+                            source_url: None,
                             // Deliberately use a different mime type to make sure we adjust the input filename
                             mime_type: mime::IMAGE_JPEG,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
@@ -4231,9 +4231,9 @@ mod tests {
                     mime_type: Some(mime::APPLICATION_PDF),
                 },
                 future: async {
-                    Ok(FileWithPath {
+                    Ok(ResolvedFile {
                         file: Base64File {
-                            url: None,
+                            source_url: None,
                             mime_type: mime::APPLICATION_PDF,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
                         },

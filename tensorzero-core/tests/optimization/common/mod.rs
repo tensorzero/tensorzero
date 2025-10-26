@@ -22,7 +22,7 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     inference::types::{
         file::Base64FileMetadata,
-        resolved_input::FileWithPath,
+        resolved_input::ResolvedFile,
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
@@ -491,9 +491,9 @@ fn generate_image_example() -> RenderedSample {
                     ResolvedContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    ResolvedContentBlock::File(Box::new(FileWithPath {
+                    ResolvedContentBlock::File(Box::new(ResolvedFile {
                         file: Base64File {
-                            url: None,
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                         },

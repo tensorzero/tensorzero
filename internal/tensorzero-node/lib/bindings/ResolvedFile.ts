@@ -2,4 +2,4 @@
 import type { Base64File } from "./Base64File";
 import type { StoragePath } from "./StoragePath";
 
-export type FileWithPath = { file: Base64File; storage_path: StoragePath };
+export type ResolvedFile = { file: Base64File; storage_path: StoragePath };

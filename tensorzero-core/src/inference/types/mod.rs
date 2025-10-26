@@ -66,7 +66,7 @@ use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
 use file::sanitize_raw_request;
-pub use file::{Base64File, File};
+pub use file::{Base64File, File, ObjectStorageFile, UrlFile};
 use futures::future::{join_all, try_join_all};
 use futures::FutureExt;
 use itertools::Itertools;
@@ -76,7 +76,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
-use resolved_input::FileWithPath;
+use resolved_input::ResolvedFile;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
@@ -320,7 +320,7 @@ impl InputMessageContent {
             }
             InputMessageContent::File(file) => {
                 match &file {
-                    File::Url { url, mime_type } => {
+                    File::Url(UrlFile { url, mime_type }) => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
@@ -338,7 +338,7 @@ impl InputMessageContent {
                         let delayed_file_future = async move {
                             let file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&file)?;
-                            Ok(FileWithPath {
+                            Ok(ResolvedFile {
                                 file,
                                 storage_path: path,
                             })
@@ -348,27 +348,31 @@ impl InputMessageContent {
                             future: delayed_file_future.boxed().shared(),
                         }))
                     }
-                    File::Base64 { mime_type, data } => {
+                    File::Base64(Base64File {
+                        source_url: _,
+                        mime_type,
+                        data,
+                    }) => {
                         let file = Base64File {
-                            url: None,
+                            source_url: None,
                             mime_type: mime_type.clone(),
                             data: data.clone(),
                         };
                         let storage_kind = get_storage_kind(&context)?;
                         let path = storage_kind.file_path(&file)?;
 
-                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(
-                            FileWithPath {
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::ResolvedFile(
+                            ResolvedFile {
                                 file,
                                 storage_path: path,
                             },
                         )))
                     }
-                    File::ObjectStorage {
+                    File::ObjectStorage(ObjectStorageFile {
                         source_url,
                         mime_type,
                         storage_path,
-                    } => {
+                    }) => {
                         let source_url = source_url.clone();
                         let object_store_info = context.object_store_info.clone();
                         let owned_storage_path = storage_path.clone();
@@ -381,11 +385,11 @@ impl InputMessageContent {
                                 get_object(object_store_info.as_ref(), owned_storage_path.clone())
                                     .await?;
                             let file = Base64File {
-                                url: None,
+                                source_url: None,
                                 mime_type: mime_type_for_closure,
                                 data: object_response.data,
                             };
-                            Ok(FileWithPath {
+                            Ok(ResolvedFile {
                                 file,
                                 storage_path: owned_storage_path,
                             })
@@ -438,7 +442,7 @@ impl LazyResolvedInputMessageContent {
                     future,
                     file_url: _,
                 } => ResolvedInputMessageContent::File(Box::new(future.await?)),
-                LazyFile::FileWithPath(file) => ResolvedInputMessageContent::File(Box::new(file)),
+                LazyFile::ResolvedFile(file) => ResolvedInputMessageContent::File(Box::new(file)),
                 LazyFile::ObjectStorage { future, .. } => {
                     ResolvedInputMessageContent::File(Box::new(future.await?))
                 }
@@ -848,7 +852,7 @@ pub enum StoredContentBlock {
     },
 }
 
-/// Like `ContentBlock`, but stores an in-memory `FileWithPath` instead of a `LazyFile`
+/// Like `ContentBlock`, but stores an in-memory `ResolvedFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -858,7 +862,7 @@ pub enum ResolvedContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    File(Box<FileWithPath>),
+    File(Box<ResolvedFile>),
     Thought(Thought),
     Unknown {
         data: Value,
@@ -873,7 +877,7 @@ impl ResolvedContentBlock {
             ResolvedContentBlock::ToolCall(tool_call) => ContentBlock::ToolCall(tool_call),
             ResolvedContentBlock::ToolResult(tool_result) => ContentBlock::ToolResult(tool_result),
             ResolvedContentBlock::File(file) => {
-                ContentBlock::File(Box::new(LazyFile::FileWithPath(*file)))
+                ContentBlock::File(Box::new(LazyFile::ResolvedFile(*file)))
             }
             ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
             ResolvedContentBlock::Unknown {

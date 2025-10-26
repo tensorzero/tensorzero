@@ -15,7 +15,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::resolved_input::FileWithPath;
+use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -643,7 +643,7 @@ async fn tensorzero_to_groq_user_messages(
             }
             ContentBlock::File(file) => {
                 let file = file.resolve().await?;
-                let FileWithPath {
+                let ResolvedFile {
                     file,
                     storage_path: _,
                 } = &*file;
@@ -712,7 +712,7 @@ async fn tensorzero_to_groq_assistant_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
+                let ResolvedFile {
                     file,
                     storage_path: _,
                 } = &*resolved_file;

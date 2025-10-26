@@ -392,8 +392,8 @@ mod tests {
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::storage::{StorageKind, StoragePath};
     use crate::inference::types::{
-        ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
-        JsonInferenceOutput, Role, StoredInputMessageContent, Text,
+        Base64File, ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
+        JsonInferenceOutput, ObjectStorageFile, Role, StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
@@ -422,11 +422,11 @@ mod tests {
                 path: ObjectStorePath::parse("test/path/image.png").unwrap(),
             };
 
-            let file = File::ObjectStorage {
+            let file = File::ObjectStorage(ObjectStorageFile {
                 source_url: Some("https://example.com/original.png".parse().unwrap()),
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
-            };
+            });
 
             let input = Input {
                 system: None,
@@ -494,10 +494,11 @@ mod tests {
             // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
             // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
 
-            let file = File::Base64 {
-            mime_type: mime::IMAGE_PNG,
-            data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
-        };
+            let file = File::Base64(Base64File {
+                source_url: None,
+                mime_type: mime::IMAGE_PNG,
+                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+            });
 
             let input = Input {
                 system: None,

@@ -22,7 +22,7 @@ use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, E
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
-use crate::inference::types::resolved_input::FileWithPath;
+use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -712,7 +712,7 @@ async fn tensorzero_to_openrouter_user_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
+                let ResolvedFile {
                     file,
                     storage_path: _,
                 } = &*resolved_file;
@@ -784,7 +784,7 @@ async fn tensorzero_to_openrouter_assistant_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
+                let ResolvedFile {
                     file,
                     storage_path: _,
                 } = &*resolved_file;

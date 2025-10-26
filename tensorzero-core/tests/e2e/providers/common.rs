@@ -39,7 +39,7 @@ use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
-use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::file::{Base64File, Base64FileMetadata, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
@@ -1634,10 +1634,10 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Url {
+                            ClientInputMessageContent::File(File::Url(UrlFile {
                                 url: image_url.clone(),
                                 mime_type: None,
-                            }),
+                            })),
                         ],
                     }],
                 },
@@ -1695,10 +1695,11 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64 {
+                            ClientInputMessageContent::File(File::Base64(Base64File {
+                                source_url: None,
                                 mime_type: mime::APPLICATION_PDF,
                                 data: pdf_data.clone(),
-                            }),
+                            })),
                         ],
                     }],
                 },
@@ -1755,10 +1756,11 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                     ClientInputMessageContent::Text(TextKind::Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
-                    ClientInputMessageContent::File(File::Base64 {
+                    ClientInputMessageContent::File(File::Base64(Base64File {
+                        source_url: None,
                         mime_type: mime::IMAGE_PNG,
                         data: image_data.clone(),
-                    }),
+                    })),
                 ],
             }],
         },
@@ -1814,10 +1816,12 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
-    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
-        mime_type: mime::IMAGE_PNG,
-        data: updated_base64,
-    });
+    params.input.messages[0].content[1] =
+        ClientInputMessageContent::File(File::Base64(Base64File {
+            source_url: None,
+            mime_type: mime::IMAGE_PNG,
+            data: updated_base64,
+        }));
 
     let response = client.inference(params.clone()).await.unwrap();
 
