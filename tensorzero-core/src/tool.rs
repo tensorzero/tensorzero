@@ -15,6 +15,7 @@ use crate::{
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
+use strum::AsRefStr;
 
 /* A Tool is a function that can be called by an LLM
  * We represent them in various ways depending on how they are configured by the user.
@@ -26,12 +27,20 @@ use crate::{
  * If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
  */
 
+#[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub enum Tool {
+    ClientSideFunction(ClientSideFunctionTool),
+}
+
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct Tool {
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub struct ClientSideFunctionTool {
     pub description: String,
     pub parameters: Value,
     pub name: String,
@@ -49,24 +58,45 @@ impl std::fmt::Display for Tool {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Tool {
+    /*
+     * Note: as we add more tool types, we can throw AttributeError on fields that they don't have
+     * and ask the caller to check the type field.
+     * This avoids a breaking change to the Python interface as we go from a single tool type to potentially more in the future.
+     * most notably, MCP
+     */
+    #[getter]
+    pub fn get_type(&self) -> &str {
+        self.as_ref()
+    }
+
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
+        match self {
+            Tool::ClientSideFunction(tool) => {
+                serialize_to_dict(py, tool.parameters.clone()).map(|x| x.into_bound(py))
+            }
+        }
     }
 
     #[getter]
     pub fn get_description(&self) -> &str {
-        &self.description
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.description,
+        }
     }
 
     #[getter]
     pub fn get_name(&self) -> &str {
-        &self.name
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.name,
+        }
     }
 
     #[getter]
     pub fn get_strict(&self) -> bool {
-        self.strict
+        match self {
+            Tool::ClientSideFunction(tool) => tool.strict,
+        }
     }
 
     pub fn __repr__(&self) -> String {
@@ -392,7 +422,7 @@ impl ToolCallConfig {
 #[cfg_attr(test, ts(export))]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
-    pub tools_available: Vec<Tool>,
+    pub tools_available: Vec<ClientSideFunctionTool>,
     pub tool_choice: ToolChoice,
     // TODO: decide what we want the Python interface to be for ToolChoice
     // This is complicated because ToolChoice is an enum with some simple arms and some
@@ -407,6 +437,8 @@ impl std::fmt::Display for ToolCallConfigDatabaseInsert {
     }
 }
 
+/*
+TODO (Viraj, in this PR): handle the Python version of the non-legacy ToolCallConfigDatabaseInsert or whatever
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl ToolCallConfigDatabaseInsert {
@@ -424,6 +456,7 @@ impl ToolCallConfigDatabaseInsert {
         self.to_string()
     }
 }
+*/
 
 /// A struct to hold the dynamic tool parameters passed at inference time.
 /// These should override the function-level tool parameters.
@@ -436,7 +469,7 @@ impl ToolCallConfigDatabaseInsert {
 #[derive(ts_rs::TS)]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
-    pub additional_tools: Option<Vec<Tool>>,
+    pub additional_tools: Option<Vec<ClientSideFunctionTool>>,
     pub tool_choice: Option<ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
     pub provider_tools: Option<Vec<ProviderTool>>,
@@ -445,7 +478,7 @@ pub struct DynamicToolParams {
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
-    pub additional_tools: Option<Vec<Option<Vec<Tool>>>>,
+    pub additional_tools: Option<Vec<Option<Vec<ClientSideFunctionTool>>>>,
     pub tool_choice: Option<Vec<Option<ToolChoice>>>,
     pub parallel_tool_calls: Option<Vec<Option<bool>>>,
     pub provider_tools: Option<Vec<Option<Vec<ProviderTool>>>>,
@@ -771,7 +804,19 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
 
 impl From<ToolConfig> for Tool {
     fn from(tool_config: ToolConfig) -> Self {
-        Self {
+        Self::ClientSideFunction(ClientSideFunctionTool {
+            description: tool_config.description().to_string(),
+            parameters: tool_config.parameters().clone(),
+            name: tool_config.name().to_string(),
+            strict: tool_config.strict(),
+        })
+    }
+}
+
+// For now, this is required to convert to LegacyToolCallConfigDatabaseInsert for writing to the databse
+impl From<ToolConfig> for ClientSideFunctionTool {
+    fn from(tool_config: ToolConfig) -> Self {
+        ClientSideFunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),

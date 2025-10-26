@@ -1844,12 +1844,14 @@ pub struct OpenAISFTTool<'a> {
 
 impl<'a> From<&'a Tool> for OpenAISFTTool<'a> {
     fn from(tool: &'a Tool) -> Self {
-        OpenAISFTTool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: &tool.name,
-                description: Some(&tool.description),
-                parameters: &tool.parameters,
+        match tool {
+            Tool::ClientSideFunction(tool) => OpenAISFTTool {
+                r#type: OpenAIToolType::Function,
+                function: OpenAIFunction {
+                    name: &tool.name,
+                    description: Some(&tool.description),
+                    parameters: &tool.parameters,
+                },
             },
         }
     }
@@ -1857,14 +1859,16 @@ impl<'a> From<&'a Tool> for OpenAISFTTool<'a> {
 
 impl<'a> From<&'a Tool> for OpenAITool<'a> {
     fn from(tool: &'a Tool) -> Self {
-        OpenAITool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: &tool.name,
-                description: Some(&tool.description),
-                parameters: &tool.parameters,
+        match tool {
+            Tool::ClientSideFunction(tool) => OpenAITool {
+                r#type: OpenAIToolType::Function,
+                function: OpenAIFunction {
+                    name: &tool.name,
+                    description: Some(&tool.description),
+                    parameters: &tool.parameters,
+                },
+                strict: tool.strict,
             },
-            strict: tool.strict,
         }
     }
 }

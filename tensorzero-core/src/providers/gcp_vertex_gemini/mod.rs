@@ -1697,16 +1697,20 @@ pub struct GCPVertexGeminiSFTTool<'a> {
 
 impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
     fn from(tool: &'a Tool) -> Self {
-        let mut parameters = tool.parameters.clone();
-        capitalize_types(&mut parameters);
-        let function_declaration = GCPVertexGeminiFunctionDeclaration {
-            name: &tool.name,
-            description: Some(&tool.description),
-            parameters: Some(parameters),
-        };
+        match tool {
+            Tool::ClientSideFunction(tool) => {
+                let mut parameters = tool.parameters.clone();
+                capitalize_types(&mut parameters);
+                let function_declaration = GCPVertexGeminiFunctionDeclaration {
+                    name: &tool.name,
+                    description: Some(&tool.description),
+                    parameters: Some(parameters),
+                };
 
-        GCPVertexGeminiSFTTool {
-            tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
+                GCPVertexGeminiSFTTool {
+                    tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
+                }
+            }
         }
     }
 }

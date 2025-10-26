@@ -453,12 +453,14 @@ pub struct FireworksTool<'a> {
 
 impl<'a> From<&'a Tool> for FireworksTool<'a> {
     fn from(tool: &'a Tool) -> Self {
-        FireworksTool {
-            r#type: OpenAIToolType::Function,
-            function: OpenAIFunction {
-                name: &tool.name,
-                description: Some(&tool.description),
-                parameters: &tool.parameters,
+        match tool {
+            Tool::ClientSideFunction(tool) => FireworksTool {
+                r#type: OpenAIToolType::Function,
+                function: OpenAIFunction {
+                    name: &tool.name,
+                    description: Some(&tool.description),
+                    parameters: &tool.parameters,
+                },
             },
         }
     }
