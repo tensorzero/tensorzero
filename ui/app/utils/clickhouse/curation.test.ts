@@ -38,7 +38,8 @@ test("countCuratedInferences for boolean metrics", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
@@ -103,7 +104,8 @@ test("countCuratedInferences for float metrics", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
@@ -127,7 +129,8 @@ test("countCuratedInferences for float metrics", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
@@ -190,7 +193,8 @@ test("countCuratedInferences for demonstration metrics", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
@@ -235,7 +239,8 @@ test("getCuratedInferences retrieves correct data", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
@@ -280,7 +285,8 @@ test("getCuratedInferences retrieves correct data", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
@@ -305,7 +311,8 @@ test("getCuratedInferences retrieves correct data", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
@@ -333,7 +340,8 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,
@@ -374,7 +382,8 @@ test("countFeedbacksForMetric returns correct counts", async () => {
       description: "",
       output_schema: { value: {} },
       implicit_tool_call_config: {
-        tools_available: [],
+        static_tools_available: [],
+        dynamic_tools_available: [],
         provider_tools: null,
         tool_choice: "none",
         parallel_tool_calls: false,

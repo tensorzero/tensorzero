@@ -1274,7 +1274,7 @@ mod tests {
         providers::test_helpers::{
             MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
         },
-        tool::{AllowedTools, ToolCallConfig},
+        tool::ToolCallConfig,
     };
 
     use super::*;
@@ -1918,14 +1918,11 @@ mod tests {
         );
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
-        let tool_config = ToolCallConfig::new_for_test(
-            vec![],
-            vec![],
-            ToolChoice::Required,
-            Some(true),
-            None,
-            AllowedTools::default(),
-        );
+        let tool_config = ToolCallConfig {
+            tool_choice: ToolChoice::Required,
+            parallel_tool_calls: Some(true),
+            ..Default::default()
+        };
 
         // Test no tools but a tool choice and make sure tool choice output is None
         let request_without_tools = ModelInferenceRequest {

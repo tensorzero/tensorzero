@@ -126,6 +126,9 @@ impl UninitializedBestOfNSamplingConfig {
         })
     }
 }
+
+const IMPLICIT_TOOL_NAME: &str = "respond";
+
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
         #[expect(clippy::expect_used)]
@@ -144,7 +147,7 @@ lazy_static! {
         create_implicit_tool_call_config_with_allowed_tools(
             EVALUATOR_OUTPUT_SCHEMA.clone(),
             AllowedTools {
-                tools: vec!["respond".to_string()],
+                tools: vec![IMPLICIT_TOOL_NAME.to_string()],
                 choice: AllowedToolsChoice::FunctionDefault,
             },
         )
