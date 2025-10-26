@@ -1458,7 +1458,7 @@ mod tests {
         // Need to cover all 4 cases
         let tool_call_config = ToolCallConfig {
             parallel_tool_calls: Some(false),
-            ..ToolCallConfig::with_tools_available(vec![], vec![])
+            ..Default::default()
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
@@ -1470,7 +1470,7 @@ mod tests {
 
         let tool_call_config = ToolCallConfig {
             parallel_tool_calls: Some(true),
-            ..ToolCallConfig::with_tools_available(vec![], vec![])
+            ..Default::default()
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1484,7 +1484,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            ..ToolCallConfig::with_tools_available(vec![], vec![])
+            ..Default::default()
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1498,7 +1498,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Specific("test".to_string()),
             parallel_tool_calls: Some(false),
-            ..ToolCallConfig::with_tools_available(vec![], vec![])
+            ..Default::default()
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());

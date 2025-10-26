@@ -1480,7 +1480,7 @@ mod tests {
         // );
         let config = ToolCallConfig {
             provider_tools: Some(provider_tools),
-            ..ToolCallConfig::with_tools_available(vec![], vec![])
+            ..Default::default()
         };
 
         // Test matching gpt-4/openai: should return unscoped + gpt4_tool

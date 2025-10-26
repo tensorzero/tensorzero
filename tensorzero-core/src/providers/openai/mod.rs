@@ -3410,7 +3410,7 @@ mod tests {
         let tool_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            ..ToolCallConfig::with_tools_available(vec![], vec![])
+            ..Default::default()
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None
