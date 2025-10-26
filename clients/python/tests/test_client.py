@@ -1316,7 +1316,7 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "ResolvedFile": {
+            "ResolvedObjectStorageFile": {
                 "file": {
                     "url": None,
                     "mime_type": "image/png",
@@ -1364,7 +1364,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "ResolvedFile": {
+            "ResolvedObjectStorageFile": {
                 "file": {
                     "url": None,
                     "mime_type": "image/png",
@@ -1417,7 +1417,7 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "ResolvedFile": {
+            "ResolvedObjectStorageFile": {
                 "file": {
                     "url": None,
                     "mime_type": "application/pdf",
