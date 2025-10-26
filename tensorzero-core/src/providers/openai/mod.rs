@@ -35,7 +35,7 @@ use crate::inference::types::batch::{
 
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::mime_type_to_ext;
-use crate::inference::types::resolved_input::{FileUrl, LazyFile, ResolvedFile};
+use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -1575,12 +1575,8 @@ pub(super) async fn prepare_file_message(
         }
         _ => {
             let resolved_file = file.resolve().await?;
-            let ResolvedFile {
-                file,
-                storage_path: _,
-            } = &*resolved_file;
-            let file_data = file.data()?;
-            let base64_url = format!("data:{};base64,{}", file.mime_type, file_data);
+            let crate::inference::types::ResolvedObjectStorageFile { file, data } = &*resolved_file;
+            let base64_url = format!("data:{};base64,{}", file.mime_type, data);
             if file.mime_type.type_() == mime::IMAGE {
                 Ok(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
@@ -2656,7 +2652,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use crate::inference::types::storage::{StorageKind, StoragePath};
-    use crate::inference::types::{Base64File, FunctionType, RequestMessage};
+    use crate::inference::types::{FunctionType, PendingObjectStoreFile, RequestMessage};
     use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
@@ -4027,14 +4023,16 @@ mod tests {
             kind: StorageKind::Disabled,
             path: object_store::path::Path::parse("dummy-path").unwrap(),
         };
-        let file = LazyFile::ResolvedFile(ResolvedFile {
-            file: Base64File {
-                source_url: None,
-                mime_type: mime::TEXT_PLAIN,
+        let file = LazyFile::Base64(PendingObjectStoreFile(
+            crate::inference::types::ResolvedObjectStorageFile {
+                file: crate::inference::types::ObjectStorageFile {
+                    source_url: None,
+                    mime_type: mime::TEXT_PLAIN,
+                    storage_path: dummy_storage_path.clone(),
+                },
                 data: BASE64_STANDARD.encode(b"Hello, world!"),
             },
-            storage_path: dummy_storage_path.clone(),
-        });
+        ));
         let first_res = prepare_file_message(
             &file,
             OpenAIMessagesConfig {
@@ -4094,14 +4092,14 @@ mod tests {
                     mime_type: None,
                 },
                 future: async move {
-                    Ok(ResolvedFile {
-                        file: Base64File {
+                    Ok(crate::inference::types::ResolvedObjectStorageFile {
+                        file: crate::inference::types::ObjectStorageFile {
                             source_url: None,
                             // Deliberately use a different mime type to make sure we adjust the input filename
                             mime_type: mime::IMAGE_JPEG,
-                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                            storage_path: dummy_storage_path.clone(),
                         },
-                        storage_path: dummy_storage_path.clone(),
+                        data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })
                 }
                 .boxed()
@@ -4148,14 +4146,14 @@ mod tests {
                     mime_type: None,
                 },
                 future: async move {
-                    Ok(ResolvedFile {
-                        file: Base64File {
+                    Ok(crate::inference::types::ResolvedObjectStorageFile {
+                        file: crate::inference::types::ObjectStorageFile {
                             source_url: None,
                             // Deliberately use a different mime type to make sure we adjust the input filename
                             mime_type: mime::IMAGE_JPEG,
-                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                            storage_path: dummy_storage_path.clone(),
                         },
-                        storage_path: dummy_storage_path.clone(),
+                        data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })
                 }
                 .boxed()
@@ -4231,16 +4229,16 @@ mod tests {
                     mime_type: Some(mime::APPLICATION_PDF),
                 },
                 future: async {
-                    Ok(ResolvedFile {
-                        file: Base64File {
+                    Ok(crate::inference::types::ResolvedObjectStorageFile {
+                        file: crate::inference::types::ObjectStorageFile {
                             source_url: None,
                             mime_type: mime::APPLICATION_PDF,
-                            data: BASE64_STANDARD.encode(FERRIS_PNG),
+                            storage_path: StoragePath {
+                                kind: StorageKind::Disabled,
+                                path: object_store::path::Path::parse("dummy-path").unwrap(),
+                            },
                         },
-                        storage_path: StoragePath {
-                            kind: StorageKind::Disabled,
-                            path: object_store::path::Path::parse("dummy-path").unwrap(),
-                        },
+                        data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })
                 }
                 .boxed()

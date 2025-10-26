@@ -43,7 +43,6 @@ use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -2051,32 +2050,28 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
             }
             Cow::Borrowed(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let ResolvedFile {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
+                    &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
                         inline_data: GCPVertexInlineData {
                             mime_type: file.mime_type.to_string(),
-                            data: Cow::Owned(file.data()?.to_string()),
+                            data: Cow::Owned(data.to_string()),
                         },
                     },
                 ));
             }
             Cow::Owned(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let ResolvedFile {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
+                    &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
                         inline_data: GCPVertexInlineData {
                             mime_type: file.mime_type.to_string(),
-                            data: Cow::Owned(file.data()?.to_string()), // Convert to owned String
+                            data: Cow::Owned(data.to_string()), // Convert to owned String
                         },
                     },
                 ));

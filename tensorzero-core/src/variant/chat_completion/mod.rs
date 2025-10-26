@@ -325,14 +325,9 @@ pub async fn prepare_model_input(
     )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
     for message in messages {
-        templated_messages.push(
-            prepare_request_message(
-                &message.clone().into_lazy_resolved_input_message(),
-                templates_config,
-                chat_templates,
-            )
-            .await?,
-        );
+        let lazy_message = message.clone().into_lazy_resolved_input_message()?;
+        templated_messages
+            .push(prepare_request_message(&lazy_message, templates_config, chat_templates).await?);
     }
     Ok(ModelInput {
         system,

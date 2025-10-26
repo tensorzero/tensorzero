@@ -22,7 +22,6 @@ use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, E
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
-use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -712,16 +711,14 @@ async fn tensorzero_to_openrouter_user_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let ResolvedFile {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
+                    &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
+                        url: format!("data:{};base64,{}", file.mime_type, data),
                     },
                 });
             }
@@ -784,16 +781,14 @@ async fn tensorzero_to_openrouter_assistant_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let ResolvedFile {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
+                    &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64File` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
+                        url: format!("data:{};base64,{}", file.mime_type, data),
                     },
                 });
             }

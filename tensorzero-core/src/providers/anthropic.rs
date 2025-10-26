@@ -18,7 +18,7 @@ use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, E
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::resolved_input::{FileUrl, LazyFile, ResolvedFile};
+use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
     FunctionType, Latency, ModelInferenceRequestJsonMode, Role, Text,
@@ -595,14 +595,12 @@ impl<'a> AnthropicMessageContent<'a> {
                         PROVIDER_TYPE,
                     );
                     // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
-                    let file = file.resolve().await?;
-                    let ResolvedFile {
-                        file,
-                        storage_path: _,
-                    } = &*file;
+                    let resolved_file = file.resolve().await?;
+                    let crate::inference::types::ResolvedObjectStorageFile { file, data } =
+                        &*resolved_file;
                     let document = AnthropicDocumentSource::Base64 {
                         media_type: file.mime_type.clone(),
-                        data: file.data()?.clone(),
+                        data: data.clone(),
                     };
                     if file.mime_type.type_() == mime::IMAGE {
                         Ok(Some(FlattenUnknown::Normal(

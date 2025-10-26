@@ -424,7 +424,7 @@ pub async fn test_render_samples_normal() {
     };
 
     // Check that the base64 string is > 1000 chars
-    assert!(file.file.data.len() > 1000);
+    assert!(file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
@@ -960,7 +960,7 @@ pub async fn test_render_datapoints_normal() {
     };
 
     // Check that the base64 string is > 1000 chars
-    assert!(file.file.data.len() > 1000);
+    assert!(file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_sample.output.as_ref().unwrap().len(), 0);

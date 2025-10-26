@@ -5,8 +5,6 @@ use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile};
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
 use crate::inference::types::storage::StoragePath;
-use crate::inference::types::Base64File;
-use crate::inference::types::ResolvedFile;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
@@ -248,14 +246,16 @@ impl StoredInputMessageContent {
             }
             StoredInputMessageContent::File(file) => {
                 let data = resolver.resolve(file.storage_path.clone()).await?;
-                Ok(ResolvedInputMessageContent::File(Box::new(ResolvedFile {
-                    file: Base64File {
-                        source_url: file.source_url.clone(),
-                        mime_type: file.mime_type.clone(),
+                Ok(ResolvedInputMessageContent::File(Box::new(
+                    crate::inference::types::ResolvedObjectStorageFile {
+                        file: crate::inference::types::ObjectStorageFile {
+                            source_url: file.source_url.clone(),
+                            mime_type: file.mime_type.clone(),
+                            storage_path: file.storage_path.clone(),
+                        },
                         data,
                     },
-                    storage_path: file.storage_path.clone(),
-                })))
+                )))
             }
             StoredInputMessageContent::Unknown {
                 data,

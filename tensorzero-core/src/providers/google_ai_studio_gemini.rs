@@ -22,7 +22,6 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -604,14 +603,12 @@ async fn convert_non_thought_content_block(
         }
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
-            let ResolvedFile {
-                file,
-                storage_path: _,
-            } = &*resolved_file;
+            let crate::inference::types::ResolvedObjectStorageFile { file, data } =
+                &*resolved_file;
             Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: file.mime_type.to_string(),
-                    data: file.data()?.to_string(),
+                    data: data.to_string(),
                 },
             }))
         }

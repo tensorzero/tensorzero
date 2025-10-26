@@ -28,7 +28,6 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::mime_type_to_ext;
-use crate::inference::types::resolved_input::ResolvedFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
@@ -684,11 +683,8 @@ async fn bedrock_content_block_from_content_block(
         }
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
-            let ResolvedFile {
-                file,
-                storage_path: _,
-            } = &*resolved_file;
-            let file_bytes = aws_smithy_types::base64::decode(file.data()?).map_err(|e| {
+            let crate::inference::types::ResolvedObjectStorageFile { file, data } = &*resolved_file;
+            let file_bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,
                     raw_response: None,

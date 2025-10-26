@@ -264,8 +264,8 @@ function tensorZeroStoredContentToInputContent(
       return {
         type: "file",
         file: {
-          url: content.file.source_url ?? null,
-          mime_type: content.file.mime_type,
+          url: content.source_url ?? null,
+          mime_type: content.mime_type,
         },
         storage_path: {
           path: content.storage_path.path,

@@ -10,7 +10,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
-use super::{storage::StoragePath, Base64File, Role, Text, Thought};
+use super::{
+    storage::StoragePath, Base64File, PendingObjectStoreFile, ResolvedObjectStorageFile, Role,
+    Text, Thought,
+};
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
@@ -41,21 +44,26 @@ pub struct LazyResolvedInputMessage {
 }
 
 // This gets serialized as part of a `ModelInferenceRequest` when we compute a cache key.
-// TODO - decide on the precise caching behavior that we want for file URLs and object storage paths.
+// TODO: decide on the precise caching behavior that we want for file URLs and object storage paths.
 #[derive(Clone, Debug, Serialize)]
 pub enum LazyFile {
+    // Client sent a file URL → must fetch & store
     Url {
         file_url: FileUrl,
         #[serde(skip)]
         future: FileFuture,
     },
-    ResolvedFile(ResolvedFile),
+    // Client sent a base64-encoded file → skip fetch, must store
+    Base64(PendingObjectStoreFile),
+    // Client sent an object storage file → must fetch, skip store
     ObjectStorage {
         metadata: Base64FileMetadata,
         storage_path: StoragePath,
         #[serde(skip)]
         future: FileFuture,
     },
+    // Client sent a resolved object storage file → skip fetch & store
+    ResolvedObjectStorage(ResolvedObjectStorageFile),
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -68,14 +76,15 @@ impl std::cmp::PartialEq for LazyFile {
 }
 
 impl LazyFile {
-    pub async fn resolve(&self) -> Result<Cow<'_, ResolvedFile>, Error> {
+    pub async fn resolve(&self) -> Result<Cow<'_, ResolvedObjectStorageFile>, Error> {
         match self {
             LazyFile::Url {
                 future,
                 file_url: _,
             } => Ok(Cow::Owned(future.clone().await?)),
-            LazyFile::ResolvedFile(file) => Ok(Cow::Borrowed(file)),
+            LazyFile::Base64(pending) => Ok(Cow::Borrowed(&pending.0)),
             LazyFile::ObjectStorage { future, .. } => Ok(Cow::Owned(future.clone().await?)),
+            LazyFile::ResolvedObjectStorage(resolved) => Ok(Cow::Borrowed(resolved)),
         }
     }
 }
@@ -94,7 +103,8 @@ pub struct FileUrl {
 /// This future is `Shared`, so that we can `.await` it from multiple different model providers
 /// (if we're not forwarding an image url to the model provider), as well as when writing the
 /// file to the object store (if enabled).
-pub type FileFuture = Shared<Pin<Box<dyn Future<Output = Result<ResolvedFile, Error>> + Send>>>;
+pub type FileFuture =
+    Shared<Pin<Box<dyn Future<Output = Result<ResolvedObjectStorageFile, Error>> + Send>>>;
 
 #[derive(Clone, Debug)]
 pub enum LazyResolvedInputMessageContent {
@@ -191,26 +201,26 @@ pub async fn write_file(
 /// Produces a `StoredInput` from a `ResolvedInput` by discarding the data for any nested `File`s.
 /// The data can be recovered later by re-fetching from the object store using `StoredInput::reresolve`.
 impl ResolvedInput {
-    pub fn into_stored_input(self) -> StoredInput {
-        StoredInput {
+    pub fn into_stored_input(self) -> Result<StoredInput, Error> {
+        Ok(StoredInput {
             system: self.system,
             messages: self
                 .messages
                 .into_iter()
                 .map(ResolvedInputMessage::into_stored_input_message)
-                .collect(),
-        }
+                .collect::<Result<_, _>>()?,
+        })
     }
 
-    pub fn into_lazy_resolved_input(self) -> LazyResolvedInput {
-        LazyResolvedInput {
+    pub fn into_lazy_resolved_input(self) -> Result<LazyResolvedInput, Error> {
+        Ok(LazyResolvedInput {
             system: self.system,
             messages: self
                 .messages
                 .into_iter()
                 .map(ResolvedInputMessage::into_lazy_resolved_input_message)
-                .collect(),
-        }
+                .collect::<Result<_, _>>()?,
+        })
     }
 
     /// Writes all the files in the input to the object store,
@@ -224,11 +234,13 @@ impl ResolvedInput {
         if config.gateway.observability.enabled.unwrap_or(true) {
             for message in self.messages {
                 for content_block in message.content {
-                    if let ResolvedInputMessageContent::File(file) = content_block {
-                        let ResolvedFile {
-                            file: raw,
-                            storage_path,
-                        } = *file;
+                    if let ResolvedInputMessageContent::File(resolved) = content_block {
+                        let raw = Base64File {
+                            source_url: resolved.file.source_url.clone(),
+                            mime_type: resolved.file.mime_type.clone(),
+                            data: resolved.data.clone(),
+                        };
+                        let storage_path = resolved.file.storage_path.clone();
 
                         futures.push(
                             (async {
@@ -288,26 +300,26 @@ pub struct ResolvedInputMessage {
 }
 
 impl ResolvedInputMessage {
-    pub fn into_stored_input_message(self) -> StoredInputMessage {
-        StoredInputMessage {
+    pub fn into_stored_input_message(self) -> Result<StoredInputMessage, Error> {
+        Ok(StoredInputMessage {
             role: self.role,
             content: self
                 .content
                 .into_iter()
                 .map(ResolvedInputMessageContent::into_stored_input_message_content)
-                .collect(),
-        }
+                .collect::<Result<_, _>>()?,
+        })
     }
 
-    pub fn into_lazy_resolved_input_message(self) -> LazyResolvedInputMessage {
-        LazyResolvedInputMessage {
+    pub fn into_lazy_resolved_input_message(self) -> Result<LazyResolvedInputMessage, Error> {
+        Ok(LazyResolvedInputMessage {
             role: self.role,
             content: self
                 .content
                 .into_iter()
                 .map(ResolvedInputMessageContent::into_lazy_resolved_input_message_content)
-                .collect(),
-        }
+                .collect::<Result<_, _>>()?,
+        })
     }
 }
 
@@ -363,7 +375,7 @@ pub enum ResolvedInputMessageContent {
     },
     Thought(Thought),
     #[cfg_attr(any(feature = "pyo3", test), serde(alias = "image"))]
-    File(Box<ResolvedFile>),
+    File(Box<ResolvedObjectStorageFile>),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -372,8 +384,8 @@ pub enum ResolvedInputMessageContent {
 }
 
 impl ResolvedInputMessageContent {
-    pub fn into_stored_input_message_content(self) -> StoredInputMessageContent {
-        match self {
+    pub fn into_stored_input_message_content(self) -> Result<StoredInputMessageContent, Error> {
+        Ok(match self {
             ResolvedInputMessageContent::Text(text) => StoredInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 StoredInputMessageContent::Template(template)
@@ -390,8 +402,8 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Thought(thought) => {
                 StoredInputMessageContent::Thought(thought)
             }
-            ResolvedInputMessageContent::File(file) => {
-                StoredInputMessageContent::File(Box::new(file.into_stored_file()))
+            ResolvedInputMessageContent::File(resolved) => {
+                StoredInputMessageContent::File(Box::new(StoredFile(resolved.file)))
             }
             ResolvedInputMessageContent::Unknown {
                 data,
@@ -400,11 +412,13 @@ impl ResolvedInputMessageContent {
                 data,
                 model_provider_name,
             },
-        }
+        })
     }
 
-    pub fn into_lazy_resolved_input_message_content(self) -> LazyResolvedInputMessageContent {
-        match self {
+    pub fn into_lazy_resolved_input_message_content(
+        self,
+    ) -> Result<LazyResolvedInputMessageContent, Error> {
+        Ok(match self {
             ResolvedInputMessageContent::Text(text) => {
                 LazyResolvedInputMessageContent::Text { text: text.text }
             }
@@ -424,9 +438,9 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
             }
-            ResolvedInputMessageContent::File(file) => {
-                LazyResolvedInputMessageContent::File(Box::new(LazyFile::ResolvedFile(*file)))
-            }
+            ResolvedInputMessageContent::File(resolved) => LazyResolvedInputMessageContent::File(
+                Box::new(LazyFile::ResolvedObjectStorage(*resolved)),
+            ),
             ResolvedInputMessageContent::Unknown {
                 data,
                 model_provider_name,
@@ -434,71 +448,25 @@ impl ResolvedInputMessageContent {
                 data,
                 model_provider_name,
             },
-        }
-    }
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-pub struct ResolvedFile {
-    #[serde(alias = "image")]
-    pub file: Base64File,
-    pub storage_path: StoragePath,
-}
-
-impl ResolvedFile {
-    pub fn into_stored_file(self) -> StoredFile {
-        let ResolvedFile {
-            file:
-                Base64File {
-                    source_url,
-                    mime_type,
-                    data: _,
-                },
-            storage_path,
-        } = self;
-        StoredFile(crate::inference::types::file::ObjectStorageFile {
-            source_url,
-            mime_type,
-            storage_path,
         })
-    }
-}
-
-impl std::fmt::Display for ResolvedFile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
     }
 }
 
 impl RateLimitedInputContent for LazyFile {
     fn estimated_input_token_usage(&self) -> u64 {
         match self {
-            LazyFile::ResolvedFile(ResolvedFile {
-                file: _,
-                storage_path: _,
-            }) => {}
+            LazyFile::Base64(_) => {}
+            LazyFile::ResolvedObjectStorage(_) => {}
             LazyFile::ObjectStorage { .. } => {}
             // Forwarding a url is inherently incompatible with input token estimation,
             // so we'll need to continue using a hardcoded value here, even if we start
-            // estimating tokens LazyFile::ResolvedFile
+            // estimating tokens for Base64 and ResolvedObjectStorage
             LazyFile::Url {
                 file_url: _,
                 future: _,
             } => {}
         }
         10_000 // Hardcoded value for file size estimation, we will improve later
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ResolvedFile {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 

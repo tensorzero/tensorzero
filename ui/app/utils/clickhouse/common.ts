@@ -478,18 +478,14 @@ function displayInputMessageContentToStoredInputMessageContent(
     case "file":
       return {
         type: "file",
-        file: {
-          mime_type: content.file.mime_type,
-        },
+        mime_type: content.file.mime_type,
         storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
     case "file_error":
       return {
         type: "file",
-        file: {
-          source_url: content.file.url ?? undefined,
-          mime_type: content.file.mime_type,
-        },
+        source_url: content.file.url ?? undefined,
+        mime_type: content.file.mime_type,
         storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
     case "template":

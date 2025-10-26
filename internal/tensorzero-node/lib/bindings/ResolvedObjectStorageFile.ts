@@ -2,11 +2,12 @@
 import type { StoragePath } from "./StoragePath";
 
 /**
- * A file stored in an object storage backend, without data.
- * This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
+ * A file stored in an object storage backend, with data.
+ * This struct can NOT be stored in the database.
  * Note: `File` supports both `ObjectStorageFile` and `ResolvedObjectStorageFile`.
  */
-export type ObjectStorageFile = {
+export type ResolvedObjectStorageFile = {
+  data: string;
   source_url?: string;
   mime_type: string;
   storage_path: StoragePath;

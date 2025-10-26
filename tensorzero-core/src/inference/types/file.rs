@@ -11,7 +11,7 @@ use super::{ContentBlock, RequestMessage};
 use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
-    inference::types::{resolved_input::LazyFile, storage::StoragePath},
+    inference::types::{resolved_input::LazyFile, storage::StoragePath, stored_input::StoredFile},
 };
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
@@ -47,7 +47,7 @@ pub struct Base64File {
     pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
-    // TODO - should we add a wrapper type to enforce base64?
+    // TODO: should we add a wrapper type to enforce base64?
     pub data: String,
 }
 
@@ -181,7 +181,9 @@ pub struct UrlFile {
     pub mime_type: Option<MediaType>,
 }
 
-/// A file stored in an object storage backend
+/// A file stored in an object storage backend, without data.
+/// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
+/// Note: `File` supports both `ObjectStorageFile` and `ResolvedObjectStorageFile`.
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ObjectStorageFile {
@@ -191,6 +193,33 @@ pub struct ObjectStorageFile {
     #[ts(type = "string")]
     pub mime_type: MediaType,
     pub storage_path: StoragePath,
+}
+
+/// A file stored in an object storage backend, with data.
+/// This struct can NOT be stored in the database.
+/// Note: `File` supports both `ObjectStorageFile` and `ResolvedObjectStorageFile`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ResolvedObjectStorageFile {
+    #[serde(flatten)]
+    pub file: ObjectStorageFile,
+    // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
+    // TODO: should we add a wrapper type to enforce base64?
+    pub data: String,
+}
+
+/// A newtype wrapper around `ResolvedObjectStorageFile` that represents file data
+/// from a base64 input that needs to be written to object storage.
+/// The `storage_path` inside is content-addressed (computed from data) and represents
+/// where the file WILL be written, not where it currently exists.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct PendingObjectStoreFile(pub ResolvedObjectStorageFile);
+
+impl std::ops::Deref for PendingObjectStoreFile {
+    type Target = ResolvedObjectStorageFile;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 /// Implement a custom deserializer for ObjectStorageFile to show a deprecation warning for the `url` field
@@ -243,6 +272,7 @@ pub enum File {
     Url(UrlFile),
     Base64(Base64File),
     ObjectStorage(ObjectStorageFile),
+    ResolvedObjectStorage(ResolvedObjectStorageFile),
 }
 
 // Allow deserializing File as either tagged or untagged format.
@@ -270,6 +300,11 @@ impl<'de> Deserialize<'de> for File {
                 mime_type: MediaType,
                 storage_path: StoragePath,
             },
+            ResolvedObjectStorage {
+                #[serde(flatten)]
+                file: ObjectStorageFile,
+                data: String,
+            },
         }
 
         #[derive(Deserialize)]
@@ -288,6 +323,11 @@ impl<'de> Deserialize<'de> for File {
                 source_url: Option<Url>,
                 mime_type: MediaType,
                 storage_path: StoragePath,
+            },
+            ResolvedObjectStorage {
+                #[serde(flatten)]
+                file: ObjectStorageFile,
+                data: String,
             },
         }
 
@@ -319,6 +359,12 @@ impl<'de> Deserialize<'de> for File {
                 mime_type,
                 storage_path,
             })),
+            FileTaggedOrUntagged::Tagged(TaggedFile::ResolvedObjectStorage { file, data }) => {
+                Ok(File::ResolvedObjectStorage(ResolvedObjectStorageFile {
+                    file,
+                    data,
+                }))
+            }
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Url { url, mime_type }) => {
                 Ok(File::Url(UrlFile { url, mime_type }))
             }
@@ -337,6 +383,13 @@ impl<'de> Deserialize<'de> for File {
                 source_url,
                 mime_type,
                 storage_path,
+            })),
+            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ResolvedObjectStorage {
+                file,
+                data,
+            }) => Ok(File::ResolvedObjectStorage(ResolvedObjectStorageFile {
+                file,
+                data,
             })),
         }
     }
@@ -459,6 +512,26 @@ impl File {
                 // the base File::Url type calls this method.
                 message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
             })),
+            File::ResolvedObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
+                // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
+                // the base File::Url type calls this method.
+                message: format!("File::ResolvedObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+            })),
+        }
+    }
+
+    pub fn into_stored_file(self) -> Result<StoredFile, Error> {
+        match self {
+            File::ResolvedObjectStorage(ResolvedObjectStorageFile { file, data: _ }) => {
+                Ok(StoredFile(file))
+            }
+            File::Url(_) | File::Base64(_) | File::ObjectStorage(_) => {
+                Err(Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "File::into_stored_file should only be called on ResolvedObjectStorage! {IMPOSSIBLE_ERROR_MESSAGE}"
+                    ),
+                }))
+            }
         }
     }
 }
@@ -482,13 +555,18 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                         // there's nothing to strip from the message.
                         // We ignore errors here, since an error during file resolution means that
                         // we cannot have included the file bytes in `raw_request`.
-                        if let Some(Ok(file)) = future.clone().now_or_never() {
-                            Some(Cow::Owned(file))
+                        if let Some(Ok(resolved)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(File::ResolvedObjectStorage(resolved)))
                         } else {
                             None
                         }
                     }
-                    LazyFile::ResolvedFile(file) => Some(Cow::Borrowed(file)),
+                    LazyFile::Base64(pending) => {
+                        Some(Cow::Owned(File::ResolvedObjectStorage(pending.0.clone())))
+                    }
+                    LazyFile::ResolvedObjectStorage(resolved) => {
+                        Some(Cow::Owned(File::ResolvedObjectStorage(resolved.clone())))
+                    }
                     LazyFile::ObjectStorage { future, .. } => {
                         // If we actually sent the file bytes to some model provider, then the
                         // Shared future must be ready, so we'll get a file from `now_or_never`.
@@ -497,16 +575,23 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                         // there's nothing to strip from the message.
                         // We ignore errors here, since an error during file resolution means that
                         // we cannot have included the file bytes in `raw_request`.
-                        if let Some(Ok(file)) = future.clone().now_or_never() {
-                            Some(Cow::Owned(file))
+                        if let Some(Ok(resolved)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(File::ResolvedObjectStorage(resolved)))
                         } else {
                             None
                         }
                     }
                 };
                 if let Some(file) = file_with_path {
-                    raw_request =
-                        raw_request.replace(&file.file.data, &format!("<TENSORZERO_FILE_{i}>"));
+                    let data = match &*file {
+                        File::ResolvedObjectStorage(resolved) => &resolved.data,
+                        File::Base64(base64) => &base64.data,
+                        File::Url(_) | File::ObjectStorage(_) => {
+                            // These variants should not occur in resolved files
+                            continue;
+                        }
+                    };
+                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
                     i += 1;
                 }
             }
@@ -583,10 +668,13 @@ mod tests {
     use tracing_test::traced_test;
 
     use crate::inference::types::{
-        file::{filename_to_mime_type, sanitize_raw_request},
-        resolved_input::{LazyFile, ResolvedFile},
+        file::{
+            filename_to_mime_type, sanitize_raw_request, ObjectStorageFile,
+            ResolvedObjectStorageFile,
+        },
+        resolved_input::LazyFile,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, RequestMessage, Role,
+        ContentBlock, RequestMessage, Role,
     };
 
     #[test]
@@ -602,71 +690,91 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(LazyFile::ResolvedFile(ResolvedFile {
-                                file: Base64File {
-                                    source_url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
+                                ResolvedObjectStorageFile {
+                                    file: ObjectStorageFile {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-1-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-1-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path")
-                                        .unwrap(),
-                                },
-                            }))),
-                            ContentBlock::File(Box::new(LazyFile::ResolvedFile(ResolvedFile {
-                                file: Base64File {
-                                    source_url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                                }
+                            ))),
+                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
+                                ResolvedObjectStorageFile {
+                                    file: ObjectStorageFile {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-2-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-2-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-2-path")
-                                        .unwrap(),
-                                },
-                            }))),
-                            ContentBlock::File(Box::new(LazyFile::ResolvedFile(ResolvedFile {
-                                file: Base64File {
-                                    source_url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                                }
+                            ))),
+                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
+                                ResolvedObjectStorageFile {
+                                    file: ObjectStorageFile {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-1-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-1-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path")
-                                        .unwrap(),
-                                },
-                            }))),
+                                }
+                            ))),
                         ],
                     },
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(LazyFile::ResolvedFile(ResolvedFile {
-                                file: Base64File {
-                                    source_url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
+                                ResolvedObjectStorageFile {
+                                    file: ObjectStorageFile {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-3-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-3-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-3-path")
-                                        .unwrap(),
-                                },
-                            }))),
-                            ContentBlock::File(Box::new(LazyFile::ResolvedFile(ResolvedFile {
-                                file: Base64File {
-                                    source_url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                                }
+                            ))),
+                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
+                                ResolvedObjectStorageFile {
+                                    file: ObjectStorageFile {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-1-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-1-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path")
-                                        .unwrap(),
-                                },
-                            })))
+                                }
+                            )))
                         ],
                     }
                 ],

@@ -495,7 +495,7 @@ impl DiclConfig {
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
         let serialized_input = serde_json::to_string(
-            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input(),
+            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input()?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -671,7 +671,7 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input.clone().into_stored_input())
+        let content = vec![serde_json::to_string(&input.clone().into_stored_input()?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -1063,7 +1063,7 @@ mod tests {
 
         // The content should contain the serialized Input as a Text ContentBlock
         let expected_serialized_input =
-            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
+            serde_json::to_string(&input_data.clone().into_stored_input().unwrap()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];
