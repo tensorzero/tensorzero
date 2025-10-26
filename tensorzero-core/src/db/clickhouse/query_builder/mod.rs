@@ -525,6 +525,7 @@ mod tests {
     use uuid::Uuid;
 
     use crate::db::clickhouse::inference_queries::generate_list_inferences_sql;
+    use crate::db::clickhouse::query_builder::test_util::assert_query_equals;
     use crate::db::inferences::{
         ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource,
         ListInferencesParams,
@@ -740,7 +741,7 @@ JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationF
 WHERE
     i.function_name = {p0:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
             value: "extract_entities".to_string(),
@@ -787,7 +788,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -844,7 +845,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -926,7 +927,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j0.value < {p3:Float64}, 0) AND COALESCE(j1.value < {p5:Float64}, 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1209,7 +1210,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         assert_eq!(params.len(), 7); // p0 (function) + 6 metric-related params
     }
 
@@ -1279,7 +1280,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         assert_eq!(params.len(), 7); // p0 (function) + 6 filter-related params
     }
 
@@ -1311,7 +1312,7 @@ FROM
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1355,7 +1356,7 @@ WHERE
 LIMIT {p1:UInt64}
 OFFSET {p2:UInt64}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1425,7 +1426,7 @@ WHERE
     i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}
 FORMAT JSONEachRow",
             );
-            assert_eq!(sql, expected_sql);
+            assert_query_equals(&sql, &expected_sql);
             let expected_params = vec![
                 QueryParameter {
                     name: "p0".to_string(),
@@ -1476,7 +1477,7 @@ FROM
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] = {p2:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1526,7 +1527,7 @@ FROM
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] != {p2:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1585,7 +1586,7 @@ FROM
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(i.tags[{p3:String}] = {p4:String}, 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1660,7 +1661,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(j0.value > {p4:Float64}, 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1752,7 +1753,7 @@ WHERE
 LIMIT {p6:UInt64}
 OFFSET {p7:UInt64}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
 
         let expected_params = vec![
             QueryParameter {
@@ -1822,7 +1823,7 @@ FROM
 WHERE
     i.function_name = {p0:String} AND i.timestamp > parseDateTimeBestEffort({p1:String})
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1879,7 +1880,7 @@ WHERE
     i.function_name = {{p0:String}} AND i.timestamp {expected_op_str} parseDateTimeBestEffort({{p1:String}})
 FORMAT JSONEachRow",
             );
-            assert_eq!(sql, expected_sql);
+            assert_query_equals(&sql, &expected_sql);
             let expected_params = vec![
                 QueryParameter {
                     name: "p0".to_string(),
@@ -1949,7 +1950,7 @@ WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
 LIMIT {p6:UInt64}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -2332,7 +2333,7 @@ WHERE
     i.function_name = {p0:String}
 ORDER BY i.timestamp DESC NULLS LAST
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
 
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
@@ -2384,7 +2385,7 @@ WHERE
     i.function_name = {p0:String}
 ORDER BY j0.value ASC NULLS LAST
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
 
         let expected_params = vec![
             QueryParameter {
@@ -2448,7 +2449,7 @@ WHERE
     i.function_name = {p0:String}
 ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
 
         let expected_params = vec![
             QueryParameter {

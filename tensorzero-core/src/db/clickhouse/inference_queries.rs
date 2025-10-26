@@ -18,6 +18,15 @@ use crate::{
     stored_inference::StoredInference,
 };
 
+/// Represents the structured parts of a single-table query
+/// This allows the caller to insert JOINs between the SELECT/FROM and WHERE clauses
+struct SingleTableQuery {
+    /// The SELECT and FROM clauses (e.g., "SELECT ... FROM table AS i")
+    select_from_sql_fragment: String,
+    /// The WHERE clause if present (e.g., "WHERE condition1 AND condition2"), or empty string
+    where_sql_fragment: String,
+}
+
 #[async_trait]
 impl InferenceQueries for ClickHouseConnectionInfo {
     async fn list_inferences(
@@ -75,7 +84,7 @@ pub(crate) fn generate_list_inferences_sql(
         Some(function_name) => {
             let mut joins = JoinRegistry::new();
             let function_config = config.get_function(function_name)?;
-            let mut query = generate_single_table_query_for_type(
+            let query = generate_single_table_query_for_type(
                 config,
                 opts,
                 function_config.table_name(),
@@ -99,27 +108,23 @@ pub(crate) fn generate_list_inferences_sql(
                 String::new()
             };
 
-            // Add all joins (from filters and ORDER BY) before WHERE clause
+            // Construct final query: SELECT/FROM + JOINs + WHERE + ORDER BY
+            let mut sql = query.select_from_sql_fragment;
             if !joins.get_clauses().is_empty() {
-                if let Some(where_pos) = query.find("\nWHERE") {
-                    query.insert_str(where_pos, &joins.get_clauses().join("\n"));
-                } else {
-                    // No WHERE clause, append at end
-                    query.push_str(&joins.get_clauses().join("\n"));
-                }
+                sql.push_str(&joins.get_clauses().join("\n"));
             }
-
-            // Add ORDER BY clause
+            sql.push('\n');
+            sql.push_str(&query.where_sql_fragment);
             if !order_by_sql.is_empty() {
-                query.push_str(&order_by_sql);
+                sql.push_str(&order_by_sql);
             }
 
-            query
+            sql
         }
         None => {
             // Otherwise, we need to query both tables with UNION ALL
             let mut chat_joins = JoinRegistry::new();
-            let mut chat_sql = generate_single_table_query_for_type(
+            let chat_query = generate_single_table_query_for_type(
                 config,
                 opts,
                 "ChatInference",
@@ -129,18 +134,16 @@ pub(crate) fn generate_list_inferences_sql(
                 &mut param_idx_counter,
             )?;
 
-            // Insert joins for chat query before WHERE clause
+            // Construct chat query: SELECT/FROM + JOINs + WHERE
+            let mut chat_sql = chat_query.select_from_sql_fragment;
             if !chat_joins.get_clauses().is_empty() {
-                if let Some(where_pos) = chat_sql.find("\nWHERE") {
-                    chat_sql.insert_str(where_pos, &chat_joins.get_clauses().join("\n"));
-                } else {
-                    // No WHERE clause, append at end
-                    chat_sql.push_str(&chat_joins.get_clauses().join("\n"));
-                }
+                chat_sql.push_str(&chat_joins.get_clauses().join("\n"));
             }
+            chat_sql.push('\n');
+            chat_sql.push_str(&chat_query.where_sql_fragment);
 
             let mut json_joins = JoinRegistry::new();
-            let mut json_sql = generate_single_table_query_for_type(
+            let json_query = generate_single_table_query_for_type(
                 config,
                 opts,
                 "JsonInference",
@@ -150,15 +153,13 @@ pub(crate) fn generate_list_inferences_sql(
                 &mut param_idx_counter,
             )?;
 
-            // Insert joins for json query before WHERE clause
+            // Construct json query: SELECT/FROM + JOINs + WHERE
+            let mut json_sql = json_query.select_from_sql_fragment;
             if !json_joins.get_clauses().is_empty() {
-                if let Some(where_pos) = json_sql.find("\nWHERE") {
-                    json_sql.insert_str(where_pos, &json_joins.get_clauses().join("\n"));
-                } else {
-                    // No WHERE clause, append at end
-                    json_sql.push_str(&json_joins.get_clauses().join("\n"));
-                }
+                json_sql.push_str(&json_joins.get_clauses().join("\n"));
             }
+            json_sql.push('\n');
+            json_sql.push_str(&json_query.where_sql_fragment);
 
             // Combine with UNION ALL
             let combined_query = format!("{chat_sql}\nUNION ALL\n{json_sql}");
@@ -228,7 +229,8 @@ pub(crate) fn generate_list_inferences_sql(
 }
 
 /// Core query building logic for a specific table type
-/// Returns (sql, join_registry) so the caller can reuse joins for ORDER BY
+/// Returns a SingleTableQuery with SELECT/FROM and WHERE parts separated,
+/// so the caller can insert JOINs between them
 fn generate_single_table_query_for_type(
     config: &Config,
     opts: &ListInferencesParams<'_>,
@@ -237,7 +239,7 @@ fn generate_single_table_query_for_type(
     joins: &mut JoinRegistry,
     query_params: &mut Vec<QueryParameter>,
     param_idx_counter: &mut usize,
-) -> Result<String, Error> {
+) -> Result<SingleTableQuery, Error> {
     // Use a Vec to maintain explicit column order for UNION ALL compatibility
     // Base columns that are always present, in fixed order
     let mut select_clauses: Vec<String> = vec![];
@@ -355,28 +357,21 @@ fn generate_single_table_query_for_type(
         where_clauses.push(filter_condition_sql);
     }
 
-    let mut sql = format!(
-        r"
-SELECT
-    {select_clauses}
-FROM
-    {table_name} AS i",
+    let select_from_sql_fragment = format!(
+        r"SELECT {select_clauses} FROM {table_name} AS i",
         select_clauses = select_clauses.iter().join(",\n    "),
     );
 
-    // Don't add joins here - let the caller add them so they can be combined with ORDER BY joins
-    // if !joins.get_clauses().is_empty() {
-    //     sql.push_str(&joins.get_clauses().join("\n"));
-    // }
+    let where_sql_fragment = if where_clauses.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", where_clauses.join(" AND "))
+    };
 
-    if !where_clauses.is_empty() {
-        // If we have where clauses but joins will be added by caller, we need to account for that
-        // The joins will be inserted before WHERE by the caller
-        sql.push_str("\nWHERE\n    ");
-        sql.push_str(&where_clauses.join(" AND "));
-    }
-
-    Ok(sql)
+    Ok(SingleTableQuery {
+        select_from_sql_fragment,
+        where_sql_fragment,
+    })
 }
 
 #[cfg(test)]
