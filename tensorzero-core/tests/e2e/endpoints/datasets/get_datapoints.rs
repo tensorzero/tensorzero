@@ -48,9 +48,9 @@ mod get_datapoints_tests {
                 )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Hello, world!".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -134,9 +134,9 @@ mod get_datapoints_tests {
                 )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"query": "test"}).to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: json!({"query": "test"}).to_string(),
+                    })],
                 }],
             },
             output: Some(JsonInferenceOutput {
@@ -203,9 +203,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Message 1".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Message 1".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -231,9 +231,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Message 2".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Message 2".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -259,9 +259,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Query".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Query".to_string(),
+                    })],
                 }],
             },
             output: Some(JsonInferenceOutput {
@@ -333,9 +333,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -399,9 +399,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -517,9 +517,9 @@ mod list_datapoints_tests {
                     system: None,
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: format!("Message {i}").into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
                     }],
                 },
                 output: Some(vec![
@@ -627,9 +627,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 1".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 1".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -656,9 +656,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 2".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 2".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -741,9 +741,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 1".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 1".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -770,9 +770,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 2".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 2".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -860,9 +860,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -959,9 +959,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 1".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 1".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -988,9 +988,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 2".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 2".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -1017,9 +1017,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 3".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 3".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -1150,9 +1150,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -1251,9 +1251,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Chat test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Chat test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -1280,9 +1280,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "JSON test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "JSON test".to_string(),
+                    })],
                 }],
             },
             output: Some(JsonInferenceOutput {
@@ -1353,9 +1353,9 @@ mod list_datapoints_tests {
                     system: None,
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: format!("Message {i}").into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
                     }],
                 },
                 output: Some(vec![

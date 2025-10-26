@@ -417,7 +417,7 @@ impl LazyResolvedInputMessageContent {
     pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
             LazyResolvedInputMessageContent::Text { text } => {
-                ResolvedInputMessageContent::Text { text }
+                ResolvedInputMessageContent::Text(Text { text })
             }
             LazyResolvedInputMessageContent::Template(template) => {
                 ResolvedInputMessageContent::Template(template)
@@ -1476,7 +1476,7 @@ impl From<String> for InputMessageContent {
 #[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        ResolvedInputMessageContent::Text { text }
+        ResolvedInputMessageContent::Text(Text { text })
     }
 }
 

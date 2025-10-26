@@ -1,9 +1,9 @@
 use anyhow::Result;
 use regex::Regex;
-use serde_json::Value;
 use std::path::PathBuf;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, StoredInput, StoredInputMessage, StoredInputMessageContent, System,
+    Text,
 };
 /*
 This file handles the outputs of inferences from Cursor. We handle two cases:
@@ -138,12 +138,7 @@ fn parse_cursor_edit_output(
     }
     let second_message = &messages[1];
     let second_message_text = match second_message.content.as_slice() {
-        [StoredInputMessageContent::Text { value: text }] => {
-            let Value::String(text) = text else {
-                return Err(anyhow::anyhow!("Expected text in second user message"));
-            };
-            text
-        }
+        [StoredInputMessageContent::Text(Text { text })] => text,
         _ => {
             return Err(anyhow::anyhow!("Expected text in second user message"));
         }
@@ -211,12 +206,7 @@ fn parse_cursor_insert_output(
     // Extract workspace path from the first message
     let first_message = &messages[0];
     let first_message_text = match first_message.content.as_slice() {
-        [StoredInputMessageContent::Text { value }] => {
-            let Value::String(s) = value else {
-                return Err(anyhow::anyhow!("Expected text in first user message"));
-            };
-            s
-        }
+        [StoredInputMessageContent::Text(Text { text })] => text,
         _ => {
             return Err(anyhow::anyhow!(
                 "Expected the first user message to contain a plain-text block"

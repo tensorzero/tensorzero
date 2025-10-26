@@ -828,7 +828,7 @@ async fn validate_inference_clickhouse(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Who was the author of the Harry Potter series?"}]
+                "content": [{"type": "text", "text": "Who was the author of the Harry Potter series?"}]
             }
         ]
     });
@@ -1202,9 +1202,9 @@ fn create_pinocchio_example(
                 .map(|s| System::Template(s.as_object().unwrap().clone())),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!(question),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: question.to_string(),
+                })],
             }],
         },
         output: Some(output),

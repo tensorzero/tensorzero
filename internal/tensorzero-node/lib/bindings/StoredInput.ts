@@ -7,6 +7,8 @@ import type { System } from "./System";
  * This is almost identical to `ResolvedInput`, but without `File` data.
  * Only the object-storage path is actually stored in clickhouse
  * (which can be used to re-fetch the file and produce a `ResolvedInput`).
+ *
+ * `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
  */
 export type StoredInput = {
   system?: System;
