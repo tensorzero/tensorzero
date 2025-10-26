@@ -2403,7 +2403,7 @@ mod tests {
     use crate::cache::CacheEnabledMode;
     use crate::config::SKIP_CREDENTIAL_VALIDATION;
     use crate::rate_limiting::ScopeInfo;
-    use crate::tool::{ToolCallConfig, ToolChoice};
+    use crate::tool::ToolCallConfig;
     use crate::{
         cache::CacheOptions,
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
@@ -2450,14 +2450,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
         };
-        let tool_config = ToolCallConfig::new_for_test(
-            vec![],
-            vec![],
-            ToolChoice::Auto,
-            None,
-            None,
-            crate::tool::AllowedTools::default(),
-        );
+        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -3098,14 +3091,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
         };
-        let tool_config = ToolCallConfig::new_for_test(
-            vec![],
-            vec![],
-            ToolChoice::Auto,
-            None,
-            None,
-            crate::tool::AllowedTools::default(),
-        );
+        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();
@@ -3227,14 +3213,7 @@ mod tests {
             )]),
             timeouts: Default::default(),
         };
-        let tool_config = ToolCallConfig::new_for_test(
-            vec![],
-            vec![],
-            ToolChoice::Auto,
-            None,
-            None,
-            crate::tool::AllowedTools::default(),
-        );
+        let tool_config = ToolCallConfig::with_tools_available(vec![], vec![]);
         let api_keys = InferenceCredentials::default();
         let http_client = TensorzeroHttpClient::new().unwrap();
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_disabled();

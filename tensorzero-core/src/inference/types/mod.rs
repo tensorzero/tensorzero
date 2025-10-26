@@ -2092,7 +2092,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{AllowedTools, DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2468,30 +2468,29 @@ mod tests {
 
         // Case 6: Additional tools
         let inference_id = Uuid::now_v7();
-        let additional_tool_config = ToolCallConfig::new_for_test(
-            vec![],
-            vec![ToolConfig::Dynamic(DynamicToolConfig {
-                name: "custom_tool".to_string(),
-                description: "A custom tool".to_string(),
-                parameters: DynamicJSONSchema::new(
-                    serde_json::from_str(
-                        r#"{
-                    "type": "object",
-                    "properties": {
-                        "input": {"type": "string"}
-                    },
-                    "required": ["input"]
-                }"#,
-                    )
-                    .unwrap(),
-                ),
-                strict: true,
-            })],
-            ToolChoice::None,
-            None,
-            None,
-            AllowedTools::default(),
-        );
+        let additional_tool_config = ToolCallConfig {
+            tool_choice: ToolChoice::None,
+            ..ToolCallConfig::with_tools_available(
+                vec![],
+                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                    name: "custom_tool".to_string(),
+                    description: "A custom tool".to_string(),
+                    parameters: DynamicJSONSchema::new(
+                        serde_json::from_str(
+                            r#"{
+                        "type": "object",
+                        "properties": {
+                            "input": {"type": "string"}
+                        },
+                        "required": ["input"]
+                    }"#,
+                        )
+                        .unwrap(),
+                    ),
+                    strict: true,
+                })],
+            )
+        };
 
         // Test valid arguments for additional tool
         let content = vec![ContentBlockOutput::ToolCall(ToolCall {
@@ -2592,31 +2591,30 @@ mod tests {
 
         // Case 7: Allowed tools restriction
         let inference_id = Uuid::now_v7();
-        let restricted_tool_config = ToolCallConfig::new_for_test(
-            vec![],
-            vec![ToolConfig::Dynamic(DynamicToolConfig {
-                name: "weather_tool".to_string(),
-                description: "Get weather information".to_string(),
-                parameters: DynamicJSONSchema::new(
-                    serde_json::from_str(
-                        r#"{
-                    "type": "object",
-                    "properties": {
-                        "location": {"type": "string"},
-                        "units": {"type": "string", "enum": ["celsius", "fahrenheit"]}
-                    },
-                    "required": ["location"]
-                }"#,
-                    )
-                    .unwrap(),
-                ),
-                strict: true,
-            })],
-            ToolChoice::None,
-            None,
-            None,
-            AllowedTools::default(),
-        );
+        let restricted_tool_config = ToolCallConfig {
+            tool_choice: ToolChoice::None,
+            ..ToolCallConfig::with_tools_available(
+                vec![],
+                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                    name: "weather_tool".to_string(),
+                    description: "Get weather information".to_string(),
+                    parameters: DynamicJSONSchema::new(
+                        serde_json::from_str(
+                            r#"{
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string"},
+                            "units": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+                        },
+                        "required": ["location"]
+                    }"#,
+                        )
+                        .unwrap(),
+                    ),
+                    strict: true,
+                })],
+            )
+        };
 
         // Test allowed tool call
         let content = vec![ContentBlockOutput::ToolCall(ToolCall {

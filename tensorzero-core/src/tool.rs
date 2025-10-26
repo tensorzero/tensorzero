@@ -192,8 +192,8 @@ pub enum AllowedToolsChoice {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
-    static_tools_available: Vec<ToolConfig>,
-    dynamic_tools_available: Vec<ToolConfig>,
+    pub(crate) static_tools_available: Vec<ToolConfig>,
+    pub(crate) dynamic_tools_available: Vec<ToolConfig>,
     pub provider_tools: Option<Vec<ProviderTool>>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
@@ -373,23 +373,15 @@ impl ToolCallConfig {
             .unwrap_or_default()
     }
 
-    /// Test-only constructor for creating ToolCallConfig with specific tool lists
     #[cfg(test)]
-    pub fn new_for_test(
+    pub fn with_tools_available(
         static_tools_available: Vec<ToolConfig>,
         dynamic_tools_available: Vec<ToolConfig>,
-        tool_choice: ToolChoice,
-        parallel_tool_calls: Option<bool>,
-        provider_tools: Option<Vec<ProviderTool>>,
-        allowed_tools: AllowedTools,
     ) -> Self {
         Self {
             static_tools_available,
             dynamic_tools_available,
-            provider_tools,
-            tool_choice,
-            parallel_tool_calls,
-            allowed_tools,
+            ..Default::default()
         }
     }
 }
@@ -1478,14 +1470,18 @@ mod tests {
             },
         ];
 
-        let config = ToolCallConfig::new_for_test(
-            vec![],
-            vec![],
-            ToolChoice::Auto,
-            None,
-            Some(provider_tools),
-            AllowedTools::default(),
-        );
+        // let config = ToolCallConfig::new_for_test(
+        //     vec![],
+        //     vec![],
+        //     ToolChoice::Auto,
+        //     None,
+        //     Some(provider_tools),
+        //     AllowedTools::default(),
+        // );
+        let config = ToolCallConfig {
+            provider_tools: Some(provider_tools),
+            ..ToolCallConfig::with_tools_available(vec![], vec![])
+        };
 
         // Test matching gpt-4/openai: should return unscoped + gpt4_tool
         let result = config.get_scoped_provider_tools("gpt-4", "openai");
@@ -1510,14 +1506,7 @@ mod tests {
         assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
 
         // Test with None provider_tools
-        let config_no_tools = ToolCallConfig::new_for_test(
-            vec![],
-            vec![],
-            ToolChoice::Auto,
-            None,
-            None,
-            AllowedTools::default(),
-        );
+        let config_no_tools = ToolCallConfig::with_tools_available(vec![], vec![]);
         let result = config_no_tools.get_scoped_provider_tools("gpt-4", "openai");
         assert_eq!(result.len(), 0);
     }

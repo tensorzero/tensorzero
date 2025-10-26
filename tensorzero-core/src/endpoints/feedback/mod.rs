@@ -911,7 +911,7 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
-    use crate::tool::{AllowedTools, StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
+    use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -1327,13 +1327,9 @@ mod tests {
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-                ToolChoice::Auto,
-                None,
-                None,
-                AllowedTools::default(),
             ));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
@@ -1355,13 +1351,9 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-                ToolChoice::Auto,
-                None,
-                None,
-                AllowedTools::default(),
             ));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
@@ -1391,13 +1383,9 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_humidity_123", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-                ToolChoice::Auto,
-                None,
-                None,
-                AllowedTools::default(),
             ));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
@@ -1418,13 +1406,9 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-                ToolChoice::Auto,
-                None,
-                None,
-                AllowedTools::default(),
             ));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
@@ -1520,13 +1504,9 @@ mod tests {
             "age": 30
         });
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::new_for_test(
+            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-                ToolChoice::Auto,
-                None,
-                None,
-                AllowedTools::default(),
             ));
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
