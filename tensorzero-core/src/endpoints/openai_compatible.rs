@@ -857,14 +857,20 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             if system_messages.len() == 1 && !first_system {
                 tracing::warn!("Moving system message to the start of the conversation");
             }
-            Ok(Input {
-                system: system_messages.pop().map(|v| match v {
-                    Value::String(s) => System::Text(s),
-                    Value::Object(map) => System::Template(map),
-                    _ => System::Text(v.to_string()),
-                }),
-                messages,
-            })
+
+            let system = system_messages
+                .pop()
+                .map(|v| match v {
+                    Value::String(s) => Ok::<System, Error>(System::Text(s)),
+                    Value::Object(map) => Ok::<System, Error>(System::Template(map)),
+                    _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                        message: "System message content must be a string or an object".to_string(),
+                    }
+                    .into()),
+                })
+                .transpose()?;
+
+            Ok(Input { system, messages })
         } else {
             let mut output = String::new();
             for (i, system_message) in system_messages.iter().enumerate() {

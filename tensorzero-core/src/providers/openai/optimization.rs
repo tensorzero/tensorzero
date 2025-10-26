@@ -603,22 +603,21 @@ pub enum OpenAIFineTuningJobStatus {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use serde_json::json;
+
     use crate::{
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
+        tool::ToolCallOutput,
     };
-    use serde_json::json;
-
-    use super::*;
 
     #[tokio::test]
     async fn test_convert_to_sft_row() {
-        use crate::inference::types::System;
-
         let output = Some(vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Paris.".to_string(),
         })]);
@@ -687,9 +686,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_rft_row() {
-        use crate::inference::types::System;
-        use crate::stored_inference::StoredOutput;
-
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
@@ -759,10 +755,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_rft_row_with_tool_calls() {
-        use crate::inference::types::System;
-        use crate::stored_inference::StoredOutput;
-        use crate::tool::ToolCallOutput;
-
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {

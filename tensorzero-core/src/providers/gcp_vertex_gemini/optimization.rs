@@ -245,7 +245,7 @@ mod tests {
     use crate::{
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
         providers::gcp_vertex_gemini::GCPVertexGeminiContentPart,
         stored_inference::{RenderedSample, StoredOutput},
@@ -256,8 +256,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_sft_row() {
-        use crate::inference::types::System;
-
         let output = Some(vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Paris.".to_string(),
         })]);
