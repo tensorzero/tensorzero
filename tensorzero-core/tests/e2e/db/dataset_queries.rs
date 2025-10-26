@@ -2154,7 +2154,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     // Create a StoredFile with ObjectStorage
     let stored_file = StoredFile {
         file: Base64FileMetadata {
-            url: Some("https://example.com/original.png".parse().unwrap()),
+            source_url: Some("https://example.com/original.png".parse().unwrap()),
             mime_type: mime::IMAGE_PNG,
         },
         storage_path: StoragePath {
@@ -2215,7 +2215,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
             StoredInputMessageContent::File(file) => {
                 assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
-                    file.file.url,
+                    file.file.source_url,
                     Some("https://example.com/original.png".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file.storage_path.path);
@@ -2236,7 +2236,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     // Create a StoredFile with ObjectStorage
     let stored_file = StoredFile {
         file: Base64FileMetadata {
-            url: Some("https://example.com/data.json".parse().unwrap()),
+            source_url: Some("https://example.com/data.json".parse().unwrap()),
             mime_type: mime::APPLICATION_JSON,
         },
         storage_path: StoragePath {
@@ -2298,7 +2298,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
             StoredInputMessageContent::File(file) => {
                 assert_eq!(file.file.mime_type, mime::APPLICATION_JSON);
                 assert_eq!(
-                    file.file.url,
+                    file.file.source_url,
                     Some("https://example.com/data.json".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file.storage_path.path);
@@ -2319,7 +2319,7 @@ async fn test_datapoint_with_mixed_file_types() {
     // Create multiple StoredFiles
     let stored_file1 = StoredFile {
         file: Base64FileMetadata {
-            url: Some("https://example.com/image1.png".parse().unwrap()),
+            source_url: Some("https://example.com/image1.png".parse().unwrap()),
             mime_type: mime::IMAGE_PNG,
         },
         storage_path: StoragePath {
@@ -2330,7 +2330,7 @@ async fn test_datapoint_with_mixed_file_types() {
 
     let stored_file2 = StoredFile {
         file: Base64FileMetadata {
-            url: None, // No source URL
+            source_url: None, // No source URL
             mime_type: mime::IMAGE_JPEG,
         },
         storage_path: StoragePath {
@@ -2409,7 +2409,7 @@ async fn test_datapoint_with_mixed_file_types() {
             StoredInputMessageContent::File(file) => {
                 assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
-                    file.file.url,
+                    file.file.source_url,
                     Some("https://example.com/image1.png".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file1.storage_path.path);
@@ -2422,7 +2422,7 @@ async fn test_datapoint_with_mixed_file_types() {
         match &chat_dp.input.messages[1].content[0] {
             StoredInputMessageContent::File(file) => {
                 assert_eq!(file.file.mime_type, mime::IMAGE_JPEG);
-                assert_eq!(file.file.url, None);
+                assert_eq!(file.file.source_url, None);
                 assert_eq!(file.storage_path.path, stored_file2.storage_path.path);
             }
             _ => panic!("Expected File content"),

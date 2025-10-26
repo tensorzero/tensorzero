@@ -479,7 +479,6 @@ function displayInputMessageContentToStoredInputMessageContent(
       return {
         type: "file",
         file: {
-          url: content.file.dataUrl,
           mime_type: content.file.mime_type,
         },
         storage_path: storagePathToBackendStoragePath(content.storage_path),
@@ -488,7 +487,7 @@ function displayInputMessageContentToStoredInputMessageContent(
       return {
         type: "file",
         file: {
-          url: content.file.url ?? null,
+          source_url: content.file.url ?? undefined,
           mime_type: content.file.mime_type,
         },
         storage_path: storagePathToBackendStoragePath(content.storage_path),

@@ -256,7 +256,7 @@ pub async fn test_render_samples_normal() {
                         }),
                         StoredInputMessageContent::File(Box::new(StoredFile {
                             file: Base64FileMetadata {
-                                url: None,
+                                source_url: None,
                                 mime_type: mime::IMAGE_PNG,
                             },
                             storage_path: StoragePath {
@@ -804,7 +804,7 @@ pub async fn test_render_datapoints_normal() {
                         }),
                         StoredInputMessageContent::File(Box::new(StoredFile {
                             file: Base64FileMetadata {
-                                url: None,
+                                source_url: None,
                                 mime_type: mime::IMAGE_PNG,
                             },
                             storage_path: StoragePath {

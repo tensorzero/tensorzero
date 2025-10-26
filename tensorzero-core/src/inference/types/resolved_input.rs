@@ -453,14 +453,17 @@ impl ResolvedFile {
         let ResolvedFile {
             file:
                 Base64File {
-                    source_url: url,
+                    source_url,
                     mime_type,
                     data: _,
                 },
             storage_path,
         } = self;
         StoredFile {
-            file: Base64FileMetadata { url, mime_type },
+            file: Base64FileMetadata {
+                source_url,
+                mime_type,
+            },
             storage_path,
         }
     }

@@ -396,7 +396,7 @@ impl InputMessageContent {
                         };
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::ObjectStorage {
                             metadata: Base64FileMetadata {
-                                url: source_url,
+                                source_url,
                                 mime_type: mime_type.clone(),
                             },
                             storage_path: storage_path.clone(),

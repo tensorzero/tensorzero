@@ -43,6 +43,7 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
 pub struct Base64File {
     // The original url we used to download the file
     #[serde(alias = "url")] // DEPRECATED
+    #[ts(optional)]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
@@ -56,7 +57,9 @@ pub struct Base64File {
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     // The original url we used to download the file
-    pub url: Option<Url>,
+    #[serde(alias = "url")] // DEPRECATED
+    #[ts(optional)]
+    pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
 }
@@ -114,6 +117,8 @@ pub struct UrlFile {
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct ObjectStorageFile {
+    #[serde(alias = "url")] // DEPRECATED
+    #[ts(optional)]
     pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
@@ -147,8 +152,7 @@ impl<'de> Deserialize<'de> for File {
         #[serde(tag = "file_type", rename_all = "snake_case")]
         enum TaggedFile {
             Url {
-                #[serde(alias = "url")] // DEPRECATED
-                source_url: Url,
+                url: Url,
                 mime_type: Option<MediaType>,
             },
             Base64 {
@@ -166,8 +170,7 @@ impl<'de> Deserialize<'de> for File {
         #[serde(untagged)]
         enum LegacyUntaggedFile {
             Url {
-                #[serde(alias = "url")] // DEPRECATED
-                source_url: Url,
+                url: Url,
                 #[serde(default)]
                 mime_type: Option<MediaType>,
             },
@@ -191,10 +194,9 @@ impl<'de> Deserialize<'de> for File {
         }
 
         match FileTaggedOrUntagged::deserialize(deserializer)? {
-            FileTaggedOrUntagged::Tagged(TaggedFile::Url {
-                source_url: url,
-                mime_type,
-            }) => Ok(File::Url(UrlFile { url, mime_type })),
+            FileTaggedOrUntagged::Tagged(TaggedFile::Url { url, mime_type }) => {
+                Ok(File::Url(UrlFile { url, mime_type }))
+            }
             FileTaggedOrUntagged::Tagged(TaggedFile::Base64 { mime_type, data }) => {
                 Ok(File::Base64(Base64File {
                     mime_type,
@@ -211,10 +213,9 @@ impl<'de> Deserialize<'de> for File {
                 mime_type,
                 storage_path,
             })),
-            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Url {
-                source_url: url,
-                mime_type,
-            }) => Ok(File::Url(UrlFile { url, mime_type })),
+            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Url { url, mime_type }) => {
+                Ok(File::Url(UrlFile { url, mime_type }))
+            }
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Base64 { mime_type, data }) => {
                 Ok(File::Base64(Base64File {
                     mime_type,

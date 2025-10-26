@@ -517,7 +517,7 @@ fn generate_image_example() -> RenderedSample {
                     }),
                     StoredInputMessageContent::File(Box::new(StoredFile {
                         file: Base64FileMetadata {
-                            url: None,
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
                         },
                         storage_path: StoragePath {

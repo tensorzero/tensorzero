@@ -249,7 +249,7 @@ impl StoredInputMessageContent {
                 let data = resolver.resolve(file.storage_path.clone()).await?;
                 Ok(ResolvedInputMessageContent::File(Box::new(ResolvedFile {
                     file: Base64File {
-                        source_url: file.file.url.clone(),
+                        source_url: file.file.source_url.clone(),
                         mime_type: file.file.mime_type.clone(),
                         data,
                     },

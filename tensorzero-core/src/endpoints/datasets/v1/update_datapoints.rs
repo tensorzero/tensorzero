@@ -476,7 +476,7 @@ mod tests {
                     assert_eq!(stored_file.storage_path.path, storage_path.path);
                     assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
                     assert_eq!(
-                        stored_file.file.url,
+                        stored_file.file.source_url,
                         Some("https://example.com/original.png".parse().unwrap())
                     );
                 }
@@ -553,7 +553,7 @@ mod tests {
                     // With disabled storage, path should still be generated
                     assert!(!stored_file.storage_path.path.as_ref().is_empty());
                     // URL should be None since this came from Base64
-                    assert_eq!(stored_file.file.url, None);
+                    assert_eq!(stored_file.file.source_url, None);
                 }
                 _ => panic!("Expected File content"),
             }

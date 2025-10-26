@@ -2633,7 +2633,7 @@ pub async fn check_base64_pdf_response(
                 }),
                 StoredContentBlock::File(Box::new(StoredFile {
                     file: Base64FileMetadata {
-                        url: None,
+                        source_url: None,
                         mime_type: mime::APPLICATION_PDF,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2788,7 +2788,7 @@ pub async fn check_base64_image_response(
                 }),
                 StoredContentBlock::File(Box::new(StoredFile {
                     file: Base64FileMetadata {
-                        url: None,
+                        source_url: None,
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: expected_storage_path.clone(),
@@ -2937,7 +2937,7 @@ pub async fn check_url_image_response(
                     text: "Describe the contents of the image".to_string(),
                 }), StoredContentBlock::File(Box::new(StoredFile {
                     file: Base64FileMetadata {
-                        url: Some(image_url.clone()),
+                        source_url: Some(image_url.clone()),
                         mime_type: mime::IMAGE_PNG,
                     },
                     storage_path: StoragePath {
