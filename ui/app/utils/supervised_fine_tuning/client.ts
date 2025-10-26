@@ -5,7 +5,7 @@ import type {
   OptimizationJobHandle,
   OptimizationJobInfo,
   UninitializedOptimizerInfo,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { getConfig } from "~/utils/config/index.server";
 import { getNativeTensorZeroClient } from "../tensorzero/native_client.server";
 import { getEnv } from "../env.server";

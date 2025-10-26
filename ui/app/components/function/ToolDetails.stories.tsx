@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { ToolDetails } from "./ToolDetails";
-import type { Config } from "tensorzero-node";
+import type { Config } from "~/types/tensorzero";
 import { useState } from "react";
 import { ConfigProvider } from "~/context/config";
 import { Button } from "../ui/button";

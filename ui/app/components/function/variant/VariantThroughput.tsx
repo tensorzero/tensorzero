@@ -1,5 +1,5 @@
 import type { VariantThroughput } from "~/utils/clickhouse/function";
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
 

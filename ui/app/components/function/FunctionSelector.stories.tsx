@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FunctionSelector } from "./FunctionSelector";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig } from "~/types/tensorzero";
 import { useState } from "react";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 

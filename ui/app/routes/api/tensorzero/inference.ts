@@ -5,7 +5,7 @@ import {
 import { isErrorLike, JSONParseError } from "~/utils/common";
 import type { Route } from "./+types/inference";
 import { getNativeTensorZeroClient } from "~/utils/tensorzero/native_client.server";
-import type { ClientInferenceParams } from "tensorzero-node";
+import type { ClientInferenceParams } from "~/types/tensorzero";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
 
 export async function action({ request }: Route.ActionArgs): Promise<Response> {

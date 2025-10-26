@@ -1,7 +1,7 @@
 import { useState, memo } from "react";
 import { FormLabel } from "~/components/ui/form";
 import { useConfig } from "~/context/config";
-import type { InferenceFilter, MetricConfig } from "tensorzero-node";
+import type { InferenceFilter, MetricConfig } from "~/types/tensorzero";
 import { Button } from "~/components/ui/button";
 import { Plus } from "lucide-react";
 import {

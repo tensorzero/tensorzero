@@ -1,0 +1,262 @@
+import { Link } from "react-router";
+import {
+  ImageIcon,
+  ImageOff,
+  Download,
+  ExternalLink,
+  FileText,
+  FileAudio,
+} from "lucide-react";
+import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
+import ContentBlockLabel from "~/components/input_output/content_blocks/ContentBlockLabel";
+import type { FileWithPath } from "~/types/tensorzero";
+
+interface FileContentBlockProps {
+  block: FileWithPath;
+}
+
+/**
+ * Main component for rendering file content blocks.
+ * Dispatches to specific renderers based on MIME type.
+ */
+export default function FileContentBlock({ block }: FileContentBlockProps) {
+  // Handle error case
+  if (block.file.url === null) {
+    return <FileErrorContentBlock error="Failed to retrieve file" />;
+  }
+
+  // Determine which component to render based on mime type
+  if (block.file.mime_type.startsWith("image/")) {
+    return (
+      <ImageContentBlock
+        imageUrl={block.file.url}
+        filePath={block.storage_path.path}
+      />
+    );
+  }
+
+  if (block.file.mime_type.startsWith("audio/")) {
+    return (
+      <AudioContentBlock
+        base64DataUrl={block.file.url}
+        mimeType={block.file.mime_type}
+        filePath={block.storage_path.path}
+      />
+    );
+  }
+
+  return (
+    <GenericFileContentBlock
+      base64DataUrl={block.file.url}
+      mimeType={block.file.mime_type}
+      filePath={block.storage_path.path}
+    />
+  );
+}
+
+interface ImageContentBlockProps {
+  /** HTTP or data URL for the image */
+  imageUrl: string;
+  filePath: string;
+}
+
+/**
+ * Renders image files with preview and download link.
+ */
+function ImageContentBlock({ imageUrl, filePath }: ImageContentBlockProps) {
+  return (
+    <div className="flex flex-col gap-1">
+      <ContentBlockLabel icon={<ImageIcon className="text-fg-muted h-3 w-3" />}>
+        File
+      </ContentBlockLabel>
+      <Link
+        to={imageUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        download={`tensorzero_${filePath}`}
+        className="border-border bg-bg-tertiary text-fg-tertiary flex min-h-20 w-60 items-center justify-center rounded border p-2 text-xs"
+      >
+        <img src={imageUrl} alt="Image" />
+      </Link>
+    </div>
+  );
+}
+
+interface AudioContentBlockProps {
+  /** Base64-encoded data URL (data:audio/...) */
+  base64DataUrl: string;
+  mimeType: string;
+  filePath: string;
+}
+
+/**
+ * Renders audio files with player controls and metadata.
+ * Converts base64 data URL to blob URL for audio playback.
+ */
+function AudioContentBlock({
+  base64DataUrl,
+  mimeType,
+  filePath,
+}: AudioContentBlockProps) {
+  const blobUrl = useBase64UrlToBlobUrl(base64DataUrl, mimeType);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <ContentBlockLabel icon={<FileAudio className="text-fg-muted h-3 w-3" />}>
+        File
+      </ContentBlockLabel>
+
+      <div className="border-border flex w-80 flex-col gap-4 rounded-md border p-3">
+        <FileMetadata mimeType={mimeType} filePath={filePath} />
+        <audio controls preload="none" className="w-full">
+          <source src={blobUrl} type={mimeType} />
+        </audio>
+      </div>
+    </div>
+  );
+}
+
+interface GenericFileContentBlockProps {
+  /** Base64-encoded data URL (data:...) */
+  base64DataUrl: string;
+  mimeType: string;
+  filePath: string;
+}
+
+/**
+ * Renders generic files with metadata and download/open actions.
+ * Converts base64 data URL to blob URL for browser preview.
+ */
+function GenericFileContentBlock({
+  base64DataUrl,
+  filePath,
+  mimeType,
+}: GenericFileContentBlockProps) {
+  const blobUrl = useBase64UrlToBlobUrl(base64DataUrl, mimeType);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <ContentBlockLabel icon={<FileText className="text-fg-muted h-3 w-3" />}>
+        File
+      </ContentBlockLabel>
+      <div className="border-border flex w-80 flex-row gap-3 rounded-md border p-3">
+        <div className="flex-1">
+          <FileMetadata filePath={filePath} mimeType={mimeType} />
+        </div>
+
+        <Link
+          to={base64DataUrl}
+          download={`tensorzero_${filePath}`}
+          aria-label={`Download ${filePath}`}
+        >
+          <Download className="h-5 w-5" />
+        </Link>
+
+        <Link
+          to={blobUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Open ${filePath} in new tab`}
+        >
+          <ExternalLink className="h-5 w-5" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+interface FileErrorContentBlockProps {
+  error: string;
+}
+
+/**
+ * Renders an error state when file cannot be loaded.
+ */
+function FileErrorContentBlock({ error }: FileErrorContentBlockProps) {
+  return (
+    <div className="flex flex-col gap-1">
+      <ContentBlockLabel icon={<FileText className="text-fg-muted h-3 w-3" />}>
+        File
+      </ContentBlockLabel>
+      <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
+          <ImageOff className="text-fg-muted h-4 w-4" />
+          <span className="text-fg-tertiary text-center text-xs font-medium">
+            {error}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface TruncatedFileNameProps {
+  filename: string;
+  maxLength?: number;
+}
+
+/**
+ * Truncates long filenames while preserving extension.
+ * Always returns JSX.Element for consistent typing.
+ */
+function TruncatedFileName({
+  filename,
+  maxLength = 32,
+}: TruncatedFileNameProps): React.JSX.Element {
+  if (filename.length <= maxLength) {
+    return <>{filename}</>;
+  }
+
+  const extension =
+    filename.lastIndexOf(".") > 0
+      ? filename.substring(filename.lastIndexOf("."))
+      : "";
+  const name = extension
+    ? filename.substring(0, filename.lastIndexOf("."))
+    : filename;
+
+  if (extension.length >= maxLength - 3) {
+    // If extension is too long, just truncate from the end
+    return (
+      <>
+        <span>{filename.substring(0, maxLength - 3)}</span>
+        <span className="text-fg-muted">...</span>
+      </>
+    );
+  }
+
+  const availableLength = maxLength - extension.length - 3; // 3 for "..."
+  const frontLength = Math.ceil(availableLength / 2);
+  const backLength = Math.floor(availableLength / 2);
+
+  if (name.length <= availableLength) {
+    return <>{filename}</>;
+  }
+
+  return (
+    <>
+      <span>{name.substring(0, frontLength)}</span>
+      <span className="text-fg-muted">...</span>
+      <span>{name.substring(name.length - backLength) + extension}</span>
+    </>
+  );
+}
+
+interface FileMetadataProps {
+  mimeType: string;
+  filePath: string;
+}
+
+/**
+ * Displays file metadata (name and MIME type).
+ */
+function FileMetadata({ mimeType, filePath }: FileMetadataProps) {
+  return (
+    <div className="flex flex-col">
+      <div className="text-fg-primary text-sm font-medium" title={filePath}>
+        <TruncatedFileName filename={filePath} />
+      </div>
+      <div className="text-fg-tertiary text-xs">{mimeType}</div>
+    </div>
+  );
+}

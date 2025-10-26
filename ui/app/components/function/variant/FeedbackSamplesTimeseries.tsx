@@ -1,7 +1,7 @@
 import type {
   CumulativeFeedbackTimeSeriesPoint,
   TimeWindow,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CHART_COLORS, formatChartNumber } from "~/utils/chart";
 import { normalizePeriod, addPeriod } from "~/utils/date";

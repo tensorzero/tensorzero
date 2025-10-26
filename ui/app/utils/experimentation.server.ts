@@ -1,4 +1,4 @@
-import type { Config, FunctionConfig } from "tensorzero-node";
+import type { Config, FunctionConfig } from "~/types/tensorzero";
 import { estimateTrackAndStopOptimalProbabilities } from "tensorzero-node";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import { logger } from "~/utils/logger";

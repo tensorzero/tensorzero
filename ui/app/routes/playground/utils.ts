@@ -7,7 +7,7 @@ import type {
   FunctionConfig,
   InferenceResponse,
   StaticToolConfig,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { prepareInferenceActionRequest } from "../api/tensorzero/inference.utils";
 import { getExtraInferenceOptions } from "~/utils/feature_flags";
 import { data } from "react-router";

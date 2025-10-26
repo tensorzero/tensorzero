@@ -18,7 +18,7 @@ import {
   queryInferenceTableByVariantName,
 } from "~/utils/clickhouse/inference.server";
 import { getVariantPerformances } from "~/utils/clickhouse/function";
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { MetricSelector } from "~/components/function/variant/MetricSelector";

@@ -10,7 +10,7 @@ import type {
   Datapoint,
   AdjacentDatapointIds,
   ToolCallConfigDatabaseInsert,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import type {
   ParsedDatasetRow,
   ParsedChatInferenceDatapointRow,

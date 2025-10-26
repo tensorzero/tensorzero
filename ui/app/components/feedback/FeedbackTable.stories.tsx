@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import FeedbackTable from "./FeedbackTable";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "tensorzero-node";
+import type { Config } from "~/types/tensorzero";
 
 // Helper function to generate a UUID-like string from a number that sorts correctly
 // Higher numbers produce lexicographically larger UUIDs (for descending sort)

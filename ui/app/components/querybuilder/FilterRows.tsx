@@ -5,7 +5,7 @@ import type {
   MetricConfig,
   TagComparisonOperator,
   FloatComparisonOperator,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { Input } from "~/components/ui/input";
 import {
   Select,

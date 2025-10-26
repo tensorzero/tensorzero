@@ -2,7 +2,7 @@ import Input from "./Input";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import pdfUrl from "./Input.stories.fixture.tensorzero.pdf?url";
 import mp3Url from "./Input.stories.fixture.tensorzero.mp3?url";
-import type { JsonValue } from "tensorzero-node";
+import type { JsonValue } from "~/types/tensorzero";
 
 const meta = {
   title: "Input",

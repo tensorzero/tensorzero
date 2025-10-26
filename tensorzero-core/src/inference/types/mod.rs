@@ -672,11 +672,12 @@ pub enum ThoughtSummaryBlock {
     SummaryText { text: String },
 }
 
-/// Struct that represents Chain of Thought reasoning
+/// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
+    #[ts(optional)]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.

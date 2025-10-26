@@ -8,7 +8,7 @@ import type {
   StoredInput,
   StoragePath as BackendStoragePath,
   StorageKind as BackendStorageKind,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 /**
  * JSON types.
@@ -84,7 +84,7 @@ export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
-  text: z.string().nullable(),
+  text: z.string().optional(),
   signature: z.string().optional(),
   _internal_provider_type: z.string().optional(),
 });

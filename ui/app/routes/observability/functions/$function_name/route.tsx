@@ -41,7 +41,7 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 import { computeTrackAndStopOptimalProbabilities } from "~/utils/experimentation.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {

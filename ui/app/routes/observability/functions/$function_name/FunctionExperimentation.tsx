@@ -1,4 +1,4 @@
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig } from "~/types/tensorzero";
 import {
   ExperimentationPieChart,
   type VariantWeight,

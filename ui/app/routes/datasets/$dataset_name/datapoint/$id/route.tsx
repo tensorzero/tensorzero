@@ -45,7 +45,7 @@ import DatapointBasicInfo from "./DatapointBasicInfo";
 import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import {
   deleteDatapoint,
   renameDatapoint,

@@ -1,4 +1,4 @@
-import type { TimeWindow, ModelUsageTimePoint } from "tensorzero-node";
+import type { TimeWindow, ModelUsageTimePoint } from "~/types/tensorzero";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,

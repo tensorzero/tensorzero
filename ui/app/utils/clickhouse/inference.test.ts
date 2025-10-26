@@ -23,7 +23,7 @@ import { getClickhouseClient } from "./client.server";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 // Test countInferencesForFunction
 test("countInferencesForFunction returns correct counts", async () => {

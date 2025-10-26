@@ -134,6 +134,7 @@ pub struct ResolvedInput {
         any(feature = "pyo3", test),
         serde(skip_serializing_if = "Option::is_none")
     )]
+    #[cfg_attr(test, ts(optional))]
     pub system: Option<Value>,
 
     #[cfg_attr(any(feature = "pyo3", test), serde(default))]

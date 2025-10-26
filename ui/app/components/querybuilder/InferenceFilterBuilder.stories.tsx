@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import InferenceFilterBuilder from "./InferenceFilterBuilder";
 import { ConfigProvider } from "~/context/config";
-import type { Config } from "tensorzero-node";
-import type { InferenceFilter } from "tensorzero-node";
+import type { Config } from "~/types/tensorzero";
+import type { InferenceFilter } from "~/types/tensorzero";
 import { FormProvider, useForm } from "react-hook-form";
 import { useState } from "react";
 

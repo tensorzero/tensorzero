@@ -1,4 +1,4 @@
-import type { Config, FunctionConfig } from "tensorzero-node";
+import type { Config, FunctionConfig } from "~/types/tensorzero";
 import { getConfig as getConfigNative } from "tensorzero-node";
 import { getEnv } from "../env.server";
 import { DEFAULT_FUNCTION } from "../constants";

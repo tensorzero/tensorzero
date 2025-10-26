@@ -17,7 +17,7 @@ import type {
   ResolvedTomlPath,
   ChatTemplates,
   StaticToolConfig,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import type {
   InputMessageContent as TensorZeroContent,
   ImageContent as TensorZeroImage,
@@ -42,7 +42,7 @@ import type {
   ToolCallConfigDatabaseInsert,
   ContentBlockChatOutput,
   JsonInferenceOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import type {
   Input,
   InputMessage,

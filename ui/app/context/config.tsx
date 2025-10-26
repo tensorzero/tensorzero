@@ -9,7 +9,7 @@
  */
 
 import { createContext, useContext } from "react";
-import type { Config } from "tensorzero-node";
+import type { Config } from "~/types/tensorzero";
 
 const ConfigContext = createContext<Config | null>(null);
 

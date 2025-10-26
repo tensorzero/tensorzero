@@ -22,6 +22,8 @@ import type { JsonObject } from "type-fest";
 import { AddButton } from "~/components/ui/AddButton";
 import { DeleteButton } from "~/components/ui/DeleteButton";
 
+/// NOTE: This component is being DEPRECATED in favor of ui/app/components/input_output/ResolvedInputElement.tsx.
+
 interface InputProps {
   messages: DisplayInputMessage[];
   system?: string | JsonObject | null;

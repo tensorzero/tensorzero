@@ -3,6 +3,7 @@ import { Trash2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
+  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
 
@@ -20,19 +21,21 @@ interface DeleteButtonProps {
 
 export function DeleteButton({ label, onDelete }: DeleteButtonProps) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="iconSm"
-          onClick={onDelete}
-          aria-label={label}
-          className="text-muted-foreground hover:text-destructive h-6 w-6"
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      </TooltipTrigger>
-      {label && <TooltipContent>{label}</TooltipContent>}
-    </Tooltip>
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="iconSm"
+            onClick={onDelete}
+            aria-label={label}
+            className="text-muted-foreground hover:text-destructive h-6 w-6"
+          >
+            <Trash2 className="h-3 w-3" />
+          </Button>
+        </TooltipTrigger>
+        {label && <TooltipContent>{label}</TooltipContent>}
+      </Tooltip>
+    </TooltipProvider>
   );
 }
