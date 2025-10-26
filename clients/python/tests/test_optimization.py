@@ -73,18 +73,13 @@ def test_sync_dicl_chat(
     embedded_sync_client: TensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = DICLOptimizationConfig(
-        embedding_model="text-embedding-3-small",
-        variant_name="test_dicl_chat",
-        function_name="basic_test",
-        dimensions=None,
-        batch_size=None,
-        max_concurrency=None,
-        k=None,
-        model=None,
-        append_to_existing_variants=True,
-        credentials=None,
-    )
+    optimization_config = {
+        "type": "dicl",
+        "embedding_model": "text-embedding-3-small",
+        "variant_name": "test_dicl_chat",
+        "function_name": "basic_test",
+        "append_to_existing_variants": True,
+    }
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=chat_function_rendered_samples,
         val_samples=None,
@@ -128,7 +123,11 @@ def test_sync_openai_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = OpenAISFTConfig(model="gpt-4o-mini", api_base="http://localhost:3030/openai/")
+    optimization_config = {
+        "type": "openai_sft",
+        "model": "gpt-4o-mini",
+        "api_base": "http://localhost:3030/openai/",
+    }
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
         val_samples=None,
@@ -167,13 +166,14 @@ def test_sync_together_sft(
     embedded_sync_client: TensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = TogetherSFTConfig(
-        model="meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
-        api_base="http://localhost:3030/together/",
-        n_epochs=1,
-        training_type={"type": "Lora", "lora_r": 8, "lora_alpha": 16},
-        batch_size="max",
-    )
+    optimization_config = {
+        "type": "together_sft",
+        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
+        "api_base": "http://localhost:3030/together/",
+        "n_epochs": 1,
+        "training_type": {"type": "Lora", "lora_r": 8, "lora_alpha": 16},
+        "batch_size": "max",
+    }
     optimization_job_handle = embedded_sync_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
         val_samples=None,
@@ -246,13 +246,18 @@ async def test_async_dicl_chat(
     embedded_async_client: AsyncTensorZeroGateway,
     chat_function_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = {
-        "type": "dicl",
-        "embedding_model": "text-embedding-3-small",
-        "variant_name": "test_dicl_chat",
-        "function_name": "basic_test",
-        "append_to_existing_variants": True,
-    }
+    optimization_config = DICLOptimizationConfig(
+        embedding_model="text-embedding-3-small",
+        variant_name="test_dicl_chat",
+        function_name="basic_test",
+        dimensions=None,
+        batch_size=None,
+        max_concurrency=None,
+        k=None,
+        model=None,
+        append_to_existing_variants=True,
+        credentials=None,
+    )
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
         train_samples=chat_function_rendered_samples,
         val_samples=None,
@@ -293,11 +298,7 @@ async def test_async_openai_sft(
     embedded_async_client: AsyncTensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = {
-        "type": "openai_sft",
-        "model": "gpt-4o-mini",
-        "api_base": "http://localhost:3030/openai/",
-    }
+    optimization_config = OpenAISFTConfig(model="gpt-4o-mini", api_base="http://localhost:3030/openai/")
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
         val_samples=None,
@@ -338,14 +339,13 @@ async def test_async_together_sft(
     embedded_async_client: AsyncTensorZeroGateway,
     mixed_rendered_samples: List[RenderedSample],
 ):
-    optimization_config = {
-        "type": "together_sft",
-        "model": "meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
-        "api_base": "http://localhost:3030/together/",
-        "n_epochs": 1,
-        "training_type": {"type": "Lora", "lora_r": 8, "lora_alpha": 16},
-        "batch_size": "max",
-    }
+    optimization_config = TogetherSFTConfig(
+        model="meta-llama/Meta-Llama-3.1-8B-Instruct-Reference",
+        api_base="http://localhost:3030/together/",
+        n_epochs=1,
+        training_type={"type": "Lora", "lora_r": 8, "lora_alpha": 16},
+        batch_size="max",
+    )
     optimization_job_handle = await embedded_async_client.experimental_launch_optimization(
         train_samples=mixed_rendered_samples,
         val_samples=None,
