@@ -6,7 +6,6 @@ import ContentBlockLabel from "~/components/input_output/content_blocks/ContentB
 interface TextContentBlockProps {
   label: string;
   text: string;
-  // footer?: string | ReactNode | null; // TODO: move/remove this?
   isEditing?: boolean;
   onChange?: (value: string) => void;
   actionBar?: ReactNode;
