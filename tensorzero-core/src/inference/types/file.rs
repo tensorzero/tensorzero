@@ -452,16 +452,7 @@ impl File {
                 })
             }
             File::Base64(base64_file) => {
-                let Base64File {
-                    source_url: _,
-                    mime_type,
-                    data,
-                } = base64_file;
-                Ok(Base64File {
-                    source_url: None,
-                    mime_type,
-                    data,
-                })
+                Ok(Base64File { source_url: None, ..base64_file })
             }
             File::ObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
