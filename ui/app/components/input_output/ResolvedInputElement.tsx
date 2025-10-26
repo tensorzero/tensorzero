@@ -4,8 +4,8 @@ import type {
   ResolvedInput,
   ResolvedInputMessage,
 } from "~/types/tensorzero";
-import SystemElement from "./SystemElement";
-import MessagesElement from "./MessagesElement";
+import { SystemElement } from "./SystemElement";
+import { MessagesElement } from "./MessagesElement";
 
 interface ResolvedInputElementProps {
   input: ResolvedInput;
@@ -15,7 +15,7 @@ interface ResolvedInputElementProps {
   maxHeight?: number | "Content";
 }
 
-export default function ResolvedInputElement({
+export function ResolvedInputElement({
   input,
   isEditing,
   onSystemChange,

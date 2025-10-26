@@ -1,5 +1,5 @@
 import { useState } from "react";
-import ToolCallContentBlock from "./ToolCallContentBlock";
+import { ToolCallContentBlock } from "./ToolCallContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 const meta = {

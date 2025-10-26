@@ -3,11 +3,11 @@ import type {
   ResolvedInputMessageContent,
 } from "~/types/tensorzero";
 import { ContentBlockElement } from "./ContentBlockElement";
-import MessageWrapper from "./MessageWrapper";
+import { MessageWrapper } from "./MessageWrapper";
 import { AddButton } from "~/components/ui/AddButton";
 import { DeleteButton } from "~/components/ui/DeleteButton";
 
-export default function MessageElement({
+export function MessageElement({
   message,
   key,
   isEditing,

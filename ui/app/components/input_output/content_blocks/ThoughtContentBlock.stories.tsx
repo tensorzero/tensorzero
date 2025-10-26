@@ -1,5 +1,5 @@
 import { useState } from "react";
-import ThoughtContentBlock from "./ThoughtContentBlock";
+import { ThoughtContentBlock } from "./ThoughtContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { Thought } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";

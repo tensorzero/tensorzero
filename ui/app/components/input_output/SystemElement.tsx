@@ -1,10 +1,10 @@
 import { AddButton } from "~/components/ui/AddButton";
 import { DeleteButton } from "~/components/ui/DeleteButton";
 import type { JsonValue } from "~/types/tensorzero";
-import TextContentBlock from "./content_blocks/TextContentBlock";
-import TemplateContentBlock from "./content_blocks/TemplateContentBlock";
-import MessageWrapper from "./MessageWrapper";
-import ExpandableElement from "./ExpandableElement";
+import { TextContentBlock } from "./content_blocks/TextContentBlock";
+import { TemplateContentBlock } from "./content_blocks/TemplateContentBlock";
+import { MessageWrapper } from "./MessageWrapper";
+import { ExpandableElement } from "./ExpandableElement";
 
 interface SystemElementProps {
   system?: JsonValue;
@@ -13,7 +13,7 @@ interface SystemElementProps {
   maxHeight?: number | "Content";
 }
 
-export default function SystemElement({
+export function SystemElement({
   system,
   isEditing,
   onSystemChange,

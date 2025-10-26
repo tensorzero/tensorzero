@@ -1,6 +1,6 @@
 import { Lightbulb } from "lucide-react";
 import { type ReactNode } from "react";
-import ContentBlockLabel from "~/components/input_output/content_blocks/ContentBlockLabel";
+import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import { CodeEditor } from "~/components/ui/code-editor";
 import { Input } from "~/components/ui/input";
 import { AddButton } from "~/components/ui/AddButton";
@@ -14,7 +14,7 @@ interface ThoughtContentBlockProps {
   actionBar?: ReactNode;
 }
 
-export default function ThoughtContentBlock({
+export function ThoughtContentBlock({
   block,
   isEditing,
   onChange,

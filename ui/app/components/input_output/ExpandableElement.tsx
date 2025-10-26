@@ -9,7 +9,7 @@ interface ExpandableElementProps {
   maxHeight?: number | "Content";
 }
 
-export default function ({
+export function ExpandableElement({
   children,
   maxHeight = 240,
 }: ExpandableElementProps) {

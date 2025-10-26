@@ -6,7 +6,7 @@ interface ContentBlockLabelProps {
   actionBar?: ReactNode;
 }
 
-export default function ContentBlockLabel({
+export function ContentBlockLabel({
   icon,
   children,
   actionBar,

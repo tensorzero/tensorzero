@@ -1,7 +1,7 @@
 import { type ReactNode, useState } from "react";
 import { FileCode } from "lucide-react";
 import { z } from "zod";
-import ContentBlockLabel from "~/components/input_output/content_blocks/ContentBlockLabel";
+import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import { Input } from "~/components/ui/input";
 import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
 import { type TemplateInput } from "~/types/tensorzero";
@@ -20,7 +20,7 @@ const templateArgumentsSchema = z.record(
   JsonValueSchema.optional(),
 );
 
-export default function TemplateContentBlock({
+export function TemplateContentBlock({
   block,
   isEditing,
   onChange,

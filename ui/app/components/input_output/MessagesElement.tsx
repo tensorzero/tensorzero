@@ -1,7 +1,7 @@
 import type { ResolvedInputMessage } from "~/types/tensorzero";
 import { AddButton } from "~/components/ui/AddButton";
-import ExpandableElement from "./ExpandableElement";
-import MessageElement from "./MessageElement";
+import { ExpandableElement } from "./ExpandableElement";
+import { MessageElement } from "./MessageElement";
 
 interface MessagesElementProps {
   messages: Array<ResolvedInputMessage>;
@@ -10,7 +10,7 @@ interface MessagesElementProps {
   maxHeight?: number | "Content";
 }
 
-export default function MessagesElement({
+export function MessagesElement({
   messages,
   isEditing,
   onMessagesChange,

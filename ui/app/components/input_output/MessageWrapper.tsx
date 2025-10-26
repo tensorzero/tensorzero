@@ -10,8 +10,9 @@ interface MessageWrapperProps {
 /**
  * A wrapper component for displaying chat messages.
  * Used to wrap `SystemElement` and `MessageElement` components with consistent styling and layout.
+ * Both these components import `MessageWrapper` to render their content.
  */
-export default function MessageWrapper({
+export function MessageWrapper({
   children,
   role,
   actionBar,

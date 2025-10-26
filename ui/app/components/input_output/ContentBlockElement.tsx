@@ -1,11 +1,11 @@
 import { type ReactNode } from "react";
 import type { ResolvedInputMessageContent } from "~/types/tensorzero";
-import TextContentBlock from "~/components/input_output/content_blocks/TextContentBlock";
-import TemplateContentBlock from "~/components/input_output/content_blocks/TemplateContentBlock";
-import ToolCallContentBlock from "~/components/input_output/content_blocks/ToolCallContentBlock";
-import ToolResultContentBlock from "~/components/input_output/content_blocks/ToolResultContentBlock";
-import FileContentBlock from "~/components/input_output/content_blocks/FileContentBlock";
-import ThoughtContentBlock from "~/components/input_output/content_blocks/ThoughtContentBlock";
+import { TextContentBlock } from "~/components/input_output/content_blocks/TextContentBlock";
+import { TemplateContentBlock } from "~/components/input_output/content_blocks/TemplateContentBlock";
+import { ToolCallContentBlock } from "~/components/input_output/content_blocks/ToolCallContentBlock";
+import { ToolResultContentBlock } from "~/components/input_output/content_blocks/ToolResultContentBlock";
+import { FileContentBlock } from "~/components/input_output/content_blocks/FileContentBlock";
+import { ThoughtContentBlock } from "~/components/input_output/content_blocks/ThoughtContentBlock";
 
 interface ContentBlockElementProps {
   block: ResolvedInputMessageContent;

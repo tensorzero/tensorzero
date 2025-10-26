@@ -1,5 +1,5 @@
 import { useState } from "react";
-import ResolvedInputElement from "./ResolvedInputElement";
+import { ResolvedInputElement } from "./ResolvedInputElement";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ResolvedInput, Role } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";

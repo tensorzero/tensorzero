@@ -8,7 +8,7 @@ import {
   FileAudio,
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
-import ContentBlockLabel from "~/components/input_output/content_blocks/ContentBlockLabel";
+import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import type { FileWithPath } from "~/types/tensorzero";
 
 interface FileContentBlockProps {
@@ -19,7 +19,7 @@ interface FileContentBlockProps {
  * Main component for rendering file content blocks.
  * Dispatches to specific renderers based on MIME type.
  */
-export default function FileContentBlock({ block }: FileContentBlockProps) {
+export function FileContentBlock({ block }: FileContentBlockProps) {
   // Handle error case
   if (block.file.url === null) {
     return <FileErrorContentBlock error="Failed to retrieve file" />;
@@ -190,6 +190,61 @@ function FileErrorContentBlock({ error }: FileErrorContentBlockProps) {
   );
 }
 
+export interface TruncatedFilenameSegment {
+  text: string;
+  isMuted: boolean;
+}
+
+/**
+ * Pure function that calculates how to truncate a filename.
+ * Returns segments with styling information for rendering.
+ *
+ * @param filename - The filename to truncate
+ * @param maxLength - Maximum length before truncation (default: 32)
+ * @returns Array of segments with text and muted status
+ */
+export function truncateFilename(
+  filename: string,
+  maxLength: number = 32,
+): TruncatedFilenameSegment[] {
+  if (filename.length <= maxLength) {
+    return [{ text: filename, isMuted: false }];
+  }
+
+  const extension =
+    filename.lastIndexOf(".") > 0
+      ? filename.substring(filename.lastIndexOf("."))
+      : "";
+  const name = extension
+    ? filename.substring(0, filename.lastIndexOf("."))
+    : filename;
+
+  if (extension.length >= maxLength - 3) {
+    // If extension is too long, just truncate from the end
+    return [
+      { text: filename.substring(0, maxLength - 3), isMuted: false },
+      { text: "...", isMuted: true },
+    ];
+  }
+
+  const availableLength = maxLength - extension.length - 3; // 3 for "..."
+  const frontLength = Math.ceil(availableLength / 2);
+  const backLength = Math.floor(availableLength / 2);
+
+  if (name.length <= availableLength) {
+    return [{ text: filename, isMuted: false }];
+  }
+
+  return [
+    { text: name.substring(0, frontLength), isMuted: false },
+    { text: "...", isMuted: true },
+    {
+      text: name.substring(name.length - backLength) + extension,
+      isMuted: false,
+    },
+  ];
+}
+
 interface TruncatedFileNameProps {
   filename: string;
   maxLength?: number;
@@ -203,41 +258,18 @@ function TruncatedFileName({
   filename,
   maxLength = 32,
 }: TruncatedFileNameProps): React.JSX.Element {
-  if (filename.length <= maxLength) {
-    return <>{filename}</>;
-  }
-
-  const extension =
-    filename.lastIndexOf(".") > 0
-      ? filename.substring(filename.lastIndexOf("."))
-      : "";
-  const name = extension
-    ? filename.substring(0, filename.lastIndexOf("."))
-    : filename;
-
-  if (extension.length >= maxLength - 3) {
-    // If extension is too long, just truncate from the end
-    return (
-      <>
-        <span>{filename.substring(0, maxLength - 3)}</span>
-        <span className="text-fg-muted">...</span>
-      </>
-    );
-  }
-
-  const availableLength = maxLength - extension.length - 3; // 3 for "..."
-  const frontLength = Math.ceil(availableLength / 2);
-  const backLength = Math.floor(availableLength / 2);
-
-  if (name.length <= availableLength) {
-    return <>{filename}</>;
-  }
+  const segments = truncateFilename(filename, maxLength);
 
   return (
     <>
-      <span>{name.substring(0, frontLength)}</span>
-      <span className="text-fg-muted">...</span>
-      <span>{name.substring(name.length - backLength) + extension}</span>
+      {segments.map((segment, index) => (
+        <span
+          key={index}
+          className={segment.isMuted ? "text-fg-muted" : undefined}
+        >
+          {segment.text}
+        </span>
+      ))}
     </>
   );
 }

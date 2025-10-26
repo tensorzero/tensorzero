@@ -1,7 +1,7 @@
 import { Terminal } from "lucide-react";
 import { type ReactNode } from "react";
-import ContentBlockLabel from "~/components/input_output/content_blocks/ContentBlockLabel";
-import ToolPayload from "~/components/input_output/content_blocks/ToolPayload";
+import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
+import { ToolPayload } from "~/components/input_output/content_blocks/ToolPayload";
 import { type ToolCall } from "~/types/tensorzero";
 
 interface ToolCallContentBlockProps {
@@ -11,7 +11,7 @@ interface ToolCallContentBlockProps {
   actionBar?: ReactNode;
 }
 
-export default function ToolCallContentBlock({
+export function ToolCallContentBlock({
   block,
   isEditing,
   onChange,

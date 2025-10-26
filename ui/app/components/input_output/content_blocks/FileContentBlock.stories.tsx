@@ -1,4 +1,4 @@
-import FileContentBlock from "./FileContentBlock";
+import { FileContentBlock } from "./FileContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import mp3Url from "./FileContentBlock.stories.fixture.mp3?url";
 import pdfUrl from "./FileContentBlock.stories.fixture.pdf?url";

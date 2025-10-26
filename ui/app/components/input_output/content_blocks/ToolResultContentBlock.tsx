@@ -1,7 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import { type ReactNode } from "react";
-import ContentBlockLabel from "~/components/input_output/content_blocks/ContentBlockLabel";
-import ToolPayload from "~/components/input_output/content_blocks/ToolPayload";
+import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
+import { ToolPayload } from "~/components/input_output/content_blocks/ToolPayload";
 import { type ToolResult } from "~/types/tensorzero";
 
 interface ToolResultContentBlockProps {
@@ -11,7 +11,7 @@ interface ToolResultContentBlockProps {
   actionBar?: ReactNode;
 }
 
-export default function ToolResultContentBlock({
+export function ToolResultContentBlock({
   block,
   isEditing,
   onChange,

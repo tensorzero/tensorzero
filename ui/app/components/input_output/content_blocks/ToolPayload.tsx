@@ -11,10 +11,10 @@ interface ToolPayloadProps {
   enforceJson?: boolean;
 }
 
-// `ToolPayload` renders the content of:
-// - `ToolCall`: `payload` = `arguments`
-// - `ToolResult`: `payload` = `result`
-export default function ToolPayload({
+// This component is used to render `ToolCall` and `ToolResult`.
+// These objects are very similar except that `ToolCall` has `arguments` and `ToolResult` has `result`.
+// We unify the rendering of both `ToolCall` and `ToolResult` by using a single component, under a common field called `payload`.
+export function ToolPayload({
   name,
   id,
   payload,

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import TemplateContentBlock from "./TemplateContentBlock";
+import { TemplateContentBlock } from "./TemplateContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { TemplateInput } from "~/types/tensorzero";
 
