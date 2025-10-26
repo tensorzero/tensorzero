@@ -194,6 +194,7 @@ const FilterGroup = memo(function FilterGroup({
         <DeleteButton
           onDelete={() => onChange(undefined)}
           label="Delete filter group"
+          icon="x"
         />
       </div>
       <div
@@ -263,6 +264,7 @@ function MissingMetricError({
       <DeleteButton
         onDelete={onDelete}
         label={`Delete missing metric ${metricName}`}
+        icon="x"
       />
     </div>
   );

@@ -229,6 +229,7 @@ export const TagFilterRow = memo(function TagFilterRow({
         <DeleteButton
           onDelete={() => onChange(undefined)}
           label="Delete tag filter"
+          icon="x"
         />
       </div>
     </div>
@@ -301,6 +302,7 @@ export const FloatMetricFilterRow = memo(function FloatMetricFilterRow({
         <DeleteButton
           onDelete={() => onChange(undefined)}
           label="Delete metric filter"
+          icon="x"
         />
       </div>
     </div>
@@ -340,6 +342,7 @@ export const BooleanMetricFilterRow = memo(function BooleanMetricFilterRow({
         <DeleteButton
           onDelete={() => onChange(undefined)}
           label="Delete metric filter"
+          icon="x"
         />
       </div>
     </div>
