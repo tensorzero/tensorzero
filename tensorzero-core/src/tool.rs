@@ -312,18 +312,17 @@ impl ToolCallConfig {
             .or(function_parallel_tool_calls);
 
         let provider_tools = dynamic_tool_params.provider_tools.unwrap_or_default();
-        let tool_call_config_option =
-            if tools_available.is_empty() && provider_tools.is_empty() {
-                None
-            } else {
-                Some(Self {
-                    tools_available,
-                    tool_choice,
-                    provider_tools,
-                    parallel_tool_calls,
-                    allowed_tools,
-                })
-            };
+        let tool_call_config_option = if tools_available.is_empty() && provider_tools.is_empty() {
+            None
+        } else {
+            Some(Self {
+                tools_available,
+                provider_tools,
+                tool_choice,
+                parallel_tool_calls,
+                allowed_tools,
+            })
+        };
 
         Ok(tool_call_config_option)
     }
