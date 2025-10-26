@@ -195,9 +195,9 @@ async function resolveModelInferenceContent(
 async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
   const object = await getTensorZeroClient().getObject(content.storage_path);
   const json = JSON.parse(object);
-  const dataURL = `data:${content.file.mime_type};base64,${json.data}`;
+  const data = `data:${content.file.mime_type};base64,${json.data}`;
   return {
-    dataUrl: dataURL,
+    data,
     mime_type: content.file.mime_type,
   };
 }

@@ -138,7 +138,7 @@ export const base64FileSchema = z.object({
 export type Base64File = z.infer<typeof base64FileSchema>;
 
 export const resolvedBase64FileSchema = z.object({
-  dataUrl: z
+  data: z
     .string()
     .url()
     .refine((url) => url.startsWith("data:"), {

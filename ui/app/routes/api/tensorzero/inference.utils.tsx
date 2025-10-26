@@ -527,7 +527,7 @@ function resolvedInputMessageContentToTensorZeroContent(
 function resolvedFileContentToTensorZeroFile(
   content: ResolvedFileContent,
 ): TensorZeroImage {
-  const data = content.file.dataUrl.split(",")[1];
+  const data = content.file.data.split(",")[1];
   return {
     type: "image",
     mime_type: content.file.mime_type,
@@ -613,12 +613,12 @@ function resolvedInputMessageContentToClientInputMessageContent(
 function resolvedFileContentToClientFile(
   content: ResolvedFileContent,
 ): ClientInputMessageContent {
-  const data = content.file.dataUrl.split(",")[1];
+  const data = content.file.data.split(",")[1];
   return {
     type: "file",
     file_type: "base64",
     mime_type: content.file.mime_type,
-    data: data,
+    data,
   };
 }
 
