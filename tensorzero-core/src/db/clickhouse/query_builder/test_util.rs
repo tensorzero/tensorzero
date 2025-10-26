@@ -3,6 +3,17 @@ pub fn normalize_whitespace(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Assert that the query is exactly equal to the expected query (ignoring whitespace and newline differences)
+///
+/// # Panics
+///
+/// This function will panic if the query is not exactly equal to the expected query. For test usage only.
+pub fn assert_query_equals(query: &str, expected_query: &str) {
+    let normalized_query = normalize_whitespace(query);
+    let normalized_expected_query = normalize_whitespace(expected_query);
+    assert_eq!(normalized_query, normalized_expected_query);
+}
+
 /// Assert that the query contains a section (ignoring whitespace and newline differences)
 ///
 /// # Panics

@@ -5,6 +5,7 @@ use tensorzero::{
     TimeComparisonOperator, TimeFilter,
 };
 use tensorzero_core::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
+use uuid::Uuid;
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_json_function() {
@@ -465,6 +466,20 @@ pub async fn test_query_by_ids_chat_only() {
         assert!(ids.contains(&chat_inference.inference_id));
         assert_eq!(chat_inference.function_name, "write_haiku");
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_query_by_ids_unknown_id_returns_empty() {
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+
+    // Query by an unknown ID
+    let opts = ListInferencesParams {
+        ids: Some(&[Uuid::new_v4()]),
+        ..Default::default()
+    };
+    let res = client.experimental_list_inferences(opts).await.unwrap();
+
+    assert!(res.is_empty(), "Expected empty result for unknown ID");
 }
 
 #[tokio::test(flavor = "multi_thread")]
