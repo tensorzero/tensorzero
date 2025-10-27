@@ -290,13 +290,14 @@ mod tests {
             stored_output: output.map(StoredOutput::Chat),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
-            tool_params: None,
+            tool_info: None,
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
         };
         let lazy_inference = inference.into_lazy_rendered_sample();
-        let row = GCPVertexGeminiSupervisedRow::from_rendered_sample(&lazy_inference)
+        let config = Config::default();
+        let row = GCPVertexGeminiSupervisedRow::from_rendered_sample(&lazy_inference, &config)
             .await
             .unwrap();
 

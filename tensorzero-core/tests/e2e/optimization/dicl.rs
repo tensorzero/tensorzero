@@ -41,7 +41,7 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
         )),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
+        tool_info: None,
         output_schema: None,
         dispreferred_outputs: vec![],
         tags: HashMap::new(),

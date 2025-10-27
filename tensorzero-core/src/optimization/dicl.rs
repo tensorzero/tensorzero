@@ -1058,21 +1058,23 @@ mod tests {
     }
 
     fn create_test_rendered_sample_with_tools(tools: Vec<crate::tool::Tool>) -> RenderedSample {
-        use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+        use crate::tool::{AllowedTools, ToolCallConfigDatabaseInsert, ToolChoice};
 
         let mut sample = create_test_rendered_sample();
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
-            tool_info: tools,
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: Some(true),
-        });
+        sample.tool_info = Some(ToolCallConfigDatabaseInsert::new_for_test(
+            tools,
+            vec![],
+            AllowedTools::default(),
+            ToolChoice::Auto,
+            Some(true),
+        ));
         sample
     }
 
     fn create_test_rendered_sample_with_tool_content() -> RenderedSample {
         use crate::{
             inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
-            tool::{ToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
+            tool::{AllowedTools, ToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
         };
         use serde_json::json;
 
@@ -1088,12 +1090,14 @@ mod tests {
             })],
         });
 
-        // Also add empty tool params to make it realistic
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
-            too: vec![],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: Some(false),
-        });
+        // Also add empty tool info to make it realistic
+        sample.tool_info = Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![],
+            vec![],
+            AllowedTools::default(),
+            ToolChoice::None,
+            Some(false),
+        ));
 
         sample
     }
@@ -1101,7 +1105,7 @@ mod tests {
     fn create_test_rendered_sample_with_tool_result() -> RenderedSample {
         use crate::{
             inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
-            tool::{ToolCallConfigDatabaseInsert, ToolChoice, ToolResult},
+            tool::{AllowedTools, ToolCallConfigDatabaseInsert, ToolChoice, ToolResult},
         };
 
         let mut sample = create_test_rendered_sample();
@@ -1116,12 +1120,14 @@ mod tests {
             })],
         });
 
-        // Also add empty tool params to make it realistic
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: Some(false),
-        });
+        // Also add empty tool info to make it realistic
+        sample.tool_info = Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![],
+            vec![],
+            AllowedTools::default(),
+            ToolChoice::None,
+            Some(false),
+        ));
 
         sample
     }
@@ -1153,15 +1159,15 @@ mod tests {
 
     #[test]
     fn test_validate_train_examples_rejects_tools_available() {
-        use crate::tool::Tool;
+        use crate::tool::{ClientSideFunctionTool, Tool};
         use serde_json::json;
 
-        let tool = Tool {
+        let tool = Tool::ClientSideFunction(ClientSideFunctionTool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
             parameters: json!({"type": "object", "properties": {}}),
             strict: false,
-        };
+        });
 
         let sample = create_test_rendered_sample_with_tools(vec![tool]);
         let result = validate_train_examples(&[sample]);
@@ -1169,7 +1175,7 @@ mod tests {
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(error.to_string().contains("does not support tool calls"));
-        assert!(error.to_string().contains("contains 1 available tools"));
+        assert!(error.to_string().contains("has tool configuration"));
     }
 
     #[test]
@@ -1200,17 +1206,17 @@ mod tests {
 
     #[test]
     fn test_validate_train_examples_multiple_samples() {
-        use crate::tool::Tool;
+        use crate::tool::{ClientSideFunctionTool, Tool};
         use serde_json::json;
 
         let valid_sample = create_test_rendered_sample();
 
-        let tool = Tool {
+        let tool = Tool::ClientSideFunction(ClientSideFunctionTool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
             parameters: json!({"type": "object", "properties": {}}),
             strict: false,
-        };
+        });
         let invalid_sample = create_test_rendered_sample_with_tools(vec![tool]);
 
         // Should fail on the second sample
