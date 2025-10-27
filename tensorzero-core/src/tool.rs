@@ -455,6 +455,7 @@ impl ToolCallConfig {
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+// TODO(Viraj, in this PR): adjust the deserialization logic or the tools_available method to handle the reading of historical data
 pub struct ToolCallConfigDatabaseInsert {
     pub dynamic_tools: Vec<Tool>,
     pub dynamic_provider_tools: Vec<ProviderTool>,
