@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{bail, Result};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
@@ -204,22 +204,17 @@ fn prepare_llm_judge_input(
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
-                        arguments: Arguments(serde_json::Map::from_iter([
-                            (
-                                "input".to_string(),
-                                serde_json::Value::String(serialized_input),
-                            ),
-                            (
-                                "generated_output".to_string(),
-                                serde_json::Value::String(generated_output),
-                            ),
-                            (
-                                "reference_output".to_string(),
-                                reference_output
-                                    .map(serde_json::Value::String)
-                                    .unwrap_or(serde_json::Value::Null),
-                            ),
-                        ])),
+                        #[expect(clippy::expect_used)]
+                        arguments: Arguments(
+                            json!({
+                                "input": serialized_input,
+                                "generated_output": generated_output,
+                                "reference_output": reference_output,
+                            })
+                            .as_object()
+                            .expect("Arguments should be an object")
+                            .clone(),
+                        ),
                     })],
                 }],
             }))
