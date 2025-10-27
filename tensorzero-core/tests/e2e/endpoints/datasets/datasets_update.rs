@@ -759,7 +759,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
 
     if let Datapoint::Chat(chat_datapoint) = new_datapoint {
         assert!(chat_datapoint.staled_at.is_none());
-        assert_eq!(chat_datapoint.tool_params, None);
+        assert_eq!(chat_datapoint.tool_info, None);
     } else {
         panic!("Expected chat datapoint");
     }

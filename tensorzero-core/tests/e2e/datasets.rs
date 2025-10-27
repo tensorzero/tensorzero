@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role};
+use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, Tool};
 use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{
@@ -339,16 +339,17 @@ async fn test_create_delete_datapoint_chat() {
         // Verify tool_params if present
         if let Some(tool_params) = &datapoint.tool_info {
             assert!(is_tool);
-            let tools_available = &tool_params.tools_available;
-            assert!(!tools_available.is_empty());
-            let first_tool = tools_available[0].clone();
-            assert_eq!(first_tool.name, "get_temperature");
+            let dynamic_tools = &tool_params.dynamic_tools;
+            assert!(!dynamic_tools.is_empty());
+            let first_tool = dynamic_tools[0].clone();
+            let Tool::ClientSideFunction(tool) = first_tool;
+            assert_eq!(tool.name, "get_temperature");
             assert_eq!(
-                first_tool.description,
+                tool.description,
                 "Get the current temperature in a given location"
             );
             assert_eq!(
-                first_tool.parameters,
+                tool.parameters,
                 json!({
                     "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",
@@ -373,16 +374,17 @@ async fn test_create_delete_datapoint_chat() {
 
         // Verify tool_params if present for the list datapoint
         if let Some(tool_params) = &list_datapoint.tool_info {
-            let tools_available = &tool_params.tools_available;
+            let tools_available = &tool_params.dynamic_tools;
             assert!(!tools_available.is_empty());
             let first_tool = tools_available[0].clone();
-            assert_eq!(first_tool.name, "get_temperature");
+            let Tool::ClientSideFunction(tool) = first_tool;
+            assert_eq!(tool.name, "get_temperature");
             assert_eq!(
-                first_tool.description,
+                tool.description,
                 "Get the current temperature in a given location"
             );
             assert_eq!(
-                first_tool.parameters,
+                tool.parameters,
                 json!({
                     "$schema": "http://json-schema.org/draft-07/schema#",
                     "type": "object",

@@ -2110,7 +2110,7 @@ FORMAT JSONEachRow";
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
         assert_eq!(
-            chat_inference.tool_info,
+            chat_inference.tool_info.unwrap(),
             ToolCallConfigDatabaseInsert::new_for_test(
                 vec![],
                 vec![],
@@ -2153,7 +2153,7 @@ FORMAT JSONEachRow";
             vec!["Hello! How can I help you today?".to_string().into()]
         );
         assert_eq!(
-            chat_inference.tool_info,
+            chat_inference.tool_info.unwrap(),
             ToolCallConfigDatabaseInsert::new_for_test(
                 vec![],
                 vec![],
@@ -2188,10 +2188,7 @@ FORMAT JSONEachRow";
         let StoredInference::Chat(chat_inference) = inference.try_into().unwrap() else {
             panic!("Expected a chat inference");
         };
-        assert_eq!(
-            chat_inference.tool_info,
-            ToolCallConfigDatabaseInsert::default()
-        );
+        assert!(chat_inference.tool_info.is_none());
         assert_eq!(
             chat_inference.dispreferred_outputs,
             vec![vec![ContentBlockChatOutput::Text(Text {

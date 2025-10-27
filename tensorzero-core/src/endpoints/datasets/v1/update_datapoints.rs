@@ -420,7 +420,7 @@ mod tests {
         JsonInferenceOutput, Role, StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::tool::{AllowedTools, ToolCallConfigDatabaseInsert, ToolChoice};
+    use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
@@ -661,14 +661,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "original output".to_string(),
                 })]),
-                tool_info: Some(ToolCallConfigDatabaseInsert {
-                    dynamic_tools: vec![],
-                    dynamic_provider_tools: vec![],
-                    allowed_tools: AllowedTools::default(),
-                    tool_choice: ToolChoice::Auto,
-                    parallel_tool_calls: Some(true),
-                    ..Default::default()
-                }),
+                tool_info: Some(ToolCallConfigDatabaseInsert::default()),
                 tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
                 auxiliary: "{}".to_string(),
                 staled_at: None,

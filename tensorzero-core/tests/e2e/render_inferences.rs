@@ -58,7 +58,7 @@ pub async fn test_render_samples_no_function() {
         output: vec![],
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_info: ToolCallConfigDatabaseInsert::default(),
+        tool_info: None,
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
@@ -94,7 +94,7 @@ pub async fn test_render_samples_no_variant() {
         output: vec![],
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_info: ToolCallConfigDatabaseInsert::default(),
+        tool_info: None,
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
@@ -138,7 +138,7 @@ pub async fn test_render_samples_missing_variable() {
         output: vec![],
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_info: ToolCallConfigDatabaseInsert::default(),
+        tool_info: None,
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
@@ -177,7 +177,7 @@ pub async fn test_render_samples_normal() {
             output: vec![],
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_info: ToolCallConfigDatabaseInsert::default(),
+            tool_info: None,
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -229,7 +229,7 @@ pub async fn test_render_samples_normal() {
             })],
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_info: ToolCallConfigDatabaseInsert::new_for_test(
+            tool_info: Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![Tool::ClientSideFunction(ClientSideFunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
@@ -240,7 +240,7 @@ pub async fn test_render_samples_normal() {
                 AllowedTools::default(),
                 ToolChoice::Auto,
                 None,
-            ),
+            )),
             timestamp: Utc::now(),
             dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
                 text: "Hello, world!".to_string(),
@@ -280,7 +280,7 @@ pub async fn test_render_samples_normal() {
             output: vec![],
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_params: ToolCallConfigDatabaseInsert::default(),
+            tool_info: None,
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -320,7 +320,7 @@ pub async fn test_render_samples_normal() {
 
     // Check other fields
     assert!(first_inference.output.as_ref().unwrap().is_empty());
-    assert!(first_inference.tool_params.is_some());
+    assert!(first_inference.tool_info.is_some());
     assert!(first_inference.output_schema.is_none());
 
     // Check the second rendered inference
@@ -359,7 +359,7 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "{}");
     // Check other fields
-    assert!(second_inference.tool_params.is_none());
+    assert!(second_inference.tool_info.is_none());
     assert!(second_inference.output_schema.is_some());
 
     // Check the third rendered inference
@@ -401,7 +401,7 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "Hello, world!");
     // Check other fields
-    assert!(third_inference.tool_params.is_some());
+    assert!(third_inference.tool_info.is_some());
     assert!(third_inference.output_schema.is_none());
 
     // Check the fourth rendered inference
@@ -435,7 +435,7 @@ pub async fn test_render_samples_normal() {
     assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
-    assert!(fourth_inference.tool_params.is_some());
+    assert!(fourth_inference.tool_info.is_some());
     assert!(fourth_inference.output_schema.is_none());
 }
 
@@ -478,7 +478,7 @@ pub async fn test_render_samples_template_no_schema() {
         output: vec![],
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_params: ToolCallConfigDatabaseInsert::default(),
+        tool_info: None,
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
     })];
@@ -536,7 +536,7 @@ pub async fn test_render_samples_template_no_schema() {
 
     // Check other fields
     assert!(first_inference.output.as_ref().unwrap().is_empty());
-    assert!(first_inference.tool_params.is_some());
+    assert!(first_inference.tool_info.is_some());
     assert!(first_inference.output_schema.is_none());
 }
 
@@ -580,7 +580,7 @@ pub async fn test_render_datapoints_no_function() {
             }],
         },
         output: Some(vec![]),
-        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+        tool_info: None,
         tags: None,
         auxiliary: "{}".to_string(),
         is_deleted: false,
@@ -621,7 +621,7 @@ pub async fn test_render_datapoints_no_variant() {
             }],
         },
         output: Some(vec![]),
-        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+        tool_info: None,
         tags: None,
         auxiliary: "{}".to_string(),
         is_deleted: false,
@@ -670,7 +670,7 @@ pub async fn test_render_datapoints_missing_variable() {
             }],
         },
         output: Some(vec![]),
-        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+        tool_info: Some(ToolCallConfigDatabaseInsert::default()),
         tags: None,
         auxiliary: "{}".to_string(),
         is_deleted: false,
@@ -714,7 +714,7 @@ pub async fn test_render_datapoints_normal() {
                 }],
             },
             output: Some(vec![]),
-            tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+            tool_info: Some(ToolCallConfigDatabaseInsert::default()),
             tags: None,
             auxiliary: "{}".to_string(),
             is_deleted: false,
@@ -773,7 +773,7 @@ pub async fn test_render_datapoints_normal() {
                 raw_name: "get_temperature".to_string(),
                 raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
             })]),
-            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            tool_info: Some(ToolCallConfigDatabaseInsert::new_for_test(
                 vec![Tool::ClientSideFunction(ClientSideFunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
@@ -827,7 +827,7 @@ pub async fn test_render_datapoints_normal() {
                 }],
             },
             output: Some(vec![]),
-            tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+            tool_info: Some(ToolCallConfigDatabaseInsert::default()),
             tags: None,
             auxiliary: "{}".to_string(),
             is_deleted: false,
@@ -871,7 +871,7 @@ pub async fn test_render_datapoints_normal() {
 
     // Check other fields
     assert!(first_sample.output.as_ref().unwrap().is_empty());
-    assert!(first_sample.tool_params.is_some());
+    assert!(first_sample.tool_info.is_some());
     assert!(first_sample.output_schema.is_none());
 
     // Check the second rendered sample (json_success)
@@ -903,7 +903,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(output_text.text, "{}");
 
     // Check other fields
-    assert!(second_sample.tool_params.is_none());
+    assert!(second_sample.tool_info.is_none());
     assert!(second_sample.output_schema.is_some());
 
     // Check the third rendered sample (weather_helper with tool call)
@@ -938,7 +938,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(tool_call.arguments, Some(json!({"location": "Tokyo"})));
 
     // Check other fields
-    assert!(third_sample.tool_params.is_some());
+    assert!(third_sample.tool_info.is_some());
     assert!(third_sample.output_schema.is_none());
 
     // Check the fourth rendered sample (basic_test with image)
@@ -972,7 +972,7 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(fourth_sample.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
-    assert!(fourth_sample.tool_params.is_some());
+    assert!(fourth_sample.tool_info.is_some());
     assert!(fourth_sample.output_schema.is_none());
 }
 
@@ -1015,7 +1015,7 @@ pub async fn test_render_datapoints_template_no_schema() {
             ],
         },
         output: Some(vec![]),
-        tool_params: Some(ToolCallConfigDatabaseInsert::default()),
+        tool_info: Some(ToolCallConfigDatabaseInsert::default()),
         tags: None,
         auxiliary: "{}".to_string(),
         is_deleted: false,
@@ -1078,6 +1078,6 @@ pub async fn test_render_datapoints_template_no_schema() {
 
     // Check other fields
     assert!(first_sample.output.as_ref().unwrap().is_empty());
-    assert!(first_sample.tool_params.is_some());
+    assert!(first_sample.tool_info.is_some());
     assert!(first_sample.output_schema.is_none());
 }
