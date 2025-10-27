@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
-use super::{storage::StoragePath, Base64File, Role, Text, Thought};
+use super::{storage::StoragePath, Base64File, Role, System, Text, Thought};
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
@@ -30,7 +30,7 @@ use pyo3::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct LazyResolvedInput {
-    pub system: Option<Value>,
+    pub system: Option<System>,
     pub messages: Vec<LazyResolvedInputMessage>,
 }
 
@@ -135,7 +135,7 @@ pub struct ResolvedInput {
         serde(skip_serializing_if = "Option::is_none")
     )]
     #[cfg_attr(test, ts(optional))]
-    pub system: Option<Value>,
+    pub system: Option<System>,
 
     #[cfg_attr(any(feature = "pyo3", test), serde(default))]
     pub messages: Vec<ResolvedInputMessage>,

@@ -1,9 +1,9 @@
 use anyhow::Result;
 use regex::Regex;
-use serde_json::Value;
 use std::path::PathBuf;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+    ContentBlockChatOutput, StoredInput, StoredInputMessage, StoredInputMessageContent, System,
+    Text,
 };
 /*
 This file handles the outputs of inferences from Cursor. We handle two cases:
@@ -26,7 +26,7 @@ pub fn parse_cursor_output(
     input: &StoredInput,
     output: &Vec<ContentBlockChatOutput>,
 ) -> Result<Vec<CursorCodeBlock>> {
-    let Some(Value::String(system)) = &input.system else {
+    let Some(System::Text(system)) = &input.system else {
         return Err(anyhow::anyhow!("No system message found"));
     };
     let output_text = match output.as_slice() {

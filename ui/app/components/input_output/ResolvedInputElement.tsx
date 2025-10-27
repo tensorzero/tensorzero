@@ -1,6 +1,6 @@
 import { EmptyMessage } from "./ContentBlockElement";
 import type {
-  JsonValue,
+  System,
   ResolvedInput,
   ResolvedInputMessage,
 } from "~/types/tensorzero";
@@ -10,7 +10,7 @@ import { MessagesElement } from "./MessagesElement";
 interface ResolvedInputElementProps {
   input: ResolvedInput;
   isEditing?: boolean;
-  onSystemChange?: (system: JsonValue) => void;
+  onSystemChange?: (system?: System) => void;
   onMessagesChange?: (messages: ResolvedInputMessage[]) => void;
   maxHeight?: number | "Content";
 }

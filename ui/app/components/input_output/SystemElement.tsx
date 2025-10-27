@@ -1,15 +1,15 @@
 import { AddButton } from "~/components/ui/AddButton";
 import { DeleteButton } from "~/components/ui/DeleteButton";
-import type { JsonValue } from "~/types/tensorzero";
+import type { System } from "~/types/tensorzero";
 import { TextContentBlock } from "./content_blocks/TextContentBlock";
 import { TemplateContentBlock } from "./content_blocks/TemplateContentBlock";
 import { MessageWrapper } from "./MessageWrapper";
 import { ExpandableElement } from "./ExpandableElement";
 
 interface SystemElementProps {
-  system?: JsonValue;
+  system?: System;
   isEditing?: boolean;
-  onSystemChange?: (system: string | object | null) => void;
+  onSystemChange?: (system?: System) => void;
   maxHeight?: number | "Content";
 }
 
@@ -68,7 +68,7 @@ export function SystemElement({
   const actionBar = isEditing ? (
     <DeleteButton
       label="Delete system"
-      onDelete={() => onSystemChange?.(null)}
+      onDelete={() => onSystemChange?.(undefined)}
     />
   ) : undefined;
 
