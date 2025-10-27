@@ -11,9 +11,11 @@ use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
-use tensorzero_core::inference::types::{ResolvedContentBlock, ResolvedRequestMessage, System};
+use tensorzero_core::inference::types::{
+    Arguments, ResolvedContentBlock, ResolvedRequestMessage, System,
+};
 use tensorzero_core::{
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, TemplateInput, Text},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Template, Text},
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };
 use tracing_test::traced_test;
@@ -124,9 +126,10 @@ pub async fn test_render_samples_missing_variable() {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: StoredInput {
-            system: Some(System::Template(
-                json!({"foo": "bar"}).as_object().unwrap().clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "foo".to_string(),
+                serde_json::Value::String("bar".to_string()),
+            )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -165,7 +168,9 @@ pub async fn test_render_samples_normal() {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -185,12 +190,14 @@ pub async fn test_render_samples_normal() {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(TemplateInput {
+                    content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
-                        arguments: serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))]),
+                        arguments: Arguments(serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))])),
                     })],
                 }],
             },
@@ -212,7 +219,9 @@ pub async fn test_render_samples_normal() {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -249,7 +258,9 @@ pub async fn test_render_samples_normal() {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
@@ -659,9 +670,10 @@ pub async fn test_render_datapoints_missing_variable() {
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input: StoredInput {
-            system: Some(System::Template(
-                json!({"foo": "bar"}).as_object().unwrap().clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "foo".to_string(),
+                serde_json::Value::String("bar".to_string()),
+            )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -705,7 +717,9 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -730,12 +744,14 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(TemplateInput {
+                    content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
-                        arguments: serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))]),
+                        arguments: Arguments(serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))])),
                     })],
                 }],
             },
@@ -759,7 +775,9 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -799,7 +817,9 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![

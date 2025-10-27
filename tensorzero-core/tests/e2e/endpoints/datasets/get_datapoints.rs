@@ -12,8 +12,8 @@ use tensorzero_core::db::datasets::{
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::{
-    JsonInferenceOutput, Role, StoredInput, StoredInputMessage, StoredInputMessageContent, System,
-    Text,
+    Arguments, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
+    StoredInputMessageContent, System, Text,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -40,12 +40,12 @@ mod get_datapoints_tests {
             id: datapoint_id,
             episode_id: None,
             input: StoredInput {
-                system: Some(System::Template(
+                system: Some(System::Template(Arguments(
                     json!({"assistant_name": "TestBot"})
                         .as_object()
                         .unwrap()
                         .clone(),
-                )),
+                ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -126,12 +126,12 @@ mod get_datapoints_tests {
             id: datapoint_id,
             episode_id: None,
             input: StoredInput {
-                system: Some(System::Template(
+                system: Some(System::Template(Arguments(
                     json!({"assistant_name": "JsonBot"})
                         .as_object()
                         .unwrap()
                         .clone(),
-                )),
+                ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {

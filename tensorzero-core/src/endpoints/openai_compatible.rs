@@ -38,8 +38,8 @@ use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
-    InputMessage, InputMessageContent, RawText, Role, System, TemplateInput, TextKind, Usage,
+    current_timestamp, Arguments, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason,
+    Input, InputMessage, InputMessageContent, RawText, Role, System, Template, TextKind, Usage,
 };
 use crate::tool::{
     DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
@@ -796,7 +796,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                                 Value::String(text)
                             }
                             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                                Value::Object(arguments)
+                                Value::Object(arguments.0)
                             }
                             InputMessageContent::RawText(raw_text) => Value::String(raw_text.value),
                             _ => {
@@ -862,7 +862,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 .pop()
                 .map(|v| match v {
                     Value::String(s) => Ok::<System, Error>(System::Text(s)),
-                    Value::Object(map) => Ok::<System, Error>(System::Template(map)),
+                    Value::Object(map) => Ok::<System, Error>(System::Template(Arguments(map))),
                     _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                         message: "System message content must be a string or an object".to_string(),
                     }
@@ -909,7 +909,7 @@ enum OpenAICompatibleContentBlock {
     #[serde(rename = "tensorzero::raw_text")]
     RawText(RawText),
     #[serde(rename = "tensorzero::template")]
-    Template(TemplateInput),
+    Template(Template),
 }
 
 #[derive(Deserialize, Debug)]
@@ -934,9 +934,7 @@ pub enum TextContent {
     /// A normal openai text content block: `{"type": "text", "text": "Some content"}`. The `type` key comes from the parent `OpenAICompatibleContentBlock`
     Text { text: String },
     /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
-    TensorZeroArguments {
-        tensorzero_arguments: Map<String, Value>,
-    },
+    TensorZeroArguments { tensorzero_arguments: Arguments },
 }
 
 impl<'de> Deserialize<'de> for TextContent {
@@ -955,7 +953,7 @@ impl<'de> Deserialize<'de> for TextContent {
             }),
             (None, Some(arguments)) => Ok(TextContent::TensorZeroArguments {
                 tensorzero_arguments: match arguments {
-                    Value::Object(arguments) => arguments,
+                    Value::Object(arguments) => Arguments(arguments),
                     _ => return Err(serde::de::Error::custom(
                         "`tensorzero::arguments` must be an object when using `\"type\": \"text\"`",
                     )),
@@ -1034,7 +1032,7 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                         }
                         tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
                         if let Value::Object(obj) = val {
-                            InputMessageContent::Text(TextKind::Arguments { arguments: obj })
+                            InputMessageContent::Text(TextKind::Arguments { arguments: Arguments(obj) })
                         } else {
                             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                                 message: format!("Content block `{val}` is not an object"),
@@ -1585,13 +1583,15 @@ mod tests {
         assert_eq!(
             input.messages[0].content[0],
             InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "country": "Japan",
-                    "city": "Tokyo",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+                arguments: Arguments(
+                    json!({
+                        "country": "Japan",
+                        "city": "Tokyo",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone()
+                ),
             })
         );
 
@@ -1689,13 +1689,15 @@ mod tests {
         assert_eq!(
             value,
             vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "country": "Japan",
-                    "city": "Tokyo",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+                arguments: Arguments(
+                    json!({
+                        "country": "Japan",
+                        "city": "Tokyo",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone()
+                ),
             })]
         );
         let content = json!({
@@ -1724,12 +1726,14 @@ mod tests {
         assert_eq!(
             value,
             vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "custom_key": "custom_val",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+                arguments: Arguments(
+                    json!({
+                        "custom_key": "custom_val",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone()
+                ),
             })]
         );
 
@@ -1743,12 +1747,14 @@ mod tests {
         let value = convert_openai_message_content(template_block).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Template(TemplateInput {
+            vec![InputMessageContent::Template(Template {
                 name: "my_template".to_string(),
-                arguments: json!({ "custom_key": "custom_val" })
-                    .as_object()
-                    .unwrap()
-                    .clone()
+                arguments: Arguments(
+                    json!({ "custom_key": "custom_val" })
+                        .as_object()
+                        .unwrap()
+                        .clone()
+                )
             })]
         );
     }
@@ -1764,13 +1770,15 @@ mod tests {
         assert_eq!(
             value,
             vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "country": "Japan",
-                    "city": "Tokyo",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+                arguments: Arguments(
+                    json!({
+                        "country": "Japan",
+                        "city": "Tokyo",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone()
+                ),
             })]
         );
         assert!(logs_contain(

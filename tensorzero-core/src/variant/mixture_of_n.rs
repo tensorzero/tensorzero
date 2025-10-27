@@ -914,8 +914,8 @@ mod tests {
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
-            ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
-            Latency, ModelInferenceResponseWithMetadata, Text, Thought,
+            Arguments, ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
+            JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
         minijinja_util::tests::{
@@ -967,12 +967,12 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap(),
         };
-        let input_message = System::Template(
+        let input_message = System::Template(Arguments(
             json!({"message": "You are a helpful assistant."})
                 .as_object()
                 .unwrap()
                 .clone(),
-        );
+        ));
         let max_index = 3;
         let result =
             fuser_config.prepare_system_message(&templates, Some(&input_message), max_index);
@@ -1041,12 +1041,12 @@ mod tests {
         };
 
         let max_index = 6;
-        let input_message = System::Template(
+        let input_message = System::Template(Arguments(
             serde_json::json!({"assistant_name": "ChatGPT"})
                 .as_object()
                 .unwrap()
                 .clone(),
-        );
+        ));
         let prepared_message = fuser_config
             .prepare_system_message(&templates, Some(&input_message), max_index)
             .unwrap();

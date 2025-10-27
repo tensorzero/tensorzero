@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{bail, Result};
-use serde_json::{json, Value};
+use serde_json::Value;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
@@ -13,7 +13,7 @@ use tensorzero_core::evaluations::{
     LLMJudgeOutputType,
 };
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, System, TextKind,
+    Arguments, ContentBlockChatOutput, JsonInferenceOutput, System, TextKind,
 };
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
@@ -203,12 +203,23 @@ fn prepare_llm_judge_input(
                 system: None,
                 messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments{
-                        #[expect(clippy::expect_used)]
-                        arguments: json!({"input": serialized_input, "generated_output": generated_output, "reference_output": reference_output})
-                            .as_object()
-                            .expect("Arguments should be an object")
-                            .clone()
+                    content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                        arguments: Arguments(serde_json::Map::from_iter([
+                            (
+                                "input".to_string(),
+                                serde_json::Value::String(serialized_input),
+                            ),
+                            (
+                                "generated_output".to_string(),
+                                serde_json::Value::String(generated_output),
+                            ),
+                            (
+                                "reference_output".to_string(),
+                                reference_output
+                                    .map(serde_json::Value::String)
+                                    .unwrap_or(serde_json::Value::Null),
+                            ),
+                        ])),
                     })],
                 }],
             }))
@@ -268,7 +279,7 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
                 ClientInputMessageContent::File { .. } => {
                     bail!("Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.")
                 }
-                ClientInputMessageContent::Unknown { .. } => {
+                ClientInputMessageContent::Unknown(_) => {
                     bail!("Unknown content not supported for LLM judge evaluations")
                 }
                 ClientInputMessageContent::Text { .. }
@@ -295,8 +306,8 @@ fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>
                     })],
                 });
             }
-            System::Template(map) => {
-                let system_message = serde_json::to_string(map)?;
+            System::Template(arguments) => {
+                let system_message = serde_json::to_string(arguments)?;
                 messages.push(ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -329,7 +340,7 @@ fn serialize_content_for_messages_input(
                 }
                 serialized_content.push(ClientInputMessageContent::File(image.clone()));
             }
-            ClientInputMessageContent::Unknown { .. } => {
+            ClientInputMessageContent::Unknown(_) => {
                 bail!("Unknown content not supported for LLM judge evaluations")
             }
             ClientInputMessageContent::ToolCall { .. }
@@ -431,7 +442,6 @@ fn handle_reference_output(
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
 
     use serde_json::json;
@@ -447,7 +457,7 @@ mod tests {
     use tensorzero_core::inference::types::Usage;
     use tensorzero_core::tool::ToolCallInput;
     use tensorzero_core::{
-        inference::types::{ContentBlockChatOutput, RawText, Text, Thought},
+        inference::types::{ContentBlockChatOutput, RawText, Text, Thought, Unknown},
         tool::{ToolCallOutput, ToolResult},
     };
 
@@ -622,14 +632,11 @@ mod tests {
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
-                        arguments: json!({
-                            "input": "{\"system\":\"You are a helpful assistant\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"bar\"}]}]}",
-                            "generated_output": "[{\"type\":\"text\",\"text\":\"Hi world!\"}]",
-                            "reference_output": null
-                        })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
+                        arguments: Arguments(serde_json::Map::from_iter([
+                            ("input".to_string(), serde_json::Value::String("{\"system\":\"You are a helpful assistant\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"bar\"}]}]}".to_string())),
+                            ("generated_output".to_string(), serde_json::Value::String("[{\"type\":\"text\",\"text\":\"Hi world!\"}]".to_string())),
+                            ("reference_output".to_string(), serde_json::Value::Null),
+                        ])),
                     })],
                 }],
             }
@@ -692,14 +699,11 @@ mod tests {
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
-                        arguments: json!({
-                            "input": "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}",
-                            "generated_output": "[{\"type\":\"text\",\"text\":\"Hi, world!\"}]",
-                            "reference_output": "[{\"type\":\"text\",\"text\":\"Hello, world!\"}]"
-                        })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
+                        arguments: Arguments(serde_json::Map::from_iter([
+                            ("input".to_string(), serde_json::Value::String("{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}".to_string())),
+                            ("generated_output".to_string(), serde_json::Value::String("[{\"type\":\"text\",\"text\":\"Hi, world!\"}]".to_string())),
+                            ("reference_output".to_string(), serde_json::Value::String("[{\"type\":\"text\",\"text\":\"Hello, world!\"}]".to_string())),
+                        ])),
                     })],
                 }],
             }
@@ -731,15 +735,16 @@ mod tests {
 
         // Test with object system message
         let input = ClientInput {
-            system: Some(System::Template(
-                json!({
-                    "instructions": "Be helpful",
-                    "persona": "assistant"
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                (
+                    "instructions".to_string(),
+                    serde_json::Value::String("Be helpful".to_string()),
+                ),
+                (
+                    "persona".to_string(),
+                    serde_json::Value::String("assistant".to_string()),
+                ),
+            ])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -776,7 +781,10 @@ mod tests {
 
         // Test with TextKind::Arguments
         let content = vec![ClientInputMessageContent::Text(TextKind::Arguments {
-            arguments: json!({"key": "value"}).as_object().unwrap().clone(),
+            arguments: Arguments(serde_json::Map::from_iter([(
+                "key".to_string(),
+                serde_json::Value::String("value".to_string()),
+            )])),
         })];
         let serialized = serialize_content_for_messages_input(&content).unwrap();
         assert_eq!(serialized.len(), 1);
@@ -845,10 +853,10 @@ mod tests {
         assert_eq!(serialized.len(), 4);
 
         // Test with Unknown content (should error)
-        let content = vec![ClientInputMessageContent::Unknown {
+        let content = vec![ClientInputMessageContent::Unknown(Unknown {
             data: json!({"unknown": "data"}),
             model_provider_name: Some("provider".to_string()),
-        }];
+        })];
         let err = serialize_content_for_messages_input(&content).unwrap_err();
         assert_eq!(
             err.to_string(),
@@ -1234,17 +1242,18 @@ mod tests {
             &prepared_input.messages[0].content[0]
         {
             assert_eq!(
-                arguments.get("input").and_then(|v| v.as_str()).unwrap(),
+                arguments.0.get("input").and_then(|v| v.as_str()).unwrap(),
                 r#"{"messages":[{"role":"user","content":[{"type":"text","text":"Query"}]}]}"#
             );
             assert_eq!(
                 arguments
+                    .0
                     .get("generated_output")
                     .and_then(|v| v.as_str())
                     .unwrap(),
                 r#"{"result":"json output"}"#
             );
-            assert!(arguments.get("reference_output").unwrap().is_null());
+            assert!(arguments.0.get("reference_output").unwrap().is_null());
         } else {
             panic!("Expected TextKind::Arguments");
         }

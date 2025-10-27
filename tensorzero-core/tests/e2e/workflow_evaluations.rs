@@ -15,7 +15,7 @@ use tensorzero_core::{
         select_workflow_evaluation_run_episode_clickhouse,
     },
     endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
-    inference::types::{System, TextKind},
+    inference::types::{Arguments, System, TextKind},
 };
 use uuid::{Timestamp, Uuid};
 
@@ -66,14 +66,10 @@ async fn test_workflow_evaluation() {
             episode_id: Some(episode_id),
             function_name: Some("basic_test".to_string()),
             input: ClientInput {
-                system: Some(System::Template(
-                    json!({
-                        "assistant_name": "AskJeeves",
-                    })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-                )),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    serde_json::Value::String("AskJeeves".to_string()),
+                )])))),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -258,14 +254,10 @@ async fn test_workflow_evaluation_other_function() {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
         input: ClientInput {
-            system: Some(System::Template(
-                json!({
-                    "assistant_name": "AskJeeves",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                serde_json::Value::String("AskJeeves".to_string()),
+            )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -335,14 +327,10 @@ async fn test_workflow_evaluation_variant_error() {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
         input: ClientInput {
-            system: Some(System::Template(
-                json!({
-                    "assistant_name": "AskJeeves",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                serde_json::Value::String("AskJeeves".to_string()),
+            )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -394,14 +382,10 @@ async fn test_workflow_evaluation_override_variant_tags() {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
         input: ClientInput {
-            system: Some(System::Template(
-                json!({
-                    "assistant_name": "AskJeeves",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                serde_json::Value::String("AskJeeves".to_string()),
+            )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -456,14 +440,10 @@ async fn test_bad_workflow_evaluation_run() {
         episode_id: Some(episode_id),
         function_name: Some("basic_test".to_string()),
         input: ClientInput {
-            system: Some(System::Template(
-                json!({
-                    "assistant_name": "AskJeeves",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                serde_json::Value::String("AskJeeves".to_string()),
+            )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {

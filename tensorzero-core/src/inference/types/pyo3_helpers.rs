@@ -258,13 +258,10 @@ pub fn stored_input_message_content_to_python(
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(py, (PyNone::get(py), file.file.mime_type.to_string()))
         }
-        StoredInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => {
+        StoredInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
-            let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+            let serialized_data = serialize_to_dict(py, &unknown.data)?;
+            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
         }
     }
 }
@@ -326,13 +323,10 @@ pub fn resolved_input_message_content_to_python(
                 (file.file.data.clone(), file.file.mime_type.to_string()),
             )
         }
-        ResolvedInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => {
+        ResolvedInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
-            let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+            let serialized_data = serialize_to_dict(py, &unknown.data)?;
+            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
         }
     }
 }

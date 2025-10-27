@@ -12,8 +12,8 @@ use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
 use crate::inference::types::System;
-use crate::inference::types::TemplateInput;
-use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult};
+use crate::inference::types::Template;
+use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult, Unknown};
 use futures::future::try_join_all;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -208,17 +208,14 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 #[cfg_attr(test, ts(export))]
 pub enum StoredInputMessageContent {
     Text(Text),
-    Template(TemplateInput),
+    Template(Template),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
     RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(Box<StoredFile>),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl StoredInputMessageContent {
@@ -238,9 +235,7 @@ impl StoredInputMessageContent {
                 Ok(ResolvedInputMessageContent::ToolResult(tool_result))
             }
             StoredInputMessageContent::RawText(raw_text) => {
-                Ok(ResolvedInputMessageContent::RawText(RawText {
-                    value: raw_text.value,
-                }))
+                Ok(ResolvedInputMessageContent::RawText(raw_text))
             }
             StoredInputMessageContent::Thought(thought) => {
                 Ok(ResolvedInputMessageContent::Thought(thought))
@@ -256,13 +251,9 @@ impl StoredInputMessageContent {
                     storage_path: file.storage_path.clone(),
                 })))
             }
-            StoredInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(ResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            }),
+            StoredInputMessageContent::Unknown(unknown) => {
+                Ok(ResolvedInputMessageContent::Unknown(unknown))
+            }
         }
     }
 }
@@ -389,8 +380,8 @@ mod tests {
         match &message.content[0] {
             StoredInputMessageContent::Template(template) => {
                 assert_eq!(template.name, "user");
-                assert_eq!(template.arguments.get("foo").unwrap(), "bar");
-                assert_eq!(template.arguments.get("baz").unwrap(), 123);
+                assert_eq!(template.arguments.0.get("foo").unwrap(), "bar");
+                assert_eq!(template.arguments.0.get("baz").unwrap(), 123);
             }
             _ => panic!("Expected Template variant"),
         }

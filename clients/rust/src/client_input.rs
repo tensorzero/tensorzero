@@ -1,10 +1,9 @@
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
 use tensorzero_core::{
     error::Error,
     inference::types::{
-        File, InputMessageContent, RawText, Role, System, TemplateInput, TextKind, Thought,
+        File, InputMessageContent, RawText, Role, System, Template, TextKind, Thought, Unknown,
     },
     tool::{ToolCallInput, ToolResult},
 };
@@ -41,7 +40,7 @@ pub struct ClientInputMessage {
 #[ts(export)]
 pub enum ClientInputMessageContent {
     Text(TextKind),
-    Template(TemplateInput),
+    Template(Template),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
     RawText(RawText),
@@ -51,12 +50,9 @@ pub enum ClientInputMessageContent {
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
     /// of TensorZero.
-    /// The 'data' field hold the original content block from the provider,
+    /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 impl TryFrom<ClientInputMessageContent> for InputMessageContent {
@@ -73,18 +69,10 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
             ClientInputMessageContent::ToolResult(tool_result) => {
                 InputMessageContent::ToolResult(tool_result)
             }
-            ClientInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(RawText {
-                value: raw_text.value,
-            }),
+            ClientInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
             ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
             ClientInputMessageContent::File(image) => InputMessageContent::File(image),
-            ClientInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => InputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            ClientInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
         })
     }
 }
@@ -155,17 +143,9 @@ pub(super) fn test_client_to_message_content(
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)
         }
-        ClientInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(RawText {
-            value: raw_text.value,
-        }),
+        ClientInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
         ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
         ClientInputMessageContent::File(image) => InputMessageContent::File(image),
-        ClientInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => InputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        },
+        ClientInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
     }
 }

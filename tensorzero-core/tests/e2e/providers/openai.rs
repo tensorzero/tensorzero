@@ -9,7 +9,7 @@ use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
-    InputMessage, InputMessageContent, Role,
+    InputMessage, InputMessageContent, Role, Unknown,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
@@ -2495,10 +2495,10 @@ model = "test-model"
             ContentBlockChatOutput::Unknown {
                 data,
                 model_provider_name,
-            } => ClientInputMessageContent::Unknown {
+            } => ClientInputMessageContent::Unknown(Unknown {
                 data: data.clone(),
                 model_provider_name: model_provider_name.clone(),
-            },
+            }),
         })
         .collect();
 
@@ -2890,10 +2890,10 @@ model = "test-model"
             ContentBlockChatOutput::Unknown {
                 data,
                 model_provider_name,
-            } => ClientInputMessageContent::Unknown {
+            } => ClientInputMessageContent::Unknown(Unknown {
                 data: data.clone(),
                 model_provider_name: model_provider_name.clone(),
-            },
+            }),
         })
         .collect();
 

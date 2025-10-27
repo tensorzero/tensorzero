@@ -274,7 +274,7 @@ impl InputMessageContent {
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
             InputMessageContent::Text(TextKind::Text { text }) => {
-                LazyResolvedInputMessageContent::Text { text }
+                LazyResolvedInputMessageContent::Text(Text { text })
             }
             InputMessageContent::RawText(raw_text) => {
                 LazyResolvedInputMessageContent::RawText(raw_text)
@@ -289,7 +289,7 @@ impl InputMessageContent {
                 // Map the legacy `{{"type": "text", "arguments": ...}}` format to an explicit
                 // `{{"type": "template", "name": "<role>", "arguments": ...}}` format, with the template
                 // name chosen based on the message role.
-                LazyResolvedInputMessageContent::Template(TemplateInput {
+                LazyResolvedInputMessageContent::Template(Template {
                     name: role.implicit_template_name().to_string(),
                     arguments,
                 })
@@ -305,11 +305,11 @@ impl InputMessageContent {
                     r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
                 );
                 match value {
-                    Value::String(text) => LazyResolvedInputMessageContent::Text { text },
+                    Value::String(text) => LazyResolvedInputMessageContent::Text(Text { text }),
                     Value::Object(arguments) => {
-                        LazyResolvedInputMessageContent::Template(TemplateInput {
+                        LazyResolvedInputMessageContent::Template(Template {
                             name: role.implicit_template_name().to_string(),
-                            arguments,
+                            arguments: Arguments(arguments),
                         })
                     }
                     _ => {
@@ -402,13 +402,9 @@ impl InputMessageContent {
                     }
                 }
             }
-            InputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => LazyResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            InputMessageContent::Unknown(unknown) => {
+                LazyResolvedInputMessageContent::Unknown(unknown)
+            }
         })
     }
 }
@@ -416,9 +412,7 @@ impl InputMessageContent {
 impl LazyResolvedInputMessageContent {
     pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
-            LazyResolvedInputMessageContent::Text { text } => {
-                ResolvedInputMessageContent::Text(Text { text })
-            }
+            LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
             LazyResolvedInputMessageContent::Template(template) => {
                 ResolvedInputMessageContent::Template(template)
             }
@@ -444,13 +438,9 @@ impl LazyResolvedInputMessageContent {
                     ResolvedInputMessageContent::File(Box::new(future.await?))
                 }
             },
-            LazyResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => ResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            LazyResolvedInputMessageContent::Unknown(unknown) => {
+                ResolvedInputMessageContent::Unknown(unknown)
+            }
         })
     }
 
@@ -506,12 +496,18 @@ pub struct InputMessage {
     pub content: Vec<InputMessageContent>,
 }
 
+/// A newtype wrapper around Map<String, Value> for template and system arguments
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct Arguments(pub Map<String, Value>);
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
-pub struct TemplateInput {
+pub struct Template {
     pub name: String,
-    pub arguments: Map<String, Value>,
+    pub arguments: Arguments,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
@@ -519,7 +515,7 @@ pub struct TemplateInput {
 #[ts(export)]
 pub enum System {
     Text(String),
-    Template(Map<String, Value>),
+    Template(Arguments),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -528,7 +524,7 @@ pub enum System {
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
 pub enum InputMessageContent {
     Text(TextKind),
-    Template(TemplateInput),
+    Template(Template),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
     RawText(RawText),
@@ -536,14 +532,11 @@ pub enum InputMessageContent {
     #[serde(alias = "image")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
-    /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
+    /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
-    /// The 'data' field hold the original content block from the provider,
+    /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
+    Unknown(Unknown),
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -552,7 +545,7 @@ pub enum InputMessageContent {
 #[ts(export)]
 pub enum TextKind {
     Text { text: String },
-    Arguments { arguments: Map<String, Value> },
+    Arguments { arguments: Arguments },
     LegacyValue { value: Value },
 }
 
@@ -578,9 +571,9 @@ impl<'de> Deserialize<'de> for TextKind {
                 })?,
             }),
             "arguments" => Ok(TextKind::Arguments {
-                arguments: serde_json::from_value(value).map_err(|e| {
+                arguments: Arguments(serde_json::from_value(value).map_err(|e| {
                     serde::de::Error::custom(format!("Error deserializing 'arguments': {e}"))
-                })?,
+                })?),
             }),
             "value" => Ok(TextKind::LegacyValue { value }),
             _ => Err(serde::de::Error::custom(format!(
@@ -696,6 +689,34 @@ impl RateLimitedInputContent for RawText {
 impl RawText {
     pub fn __repr__(&self) -> String {
         self.to_string()
+    }
+}
+
+/// Struct that represents an unknown provider-specific content block.
+/// We pass this along as-is without any validation or transformation.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass)]
+pub struct Unknown {
+    /// The underlying content block to be passed to the model provider.
+    pub data: Value,
+    /// A fully-qualified name specifying when this content block should
+    /// be included in the model provider input.
+    pub model_provider_name: Option<String>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Unknown {
+    #[getter]
+    pub fn data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::inference::types::pyo3_helpers::serialize_to_dict;
+        serialize_to_dict(py, &self.data).map(|p| p.into_bound(py))
+    }
+
+    #[getter]
+    pub fn model_provider_name(&self) -> Option<String> {
+        self.model_provider_name.clone()
     }
 }
 
@@ -1509,7 +1530,7 @@ impl From<String> for ResolvedInputMessageContent {
 #[cfg(test)]
 impl From<String> for LazyResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        LazyResolvedInputMessageContent::Text { text }
+        LazyResolvedInputMessageContent::Text(Text { text })
     }
 }
 
@@ -2782,7 +2803,7 @@ mod tests {
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap());
+                assert_eq!(&arguments.0, json!({"key": "value"}).as_object().unwrap());
             }
             _ => panic!("Expected Text content"),
         }
@@ -2826,10 +2847,10 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Template(TemplateInput { name, arguments }) => {
+            InputMessageContent::Template(Template { name, arguments }) => {
                 assert_eq!(name, "user");
                 assert_eq!(
-                    arguments,
+                    &arguments.0,
                     json!({"complex": "json", "with": ["nested", "array"]})
                         .as_object()
                         .unwrap()

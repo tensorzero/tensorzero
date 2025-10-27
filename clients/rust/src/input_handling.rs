@@ -1,6 +1,6 @@
 use crate::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 use tensorzero_core::inference::types::{
-    File, RawText, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
+    File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
 };
 use tensorzero_core::tool::{ToolCall, ToolCallInput};
 
@@ -52,9 +52,7 @@ fn resolved_input_message_content_to_client_input_message_content(
             ClientInputMessageContent::ToolResult(tool_result)
         }
         ResolvedInputMessageContent::RawText(raw_text) => {
-            ClientInputMessageContent::RawText(RawText {
-                value: raw_text.value,
-            })
+            ClientInputMessageContent::RawText(raw_text)
         }
         ResolvedInputMessageContent::Thought(thought) => {
             ClientInputMessageContent::Thought(thought)
@@ -65,13 +63,9 @@ fn resolved_input_message_content_to_client_input_message_content(
 
             ClientInputMessageContent::File(File::Base64 { mime_type, data })
         }
-        ResolvedInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => ClientInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        },
+        ResolvedInputMessageContent::Unknown(unknown) => {
+            ClientInputMessageContent::Unknown(unknown)
+        }
     }
 }
 

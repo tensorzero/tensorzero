@@ -576,7 +576,7 @@ fn validate_all_text_input(
         (Some(system), _) => {
             let system_value = match system {
                 System::Text(text) => Cow::Owned(Value::String(text.clone())),
-                System::Template(map) => Cow::Owned(Value::Object(map.clone())),
+                System::Template(arguments) => Cow::Owned(Value::Object(arguments.0.clone())),
             };
             validate_single_message(
                 &system_value,
@@ -599,7 +599,7 @@ fn validate_all_text_input(
                 InputMessageContent::Text(kind) => {
                     let content = match kind {
                         TextKind::Arguments { arguments } => {
-                            Cow::Owned(Value::Object(arguments.clone()))
+                            Cow::Owned(Value::Object(arguments.0.clone()))
                         }
                         TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
                         TextKind::LegacyValue { value } => Cow::Borrowed(value),
@@ -618,7 +618,7 @@ fn validate_all_text_input(
                 }
                 InputMessageContent::Template(template) => {
                     // TODO - figure out a way to avoid this clone
-                    let value = Value::Object(template.arguments.clone());
+                    let value = Value::Object(template.arguments.0.clone());
                     validate_single_message(
                         &value,
                         schemas.get_named_schema(&template.name).map(|s| &s.schema),
@@ -665,7 +665,18 @@ fn validate_single_message(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::io::Write;
+    use std::time::Duration;
+    use std::time::Instant;
+    use tempfile::NamedTempFile;
+    use tracing_test::traced_test;
+
+    use crate::config::path::ResolvedTomlPath;
+    use crate::config::UninitializedSchemas;
     use crate::endpoints::inference::InferenceIds;
+    use crate::inference::types::Arguments;
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
@@ -677,16 +688,6 @@ mod tests {
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
-
-    use super::*;
-    use crate::config::path::ResolvedTomlPath;
-    use crate::config::UninitializedSchemas;
-    use serde_json::json;
-    use std::io::Write;
-    use std::time::Duration;
-    use std::time::Instant;
-    use tempfile::NamedTempFile;
-    use tracing_test::traced_test;
 
     fn create_test_schema() -> StaticJSONSchema {
         let schema = r#"
@@ -746,10 +747,12 @@ mod tests {
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
+                    arguments: Arguments(
+                        json!({ "name": "assistant name" })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    ),
                 })],
             },
         ];
@@ -844,12 +847,12 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({ "name": "system name" })
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages,
         };
 
@@ -904,7 +907,10 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
+                    arguments: Arguments(serde_json::Map::from_iter([(
+                        "name".to_string(),
+                        serde_json::Value::String("user name".to_string()),
+                    )])),
                 })],
             },
             InputMessage {
@@ -972,10 +978,12 @@ mod tests {
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
+                    arguments: Arguments(
+                        json!({ "name": "assistant name" })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    ),
                 })],
             },
         ];
@@ -1045,27 +1053,32 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
+                    arguments: Arguments(serde_json::Map::from_iter([(
+                        "name".to_string(),
+                        serde_json::Value::String("user name".to_string()),
+                    )])),
                 })],
             },
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
+                    arguments: Arguments(
+                        json!({ "name": "assistant name" })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    ),
                 })],
             },
         ];
 
         let input = Input {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({ "name": "system name" })
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages,
         };
 
@@ -1114,12 +1127,12 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({ "name": "system name" })
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages,
         };
 
@@ -1186,23 +1199,30 @@ mod tests {
                 role: Role::User,
                 content: vec![
                     InputMessageContent::Text(TextKind::Arguments {
-                        arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
+                        arguments: Arguments(serde_json::Map::from_iter([(
+                            "name".to_string(),
+                            serde_json::Value::String("user name".to_string()),
+                        )])),
                     }),
                     InputMessageContent::Text(TextKind::Arguments {
-                        arguments: json!({ "name": "extra content" })
-                            .as_object()
-                            .unwrap()
-                            .clone(),
+                        arguments: Arguments(
+                            json!({ "name": "extra content" })
+                                .as_object()
+                                .unwrap()
+                                .clone(),
+                        ),
                     }),
                 ],
             },
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
+                    arguments: Arguments(
+                        json!({ "name": "assistant name" })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    ),
                 })],
             },
         ];
@@ -1258,16 +1278,21 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
+                    arguments: Arguments(serde_json::Map::from_iter([(
+                        "name".to_string(),
+                        serde_json::Value::String("user name".to_string()),
+                    )])),
                 })],
             },
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
+                    arguments: Arguments(
+                        json!({ "name": "assistant name" })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    ),
                 })],
             },
         ];
@@ -1349,12 +1374,12 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({ "name": "system name" })
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages,
         };
 
@@ -1416,7 +1441,10 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
+                    arguments: Arguments(serde_json::Map::from_iter([(
+                        "name".to_string(),
+                        serde_json::Value::String("user name".to_string()),
+                    )])),
                 })],
             },
             InputMessage {
@@ -1490,10 +1518,12 @@ mod tests {
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
+                    arguments: Arguments(
+                        json!({ "name": "assistant name" })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    ),
                 })],
             },
         ];
@@ -1561,27 +1591,32 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "user name" }).as_object().unwrap().clone(),
+                    arguments: Arguments(serde_json::Map::from_iter([(
+                        "name".to_string(),
+                        serde_json::Value::String("user name".to_string()),
+                    )])),
                 })],
             },
             InputMessage {
                 role: Role::Assistant,
                 content: vec![InputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({ "name": "assistant name" })
-                        .as_object()
-                        .unwrap()
-                        .clone(),
+                    arguments: Arguments(
+                        json!({ "name": "assistant name" })
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    ),
                 })],
             },
         ];
 
         let input = Input {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({ "name": "system name" })
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages,
         };
 
