@@ -1460,7 +1460,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(false),
             tools_available: vec![],
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1475,7 +1475,7 @@ mod tests {
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
             tools_available: vec![],
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1491,7 +1491,7 @@ mod tests {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             tools_available: vec![],
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
@@ -1507,7 +1507,7 @@ mod tests {
             tool_choice: ToolChoice::Specific("test".to_string()),
             parallel_tool_calls: Some(false),
             tools_available: vec![],
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);

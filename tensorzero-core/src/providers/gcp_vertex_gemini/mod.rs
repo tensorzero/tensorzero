@@ -2775,7 +2775,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
         let inference_request = ModelInferenceRequest {

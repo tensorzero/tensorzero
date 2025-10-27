@@ -2454,7 +2454,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();
@@ -3101,7 +3101,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();
@@ -3229,7 +3229,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();

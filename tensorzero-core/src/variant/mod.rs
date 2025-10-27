@@ -900,7 +900,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: crate::tool::AllowedTools::default(),
         };
         let tool_config_arc = Arc::new(tool_config.clone());
@@ -1288,7 +1288,7 @@ mod tests {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
-                provider_tools: None,
+                provider_tools: vec![],
                 allowed_tools: crate::tool::AllowedTools::default(),
             },
             description: None,
