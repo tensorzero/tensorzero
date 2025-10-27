@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use axum::extract::{Path, State};
 use axum::Json;
 use tracing::instrument;
@@ -8,13 +10,12 @@ use crate::db::datasets::DatasetQueries;
 use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
 use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
 use crate::endpoints::datasets::validate_dataset_name;
-use crate::error::Error;
-use crate::stored_inference::StoredInference;
+use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
-    CreateDatapointResult, CreateDatapointsFromInferenceRequest,
-    CreateDatapointsFromInferenceRequestParams, CreateDatapointsFromInferenceResponse,
+    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
+    CreateDatapointsFromInferenceResponse,
 };
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/from_inferences` endpoint.
@@ -84,32 +85,39 @@ async fn create_from_inferences(
         .list_inferences(config, &list_inferences_params)
         .await?;
 
+    if let CreateDatapointsFromInferenceRequestParams::InferenceIds {
+        inference_ids: request_inference_ids,
+    } = &request.params
+    {
+        // Check if all inferences are found. If not, we fail early without creating any datapoints for a pseudo-transactional behavior.
+        let found_inference_ids = inferences
+            .iter()
+            .map(|inference| inference.id())
+            .collect::<HashSet<_>>();
+        for inference_id in request_inference_ids {
+            if !found_inference_ids.contains(&inference_id) {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Inference {inference_id} not found"),
+                }));
+            }
+        }
+    }
+
     // Convert inferences to datapoints
-    let mut results = Vec::new();
+    let mut ids = Vec::new();
     let mut datapoints_to_insert = Vec::new();
 
     for inference in inferences {
-        let inference_id = match &inference {
-            StoredInference::Chat(chat) => chat.inference_id,
-            StoredInference::Json(json) => json.inference_id,
-        };
-
-        // Convert the inference to a datapoint
-        let (datapoint_id, datapoint_insert) =
-            inference.to_datapoint_insert(&dataset_name, &request.output_source);
+        let datapoint_insert =
+            inference.into_datapoint_insert(&dataset_name, &request.output_source);
+        ids.push(datapoint_insert.id());
         datapoints_to_insert.push(datapoint_insert);
-        results.push(CreateDatapointResult::Success {
-            id: datapoint_id,
-            inference_id,
-        });
     }
 
-    // Batch insert all successful datapoints
+    // Batch insert all datapoints
     if !datapoints_to_insert.is_empty() {
         clickhouse.insert_datapoints(&datapoints_to_insert).await?;
     }
 
-    Ok(CreateDatapointsFromInferenceResponse {
-        datapoints: results,
-    })
+    Ok(CreateDatapointsFromInferenceResponse { ids })
 }

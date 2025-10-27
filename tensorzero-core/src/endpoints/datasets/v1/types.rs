@@ -250,28 +250,6 @@ pub enum CreateDatapointsFromInferenceRequestParams {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct CreateDatapointsFromInferenceResponse {
-    /// Results for each inference, either success with datapoint ID or error.
-    pub datapoints: Vec<CreateDatapointResult>,
-}
-
-/// Result of creating a single datapoint from an inference.
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-#[serde(tag = "status", rename_all = "snake_case")]
-pub enum CreateDatapointResult {
-    /// Successfully created datapoint.
-    Success {
-        /// The ID of the created datapoint.
-        id: Uuid,
-        /// The ID of the source inference.
-        inference_id: Uuid,
-    },
-    /// Failed to create datapoint.
-    Error {
-        /// The ID of the inference that failed.
-        inference_id: Uuid,
-        /// The error message.
-        error: String,
-    },
+    /// The IDs of the newly-generated datapoints.
+    pub ids: Vec<Uuid>,
 }
