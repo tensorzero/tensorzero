@@ -34,7 +34,10 @@ use tensorzero_core::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
-    tool::{AllowedTools, ClientSideFunctionTool, Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
+    tool::{
+        AllowedTools, ClientSideFunctionTool, Tool, ToolCall, ToolCallConfigDatabaseInsert,
+        ToolCallOutput, ToolChoice, ToolResult,
+    },
     variant::JsonMode,
 };
 
