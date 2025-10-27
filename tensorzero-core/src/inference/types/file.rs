@@ -949,7 +949,8 @@ mod tests {
             });
 
             let serialized = serde_json::to_value(&file).unwrap();
-            assert_eq!(serialized["file_type"], "object_storage");
+            let file_type = serialized["file_type"].as_str().unwrap();
+            assert_eq!(file_type, "object_storage");
             assert!(serialized.get("source_url").is_some());
             assert!(serialized.get("mime_type").is_some());
             assert!(serialized.get("storage_path").is_some());
