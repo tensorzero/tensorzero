@@ -207,7 +207,7 @@ pub async fn test_dicl_optimization_chat() {
     let input = ClientInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Pinocchio".to_string()),
+            "Pinocchio".into(),
         )])))),
         messages: vec![ClientInputMessage {
             role: Role::User,
@@ -488,7 +488,7 @@ pub async fn test_dicl_optimization_json() {
     let input = ClientInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Pinocchio".to_string()),
+            "Pinocchio".into(),
         )])))),
         messages: vec![ClientInputMessage {
             role: Role::User,

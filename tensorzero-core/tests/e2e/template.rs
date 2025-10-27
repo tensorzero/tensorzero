@@ -565,7 +565,7 @@ async fn e2e_test_named_system_template_no_schema() {
             input: tensorzero::ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::String("AskJeeves".to_string()),
+                    "AskJeeves".into(),
                 )])))),
                 messages: vec![],
             },
@@ -630,7 +630,7 @@ async fn e2e_test_named_system_template_with_schema() {
             input: tensorzero::ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::String("AskJeeves".to_string()),
+                    "AskJeeves".into(),
                 )])))),
                 messages: vec![],
             },
@@ -670,7 +670,7 @@ async fn e2e_test_named_system_template_with_schema() {
             input: tensorzero::ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::Number(123.into()),
+                    123.into(),
                 )])))),
                 messages: vec![],
             },

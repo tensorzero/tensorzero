@@ -1499,7 +1499,7 @@ mod tests {
         let example_input = StoredInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "context".to_string(),
-                serde_json::Value::String("example".to_string()),
+                "example".into(),
             )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,

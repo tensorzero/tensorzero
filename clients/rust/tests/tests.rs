@@ -50,7 +50,7 @@ async fn test_versioning() {
             input: ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::String("John".to_string()),
+                    "John".into(),
                 )])))),
                 messages: vec![],
             },

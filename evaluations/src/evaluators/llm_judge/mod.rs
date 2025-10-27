@@ -613,9 +613,9 @@ mod tests {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
                         arguments: Arguments(serde_json::Map::from_iter([
-                            ("input".to_string(), serde_json::Value::String("{\"system\":\"You are a helpful assistant\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"bar\"}]}]}".to_string())),
-                            ("generated_output".to_string(), serde_json::Value::String("[{\"type\":\"text\",\"text\":\"Hi world!\"}]".to_string())),
-                            ("reference_output".to_string(), serde_json::Value::Null),
+                            ("input".to_string(), "{\"system\":\"You are a helpful assistant\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"bar\"}]}]}".into()),
+                            ("generated_output".to_string(), "[{\"type\":\"text\",\"text\":\"Hi world!\"}]".into()),
+                            ("reference_output".to_string(), Value::Null),
                         ])),
                     })],
                 }],
@@ -680,9 +680,9 @@ mod tests {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
                         arguments: Arguments(serde_json::Map::from_iter([
-                            ("input".to_string(), serde_json::Value::String("{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}".to_string())),
-                            ("generated_output".to_string(), serde_json::Value::String("[{\"type\":\"text\",\"text\":\"Hi, world!\"}]".to_string())),
-                            ("reference_output".to_string(), serde_json::Value::String("[{\"type\":\"text\",\"text\":\"Hello, world!\"}]".to_string())),
+                            ("input".to_string(), "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"arguments\":{\"input\":\"{\\\"system\\\":\\\"You are a helpful assistant\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"bar\\\"}]}]}\",\"generated_output\":\"[{\\\"type\\\":\\\"text\\\",\\\"text\\\":\\\"Hi world!\\\"}]\",\"reference_output\":null}}]}]}".into()),
+                            ("generated_output".to_string(), "[{\"type\":\"text\",\"text\":\"Hi, world!\"}]".into()),
+                            ("reference_output".to_string(), "[{\"type\":\"text\",\"text\":\"Hello, world!\"}]".into()),
                         ])),
                     })],
                 }],
@@ -716,14 +716,8 @@ mod tests {
         // Test with object system message
         let input = ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                (
-                    "instructions".to_string(),
-                    serde_json::Value::String("Be helpful".to_string()),
-                ),
-                (
-                    "persona".to_string(),
-                    serde_json::Value::String("assistant".to_string()),
-                ),
+                ("instructions".to_string(), "Be helpful".into()),
+                ("persona".to_string(), "assistant".into()),
             ])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
@@ -763,7 +757,7 @@ mod tests {
         let content = vec![ClientInputMessageContent::Text(TextKind::Arguments {
             arguments: Arguments(serde_json::Map::from_iter([(
                 "key".to_string(),
-                serde_json::Value::String("value".to_string()),
+                "value".into(),
             )])),
         })];
         let serialized = serialize_content_for_messages_input(&content).unwrap();

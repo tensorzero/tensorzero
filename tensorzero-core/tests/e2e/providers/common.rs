@@ -2387,7 +2387,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
             input: ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::String("Dr. Mehta".to_string()),
+                    "Dr. Mehta".into(),
                 )])))),
                 messages: vec![
                     ClientInputMessage {
@@ -8703,7 +8703,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             input: tensorzero::ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::String("Dr. Mehta".to_string()),
+                    "Dr. Mehta".into(),
                 )])))),
                 messages: vec![tensorzero::ClientInputMessage {
                     role: Role::User,
@@ -8827,7 +8827,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         input: tensorzero::ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
-                serde_json::Value::String("Dr. Mehta".to_string()),
+                "Dr. Mehta".into(),
             )])))),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
@@ -9135,7 +9135,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         input: tensorzero::ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
-                serde_json::Value::String("Dr. Mehta".to_string()),
+                "Dr. Mehta".into(),
             )])))),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,

@@ -463,7 +463,7 @@ pub async fn test_dicl_inference_request_simple() {
     let input = ResolvedInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Dr. Mehta".to_string()),
+            "Dr. Mehta".into(),
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
@@ -486,7 +486,7 @@ pub async fn test_dicl_inference_request_simple() {
     let input = ResolvedInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Pinocchio".to_string()),
+            "Pinocchio".into(),
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
@@ -510,7 +510,7 @@ pub async fn test_dicl_inference_request_simple() {
     let input = ResolvedInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Pinocchio".to_string()),
+            "Pinocchio".into(),
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
@@ -536,7 +536,7 @@ pub async fn test_dicl_inference_request_simple() {
     let input = ResolvedInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Pinocchio".to_string()),
+            "Pinocchio".into(),
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
@@ -1057,7 +1057,7 @@ async fn test_dicl_json_request() {
     let input = ResolvedInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Dr. Mehta".to_string()),
+            "Dr. Mehta".into(),
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
@@ -1065,7 +1065,7 @@ async fn test_dicl_json_request() {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "country".to_string(),
-                    serde_json::Value::String("Canada".to_string()),
+                    "Canada".into(),
                 )])),
             })],
         }],
@@ -1087,7 +1087,7 @@ async fn test_dicl_json_request() {
     let input = ResolvedInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Pinocchio".to_string()),
+            "Pinocchio".into(),
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
@@ -1095,7 +1095,7 @@ async fn test_dicl_json_request() {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "country".to_string(),
-                    serde_json::Value::String("India".to_string()),
+                    "India".into(),
                 )])),
             })],
         }],
@@ -1117,7 +1117,7 @@ async fn test_dicl_json_request() {
     let input = ResolvedInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Pinocchio".to_string()),
+            "Pinocchio".into(),
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
@@ -1125,7 +1125,7 @@ async fn test_dicl_json_request() {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "country".to_string(),
-                    serde_json::Value::String("USA".to_string()),
+                    "USA".into(),
                 )])),
             })],
         }],
@@ -1146,7 +1146,7 @@ async fn test_dicl_json_request() {
     let input = ResolvedInput {
         system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
             "assistant_name".to_string(),
-            serde_json::Value::String("Pinocchio".to_string()),
+            "Pinocchio".into(),
         )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
@@ -1154,7 +1154,7 @@ async fn test_dicl_json_request() {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "country".to_string(),
-                    serde_json::Value::String("England".to_string()),
+                    "England".into(),
                 )])),
             })],
         }],

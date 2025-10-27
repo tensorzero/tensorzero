@@ -27,7 +27,7 @@ async fn test_client_stream_with_error(client: Client) {
             input: ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::String("AskJeeves".to_string()),
+                    "AskJeeves".into(),
                 )])))),
                 messages: vec![ClientInputMessage {
                     role: Role::User,

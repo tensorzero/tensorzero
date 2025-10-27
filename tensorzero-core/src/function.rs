@@ -906,7 +906,7 @@ mod tests {
                     name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
-                        serde_json::Value::String("user name".to_string()),
+                        "user name".into(),
                     )])),
                 })],
             },
@@ -1054,7 +1054,7 @@ mod tests {
                     name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
-                        serde_json::Value::String("user name".to_string()),
+                        "user name".into(),
                     )])),
                 })],
             },
@@ -1202,7 +1202,7 @@ mod tests {
                         name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([(
                             "name".to_string(),
-                            serde_json::Value::String("user name".to_string()),
+                            "user name".into(),
                         )])),
                     }),
                     InputMessageContent::Template(Template {
@@ -1284,7 +1284,7 @@ mod tests {
                     name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
-                        serde_json::Value::String("user name".to_string()),
+                        "user name".into(),
                     )])),
                 })],
             },
@@ -1449,7 +1449,7 @@ mod tests {
                     name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
-                        serde_json::Value::String("user name".to_string()),
+                        "user name".into(),
                     )])),
                 })],
             },
@@ -1601,7 +1601,7 @@ mod tests {
                     name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
-                        serde_json::Value::String("user name".to_string()),
+                        "user name".into(),
                     )])),
                 })],
             },

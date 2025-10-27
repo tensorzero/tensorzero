@@ -68,7 +68,7 @@ async fn test_workflow_evaluation() {
             input: ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::String("AskJeeves".to_string()),
+                    "AskJeeves".into(),
                 )])))),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
@@ -256,7 +256,7 @@ async fn test_workflow_evaluation_other_function() {
         input: ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
-                serde_json::Value::String("AskJeeves".to_string()),
+                "AskJeeves".into(),
             )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
@@ -329,7 +329,7 @@ async fn test_workflow_evaluation_variant_error() {
         input: ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
-                serde_json::Value::String("AskJeeves".to_string()),
+                "AskJeeves".into(),
             )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
@@ -384,7 +384,7 @@ async fn test_workflow_evaluation_override_variant_tags() {
         input: ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
-                serde_json::Value::String("AskJeeves".to_string()),
+                "AskJeeves".into(),
             )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
@@ -442,7 +442,7 @@ async fn test_bad_workflow_evaluation_run() {
         input: ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
-                serde_json::Value::String("AskJeeves".to_string()),
+                "AskJeeves".into(),
             )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,

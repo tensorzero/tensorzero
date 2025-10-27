@@ -1510,7 +1510,7 @@ async fn test_fast_inference_then_feedback() {
                     episode_id: None,
                     input: tensorzero::ClientInput {
                         system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                            ("assistant_name".to_string(), serde_json::Value::String("Alfred Pennyworth".to_string())),
+                            ("assistant_name".to_string(), "Alfred Pennyworth".into()),
                         ])))),
                         messages: vec![tensorzero::ClientInputMessage {
                             role: Role::User,

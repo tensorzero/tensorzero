@@ -880,7 +880,7 @@ mod tests {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "invalid".to_string(),
-                    serde_json::Value::String("json".to_string()),
+                    "json".into(),
                 )])),
             })],
         };
@@ -935,7 +935,7 @@ mod tests {
                 name: "assistant".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "reason".to_string(),
-                    serde_json::Value::String("it's against my ethical guidelines".to_string()),
+                    "it's against my ethical guidelines".into(),
                 )])),
             })],
         };
@@ -962,11 +962,8 @@ mod tests {
             content: vec![LazyResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([
-                    (
-                        "name".to_string(),
-                        serde_json::Value::String("John".to_string()),
-                    ),
-                    ("age".to_string(), serde_json::Value::Number(30.into())),
+                    ("name".to_string(), "John".into()),
+                    ("age".to_string(), 30.into()),
                 ])),
             })],
         };
@@ -994,7 +991,7 @@ mod tests {
                 name: "user".to_string(),
                 arguments: Arguments(serde_json::Map::from_iter([(
                     "name".to_string(),
-                    serde_json::Value::String("Alice".to_string()),
+                    "Alice".into(),
                 )])), // Missing "age" field
             })],
         };

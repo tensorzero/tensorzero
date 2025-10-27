@@ -1765,7 +1765,7 @@ base_path = "{root}"
         input: ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
-                serde_json::Value::String("AskJeeves".to_string()),
+                "AskJeeves".into(),
             )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
@@ -1810,7 +1810,7 @@ model = "dummy::good"
         input: ClientInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "assistant_name".to_string(),
-                serde_json::Value::String("AskJeeves".to_string()),
+                "AskJeeves".into(),
             )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
@@ -2573,7 +2573,7 @@ pub async fn test_raw_text(client: tensorzero::Client) {
             input: ClientInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                     "assistant_name".to_string(),
-                    serde_json::Value::String("Dr. Mehta".to_string()),
+                    "Dr. Mehta".into(),
                 )])))),
                 messages: vec![ClientInputMessage {
                     role: Role::User,

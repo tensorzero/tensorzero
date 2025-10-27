@@ -128,7 +128,7 @@ pub async fn test_render_samples_missing_variable() {
         input: StoredInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "foo".to_string(),
-                serde_json::Value::String("bar".to_string()),
+                "bar".into(),
             )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
@@ -169,7 +169,7 @@ pub async fn test_render_samples_normal() {
             variant_name: "dummy".to_string(),
             input: StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
                 ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
@@ -191,7 +191,7 @@ pub async fn test_render_samples_normal() {
             variant_name: "dummy".to_string(),
             input: StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
                 ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
@@ -220,7 +220,7 @@ pub async fn test_render_samples_normal() {
             variant_name: "dummy".to_string(),
             input: StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
                 ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
@@ -259,7 +259,7 @@ pub async fn test_render_samples_normal() {
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
             input: StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
                 ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
@@ -672,7 +672,7 @@ pub async fn test_render_datapoints_missing_variable() {
         input: StoredInput {
             system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
                 "foo".to_string(),
-                serde_json::Value::String("bar".to_string()),
+                "bar".into(),
             )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
@@ -718,7 +718,7 @@ pub async fn test_render_datapoints_normal() {
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
                 ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
@@ -745,7 +745,7 @@ pub async fn test_render_datapoints_normal() {
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
                 ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
@@ -776,7 +776,7 @@ pub async fn test_render_datapoints_normal() {
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
                 ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
@@ -818,7 +818,7 @@ pub async fn test_render_datapoints_normal() {
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
                 system: Some(System::Template(Arguments(serde_json::Map::from_iter([
-                    ("assistant_name".to_string(), serde_json::Value::String("Dr. Mehta".to_string())),
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
                 ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
