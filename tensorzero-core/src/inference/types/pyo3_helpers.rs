@@ -250,9 +250,9 @@ pub fn stored_input_message_content_to_python(
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        StoredInputMessageContent::RawText { value } => {
+        StoredInputMessageContent::RawText(raw_text) => {
             let raw_text_content_block = import_raw_text_content_block(py)?;
-            raw_text_content_block.call1(py, (value,))
+            raw_text_content_block.call1(py, (raw_text.value,))
         }
         StoredInputMessageContent::File(file) => {
             let file_content_block = import_file_content_block(py)?;
@@ -315,9 +315,9 @@ pub fn resolved_input_message_content_to_python(
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        ResolvedInputMessageContent::RawText { value } => {
+        ResolvedInputMessageContent::RawText(raw_text) => {
             let raw_text_content_block = import_raw_text_content_block(py)?;
-            raw_text_content_block.call1(py, (value,))
+            raw_text_content_block.call1(py, (raw_text.value,))
         }
         ResolvedInputMessageContent::File(file) => {
             let file_content_block = import_file_content_block(py)?;

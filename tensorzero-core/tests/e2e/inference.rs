@@ -30,7 +30,7 @@ use tensorzero_core::{
     },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
-        ContentBlockOutput, File, Role, StoredContentBlock, StoredInputMessageContent,
+        ContentBlockOutput, File, RawText, Role, StoredContentBlock, StoredInputMessageContent,
         StoredRequestMessage, Text, TextKind,
     },
     providers::dummy::{
@@ -2589,9 +2589,9 @@ pub async fn test_raw_text(client: tensorzero::Client) {
                 )),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::RawText {
+                    content: vec![ClientInputMessageContent::RawText(RawText {
                         value: "This is not the normal input".into(),
-                    }],
+                    })],
                 }],
             },
             ..Default::default()

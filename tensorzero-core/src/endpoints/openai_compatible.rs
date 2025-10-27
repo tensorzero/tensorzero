@@ -39,7 +39,7 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
     current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
-    InputMessage, InputMessageContent, Role, System, TemplateInput, TextKind, Usage,
+    InputMessage, InputMessageContent, RawText, Role, System, TemplateInput, TextKind, Usage,
 };
 use crate::tool::{
     DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
@@ -798,7 +798,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                             InputMessageContent::Text(TextKind::Arguments { arguments }) => {
                                 Value::Object(arguments)
                             }
-                            InputMessageContent::RawText { value } => Value::String(value),
+                            InputMessageContent::RawText(raw_text) => Value::String(raw_text.value),
                             _ => {
                                 return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
                                     message: "System message must be a text content block"
@@ -907,14 +907,9 @@ enum OpenAICompatibleContentBlock {
         file: OpenAICompatibleFile,
     },
     #[serde(rename = "tensorzero::raw_text")]
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     #[serde(rename = "tensorzero::template")]
-    Template {
-        name: String,
-        arguments: Map<String, Value>,
-    },
+    Template(TemplateInput),
 }
 
 #[derive(Deserialize, Debug)]
@@ -1003,8 +998,8 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
             for val in a {
                 let block = serde_json::from_value::<OpenAICompatibleContentBlock>(val.clone());
                 let output = match block {
-                    Ok(OpenAICompatibleContentBlock::RawText{ value }) => InputMessageContent::RawText { value },
-                    Ok(OpenAICompatibleContentBlock::Template { name, arguments }) => InputMessageContent::Template(TemplateInput { name, arguments }),
+                    Ok(OpenAICompatibleContentBlock::RawText(raw_text)) => InputMessageContent::RawText(raw_text),
+                    Ok(OpenAICompatibleContentBlock::Template(template)) => InputMessageContent::Template(template),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(TextKind::Text {text }),
                     Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => InputMessageContent::Text(TextKind::Arguments { arguments: tensorzero_arguments }),
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
@@ -1681,9 +1676,9 @@ mod tests {
         let value = convert_openai_message_content(content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::RawText {
+            vec![InputMessageContent::RawText(RawText {
                 value: "This is raw text".to_string()
-            }]
+            })]
         );
         // tensorzero::arguments
         let content = json!([{

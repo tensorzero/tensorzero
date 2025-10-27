@@ -265,7 +265,7 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
     for message in &input.messages {
         for content in &message.content {
             match content {
-                ClientInputMessageContent::File(..) => {
+                ClientInputMessageContent::File { .. } => {
                     bail!("Image content not supported for LLM judge evaluations with `serialized` input format. If you want image evaluations, try the `messages` input format.")
                 }
                 ClientInputMessageContent::Unknown { .. } => {
@@ -275,8 +275,8 @@ fn prepare_serialized_input(input: &ClientInput) -> Result<String> {
                 | ClientInputMessageContent::Template { .. }
                 | ClientInputMessageContent::ToolCall { .. }
                 | ClientInputMessageContent::ToolResult { .. }
-                | ClientInputMessageContent::RawText { .. }
-                | ClientInputMessageContent::Thought(_) => {}
+                | ClientInputMessageContent::RawText(..)
+                | ClientInputMessageContent::Thought(..) => {}
             }
         }
     }
@@ -447,7 +447,7 @@ mod tests {
     use tensorzero_core::inference::types::Usage;
     use tensorzero_core::tool::ToolCallInput;
     use tensorzero_core::{
-        inference::types::{ContentBlockChatOutput, Text, Thought},
+        inference::types::{ContentBlockChatOutput, RawText, Text, Thought},
         tool::{ToolCallOutput, ToolResult},
     };
 
@@ -831,9 +831,9 @@ mod tests {
                 result: "result".to_string(),
                 id: "toolid".to_string(),
             }),
-            ClientInputMessageContent::RawText {
+            ClientInputMessageContent::RawText(RawText {
                 value: "raw text".to_string(),
-            },
+            }),
             ClientInputMessageContent::Thought(Thought {
                 text: Some("thought".to_string()),
                 signature: None,

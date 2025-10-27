@@ -13,7 +13,7 @@ use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
 use crate::inference::types::System;
 use crate::inference::types::TemplateInput;
-use crate::inference::types::{Role, Text, Thought, ToolCall, ToolResult};
+use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult};
 use futures::future::try_join_all;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -211,9 +211,7 @@ pub enum StoredInputMessageContent {
     Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(Box<StoredFile>),
@@ -221,7 +219,6 @@ pub enum StoredInputMessageContent {
         data: Value,
         model_provider_name: Option<String>,
     },
-    // We may extend this in the future to include other types of content
 }
 
 impl StoredInputMessageContent {
@@ -240,8 +237,10 @@ impl StoredInputMessageContent {
             StoredInputMessageContent::ToolResult(tool_result) => {
                 Ok(ResolvedInputMessageContent::ToolResult(tool_result))
             }
-            StoredInputMessageContent::RawText { value } => {
-                Ok(ResolvedInputMessageContent::RawText { value })
+            StoredInputMessageContent::RawText(raw_text) => {
+                Ok(ResolvedInputMessageContent::RawText(RawText {
+                    value: raw_text.value,
+                }))
             }
             StoredInputMessageContent::Thought(thought) => {
                 Ok(ResolvedInputMessageContent::Thought(thought))

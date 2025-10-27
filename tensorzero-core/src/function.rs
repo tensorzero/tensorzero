@@ -669,6 +669,7 @@ mod tests {
     use crate::inference::types::FinishReason;
     use crate::inference::types::InputMessage;
     use crate::inference::types::Latency;
+    use crate::inference::types::RawText;
     use crate::inference::types::RequestMessagesOrBatch;
     use crate::inference::types::Text;
     use crate::inference::types::Thought;
@@ -1018,9 +1019,9 @@ mod tests {
             },
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::RawText {
+                content: vec![InputMessageContent::RawText(RawText {
                     value: "raw text".to_string(),
-                }],
+                })],
             },
         ];
 
@@ -1094,21 +1095,21 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::RawText {
+                content: vec![InputMessageContent::RawText(RawText {
                     value: "user content".to_string(),
-                }],
+                })],
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::RawText {
+                content: vec![InputMessageContent::RawText(RawText {
                     value: "assistant content".to_string(),
-                }],
+                })],
             },
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::RawText {
+                content: vec![InputMessageContent::RawText(RawText {
                     value: "raw text".to_string(),
-                }],
+                })],
             },
         ];
 
@@ -1151,9 +1152,9 @@ mod tests {
             },
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::RawText {
+                content: vec![InputMessageContent::RawText(RawText {
                     value: "raw text".to_string(),
-                }],
+                })],
             },
         ];
 
@@ -1240,9 +1241,9 @@ mod tests {
             },
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::RawText {
+                content: vec![InputMessageContent::RawText(RawText {
                     value: "raw text".to_string(),
-                }],
+                })],
             },
         ];
 

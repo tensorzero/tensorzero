@@ -3,7 +3,9 @@ use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
 use tensorzero_core::{
     error::Error,
-    inference::types::{File, InputMessageContent, Role, System, TemplateInput, TextKind, Thought},
+    inference::types::{
+        File, InputMessageContent, RawText, Role, System, TemplateInput, TextKind, Thought,
+    },
     tool::{ToolCallInput, ToolResult},
 };
 use tensorzero_derive::TensorZeroDeserialize;
@@ -42,9 +44,7 @@ pub enum ClientInputMessageContent {
     Template(TemplateInput),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(File),
@@ -57,7 +57,6 @@ pub enum ClientInputMessageContent {
         data: Value,
         model_provider_name: Option<String>,
     },
-    // We may extend this in the future to include other types of content
 }
 
 impl TryFrom<ClientInputMessageContent> for InputMessageContent {
@@ -74,7 +73,9 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
             ClientInputMessageContent::ToolResult(tool_result) => {
                 InputMessageContent::ToolResult(tool_result)
             }
-            ClientInputMessageContent::RawText { value } => InputMessageContent::RawText { value },
+            ClientInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(RawText {
+                value: raw_text.value,
+            }),
             ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
             ClientInputMessageContent::File(image) => InputMessageContent::File(image),
             ClientInputMessageContent::Unknown {
@@ -154,7 +155,9 @@ pub(super) fn test_client_to_message_content(
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)
         }
-        ClientInputMessageContent::RawText { value } => InputMessageContent::RawText { value },
+        ClientInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(RawText {
+            value: raw_text.value,
+        }),
         ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
         ClientInputMessageContent::File(image) => InputMessageContent::File(image),
         ClientInputMessageContent::Unknown {

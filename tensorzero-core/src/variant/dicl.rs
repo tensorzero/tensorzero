@@ -412,8 +412,8 @@ fn lazy_content_to_resolved_discarding_incompatible(
         LazyResolvedInputMessageContent::ToolResult(tool_result) => {
             ResolvedInputMessageContent::ToolResult(tool_result)
         }
-        LazyResolvedInputMessageContent::RawText { value } => {
-            ResolvedInputMessageContent::RawText { value }
+        LazyResolvedInputMessageContent::RawText(raw_text) => {
+            ResolvedInputMessageContent::RawText(raw_text)
         }
         LazyResolvedInputMessageContent::Thought(thought) => {
             ResolvedInputMessageContent::Thought(thought)

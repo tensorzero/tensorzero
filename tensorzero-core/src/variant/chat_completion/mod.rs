@@ -20,7 +20,7 @@ use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
-    ModelInferenceRequest, RequestMessage, Role, System,
+    ModelInferenceRequest, RequestMessage, Role, System, Text,
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -439,8 +439,10 @@ pub async fn prepare_request_message(
                 )?;
                 content.push(text_content.into());
             }
-            LazyResolvedInputMessageContent::RawText { value: text } => {
-                content.push(text.clone().into());
+            LazyResolvedInputMessageContent::RawText(raw_text) => {
+                content.push(ContentBlock::Text(Text {
+                    text: raw_text.value.clone(),
+                }));
             }
             // The following two clones are probably removable.
             // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.

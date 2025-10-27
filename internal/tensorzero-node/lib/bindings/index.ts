@@ -213,6 +213,7 @@ export * from "./RateLimitingConfigPriority";
 export * from "./RateLimitingConfigRule";
 export * from "./RateLimitingConfigScope";
 export * from "./RateLimitingConfigScopes";
+export * from "./RawText";
 export * from "./RenderedSample";
 export * from "./ResolvedContentBlock";
 export * from "./ResolvedInput";

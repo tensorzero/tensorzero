@@ -276,8 +276,8 @@ impl InputMessageContent {
             InputMessageContent::Text(TextKind::Text { text }) => {
                 LazyResolvedInputMessageContent::Text { text }
             }
-            InputMessageContent::RawText { value } => {
-                LazyResolvedInputMessageContent::RawText { value }
+            InputMessageContent::RawText(raw_text) => {
+                LazyResolvedInputMessageContent::RawText(raw_text)
             }
             InputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
@@ -428,8 +428,8 @@ impl LazyResolvedInputMessageContent {
             LazyResolvedInputMessageContent::ToolResult(tool_result) => {
                 ResolvedInputMessageContent::ToolResult(tool_result)
             }
-            LazyResolvedInputMessageContent::RawText { value } => {
-                ResolvedInputMessageContent::RawText { value }
+            LazyResolvedInputMessageContent::RawText(raw_text) => {
+                ResolvedInputMessageContent::RawText(raw_text)
             }
             LazyResolvedInputMessageContent::Thought(thought) => {
                 ResolvedInputMessageContent::Thought(thought)
@@ -531,9 +531,7 @@ pub enum InputMessageContent {
     Template(TemplateInput),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(File),
@@ -546,7 +544,6 @@ pub enum InputMessageContent {
         data: Value,
         model_provider_name: Option<String>,
     },
-    // We may extend this in the future to include other types of content
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -668,6 +665,35 @@ impl RateLimitedInputContent for Text {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Text {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+/// Struct that represents raw text content that should be passed directly to the model
+/// without any template processing or validation
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+pub struct RawText {
+    pub value: String,
+}
+
+impl std::fmt::Display for RawText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl RateLimitedInputContent for RawText {
+    fn estimated_input_token_usage(&self) -> u64 {
+        get_estimated_tokens(&self.value)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RawText {
     pub fn __repr__(&self) -> String {
         self.to_string()
     }

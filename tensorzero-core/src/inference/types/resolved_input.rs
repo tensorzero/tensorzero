@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use url::Url;
 
-use super::{storage::StoragePath, Base64File, Role, System, Text, Thought};
+use super::{storage::StoragePath, Base64File, RawText, Role, System, Text, Thought};
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::file::Base64FileMetadata;
@@ -104,9 +104,7 @@ pub enum LazyResolvedInputMessageContent {
     Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     // When we add support for forwarding image urls to the model provider,
     // we'll store additional information here
@@ -115,7 +113,6 @@ pub enum LazyResolvedInputMessageContent {
         data: Value,
         model_provider_name: Option<String>,
     },
-    // We may extend this in the future to include other types of content
 }
 
 /// Like `Input`, but with all network resources resolved.
@@ -359,9 +356,7 @@ pub enum ResolvedInputMessageContent {
     Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[cfg_attr(any(feature = "pyo3", test), serde(alias = "image"))]
     File(Box<FileWithPath>),
@@ -369,7 +364,6 @@ pub enum ResolvedInputMessageContent {
         data: Value,
         model_provider_name: Option<String>,
     },
-    // We may extend this in the future to include other types of content
 }
 
 impl ResolvedInputMessageContent {
@@ -385,8 +379,10 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::ToolResult(tool_result) => {
                 StoredInputMessageContent::ToolResult(tool_result)
             }
-            ResolvedInputMessageContent::RawText { value } => {
-                StoredInputMessageContent::RawText { value }
+            ResolvedInputMessageContent::RawText(raw_text) => {
+                StoredInputMessageContent::RawText(RawText {
+                    value: raw_text.value,
+                })
             }
             ResolvedInputMessageContent::Thought(thought) => {
                 StoredInputMessageContent::Thought(thought)
@@ -419,8 +415,10 @@ impl ResolvedInputMessageContent {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
             }
 
-            ResolvedInputMessageContent::RawText { value } => {
-                LazyResolvedInputMessageContent::RawText { value }
+            ResolvedInputMessageContent::RawText(raw_text) => {
+                LazyResolvedInputMessageContent::RawText(RawText {
+                    value: raw_text.value,
+                })
             }
             ResolvedInputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
