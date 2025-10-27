@@ -602,7 +602,6 @@ fn validate_all_text_input(
                             Cow::Owned(Value::Object(arguments.0.clone()))
                         }
                         TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
-                        TextKind::LegacyValue { value } => Cow::Borrowed(value),
                     };
                     let schema = match &message.role {
                         Role::Assistant => schemas.get_implicit_assistant_schema(),

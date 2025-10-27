@@ -371,21 +371,6 @@ fn serialize_content_for_messages_input(
                         text: arguments_string,
                     }));
                 }
-                TextKind::LegacyValue { value } => match value {
-                    Value::String(string) => {
-                        serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
-                            text: string.clone(),
-                        }));
-                    }
-                    // Same behavior as Arguments above.
-                    Value::Object(object) => {
-                        let object_string = serde_json::to_string(object)?;
-                        serialized_content.push(ClientInputMessageContent::Text(TextKind::Text {
-                            text: object_string,
-                        }));
-                    }
-                    _ => bail!("Legacy value is not a string"),
-                },
             },
         }
     }
@@ -793,37 +778,6 @@ mod tests {
         } else {
             panic!("Expected TextKind::Text");
         }
-
-        // Test with TextKind::LegacyValue (string)
-        let content = vec![ClientInputMessageContent::Text(TextKind::LegacyValue {
-            value: json!("legacy text"),
-        })];
-        let serialized = serialize_content_for_messages_input(&content).unwrap();
-        assert_eq!(serialized.len(), 1);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
-            assert_eq!(text, "legacy text");
-        } else {
-            panic!("Expected TextKind::Text");
-        }
-
-        // Test with TextKind::LegacyValue (object)
-        let content = vec![ClientInputMessageContent::Text(TextKind::LegacyValue {
-            value: json!({"legacy": "object"}),
-        })];
-        let serialized = serialize_content_for_messages_input(&content).unwrap();
-        assert_eq!(serialized.len(), 1);
-        if let ClientInputMessageContent::Text(TextKind::Text { text }) = &serialized[0] {
-            assert_eq!(text, r#"{"legacy":"object"}"#);
-        } else {
-            panic!("Expected TextKind::Text");
-        }
-
-        // Test with TextKind::LegacyValue (non-string, non-object)
-        let content = vec![ClientInputMessageContent::Text(TextKind::LegacyValue {
-            value: json!([1, 2, 3]),
-        })];
-        let err = serialize_content_for_messages_input(&content).unwrap_err();
-        assert_eq!(err.to_string(), "Legacy value is not a string");
 
         // Test with ToolCall, ToolResult, etc. (should pass through)
         let content = vec![

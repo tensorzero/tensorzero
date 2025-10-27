@@ -791,7 +791,6 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                     let system_content = convert_openai_message_content(msg.content.clone())?;
                     for content in system_content {
                         system_messages.push(match content {
-                            InputMessageContent::Text(TextKind::LegacyValue { value }) => value,
                             InputMessageContent::Text(TextKind::Text { text }) => {
                                 Value::String(text)
                             }
