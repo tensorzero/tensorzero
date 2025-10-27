@@ -721,6 +721,7 @@ impl Role {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[serde(deny_unknown_fields)]
 pub struct Text {
     pub text: String,
 }
