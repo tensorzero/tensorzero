@@ -529,7 +529,7 @@ mod tests {
     };
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
     use crate::stored_inference::StoredInference;
-    use crate::tool::ToolCallConfigDatabaseInsert;
+    use crate::tool::{AllowedTools, ToolCallConfigDatabaseInsert};
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
     use super::*;
@@ -2110,12 +2110,14 @@ FORMAT JSONEachRow";
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
         assert_eq!(
-            chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert {
-                dynamic_tools: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            }
+            chat_inference.tool_info,
+            ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools::default(),
+                ToolChoice::None,
+                Some(false),
+            )
         );
 
         // Test the Python version (singly serialized)
@@ -2151,12 +2153,14 @@ FORMAT JSONEachRow";
             vec!["Hello! How can I help you today?".to_string().into()]
         );
         assert_eq!(
-            chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            }
+            chat_inference.tool_info,
+            ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools::default(),
+                ToolChoice::None,
+                Some(false),
+            )
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
     }
@@ -2185,7 +2189,7 @@ FORMAT JSONEachRow";
             panic!("Expected a chat inference");
         };
         assert_eq!(
-            chat_inference.tool_params,
+            chat_inference.tool_info,
             ToolCallConfigDatabaseInsert::default()
         );
         assert_eq!(
