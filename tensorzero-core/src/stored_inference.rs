@@ -87,16 +87,18 @@ impl StoredInference {
     pub fn into_datapoint_insert(
         self,
         dataset_name: &str,
-        output_source: &Option<CreateDatapointsFromInferenceOutputSource>,
+        output_source: &CreateDatapointsFromInferenceOutputSource,
     ) -> DatapointInsert {
         let datapoint_id = Uuid::now_v7();
 
         match self {
             StoredInference::Json(inference) => {
-                // If output_source is explicitly None, set output to None regardless of what's in the inference
                 let output = match output_source {
-                    Some(CreateDatapointsFromInferenceOutputSource::None) => None,
-                    _ => Some(inference.output),
+                    CreateDatapointsFromInferenceOutputSource::None => None,
+                    CreateDatapointsFromInferenceOutputSource::Inference => Some(inference.output),
+                    CreateDatapointsFromInferenceOutputSource::Demonstration => {
+                        Some(inference.output)
+                    }
                 };
 
                 let datapoint = JsonInferenceDatapointInsert {
@@ -117,26 +119,28 @@ impl StoredInference {
 
                 DatapointInsert::Json(datapoint)
             }
-            StoredInference::Chat(chat_inference) => {
-                // If output_source is explicitly None, set output to None regardless of what's in the inference
+            StoredInference::Chat(inference) => {
                 let output = match output_source {
-                    Some(CreateDatapointsFromInferenceOutputSource::None) => None,
-                    _ => Some(chat_inference.output.clone()),
+                    CreateDatapointsFromInferenceOutputSource::None => None,
+                    CreateDatapointsFromInferenceOutputSource::Inference => Some(inference.output),
+                    CreateDatapointsFromInferenceOutputSource::Demonstration => {
+                        Some(inference.output)
+                    }
                 };
 
                 let datapoint = ChatInferenceDatapointInsert {
                     dataset_name: dataset_name.to_string(),
-                    function_name: chat_inference.function_name.clone(),
+                    function_name: inference.function_name,
                     name: None,
                     id: datapoint_id,
-                    episode_id: Some(chat_inference.episode_id),
-                    input: chat_inference.input.clone(),
+                    episode_id: Some(inference.episode_id),
+                    input: inference.input,
                     output,
-                    tool_params: Some(chat_inference.tool_params.clone()),
-                    tags: Some(chat_inference.tags.clone()),
+                    tool_params: Some(inference.tool_params),
+                    tags: Some(inference.tags),
                     auxiliary: String::new(),
                     staled_at: None,
-                    source_inference_id: Some(chat_inference.inference_id),
+                    source_inference_id: Some(inference.inference_id),
                     is_custom: false,
                 };
 

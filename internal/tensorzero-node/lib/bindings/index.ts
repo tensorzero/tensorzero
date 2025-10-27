@@ -37,7 +37,6 @@ export * from "./Config";
 export * from "./ContentBlockChatOutput";
 export * from "./CountDatapointsForDatasetFunctionParams";
 export * from "./CountFeedbackByTargetIdParams";
-export * from "./CreateDatapointResult";
 export * from "./CreateDatapointsFromInferenceOutputSource";
 export * from "./CreateDatapointsFromInferenceRequest";
 export * from "./CreateDatapointsFromInferenceRequestParams";

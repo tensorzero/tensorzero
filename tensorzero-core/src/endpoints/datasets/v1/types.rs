@@ -191,6 +191,10 @@ pub struct GetDatapointsResponse {
     pub datapoints: Vec<Datapoint>,
 }
 
+/// Specifies the source of the output for the datapoint when creating datapoints from inferences.
+/// - `None`: Do not include any output in the datapoint.
+/// - `Inference`: Include the original inference output in the datapoint.
+/// - `Demonstration`: Include the latest demonstration feedback as output in the datapoint.
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -213,7 +217,8 @@ pub struct CreateDatapointsFromInferenceRequest {
     pub params: CreateDatapointsFromInferenceRequestParams,
 
     /// When creating the datapoint, this specifies the source of the output for the datapoint.
-    /// If not provided, by default we will use the original inference output as the datapoint's output.
+    /// If not provided, by default we will use the original inference output as the datapoint's output
+    /// (equivalent to `inference`).
     pub output_source: Option<CreateDatapointsFromInferenceOutputSource>,
 }
 
