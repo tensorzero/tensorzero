@@ -913,6 +913,7 @@ mod tests {
     use crate::inference::types::resolved_input::LazyResolvedInputMessage;
     use crate::inference::types::stored_input::StoredFile;
     use crate::inference::types::StoredInputMessage;
+    use crate::inference::types::System;
     use crate::minijinja_util::tests::get_test_template_config;
     use crate::tool::ToolChoice;
     use crate::{
@@ -933,7 +934,12 @@ mod tests {
 
         // Mock Input data
         let input_data = StoredInput {
-            system: Some(json!({"type": "system", "content": "System message"})),
+            system: Some(System::Template(
+                json!({"type": "system", "content": "System message"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
@@ -1032,7 +1038,12 @@ mod tests {
     fn test_prepare_input_message() {
         // Mock Input data
         let input_data = ResolvedInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            system: Some(System::Template(
+                json!({"assistant_name": "Dr. Mehta"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages: vec![
                 ResolvedInputMessage {
                     role: Role::User,
@@ -1077,7 +1088,12 @@ mod tests {
         let raw_examples = vec![
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                    system: Some(System::Template(
+                        json!({"assistant_name": "Dr. Mehta"})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    )),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1094,7 +1110,12 @@ mod tests {
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(json!({"assistant_name": "Pinocchio"})),
+                    system: Some(System::Template(
+                        json!({"assistant_name": "Pinocchio"})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    )),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![
@@ -1141,7 +1162,12 @@ mod tests {
         // Create a raw example with missing output
         let raw_examples = vec![RawExample {
             input: serde_json::to_string(&StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(
+                    json!({"assistant_name": "Dr. Mehta"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -1180,7 +1206,12 @@ mod tests {
         let raw_examples = vec![
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                    system: Some(System::Template(
+                        json!({"assistant_name": "Dr. Mehta"})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    )),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1197,7 +1228,12 @@ mod tests {
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(json!({"assistant_name": "Pinocchio"})),
+                    system: Some(System::Template(
+                        json!({"assistant_name": "Pinocchio"})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    )),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1240,7 +1276,12 @@ mod tests {
         let json_raw_examples = vec![
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(json!({"assistant_name": "JsonTester"})),
+                    system: Some(System::Template(
+                        json!({"assistant_name": "JsonTester"})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    )),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1263,7 +1304,12 @@ mod tests {
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(json!({"assistant_name": "JsonTester"})),
+                    system: Some(System::Template(
+                        json!({"assistant_name": "JsonTester"})
+                            .as_object()
+                            .unwrap()
+                            .clone(),
+                    )),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1326,7 +1372,7 @@ mod tests {
 
         // Create input with custom system prompt and messages
         let input = LazyResolvedInput {
-            system: Some(json!("Custom system from input")),
+            system: Some(System::Text("Custom system from input".to_string())),
             messages: vec![
                 LazyResolvedInputMessage {
                     role: Role::User,
@@ -1440,7 +1486,7 @@ mod tests {
 
         // Create input
         let input = LazyResolvedInput {
-            system: Some(json!("Custom system from input")),
+            system: Some(System::Text("Custom system from input".to_string())),
             messages: vec![LazyResolvedInputMessage {
                 role: Role::User,
                 content: vec![LazyResolvedInputMessageContent::Text {
@@ -1451,7 +1497,9 @@ mod tests {
 
         // Create an example
         let example_input = StoredInput {
-            system: Some(json!({"context": "example"})),
+            system: Some(System::Template(
+                json!({"context": "example"}).as_object().unwrap().clone(),
+            )),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {

@@ -217,6 +217,10 @@ Separately, you can run headless tests with `pnpm test` and Playwright tests wit
 We also maintain a Docker Compose for e2e tests `fixtures/docker-compose.e2e.yml` that is used in CI for the Playwright tests.
 This file uses a different configuration that mandates credentials for image fetching.
 
+### Advanced
+
+- If your code affects the serialization of stored data, batch tests might fail because they'll rely on an older serialization of the request. In such cases, you might need to clear the database and re-run the tests. The TensorZero Team can clean up the cache by running `TRUNCATE TABLE tensorzero_e2e_tests.BatchModelInference; TRUNCATE TABLE tensorzero_e2e_tests.BatchRequest;` in the ClickHouse Cloud cluster `dev-tensorzero-e2e-tests`.
+
 ---
 
 Thanks again for your interest in contributing to TensorZero! We're excited to see what you build.

@@ -10,7 +10,7 @@ use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
-use tensorzero_core::inference::types::{ResolvedContentBlock, ResolvedRequestMessage};
+use tensorzero_core::inference::types::{ResolvedContentBlock, ResolvedRequestMessage, System};
 use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, TemplateInput, Text},
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
@@ -123,7 +123,9 @@ pub async fn test_render_samples_missing_variable() {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: StoredInput {
-            system: Some(json!({"foo": "bar"})),
+            system: Some(System::Template(
+                json!({"foo": "bar"}).as_object().unwrap().clone(),
+            )),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -162,7 +164,7 @@ pub async fn test_render_samples_normal() {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -182,7 +184,7 @@ pub async fn test_render_samples_normal() {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Template(TemplateInput {
@@ -209,7 +211,7 @@ pub async fn test_render_samples_normal() {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -246,7 +248,7 @@ pub async fn test_render_samples_normal() {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
             input: StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
@@ -444,7 +446,7 @@ pub async fn test_render_samples_template_no_schema() {
         variant_name: "test".to_string(),
         timestamp: Utc::now(),
         input: StoredInput {
-            system: Some("My system message".into()),
+            system: Some(System::Text("My system message".to_string())),
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
@@ -656,7 +658,9 @@ pub async fn test_render_datapoints_missing_variable() {
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input: StoredInput {
-            system: Some(json!({"foo": "bar"})),
+            system: Some(System::Template(
+                json!({"foo": "bar"}).as_object().unwrap().clone(),
+            )),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -700,7 +704,7 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -725,7 +729,7 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Template(TemplateInput {
@@ -754,7 +758,7 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -794,7 +798,7 @@ pub async fn test_render_datapoints_normal() {
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
@@ -982,7 +986,7 @@ pub async fn test_render_datapoints_template_no_schema() {
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input: StoredInput {
-            system: Some("My system message".into()),
+            system: Some(System::Text("My system message".to_string())),
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,

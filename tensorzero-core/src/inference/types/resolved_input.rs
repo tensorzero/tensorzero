@@ -11,8 +11,8 @@ use serde_json::Value;
 use url::Url;
 
 use super::{
-    storage::StoragePath, Base64File, ObjectStorageFile, PendingObjectStoreFile, Role, Text,
-    Thought,
+    storage::StoragePath, Base64File, ObjectStorageFile, PendingObjectStoreFile, Role, System,
+    Text, Thought,
 };
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
@@ -33,7 +33,7 @@ use pyo3::prelude::*;
 
 #[derive(Clone, Debug)]
 pub struct LazyResolvedInput {
-    pub system: Option<Value>,
+    pub system: Option<System>,
     pub messages: Vec<LazyResolvedInputMessage>,
 }
 
@@ -144,7 +144,8 @@ pub struct ResolvedInput {
         any(feature = "pyo3", test),
         serde(skip_serializing_if = "Option::is_none")
     )]
-    pub system: Option<Value>,
+    #[cfg_attr(test, ts(optional))]
+    pub system: Option<System>,
 
     #[cfg_attr(any(feature = "pyo3", test), serde(default))]
     pub messages: Vec<ResolvedInputMessage>,

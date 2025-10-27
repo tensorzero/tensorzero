@@ -1,5 +1,3 @@
-#![expect(clippy::print_stdout)]
-
 use futures::StreamExt;
 use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -19,8 +17,8 @@ use tensorzero_core::{
     http::TensorzeroHttpClient,
     inference::types::{
         ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, Role, StoredContentBlock, StoredRequestMessage, TemplateInput,
-        Text,
+        ResolvedInputMessageContent, Role, StoredContentBlock, StoredRequestMessage, System,
+        TemplateInput, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     rate_limiting::ScopeInfo,
@@ -463,7 +461,12 @@ pub async fn test_dicl_inference_request_simple() {
     let mut tasks = Vec::new();
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Dr. Mehta"})),
+        system: Some(System::Template(
+            json!({"assistant_name": "Dr. Mehta"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text(Text {
@@ -483,7 +486,12 @@ pub async fn test_dicl_inference_request_simple() {
     ));
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Pinocchio"})),
+        system: Some(System::Template(
+            json!({"assistant_name": "Pinocchio"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text(Text {
@@ -504,7 +512,12 @@ pub async fn test_dicl_inference_request_simple() {
     ));
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Pinocchio"})),
+        system: Some(System::Template(
+            json!({"assistant_name": "Pinocchio"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text(Text {
@@ -527,7 +540,12 @@ pub async fn test_dicl_inference_request_simple() {
     ));
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Pinocchio"})),
+        system: Some(System::Template(
+            json!({"assistant_name": "Pinocchio"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text(Text {
@@ -1045,7 +1063,12 @@ async fn test_dicl_json_request() {
     let mut tasks = Vec::new();
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Dr. Mehta"})),
+        system: Some(System::Template(
+            json!({"assistant_name": "Dr. Mehta"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Template(TemplateInput {
@@ -1069,7 +1092,12 @@ async fn test_dicl_json_request() {
     ));
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Pinocchio"})),
+        system: Some(System::Template(
+            json!({"assistant_name": "Pinocchio"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Template(TemplateInput {
@@ -1093,7 +1121,12 @@ async fn test_dicl_json_request() {
     ));
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Pinocchio"})),
+        system: Some(System::Template(
+            json!({"assistant_name": "Pinocchio"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Template(TemplateInput {
@@ -1116,7 +1149,12 @@ async fn test_dicl_json_request() {
     ));
 
     let input = ResolvedInput {
-        system: Some(json!({"assistant_name": "Pinocchio"})),
+        system: Some(System::Template(
+            json!({"assistant_name": "Pinocchio"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Template(TemplateInput {

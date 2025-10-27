@@ -41,7 +41,7 @@ use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectRespo
 
 use tensorzero_core::inference::types::file::{Base64File, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
-use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
+use tensorzero_core::inference::types::{FinishReason, System, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -2389,7 +2389,12 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name.clone()),
             input: ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "Dr. Mehta"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![
                     ClientInputMessage {
                         role: Role::Assistant,
@@ -8702,7 +8707,7 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             variant_name: Some(provider.variant_name.clone()),
             episode_id: Some(episode_id),
             input: tensorzero::ClientInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
                 messages: vec![tensorzero::ClientInputMessage {
                     role: Role::User,
                     content: vec![tensorzero::ClientInputMessageContent::Text(
@@ -8823,7 +8828,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         episode_id: Some(episode_id),
         extra_headers: get_extra_headers(),
         input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![
@@ -9128,7 +9133,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
         input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],

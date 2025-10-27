@@ -12,7 +12,9 @@ use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
 };
-use tensorzero_core::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, TextKind};
+use tensorzero_core::inference::types::{
+    ContentBlockChatOutput, JsonInferenceOutput, System, TextKind,
+};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
@@ -285,25 +287,22 @@ fn prepare_messages_input(input: &ClientInput) -> Result<Vec<ClientInputMessage>
     let mut messages = Vec::new();
     if let Some(system) = &input.system {
         match system {
-            Value::String(system) => {
+            System::Text(text) => {
                 messages.push(ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
-                        text: system.clone(),
+                        text: text.clone(),
                     })],
                 });
             }
-            Value::Object(system) => {
-                let system_message = serde_json::to_string(system)?;
+            System::Template(map) => {
+                let system_message = serde_json::to_string(map)?;
                 messages.push(ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {
                         text: system_message,
                     })],
                 });
-            }
-            _ => {
-                bail!("System message is not a string or object");
             }
         }
     }
@@ -474,7 +473,7 @@ mod tests {
 
         // System message, user message with a text and tool block
         let input = ClientInput {
-            system: Some(json!("You are a helpful assistant")),
+            system: Some(System::Text("You are a helpful assistant".to_string())),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![
@@ -567,7 +566,7 @@ mod tests {
             include: LLMJudgeIncludeConfig::default(),
         };
         let input = ClientInput {
-            system: Some(json!("You are a helpful assistant")),
+            system: Some(System::Text("You are a helpful assistant".to_string())),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -711,7 +710,7 @@ mod tests {
     fn test_prepare_messages_input() {
         // Test with simple string system message
         let input = ClientInput {
-            system: Some(json!("You are a helpful assistant")),
+            system: Some(System::Text("You are a helpful assistant".to_string())),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -732,10 +731,15 @@ mod tests {
 
         // Test with object system message
         let input = ClientInput {
-            system: Some(json!({
-                "instructions": "Be helpful",
-                "persona": "assistant"
-            })),
+            system: Some(System::Template(
+                json!({
+                    "instructions": "Be helpful",
+                    "persona": "assistant"
+                })
+                .as_object()
+                .unwrap()
+                .clone(),
+            )),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -754,14 +758,6 @@ mod tests {
         } else {
             panic!("Expected TextKind::Text");
         }
-
-        // Test with invalid system message
-        let input = ClientInput {
-            system: Some(json!([1, 2, 3])),
-            messages: vec![],
-        };
-        let err = prepare_messages_input(&input).unwrap_err();
-        assert_eq!(err.to_string(), "System message is not a string or object");
     }
 
     #[test]
@@ -1066,7 +1062,7 @@ mod tests {
             },
         };
         let input = ClientInput {
-            system: Some(json!("System instruction")),
+            system: Some(System::Text("System instruction".to_string())),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
