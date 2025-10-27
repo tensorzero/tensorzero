@@ -2024,4 +2024,269 @@ mod tests {
             "Currently, the gateway automatically includes all dynamic tools"
         ));
     }
+
+    // Helper struct to test deserialization with flattening
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct ToolCallConfigDeserializeTestHelper {
+        baz: String,
+        #[serde(flatten)]
+        tool_info: ToolCallConfigDatabaseInsert,
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_full() {
+        // Test Full format: Contains all fields
+        let json = json!({
+            "dynamic_tools": [
+                {
+                    "type": "client_side_function",
+                    "name": "test_tool",
+                    "description": "A test tool",
+                    "parameters": {"type": "object"},
+                    "strict": false
+                }
+            ],
+            "dynamic_provider_tools": [
+                {
+                    "scope": "unscoped",
+                    "tool": {"type": "test"}
+                }
+            ],
+            "allowed_tools": {
+                "tools": ["test_tool"],
+                "choice": "dynamic_allowed_tools"
+            },
+            "tool_choice": "auto",
+            "parallel_tool_calls": true,
+            "tool_config": {
+                "tools_available": [],
+                "tool_choice": "auto",
+                "parallel_tool_calls": true
+            }
+        });
+
+        let result: ToolCallConfigDatabaseInsert = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.dynamic_tools.len(), 1);
+        assert_eq!(result.dynamic_tools[0].name(), "test_tool");
+        assert_eq!(result.dynamic_provider_tools.len(), 1);
+        assert_eq!(result.allowed_tools.tools, vec!["test_tool"]);
+        assert_eq!(result.allowed_tools.choice, AllowedToolsChoice::DynamicAllowedTools);
+        assert_eq!(result.tool_choice, ToolChoice::Auto);
+        assert_eq!(result.parallel_tool_calls, Some(true));
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_legacy() {
+        // Test Legacy format: Contains only tool_config field
+        let json = json!({
+            "tool_config": {
+                "tools_available": [
+                    {
+                        "name": "legacy_tool",
+                        "description": "A legacy tool",
+                        "parameters": {"type": "object"},
+                        "strict": false
+                    }
+                ],
+                "tool_choice": "required",
+                "parallel_tool_calls": false
+            }
+        });
+
+        let result: ToolCallConfigDatabaseInsert = serde_json::from_value(json).unwrap();
+
+        // Legacy format should have empty dynamic tools and provider tools
+        assert_eq!(result.dynamic_tools.len(), 0);
+        assert_eq!(result.dynamic_provider_tools.len(), 0);
+        assert_eq!(result.allowed_tools.tools.len(), 0);
+        assert_eq!(result.allowed_tools.choice, AllowedToolsChoice::FunctionDefault);
+        // But tool_choice and parallel_tool_calls should come from tool_config
+        assert_eq!(result.tool_choice, ToolChoice::Required);
+        assert_eq!(result.parallel_tool_calls, Some(false));
+        // The legacy tool_config should be preserved
+        assert_eq!(result.tool_config.tools_available.len(), 1);
+        assert_eq!(result.tool_config.tools_available[0].name, "legacy_tool");
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_empty() {
+        // Test Empty format: Empty JSON object
+        let json = json!({});
+
+        let result: ToolCallConfigDatabaseInsert = serde_json::from_value(json).unwrap();
+
+        // Should return default values
+        assert_eq!(result.dynamic_tools.len(), 0);
+        assert_eq!(result.dynamic_provider_tools.len(), 0);
+        assert_eq!(result.allowed_tools.tools.len(), 0);
+        assert_eq!(result.allowed_tools.choice, AllowedToolsChoice::FunctionDefault);
+        assert_eq!(result.tool_choice, ToolChoice::Auto);
+        assert_eq!(result.parallel_tool_calls, None);
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_with_flatten() {
+        // Test with a flattened struct (ragged case)
+        let json = json!({
+            "baz": "test_value",
+            "dynamic_tools": [
+                {
+                    "type": "client_side_function",
+                    "name": "ragged_tool",
+                    "description": "A ragged tool",
+                    "parameters": {"type": "string"},
+                    "strict": true
+                }
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": ["ragged_tool"],
+                "choice": "function_default"
+            },
+            "tool_choice": {"specific": "ragged_tool"},
+            "parallel_tool_calls": null,
+            "tool_config": {
+                "tools_available": [],
+                "tool_choice": {"specific": "ragged_tool"},
+                "parallel_tool_calls": null
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.baz, "test_value");
+        assert_eq!(result.tool_info.dynamic_tools.len(), 1);
+        assert_eq!(result.tool_info.dynamic_tools[0].name(), "ragged_tool");
+        assert_eq!(result.tool_info.dynamic_provider_tools.len(), 0);
+        assert_eq!(result.tool_info.allowed_tools.tools, vec!["ragged_tool"]);
+        assert_eq!(result.tool_info.tool_choice, ToolChoice::Specific("ragged_tool".to_string()));
+        assert_eq!(result.tool_info.parallel_tool_calls, None);
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_legacy() {
+        // Test legacy format with flattening
+        let json = json!({
+            "baz": "legacy_value",
+            "tool_config": {
+                "tools_available": [
+                    {
+                        "name": "legacy_ragged_tool",
+                        "description": "A legacy ragged tool",
+                        "parameters": {"type": "number"},
+                        "strict": false
+                    }
+                ],
+                "tool_choice": "none",
+                "parallel_tool_calls": true
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.baz, "legacy_value");
+        assert_eq!(result.tool_info.dynamic_tools.len(), 0);
+        assert_eq!(result.tool_info.dynamic_provider_tools.len(), 0);
+        assert_eq!(result.tool_info.tool_choice, ToolChoice::None);
+        assert_eq!(result.tool_info.parallel_tool_calls, Some(true));
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_empty() {
+        // Test empty format with flattening
+        let json = json!({
+            "baz": "empty_value"
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.baz, "empty_value");
+        assert_eq!(result.tool_info, ToolCallConfigDatabaseInsert::default());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_full_multiple_tools() {
+        // Test Full format with multiple tools and provider tools
+        let json = json!({
+            "dynamic_tools": [
+                {
+                    "type": "client_side_function",
+                    "name": "tool1",
+                    "description": "First tool",
+                    "parameters": {"type": "object"},
+                    "strict": false
+                },
+                {
+                    "type": "client_side_function",
+                    "name": "tool2",
+                    "description": "Second tool",
+                    "parameters": {"type": "array"},
+                    "strict": true
+                }
+            ],
+            "dynamic_provider_tools": [
+                {
+                    "scope": "unscoped",
+                    "tool": {"type": "provider1"}
+                },
+                {
+                    "scope": {
+                        "model_name": "gpt-4",
+                        "model_provider_name": "openai"
+                    },
+                    "tool": {"type": "provider2"}
+                }
+            ],
+            "allowed_tools": {
+                "tools": ["tool1", "tool2"],
+                "choice": "dynamic_allowed_tools"
+            },
+            "tool_choice": {"specific": "tool1"},
+            "parallel_tool_calls": false,
+            "tool_config": {
+                "tools_available": [],
+                "tool_choice": {"specific": "tool1"},
+                "parallel_tool_calls": false
+            }
+        });
+
+        let result: ToolCallConfigDatabaseInsert = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.dynamic_tools.len(), 2);
+        assert_eq!(result.dynamic_tools[0].name(), "tool1");
+        assert_eq!(result.dynamic_tools[1].name(), "tool2");
+        assert_eq!(result.dynamic_provider_tools.len(), 2);
+        assert_eq!(result.allowed_tools.tools, vec!["tool1", "tool2"]);
+        assert_eq!(result.tool_choice, ToolChoice::Specific("tool1".to_string()));
+        assert_eq!(result.parallel_tool_calls, Some(false));
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_partial_full() {
+        // Test a case where some fields are present but not all (should still parse as Full)
+        let json = json!({
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": [],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "parallel_tool_calls": null,
+            "tool_config": {
+                "tools_available": [],
+                "tool_choice": "auto",
+                "parallel_tool_calls": null
+            }
+        });
+
+        let result: ToolCallConfigDatabaseInsert = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.dynamic_tools.len(), 0);
+        assert_eq!(result.dynamic_provider_tools.len(), 0);
+        assert_eq!(result.allowed_tools.tools.len(), 0);
+        assert_eq!(result.tool_choice, ToolChoice::Auto);
+        assert_eq!(result.parallel_tool_calls, None);
+    }
 }
