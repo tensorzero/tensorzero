@@ -3,12 +3,6 @@ import type { ObjectStoragePointer } from "./ObjectStoragePointer";
 
 /**
  * A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.
- * This ensures `StoredFile` stays in sync with `ObjectStoragePointer` and prevents type drift.
- *
- * The custom deserializer handles:
- * - Legacy nested format: `{ file: { source_url, mime_type }, storage_path }`
- * - Legacy alias: `{ image: { source_url, mime_type }, storage_path }`
- * - New flattened format: `{ source_url, mime_type, storage_path }` (delegates to ObjectStorageFile)
- * - Deprecated `url` field (via ObjectStorageFile): `{ url: ..., mime_type, storage_path }`
+ * See the deserializer implementation below for details on the legacy formats it supports.
  */
 export type StoredFile = ObjectStoragePointer;
