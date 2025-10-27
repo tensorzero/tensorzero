@@ -102,7 +102,7 @@ mod tests {
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "hello world".to_string(),
             })]),
-            tool_params: None,
+            tool_info: None,
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -163,7 +163,7 @@ mod tests {
             function_name: "test".to_string(),
             episode_id: Some(Uuid::now_v7()),
             output: None,
-            tool_params: None,
+            tool_info: None,
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,

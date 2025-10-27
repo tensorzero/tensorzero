@@ -604,7 +604,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Hello, world!".to_string(),
                 })]),
-                tool_params: None,
+                tool_info: None,
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -674,7 +674,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Hello, world!".to_string(),
                 })]),
-                tool_params: None,
+                tool_info: None,
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -905,7 +905,7 @@ mod tests {
                 messages: Vec::new(),
             },
             output: None,
-            tool_params: None,
+            tool_info: None,
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -938,7 +938,7 @@ mod tests {
                 messages: Vec::new(),
             },
             output: None,
-            tool_params: None,
+            tool_info: None,
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -967,7 +967,7 @@ mod tests {
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "Reference text".to_string(),
             })]),
-            tool_params: None,
+            tool_info: None,
             tags: None,
             auxiliary: String::new(),
             is_deleted: false,
@@ -1101,7 +1101,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "Reference output".to_string(),
                 })]),
-                tool_params: None,
+                tool_info: None,
                 tags: None,
                 auxiliary: String::new(),
                 is_deleted: false,

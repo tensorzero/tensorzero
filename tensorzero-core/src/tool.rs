@@ -453,7 +453,8 @@ impl ToolCallConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 // TODO(Viraj, in this PR): adjust the deserialization logic or the tools_available method to handle the reading of historical data
 pub struct ToolCallConfigDatabaseInsert {
@@ -578,9 +579,8 @@ impl ToolCallConfigDatabaseInsert {
 /// by legacy code. It has been subsumed by ToolCallConfigDatabaseInsert (which depends on this for backwards compatibility)
 /// a lightweight version of ToolCallConfig that can be serialized and cloned.
 /// It is used to insert the ToolCallConfig into the database.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct LegacyToolCallConfigDatabaseInsert {
     pub tools_available: Vec<ClientSideFunctionTool>,
@@ -1281,29 +1281,67 @@ mod tests {
             ToolChoice::Specific("get_temperature".to_string());
     }
 
+    // Helper to create ClientSideFunctionTool quickly
+    fn make_client_side_tool(
+        name: &str,
+        description: &str,
+        parameters: Value,
+        strict: bool,
+    ) -> ClientSideFunctionTool {
+        ClientSideFunctionTool {
+            name: name.to_string(),
+            description: description.to_string(),
+            parameters,
+            strict,
+        }
+    }
+
+    // Helper to construct ToolCallConfigConstructorArgs with defaults
+    fn make_tool_call_config_args<'a>(
+        function_tools: &'a [String],
+        function_tool_choice: &'a ToolChoice,
+        function_parallel_tool_calls: Option<bool>,
+        static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
+        dynamic_tool_params: DynamicToolParams,
+    ) -> ToolCallConfigConstructorArgs<'a> {
+        ToolCallConfigConstructorArgs {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools: dynamic_tool_params.allowed_tools,
+            dynamic_additional_tools: dynamic_tool_params
+                .additional_tools
+                .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+            dynamic_tool_choice: dynamic_tool_params.tool_choice,
+            dynamic_parallel_tool_calls: dynamic_tool_params.parallel_tool_calls,
+            dynamic_provider_tools: dynamic_tool_params.provider_tools,
+        }
+    }
+
     #[tokio::test]
     async fn test_tool_call_config_new() {
         // Empty tools in function, no dynamic tools, tools are configured in the config
         // This should return no tools because the function does not specify any tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap();
         assert!(tool_call_config.is_none());
 
         // All tools available, no dynamic tools, tools are configured in the config
         // This should return all tools because the function specifies all tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1318,13 +1356,13 @@ mod tests {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
             ..Default::default()
         };
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(make_tool_call_config_args(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &EMPTY_TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
         assert_eq!(
             err,
@@ -1339,13 +1377,13 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("get_temperature".to_string())),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1360,13 +1398,13 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
         assert_eq!(
             err,
@@ -1380,21 +1418,21 @@ mod tests {
         // This should remove all configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![Tool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({}),
+                false,
+            )]),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 1);
@@ -1406,22 +1444,22 @@ mod tests {
         // This should remove the other configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![Tool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({}),
+                false,
+            )]),
             parallel_tool_calls: Some(false),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1436,22 +1474,22 @@ mod tests {
         // This should remove all configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![Tool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({}),
+                false,
+            )]),
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 1);
@@ -1472,13 +1510,13 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "123".to_string(),
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap()
         .unwrap();
         // Tool call is valid, so we should get a valid ToolCallOutput
@@ -1531,21 +1569,21 @@ mod tests {
         );
 
         // Make sure validation works with dynamic tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams {
-                additional_tools: Some(vec![Tool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
-                    strict: false,
-                }]),
+                additional_tools: Some(vec![make_client_side_tool(
+                    "establish_campground",
+                    "Establish a campground",
+                    json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
+                    false,
+                )]),
                 ..Default::default()
             },
-        )
+        ))
         .unwrap()
         .unwrap();
         let tool_call = ToolCall {
@@ -1676,28 +1714,28 @@ mod tests {
     async fn test_duplicate_tool_names_error() {
         // Test case where dynamic tool params add a tool with the same name as a static tool
         let dynamic_tool_params = DynamicToolParams {
-            additional_tools: Some(vec![Tool {
-                name: "get_temperature".to_string(), // Same name as static tool
-                description: "Another temperature tool".to_string(),
-                parameters: json!({
+            additional_tools: Some(vec![make_client_side_tool(
+                "get_temperature", // Same name as static tool
+                "Another temperature tool",
+                json!({
                     "type": "object",
                     "properties": {
                         "city": {"type": "string"}
                     },
                     "required": ["city"]
                 }),
-                strict: false,
-            }]),
+                false,
+            )]),
             ..Default::default()
         };
 
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
 
         assert_eq!(
@@ -1783,22 +1821,22 @@ mod tests {
                 "get_temperature".to_string(),
                 "establish_campground".to_string(),
             ]),
-            additional_tools: Some(vec![Tool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                false,
+            )]),
             ..Default::default()
         };
 
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
 
@@ -1825,22 +1863,22 @@ mod tests {
                 "get_temperature".to_string(),
                 "nonexistent_tool".to_string(),
             ]),
-            additional_tools: Some(vec![Tool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({"type": "object"}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({"type": "object"}),
+                false,
+            )]),
             ..Default::default()
         };
 
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
 
         assert_eq!(
@@ -1858,22 +1896,22 @@ mod tests {
         // Test that dynamic tools are still auto-added even when not in allowed_tools (with warning)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![Tool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                false,
+            )]),
             ..Default::default()
         };
 
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
 

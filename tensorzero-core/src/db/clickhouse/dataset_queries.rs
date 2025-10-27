@@ -2426,7 +2426,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "response_2".to_string(),
                 })]),
-                tool_params: None,
+                tool_info: None,
                 tags: None,
                 auxiliary: String::new(),
                 staled_at: None,
@@ -2446,7 +2446,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "response_3".to_string(),
                 })]),
-                tool_params: None,
+                tool_info: None,
                 tags: None,
                 auxiliary: String::new(),
                 staled_at: None,
@@ -2687,7 +2687,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "chat response 1".to_string(),
                 })]),
-                tool_params: None,
+                tool_info: None,
                 tags: None,
                 auxiliary: String::new(),
                 staled_at: None,
@@ -2728,7 +2728,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "chat response 2".to_string(),
                 })]),
-                tool_params: None,
+                tool_info: None,
                 tags: None,
                 auxiliary: String::new(),
                 staled_at: None,
@@ -2815,7 +2815,7 @@ mod tests {
                 messages: vec![],
             },
             output: None,
-            tool_params: None,
+            tool_info: None,
             tags: None,
             auxiliary: String::new(),
             staled_at: None,

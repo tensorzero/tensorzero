@@ -1050,7 +1050,7 @@ mod tests {
             )])),
             episode_id: Some(Uuid::now_v7()),
             inference_id: Some(Uuid::now_v7()),
-            tool_params: None,
+            tool_info: None,
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -1062,7 +1062,7 @@ mod tests {
 
         let mut sample = create_test_rendered_sample();
         sample.tool_params = Some(ToolCallConfigDatabaseInsert {
-            tools_available: tools,
+            tool_info: tools,
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
         });
@@ -1090,7 +1090,7 @@ mod tests {
 
         // Also add empty tool params to make it realistic
         sample.tool_params = Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![],
+            too: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: Some(false),
         });

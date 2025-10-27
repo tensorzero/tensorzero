@@ -2112,7 +2112,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             chat_inference.tool_params,
             ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
+                dynamic_tools: vec![],
                 tool_choice: ToolChoice::None,
                 parallel_tool_calls: Some(false),
             }
