@@ -25,7 +25,6 @@ pub enum DatapointInsert {
     Json(JsonInferenceDatapointInsert),
 }
 
-#[cfg(any(test, feature = "e2e_tests"))]
 impl DatapointInsert {
     pub fn id(&self) -> Uuid {
         match self {
