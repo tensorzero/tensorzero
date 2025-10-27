@@ -53,10 +53,7 @@ use crate::inference::types::resolved_input::{
 };
 use crate::inference::types::storage::StorageKind;
 use crate::inference::types::stored_input::StoredFile;
-use crate::rate_limiting::{
-    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
-    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
-};
+use crate::rate_limiting::RateLimitResourceUsage;
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
 };
@@ -97,10 +94,7 @@ use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{cache::CacheData, config::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
-use crate::{
-    endpoints::inference::InferenceParams,
-    error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
-};
+use crate::{endpoints::inference::InferenceParams, error::ErrorDetails};
 use crate::{error::Error, variant::JsonMode};
 use serde::de::Error as _;
 
@@ -110,6 +104,7 @@ pub mod extra_headers;
 pub mod file;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
+pub mod rate_limiting;
 pub mod resolved_input;
 pub mod storage;
 pub mod stored_input;
@@ -658,13 +653,6 @@ impl std::fmt::Display for Text {
     }
 }
 
-impl RateLimitedInputContent for Text {
-    fn estimated_input_token_usage(&self) -> u64 {
-        let Text { text } = self;
-        get_estimated_tokens(text)
-    }
-}
-
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Text {
@@ -704,25 +692,6 @@ pub struct Thought {
     )]
     #[ts(optional)]
     pub provider_type: Option<String>,
-}
-
-impl RateLimitedInputContent for Thought {
-    fn estimated_input_token_usage(&self) -> u64 {
-        let Thought {
-            text,
-            signature,
-            // We intentionally do *not* count the summary towards the token usage
-            // Even though OpenAI responses requires passing the summaries back in a multi-turn
-            // conversation, we expect that the actual model will ignore them, since they're
-            // not the internal model thoughts.
-            summary: _,
-            provider_type: _,
-        } = self;
-        text.as_ref().map_or(0, |text| get_estimated_tokens(text))
-            + signature
-                .as_ref()
-                .map_or(0, |signature| get_estimated_tokens(signature))
-    }
 }
 
 /// Core representation of the types of content that could go into a model provider
@@ -810,19 +779,6 @@ impl std::fmt::Display for ResolvedRequestMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-impl RateLimitedInputContent for ContentBlock {
-    fn estimated_input_token_usage(&self) -> u64 {
-        match self {
-            ContentBlock::Text(text) => text.estimated_input_token_usage(),
-            ContentBlock::ToolCall(tool_call) => tool_call.estimated_input_token_usage(),
-            ContentBlock::ToolResult(tool_result) => tool_result.estimated_input_token_usage(),
-            ContentBlock::File(file) => file.estimated_input_token_usage(),
-            ContentBlock::Thought(thought) => thought.estimated_input_token_usage(),
-            ContentBlock::Unknown { .. } => 0,
-        }
     }
 }
 
@@ -983,20 +939,6 @@ impl RequestMessage {
     }
 }
 
-impl RateLimitedInputContent for RequestMessage {
-    fn estimated_input_token_usage(&self) -> u64 {
-        let RequestMessage {
-            #[expect(unused_variables)]
-            role,
-            content,
-        } = self;
-        content
-            .iter()
-            .map(RateLimitedInputContent::estimated_input_token_usage)
-            .sum()
-    }
-}
-
 impl std::fmt::Display for RequestMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -1067,62 +1009,6 @@ pub struct ModelInferenceRequest<'a> {
 impl<'a> ModelInferenceRequest<'a> {
     pub fn borrow_stop_sequences(&'a self) -> Option<Cow<'a, [String]>> {
         self.stop_sequences.as_ref().map(borrow_cow)
-    }
-}
-
-impl RateLimitedRequest for ModelInferenceRequest<'_> {
-    fn estimated_resource_usage(
-        &self,
-        resources: &[RateLimitResource],
-    ) -> Result<EstimatedRateLimitResourceUsage, Error> {
-        let ModelInferenceRequest {
-            inference_id: _,
-            messages,
-            system,
-            tool_config: _, // TODO: should we account for this in advance?
-            temperature: _,
-            top_p: _,
-            max_tokens,
-            presence_penalty: _,
-            frequency_penalty: _,
-            seed: _,
-            stop_sequences: _,
-            stream: _,
-            json_mode: _,
-            function_type: _,
-            output_schema: _,
-            extra_body: _,
-            fetch_and_encode_input_files_before_inference: _,
-            extra_headers: _,
-            extra_cache_key: _,
-        } = self;
-
-        let tokens = if resources.contains(&RateLimitResource::Token) {
-            let system_tokens = system
-                .as_ref()
-                .map(|s| get_estimated_tokens(s))
-                .unwrap_or(0);
-            let messages_tokens: u64 = messages
-                .iter()
-                .map(RateLimitedInputContent::estimated_input_token_usage)
-                .sum();
-            let output_tokens =
-                max_tokens.ok_or_else(|| Error::new(RateLimitMissingMaxTokens))? as u64;
-            Some(system_tokens + messages_tokens + output_tokens)
-        } else {
-            None
-        };
-
-        let model_inferences = if resources.contains(&RateLimitResource::ModelInference) {
-            Some(1)
-        } else {
-            None
-        };
-
-        Ok(EstimatedRateLimitResourceUsage {
-            model_inferences,
-            tokens,
-        })
     }
 }
 

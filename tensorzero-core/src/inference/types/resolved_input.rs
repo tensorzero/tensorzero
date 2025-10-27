@@ -18,7 +18,6 @@ use crate::inference::types::stored_input::{
     StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
 use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput};
-use crate::rate_limiting::RateLimitedInputContent;
 use crate::tool::{ToolCall, ToolResult};
 
 #[cfg(feature = "pyo3")]
@@ -471,26 +470,6 @@ impl std::fmt::Display for FileWithPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
-    }
-}
-
-impl RateLimitedInputContent for LazyFile {
-    fn estimated_input_token_usage(&self) -> u64 {
-        match self {
-            LazyFile::FileWithPath(FileWithPath {
-                file: _,
-                storage_path: _,
-            }) => {}
-            LazyFile::ObjectStorage { .. } => {}
-            // Forwarding a url is inherently incompatible with input token estimation,
-            // so we'll need to continue using a hardcoded value here, even if we start
-            // estimating tokens LazyFile::FileWithPath
-            LazyFile::Url {
-                file_url: _,
-                future: _,
-            } => {}
-        }
-        10_000 // Hardcoded value for file size estimation, we will improve later
     }
 }
 
