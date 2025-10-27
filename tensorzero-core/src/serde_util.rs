@@ -1,6 +1,8 @@
 use serde::de::IntoDeserializer;
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Serializes a value as a JSON string (for "doubly-serialized" fields).
 /// This is the inverse of `deserialize_json_string`.
@@ -420,6 +422,42 @@ where
     }
 }
 
+/// Serializes an optional value, returning an empty string if the value is None.
+/// This is useful for ClickHouse compatibility where empty strings represent null for certain fields.
+pub fn serialize_none_as_empty_string<S, T>(
+    value: &Option<T>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize,
+{
+    match value {
+        Some(v) => v.serialize(serializer),
+        None => serializer.serialize_str(""),
+    }
+}
+
+/// Serializes an optional HashMap, returning an empty map if the value is None.
+/// This is useful for ClickHouse compatibility where empty maps represent null for map fields.
+pub fn serialize_none_as_empty_map<S, K, V>(
+    value: &Option<HashMap<K, V>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    K: Serialize,
+    V: Serialize,
+{
+    match value {
+        Some(map) => map.serialize(serializer),
+        None => {
+            let map = serializer.serialize_map(Some(0))?;
+            map.end()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -789,5 +827,68 @@ mod tests {
                 inner_option_field: None
             }))
         );
+    }
+
+    // Tests for serialize_none_as_empty_string
+    #[derive(Debug, Serialize, PartialEq)]
+    struct TestSerializeNoneAsEmptyString {
+        #[serde(serialize_with = "serialize_none_as_empty_string")]
+        field: Option<String>,
+    }
+
+    #[test]
+    fn test_serialize_none_as_empty_string_with_some() {
+        let obj = TestSerializeNoneAsEmptyString {
+            field: Some("test".to_string()),
+        };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"field":"test"}"#);
+    }
+
+    #[test]
+    fn test_serialize_none_as_empty_string_with_none() {
+        let obj = TestSerializeNoneAsEmptyString { field: None };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"field":""}"#);
+    }
+
+    // Tests for serialize_none_as_empty_map
+    #[derive(Debug, Serialize, PartialEq)]
+    struct TestSerializeNoneAsEmptyMap {
+        #[serde(serialize_with = "serialize_none_as_empty_map")]
+        field: Option<HashMap<String, String>>,
+    }
+
+    #[test]
+    fn test_serialize_none_as_empty_map_with_some() {
+        let mut map = HashMap::new();
+        map.insert("key1".to_string(), "value1".to_string());
+        map.insert("key2".to_string(), "value2".to_string());
+
+        let obj = TestSerializeNoneAsEmptyMap { field: Some(map) };
+        let json = serde_json::to_string(&obj).unwrap();
+
+        // Parse back to verify it's a valid map with the right contents
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let field_map = parsed["field"].as_object().unwrap();
+        assert_eq!(field_map.len(), 2);
+        assert_eq!(field_map["key1"], "value1");
+        assert_eq!(field_map["key2"], "value2");
+    }
+
+    #[test]
+    fn test_serialize_none_as_empty_map_with_none() {
+        let obj = TestSerializeNoneAsEmptyMap { field: None };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"field":{}}"#);
+    }
+
+    #[test]
+    fn test_serialize_none_as_empty_map_with_empty_map() {
+        let obj = TestSerializeNoneAsEmptyMap {
+            field: Some(HashMap::new()),
+        };
+        let json = serde_json::to_string(&obj).unwrap();
+        assert_eq!(json, r#"{"field":{}}"#);
     }
 }
