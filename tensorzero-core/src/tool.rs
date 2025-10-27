@@ -194,7 +194,7 @@ pub enum AllowedToolsChoice {
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<ToolConfig>,
     pub(crate) dynamic_tools_available: Vec<ToolConfig>,
-    pub provider_tools: Option<Vec<ProviderTool>>,
+    pub provider_tools: Vec<ProviderTool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub allowed_tools: AllowedTools,
@@ -328,7 +328,7 @@ impl ToolCallConfig {
                 static_tools_available,
                 dynamic_tools_available,
                 tool_choice,
-                provider_tools: dynamic_tool_params.provider_tools,
+                provider_tools: dynamic_tool_params.provider_tools.unwrap_or_default(),
                 parallel_tool_calls,
                 allowed_tools,
             })
@@ -363,14 +363,9 @@ impl ToolCallConfig {
         model_provider_name: &str,
     ) -> Vec<&ProviderTool> {
         self.provider_tools
-            .as_ref()
-            .map(|tools| {
-                tools
-                    .iter()
-                    .filter(|t| t.scope.matches(model_name, model_provider_name))
-                    .collect()
-            })
-            .unwrap_or_default()
+            .iter()
+            .filter(|t| t.scope.matches(model_name, model_provider_name))
+            .collect()
     }
 
     #[cfg(test)]
@@ -622,7 +617,7 @@ impl ToolCallConfig {
             dynamic_tools_available: vec![],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         }
     }
@@ -790,7 +785,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         dynamic_tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: None,
+        provider_tools: vec![],
         allowed_tools: AllowedTools::default(),
     }
 }
@@ -934,7 +929,7 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
             tool_choice: db_insert.tool_choice,
             parallel_tool_calls: db_insert.parallel_tool_calls,
             // TODO(Viraj): address this once we start storing provider tools
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         }
     }
@@ -956,7 +951,7 @@ pub fn create_implicit_tool_call_config_with_allowed_tools(
         dynamic_tools_available: vec![],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: None,
+        provider_tools: vec![],
         allowed_tools,
     }
 }
@@ -1471,7 +1466,7 @@ mod tests {
         ];
 
         let config = ToolCallConfig {
-            provider_tools: Some(provider_tools),
+            provider_tools,
             ..Default::default()
         };
 
