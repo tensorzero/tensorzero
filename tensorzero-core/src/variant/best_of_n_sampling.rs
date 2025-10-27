@@ -19,7 +19,7 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role,
+    ModelInferenceResponseWithMetadata, RequestMessage, Role, System,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
@@ -591,7 +591,7 @@ impl BestOfNEvaluatorConfig {
     fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
-        system: Option<&Value>,
+        system: Option<&System>,
         max_index: usize,
     ) -> Result<String, Error> {
         let inner_system_message = self.inner.prepare_system_message(templates, system)?;
@@ -868,7 +868,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap(),
         };
-        let input_message = Value::String("You are a helpful assistant.".to_string());
+        let input_message = System::Text("You are a helpful assistant.".to_string());
         let max_index = 2;
         let result =
             evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
@@ -891,15 +891,24 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap(),
         };
-        let input_message = json!({"message": "You are a helpful assistant."});
+        let input_message = System::Template(
+            json!({"message": "You are a helpful assistant."})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
         let max_index = 3;
         let result =
             evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
-        prepared_message,
-        ErrorDetails::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }.into()
+            prepared_message,
+            ErrorDetails::InvalidMessage {
+                message: "System message content is a template but there is no variant template"
+                    .to_string()
+            }
+            .into()
         );
 
         // Test without templates, no message
@@ -954,7 +963,12 @@ mod tests {
         };
 
         let max_index = 6;
-        let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
+        let input_message = System::Template(
+            serde_json::json!({"assistant_name": "ChatGPT"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
         let result =
             evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
         let prepared_message = result.unwrap();

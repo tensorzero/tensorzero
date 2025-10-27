@@ -1,8 +1,6 @@
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
-use crate::error::ErrorDetails;
-use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::inference::types::file::Base64FileMetadata;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
@@ -13,9 +11,11 @@ use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
+use crate::inference::types::System;
 use crate::inference::types::TemplateInput;
-use crate::inference::types::{Role, Thought, ToolCall, ToolResult};
+use crate::inference::types::{Role, Text, Thought, ToolCall, ToolResult};
 use futures::future::try_join_all;
+use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -28,6 +28,8 @@ use pyo3::prelude::*;
 /// This is almost identical to `ResolvedInput`, but without `File` data.
 /// Only the object-storage path is actually stored in clickhouse
 /// (which can be used to re-fetch the file and produce a `ResolvedInput`).
+///
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
@@ -36,7 +38,7 @@ use pyo3::prelude::*;
 pub struct StoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, ts(optional))]
-    pub system: Option<Value>,
+    pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<StoredInputMessage>,
 }
@@ -75,11 +77,11 @@ impl StoredInput {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
 pub struct StoredInputMessage {
     pub role: Role,
     pub content: Vec<StoredInputMessageContent>,
@@ -95,10 +97,108 @@ impl StoredInputMessage {
             content: try_join_all(
                 self.content
                     .into_iter()
-                    .map(|content| content.reresolve(self.role, resolver)),
+                    .map(|content| content.reresolve(resolver)),
             )
             .await?,
         })
+    }
+}
+
+impl<'de> Deserialize<'de> for StoredInputMessage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Role,
+            Content,
+        }
+
+        struct StoredInputMessageVisitor;
+
+        impl<'de> Visitor<'de> for StoredInputMessageVisitor {
+            type Value = StoredInputMessage;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("struct StoredInputMessage")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<StoredInputMessage, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut role: Option<Role> = None;
+                let mut content: Option<Vec<Value>> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Role => {
+                            if role.is_some() {
+                                return Err(de::Error::duplicate_field("role"));
+                            }
+                            role = Some(map.next_value()?);
+                        }
+                        Field::Content => {
+                            if content.is_some() {
+                                return Err(de::Error::duplicate_field("content"));
+                            }
+                            content = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                let role = role.ok_or_else(|| de::Error::missing_field("role"))?;
+                let content_values = content.ok_or_else(|| de::Error::missing_field("content"))?;
+
+                // Transform legacy Text format to new format
+                let transformed_content: Result<Vec<StoredInputMessageContent>, V::Error> =
+                    content_values
+                        .into_iter()
+                        .map(|mut value| {
+                            // Check if this is a legacy Text variant: {"type": "text", "value": ...}
+                            if let Some(obj) = value.as_object_mut() {
+                                if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
+                                    if let Some(val) = obj.remove("value") {
+                                        // Convert based on value type
+                                        match val {
+                                            Value::String(text) => {
+                                                // Convert to new format: {"type": "text", "text": "..."}
+                                                obj.insert("text".to_string(), Value::String(text));
+                                            }
+                                            Value::Object(arguments) => {
+                                                // Convert to Template format by constructing a new object
+                                                let mut new_obj = serde_json::Map::new();
+                                                new_obj.insert("type".to_string(), Value::String("template".to_string()));
+                                                new_obj.insert("name".to_string(), Value::String(role.implicit_template_name().to_string()));
+                                                new_obj.insert("arguments".to_string(), Value::Object(arguments));
+                                                *obj = new_obj;
+                                            }
+                                            _ => {
+                                                return Err(de::Error::custom(
+                                                    r#"The `value` field in a `{"type": "text", "value": ... }` content block must be a string or object"#
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Deserialize the transformed value
+                            serde_json::from_value(value).map_err(de::Error::custom)
+                        })
+                        .collect();
+
+                Ok(StoredInputMessage {
+                    role,
+                    content: transformed_content?,
+                })
+            }
+        }
+
+        const FIELDS: &[&str] = &["role", "content"];
+        deserializer.deserialize_struct("StoredInputMessage", FIELDS, StoredInputMessageVisitor)
     }
 }
 
@@ -107,9 +207,7 @@ impl StoredInputMessage {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum StoredInputMessageContent {
-    Text {
-        value: Value,
-    },
+    Text(Text),
     Template(TemplateInput),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
@@ -129,31 +227,10 @@ pub enum StoredInputMessageContent {
 impl StoredInputMessageContent {
     pub async fn reresolve(
         self,
-        role: Role,
         resolver: &impl StoragePathResolver,
     ) -> Result<ResolvedInputMessageContent, Error> {
         match self {
-            StoredInputMessageContent::Text { value } => {
-                match value {
-                    // Plain string input (which might later be templated by an `input_wrapper` template)
-                    Value::String(text) => Ok(ResolvedInputMessageContent::Text { text }),
-                    // Convert legacy `{"type": "text", "arguments": {}}` inputs to `{"type": "template", "name": "<role>", "arguments": {}}` inputs,
-                    // where the template name is determined by the message role.
-                    // We don't store any new entries in ClickHouse using the legacy format - this is needed to handle
-                    // existing entries in our database.
-                    Value::Object(object) => {
-                        Ok(ResolvedInputMessageContent::Template(TemplateInput {
-                            name: role.implicit_template_name().to_string(),
-                            arguments: object,
-                        }))
-                    }
-                    _ => Err(Error::new(ErrorDetails::InternalError {
-                        message: format!(
-                            "Invalid text content: {value:?}. {IMPOSSIBLE_ERROR_MESSAGE}"
-                        ),
-                    })),
-                }
-            }
+            StoredInputMessageContent::Text(text) => Ok(ResolvedInputMessageContent::Text(text)),
             StoredInputMessageContent::Template(template) => {
                 Ok(ResolvedInputMessageContent::Template(template))
             }
@@ -273,4 +350,98 @@ impl StoredInput {
 pub struct StoredRequestMessage {
     pub role: Role,
     pub content: Vec<StoredContentBlock>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_deserialize_legacy_text_string() {
+        // Legacy format with string value
+        let json = json!({
+            "role": "user",
+            "content": [{"type": "text", "value": "Hello, world!"}]
+        });
+
+        let message: StoredInputMessage = serde_json::from_value(json).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 1);
+        match &message.content[0] {
+            StoredInputMessageContent::Text(text) => {
+                assert_eq!(text.text, "Hello, world!");
+            }
+            _ => panic!("Expected Text variant"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_legacy_text_object() {
+        // Legacy format with object value (should convert to Template)
+        let json = json!({
+            "role": "user",
+            "content": [{"type": "text", "value": {"foo": "bar", "baz": 123}}]
+        });
+
+        let message: StoredInputMessage = serde_json::from_value(json).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 1);
+        match &message.content[0] {
+            StoredInputMessageContent::Template(template) => {
+                assert_eq!(template.name, "user");
+                assert_eq!(template.arguments.get("foo").unwrap(), "bar");
+                assert_eq!(template.arguments.get("baz").unwrap(), 123);
+            }
+            _ => panic!("Expected Template variant"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_new_text_format() {
+        // New format with text field
+        let json = json!({
+            "role": "user",
+            "content": [{"type": "text", "text": "Hello, world!"}]
+        });
+
+        let message: StoredInputMessage = serde_json::from_value(json).unwrap();
+        assert_eq!(message.role, Role::User);
+        assert_eq!(message.content.len(), 1);
+        match &message.content[0] {
+            StoredInputMessageContent::Text(text) => {
+                assert_eq!(text.text, "Hello, world!");
+            }
+            _ => panic!("Expected Text variant"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_legacy_text_invalid_value() {
+        // Legacy format with invalid value type (number)
+        let json = json!({
+            "role": "user",
+            "content": [{"type": "text", "value": 123}]
+        });
+
+        let result: Result<StoredInputMessage, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("must be a string or object"));
+    }
+
+    #[test]
+    fn test_round_trip_serialization() {
+        let message = StoredInputMessage {
+            role: Role::User,
+            content: vec![StoredInputMessageContent::Text(Text {
+                text: "Hello, world!".to_string(),
+            })],
+        };
+
+        let json = serde_json::to_value(&message).unwrap();
+        let deserialized: StoredInputMessage = serde_json::from_value(json).unwrap();
+
+        assert_eq!(message, deserialized);
+    }
 }

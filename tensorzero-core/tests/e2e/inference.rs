@@ -20,7 +20,7 @@ use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
-use tensorzero_core::inference::types::StoredInput;
+use tensorzero_core::inference::types::{StoredInput, System};
 use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
@@ -166,7 +166,7 @@ async fn e2e_test_inference_chat_strip_unknown_block_non_stream() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 },
                 {
                     "role": "user",
@@ -314,7 +314,7 @@ async fn test_dummy_only_inference_chat_strip_unknown_block_stream() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 },
                 {
                     "role": "user",
@@ -459,7 +459,7 @@ async fn e2e_test_inference_model_fallback() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 }
             ]
         }
@@ -616,7 +616,7 @@ async fn e2e_test_tool_call() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
                 }
             ]
         }
@@ -812,7 +812,7 @@ async fn e2e_test_tool_call_malformed() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
                 }
             ]
         }
@@ -989,7 +989,7 @@ async fn e2e_test_inference_json_fail() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "text": "Hello, world!"}]
             }
         ]
     });
@@ -1073,7 +1073,7 @@ async fn e2e_test_inference_json_success() {
                 "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -1218,7 +1218,7 @@ async fn e2e_test_variant_failover() {
                     "messages": [
                     {
                         "role": "user",
-                        "content": [{"type": "text", "arguments": {"type": "tacos", "quantity": 13}}],
+                        "content": [{"type": "template", "name": "user", "arguments": {"type": "tacos", "quantity": 13}}],
                     }
                 ]},
             "stream": false,
@@ -1370,7 +1370,12 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
             input: ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "AskJeeves"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
@@ -1413,7 +1418,12 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
             function_name: Some("variant_failover_zero_weight".to_string()),
             variant_name: Some("zero_weight".to_string()),
             input: ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "AskJeeves"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
@@ -1539,7 +1549,7 @@ async fn e2e_test_streaming() {
             "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hello, world!"}]
+                "content": [{"type": "text", "text": "Hello, world!"}]
             }
         ]}
     );
@@ -1757,7 +1767,12 @@ base_path = "{root}"
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
         input: ClientInput {
-            system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+            system: Some(System::Template(
+                serde_json::json!({"assistant_name": "AskJeeves"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -1799,7 +1814,12 @@ model = "dummy::good"
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
         input: ClientInput {
-            system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+            system: Some(System::Template(
+                serde_json::json!({"assistant_name": "AskJeeves"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -2215,7 +2235,7 @@ async fn e2e_test_tool_call_streaming() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
                 }
             ]
         }
@@ -2429,7 +2449,7 @@ async fn e2e_test_tool_call_streaming_split_tool_name() {
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                    "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
                 }
             ]
         }
@@ -2559,9 +2579,14 @@ pub async fn test_raw_text(client: tensorzero::Client) {
             episode_id: Some(episode_id),
             function_name: Some("json_success".to_string()),
             input: ClientInput {
-                system: Some(serde_json::json!({
-                    "assistant_name": "Dr. Mehta"
-                })),
+                system: Some(System::Template(
+                    serde_json::json!({
+                        "assistant_name": "Dr. Mehta"
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+                )),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::RawText {
@@ -2762,7 +2787,7 @@ pub async fn e2e_test_dynamic_api_key() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -3286,7 +3311,7 @@ async fn test_inference_zero_tokens_helper(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "Hello, world!"}]
+                    "content": [{"type": "text", "text": "Hello, world!"}]
                 }
             ]
         }
@@ -3592,7 +3617,7 @@ async fn test_json_cot_inference_request() {
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -3633,7 +3658,7 @@ async fn test_json_cot_inference_request_implicit_tool() {
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -3907,11 +3932,11 @@ async fn test_multiple_text_blocks_in_message() {
     assert_eq!(input.messages[0].content.len(), 2);
     assert!(matches!(
         input.messages[0].content[0],
-        StoredInputMessageContent::Text { .. }
+        StoredInputMessageContent::Text(_)
     ));
     assert!(matches!(
         input.messages[0].content[1],
-        StoredInputMessageContent::Text { .. }
+        StoredInputMessageContent::Text(_)
     ));
 }
 

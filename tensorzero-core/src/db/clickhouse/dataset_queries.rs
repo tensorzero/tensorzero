@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use itertools::Itertools;
-use serde_json::json;
 use std::collections::HashMap;
 use std::num::ParseIntError;
 
@@ -384,7 +383,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         params: &CountDatapointsForDatasetFunctionParams,
     ) -> Result<u32, Error> {
         let query = "
-        SELECT toUInt32(count()) as count 
+        SELECT toUInt32(count()) as count
         FROM {table:Identifier}
         WHERE dataset_name = {dataset_name:String}
             AND function_name = {function_name:String}";
@@ -685,79 +684,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
     }
 }
 
-/// Internal helper: Build the JSON value for the insert to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
-/// TODO(shuyangli): Consider restructuring the types so this takes a RawChatDatapointInsert (or something that directly corresponds to the internal ClickHouse structure).
-fn convert_chat_datapoint_to_json_string(
-    chat_datapoint: &ChatInferenceDatapointInsert,
-) -> Result<String, Error> {
-    // tool_params in clickhouse is a non-null String
-    let tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_params {
-        serde_json::to_value(tool_params)?
-    } else {
-        json!("")
-    };
-    // Tags in clickhouse is a Non-null Map(String, String)
-    let tags_value = if let Some(tags) = &chat_datapoint.tags {
-        serde_json::to_value(tags)?
-    } else {
-        json!({})
-    };
-
-    let json_value = json!({
-        "dataset_name": chat_datapoint.dataset_name,
-        "function_name": chat_datapoint.function_name,
-        "id": chat_datapoint.id,
-        "name": chat_datapoint.name,
-        "episode_id": chat_datapoint.episode_id,
-        "input": chat_datapoint.input,
-        "output": chat_datapoint.output,
-        "tool_params": tool_params_value,
-        "tags": tags_value,
-        "auxiliary": chat_datapoint.auxiliary,
-        "source_inference_id": chat_datapoint.source_inference_id,
-        "is_custom": chat_datapoint.is_custom,
-        "staled_at": chat_datapoint.staled_at,
-    });
-    serde_json::to_string(&json_value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize chat datapoint: {e}"),
-        })
-    })
-}
-
-/// Internal helper: Build the JSON value for the insert to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
-/// TODO(shuyangli): Consider restructuring the types so this takes a RawJsonDatapointInsert (or something that directly corresponds to the internal ClickHouse structure).
-fn convert_json_datapoint_to_json_string(
-    json_datapoint: &JsonInferenceDatapointInsert,
-) -> Result<String, Error> {
-    // Tags in clickhouse is a Non-null Map(String, String)
-    let tags_value = if let Some(tags) = &json_datapoint.tags {
-        serde_json::to_value(tags)?
-    } else {
-        json!({})
-    };
-    let json_value = json!({
-        "dataset_name": json_datapoint.dataset_name,
-        "function_name": json_datapoint.function_name,
-        "id": json_datapoint.id,
-        "name": json_datapoint.name,
-        "episode_id": json_datapoint.episode_id,
-        "input": json_datapoint.input,
-        "output": json_datapoint.output,
-        "output_schema": json_datapoint.output_schema,
-        "tags": tags_value,
-        "auxiliary": json_datapoint.auxiliary,
-        "source_inference_id": json_datapoint.source_inference_id,
-        "is_custom": json_datapoint.is_custom,
-        "staled_at": json_datapoint.staled_at,
-    });
-    serde_json::to_string(&json_value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize json datapoint: {e}"),
-        })
-    })
-}
-
 impl ClickHouseConnectionInfo {
     /// Internal helper: Puts chat datapoints into the database
     /// Returns the number of rows written
@@ -772,10 +698,8 @@ impl ClickHouseConnectionInfo {
             validate_dataset_name(&datapoint.dataset_name)?;
         }
 
-        let serialized_datapoints = datapoints
-            .iter()
-            .map(|datapoint| convert_chat_datapoint_to_json_string(datapoint))
-            .collect::<Result<Vec<_>, _>>()?;
+        let serialized_datapoints: Vec<String> =
+            datapoints.iter().map(serde_json::to_string).try_collect()?;
 
         let query = r"
         INSERT INTO ChatInferenceDatapoint
@@ -840,10 +764,8 @@ impl ClickHouseConnectionInfo {
             validate_dataset_name(&datapoint.dataset_name)?;
         }
 
-        let serialized_datapoints = datapoints
-            .iter()
-            .map(|datapoint| convert_json_datapoint_to_json_string(datapoint))
-            .collect::<Result<Vec<_>, _>>()?;
+        let serialized_datapoints: Vec<String> =
+            datapoints.iter().map(serde_json::to_string).try_collect()?;
 
         let query = r"
         INSERT INTO JsonInferenceDatapoint
@@ -1050,6 +972,9 @@ mod tests {
 
     use crate::config::{MetricConfigLevel, MetricConfigType};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::db::clickhouse::query_builder::test_util::{
+        assert_query_contains, assert_query_does_not_contain,
+    };
     use crate::db::clickhouse::query_builder::{
         DatapointFilter, FloatComparisonOperator, TagComparisonOperator, TagFilter,
     };
@@ -1075,30 +1000,6 @@ mod tests {
             limit: None,
             offset: None,
         }
-    }
-
-    /// Normalize whitespace and newlines in a query for comparison
-    fn normalize_whitespace(s: &str) -> String {
-        s.split_whitespace().collect::<Vec<_>>().join(" ")
-    }
-
-    /// Assert that the query contains a section (ignoring whitespace and newline differences)
-    fn assert_query_contains(query: &str, expected_section: &str) {
-        let normalized_query = normalize_whitespace(query);
-        let normalized_section = normalize_whitespace(expected_section);
-        assert!(
-            normalized_query.contains(&normalized_section),
-            "Query does not contain expected section.\nExpected section: {normalized_section}\nFull query: {normalized_query}"
-        );
-    }
-
-    fn assert_query_does_not_contain(query: &str, unexpected_section: &str) {
-        let normalized_query = normalize_whitespace(query);
-        let normalized_section = normalize_whitespace(unexpected_section);
-        assert!(
-            !normalized_query.contains(&normalized_section),
-            "Query contains unexpected section: {normalized_section}\nFull query: {normalized_query}"
-        );
     }
 
     #[test]
@@ -3124,18 +3025,18 @@ mod tests {
                     '' as output_schema,");
                 assert_query_contains(query,
                     "tags,
-                    auxiliary, 
-                    source_inference_id, 
-                    is_deleted, 
-                    is_custom, 
-                    staled_at, 
+                    auxiliary,
+                    source_inference_id,
+                    is_deleted,
+                    is_custom,
+                    staled_at,
                     formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
                 assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL
                     WHERE true
                     AND dataset_name = {dataset_name:String}
                     AND id IN ['123e4567-e89b-12d3-a456-426614174000']
                     AND staled_at IS NULL");
-                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC 
+                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC
                     LIMIT {subquery_page_size:UInt32}");
                 assert_query_contains(query, "UNION ALL");
                 assert_query_contains(query, "

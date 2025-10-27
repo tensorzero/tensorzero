@@ -18,7 +18,7 @@ import type {
 } from "./datasets";
 import { displayInputToStoredInput } from "./common";
 import { getConfig, getFunctionConfig } from "../config/index.server";
-import { resolveInput } from "../resolve.server";
+import { resolveStoredInput } from "../resolve.server";
 
 // TODO(shuyangli): Consider removing this file and fully use DatabaseClient from tensorzero-node/lib.
 
@@ -203,12 +203,7 @@ export async function getAdjacentDatapointIds(
 export async function datapointToParsedDatasetRow(
   datapoint: Datapoint,
 ): Promise<ParsedDatasetRow> {
-  const config = await getConfig();
-  const functionConfig = await getFunctionConfig(
-    datapoint.function_name,
-    config,
-  );
-  const resolvedInput = await resolveInput(datapoint.input, functionConfig);
+  const resolvedInput = await resolveStoredInput(datapoint.input);
 
   if (datapoint.type === "chat") {
     const chatDatapoint: ParsedChatInferenceDatapointRow = {
