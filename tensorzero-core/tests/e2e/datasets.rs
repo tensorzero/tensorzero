@@ -337,7 +337,7 @@ async fn test_create_delete_datapoint_chat() {
         }
 
         // Verify tool_params if present
-        if let Some(tool_params) = &datapoint.tool_params {
+        if let Some(tool_params) = &datapoint.tool_info {
             assert!(is_tool);
             let tools_available = &tool_params.tools_available;
             assert!(!tools_available.is_empty());

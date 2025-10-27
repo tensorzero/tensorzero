@@ -1667,7 +1667,7 @@ mod test {
             serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_function");
         assert_eq!(datapoint.output, None);
-        assert_eq!(datapoint.tool_params, None);
+        assert_eq!(datapoint.tool_info, None);
         assert_eq!(datapoint.tags, None);
         assert_eq!(datapoint.auxiliary, "");
         assert!(!datapoint.is_custom);
@@ -1689,7 +1689,7 @@ mod test {
             serde_json::from_str(json_str).unwrap();
         assert_eq!(datapoint.function_name, "test_function");
         assert!(datapoint.output.is_some());
-        assert!(datapoint.tool_params.is_some());
+        assert!(datapoint.tool_info.is_some());
         assert_eq!(
             datapoint.tags,
             Some(HashMap::from([("source".to_string(), "test".to_string())]))
