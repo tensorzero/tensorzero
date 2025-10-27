@@ -698,16 +698,8 @@ impl ClickHouseConnectionInfo {
             validate_dataset_name(&datapoint.dataset_name)?;
         }
 
-        let serialized_datapoints = datapoints
-            .iter()
-            .map(|datapoint| {
-                serde_json::to_string(datapoint).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!("Failed to serialize chat datapoint: {e}"),
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let serialized_datapoints: Vec<String> =
+            datapoints.iter().map(serde_json::to_string).try_collect()?;
 
         let query = r"
         INSERT INTO ChatInferenceDatapoint
@@ -772,16 +764,8 @@ impl ClickHouseConnectionInfo {
             validate_dataset_name(&datapoint.dataset_name)?;
         }
 
-        let serialized_datapoints = datapoints
-            .iter()
-            .map(|datapoint| {
-                serde_json::to_string(datapoint).map_err(|e| {
-                    Error::new(ErrorDetails::Serialization {
-                        message: format!("Failed to serialize json datapoint: {e}"),
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let serialized_datapoints: Vec<String> =
+            datapoints.iter().map(serde_json::to_string).try_collect()?;
 
         let query = r"
         INSERT INTO JsonInferenceDatapoint
@@ -2126,6 +2110,7 @@ mod tests {
                 "test_tag".to_string(),
                 "test_value".to_string(),
             )])),
+            auxiliary: String::new(),
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
@@ -2212,6 +2197,7 @@ mod tests {
                 "test_tag".to_string(),
                 "test_value".to_string(),
             )])),
+            auxiliary: String::new(),
             staled_at: None,
             source_inference_id: None,
             is_custom: true,
@@ -2342,6 +2328,7 @@ mod tests {
                 })]),
                 tool_params: None,
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
@@ -2361,6 +2348,7 @@ mod tests {
                 })]),
                 tool_params: None,
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
@@ -2380,6 +2368,7 @@ mod tests {
                 })]),
                 tool_params: None,
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
@@ -2505,6 +2494,7 @@ mod tests {
                 }),
                 output_schema: json!({"type": "object"}),
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
@@ -2525,6 +2515,7 @@ mod tests {
                 }),
                 output_schema: json!({"type": "object"}),
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: true,
@@ -2618,6 +2609,7 @@ mod tests {
                 })]),
                 tool_params: None,
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
@@ -2638,6 +2630,7 @@ mod tests {
                 }),
                 output_schema: json!({"type": "object"}),
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
@@ -2657,6 +2650,7 @@ mod tests {
                 })]),
                 tool_params: None,
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
@@ -2677,6 +2671,7 @@ mod tests {
                 }),
                 output_schema: json!({"type": "object"}),
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,
@@ -2742,6 +2737,7 @@ mod tests {
             output: None,
             tool_params: None,
             tags: None,
+            auxiliary: String::new(),
             staled_at: None,
             source_inference_id: None,
             is_custom: false,
@@ -2773,6 +2769,7 @@ mod tests {
                 output: None,
                 output_schema: json!({"type": "object"}),
                 tags: None,
+                auxiliary: String::new(),
                 staled_at: None,
                 source_inference_id: None,
                 is_custom: false,

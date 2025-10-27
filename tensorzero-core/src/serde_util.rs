@@ -829,20 +829,22 @@ mod tests {
         );
     }
 
-    // Tests for serialize_none_as_empty_string
     #[derive(Debug, Serialize, PartialEq)]
     struct TestSerializeNoneAsEmptyString {
         #[serde(serialize_with = "serialize_none_as_empty_string")]
-        field: Option<String>,
+        field: Option<TestStruct>,
     }
 
     #[test]
     fn test_serialize_none_as_empty_string_with_some() {
         let obj = TestSerializeNoneAsEmptyString {
-            field: Some("test".to_string()),
+            field: Some(TestStruct {
+                foo: 1,
+                bar: "test".to_string(),
+            }),
         };
         let json = serde_json::to_string(&obj).unwrap();
-        assert_eq!(json, r#"{"field":"test"}"#);
+        assert_eq!(json, r#"{"field":{"foo":1,"bar":"test"}}"#);
     }
 
     #[test]

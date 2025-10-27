@@ -17,12 +17,12 @@ use crate::serde_util::{
 };
 use crate::tool::ToolCallConfigDatabaseInsert;
 
+/// Datapoint types that are directly serialized and inserted into ClickHouse.
+/// These should be internal-only types but are exposed to tensorzero-node.
 #[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-/// Datapoint types that are directly serialized and inserted into ClickHouse.
-/// These are internal-only types and should never be exposed to clients.
 pub enum DatapointInsert {
     #[serde(rename = "chat")]
     Chat(ChatInferenceDatapointInsert),
@@ -40,12 +40,12 @@ impl DatapointInsert {
     }
 }
 
+/// Type that gets serialized directly to be written to ClickHouse. Serialization should match
+/// the structure of the ChatInferenceDatapoint table in ClickHouse.
+/// Theis should be an internal-only type, but it's exposed to tensorzero-node.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
-/// Type that gets serialized directly to be written to ClickHouse. Serialization should match
-/// the structure of the ChatInferenceDatapoint table in ClickHouse.
-/// This is an internal-only type, and should never be exposed to clients.
 pub struct ChatInferenceDatapointInsert {
     /// Name of the dataset to write to. Required.
     pub dataset_name: String,
@@ -54,12 +54,14 @@ pub struct ChatInferenceDatapointInsert {
     pub function_name: String,
 
     /// Human-readable name of the datapoint. Optional.
+    #[serde(default)]
     pub name: Option<String>,
 
     /// Unique identifier for the datapoint. Required.
     pub id: Uuid,
 
     /// Episode ID that the datapoint belongs to. Optional.
+    #[serde(default)]
     pub episode_id: Option<Uuid>,
 
     /// Input to the function that generated this datapoint. Required.
@@ -67,34 +69,45 @@ pub struct ChatInferenceDatapointInsert {
     pub input: StoredInput,
 
     /// Output of the function that generated this datapoint. Optional.
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_string_or_parsed_json"
+    )]
     pub output: Option<Vec<ContentBlockChatOutput>>,
 
     /// Tool parameters used to generate this datapoint. Optional.
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
-    #[serde(serialize_with = "serialize_none_as_empty_string")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_string_or_parsed_json",
+        serialize_with = "serialize_none_as_empty_string"
+    )]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
 
     /// Tags associated with this datapoint. Optional.
-    #[serde(serialize_with = "serialize_none_as_empty_map")]
+    #[serde(default, serialize_with = "serialize_none_as_empty_map")]
     pub tags: Option<HashMap<String, String>>,
 
+    /// Deprecated, do not use.
+    pub auxiliary: String,
+
     /// Timestamp when the datapoint was marked as stale. Optional.
+    #[serde(default)]
     pub staled_at: Option<String>,
 
     /// Source inference ID that generated this datapoint. Optional.
+    #[serde(default)]
     pub source_inference_id: Option<Uuid>,
 
     /// If true, this datapoint was manually created or edited by the user.
     pub is_custom: bool,
 }
 
+/// Type that gets serialized directly to be written to ClickHouse. Serialization should match
+/// the structure of the JsonInferenceDatapoint table in ClickHouse.
+/// Theis should be an internal-only type, but it's exposed to tensorzero-node.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
-/// Type that gets serialized directly to be written to ClickHouse. Serialization should match
-/// the structure of the JsonInferenceDatapoint table in ClickHouse.
-/// This is an internal-only type, and should never be exposed to clients.
 pub struct JsonInferenceDatapointInsert {
     /// Name of the dataset to write to. Required.
     pub dataset_name: String,
@@ -103,12 +116,14 @@ pub struct JsonInferenceDatapointInsert {
     pub function_name: String,
 
     /// Human-readable name of the datapoint. Optional.
+    #[serde(default)]
     pub name: Option<String>,
 
     /// Unique identifier for the datapoint. Required.
     pub id: Uuid,
 
     /// Episode ID that the datapoint belongs to. Optional.
+    #[serde(default)]
     pub episode_id: Option<Uuid>,
 
     /// Input to the function that generated this datapoint. Required.
@@ -116,7 +131,10 @@ pub struct JsonInferenceDatapointInsert {
     pub input: StoredInput,
 
     /// Output of the function that generated this datapoint. Optional.
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_string_or_parsed_json"
+    )]
     pub output: Option<JsonInferenceOutput>,
 
     /// Schema of the output of the function that generated this datapoint. Required.
@@ -124,13 +142,18 @@ pub struct JsonInferenceDatapointInsert {
     pub output_schema: serde_json::Value,
 
     /// Tags associated with this datapoint. Optional.
-    #[serde(serialize_with = "serialize_none_as_empty_map")]
+    #[serde(default, serialize_with = "serialize_none_as_empty_map")]
     pub tags: Option<HashMap<String, String>>,
 
+    /// Deprecated, do not use.
+    pub auxiliary: String,
+
     /// Timestamp when the datapoint was marked as stale. Optional.
+    #[serde(default)]
     pub staled_at: Option<String>,
 
     /// Source inference ID that generated this datapoint. Optional.
+    #[serde(default)]
     pub source_inference_id: Option<Uuid>,
 
     /// If true, this datapoint was manually created or edited by the user.
