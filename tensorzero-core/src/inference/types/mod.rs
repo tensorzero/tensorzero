@@ -140,7 +140,8 @@ pub use streams::{
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<Value>,
+    #[cfg_attr(test, ts(optional))]
+    pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<InputMessage>,
 }
@@ -416,7 +417,7 @@ impl LazyResolvedInputMessageContent {
     pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
             LazyResolvedInputMessageContent::Text { text } => {
-                ResolvedInputMessageContent::Text { text }
+                ResolvedInputMessageContent::Text(Text { text })
             }
             LazyResolvedInputMessageContent::Template(template) => {
                 ResolvedInputMessageContent::Template(template)
@@ -511,6 +512,14 @@ pub struct InputMessage {
 pub struct TemplateInput {
     pub name: String,
     pub arguments: Map<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[serde(untagged)]
+#[ts(export)]
+pub enum System {
+    Text(String),
+    Template(Map<String, Value>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -910,6 +919,7 @@ enum ContentBlockOutputType {
     Text,
     ToolCall,
     Thought,
+    Unknown,
 }
 
 /// Defines the types of content block that can come out of a model provider
@@ -1466,7 +1476,7 @@ impl From<String> for InputMessageContent {
 #[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        ResolvedInputMessageContent::Text { text }
+        ResolvedInputMessageContent::Text(Text { text })
     }
 }
 
@@ -2091,7 +2101,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{AllowedTools, DynamicToolConfig, ToolChoice, ToolConfig};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2488,6 +2498,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test valid arguments for additional tool
@@ -2611,6 +2622,7 @@ mod tests {
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test allowed tool call

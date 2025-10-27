@@ -18,6 +18,7 @@ import { ContentLayout } from "./components/layout/ContentLayout";
 import { startPeriodicCleanup } from "./utils/evaluations.server";
 import { ReactQueryProvider } from "./providers/react-query";
 import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
+import { TooltipProvider } from "~/components/ui/tooltip";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -73,12 +74,14 @@ export default function App({ loaderData }: Route.ComponentProps) {
       <ReadOnlyProvider value={isReadOnly}>
         <ConfigProvider value={config}>
           <SidebarProvider>
-            <div className="fixed inset-0 flex">
-              <AppSidebar />
-              <ContentLayout>
-                <Outlet />
-              </ContentLayout>
-            </div>
+            <TooltipProvider>
+              <div className="fixed inset-0 flex">
+                <AppSidebar />
+                <ContentLayout>
+                  <Outlet />
+                </ContentLayout>
+              </div>
+            </TooltipProvider>
           </SidebarProvider>
         </ConfigProvider>
       </ReadOnlyProvider>

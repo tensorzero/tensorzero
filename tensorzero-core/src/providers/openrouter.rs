@@ -1351,7 +1351,7 @@ mod tests {
         providers::test_helpers::{
             MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
         },
-        tool::ToolCallConfig,
+        tool::{AllowedTools, ToolCallConfig},
     };
 
     use super::*;
@@ -2105,6 +2105,7 @@ mod tests {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

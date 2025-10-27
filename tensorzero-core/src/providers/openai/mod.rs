@@ -525,6 +525,7 @@ impl InferenceProvider for OpenAIProvider {
                     PROVIDER_TYPE.to_string(),
                     event_source.map_err(TensorZeroEventError::EventSource),
                     start_time,
+                    model_provider.discard_unknown_chunks,
                 )
                 .peekable();
                 Ok((stream, raw_request))
@@ -2659,6 +2660,7 @@ mod tests {
     use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
+    use crate::tool::AllowedTools;
     use crate::tool::ToolCallConfig;
 
     use super::*;
@@ -3411,6 +3413,7 @@ mod tests {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
             provider_tools: None,
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

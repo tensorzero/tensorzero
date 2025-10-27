@@ -9,7 +9,8 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::db::datasets::{
-    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
+    ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
+    JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{
     validate_dataset_name, ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
@@ -92,7 +93,15 @@ async fn update_datapoints(
         .collect();
     let datapoints_vec = app_state
         .clickhouse_connection_info
-        .get_datapoints(dataset_name, &datapoint_ids, false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.to_string()),
+            function_name: None,
+            ids: Some(datapoint_ids),
+            page_size: u32::MAX, // No limit - fetch all matching datapoints
+            offset: 0,
+            allow_stale: false,
+            filter: None, // No filtering when updating datapoints
+        })
         .await?;
 
     // Build a HashMap to construct new DatapointInserts
@@ -620,9 +629,9 @@ mod tests {
                     system: None,
                     messages: vec![crate::inference::types::StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: json!("original input"),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "original input".to_string(),
+                        })],
                     }],
                 },
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -657,9 +666,9 @@ mod tests {
                     system: None,
                     messages: vec![crate::inference::types::StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: json!("original input"),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "original input".to_string(),
+                        })],
                     }],
                 },
                 output: Some(JsonInferenceOutput {
@@ -791,9 +800,8 @@ mod tests {
             // Input should be updated
             assert_eq!(updated.input.messages.len(), 1);
             match &updated.input.messages[0].content[0] {
-                StoredInputMessageContent::Text { value } => {
-                    let text: String = serde_json::from_value(value.clone()).unwrap();
-                    assert_eq!(text, "new input text");
+                StoredInputMessageContent::Text(text) => {
+                    assert_eq!(text.text, "new input text");
                 }
                 _ => panic!("Expected text content"),
             }

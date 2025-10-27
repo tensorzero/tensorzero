@@ -16,6 +16,8 @@ const buttonVariants = cva(
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
           "border border-input text-fg bg-bg hover:bg-bg-hover hover:text-accent-foreground",
+        destructiveOutline:
+          "border border-input text-fg bg-bg hover:bg-red-50 hover:text-red-400 hover:border-red-400",
         secondary: "bg-bg-hover text-secondary-foreground hover:bg-bg-hover/80",
         ghost: "hover:bg-accent text-fg hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
@@ -35,12 +37,12 @@ const buttonVariants = cva(
   },
 );
 
-type Variant = VariantProps<typeof buttonVariants>["variant"];
-type Size = VariantProps<typeof buttonVariants>["size"];
+export type ButtonVariant = VariantProps<typeof buttonVariants>["variant"];
+export type ButtonSize = VariantProps<typeof buttonVariants>["size"];
 
 interface ButtonContextValue {
-  variant: Variant;
-  size: Size;
+  variant: ButtonVariant;
+  size: ButtonSize;
 }
 
 const ButtonContext = React.createContext<ButtonContextValue | null>(null);
