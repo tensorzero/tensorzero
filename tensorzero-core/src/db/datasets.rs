@@ -360,4 +360,17 @@ pub trait DatasetQueries {
 
     /// Gets multiple datapoints with various filters and pagination
     async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error>;
+
+    /// Deletes datapoints or datasets by marking specified datapoints as stale.
+    /// This is a soft deletion, so evaluation runs will still refer to it.
+    ///
+    /// If `datapoint_ids` is empty, all datapoints in the dataset will be deleted.
+    /// Otherwise, only the datapoints with the given IDs will be marked as stale.
+    ///
+    /// Returns the number of datapoints that were deleted.
+    async fn delete_datapoints(
+        &self,
+        dataset_name: &str,
+        datapoint_ids: &[Uuid],
+    ) -> Result<u64, Error>;
 }
