@@ -1,4 +1,5 @@
 use chrono::DateTime;
+use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero::{
     BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
     InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagFilter,
@@ -9,7 +10,7 @@ use uuid::Uuid;
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_json_function() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let order_by = vec![OrderBy {
         term: OrderByTerm::Timestamp,
         direction: OrderDirection::Desc,
@@ -51,7 +52,7 @@ pub async fn test_simple_query_json_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_chat_function() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let order_by = vec![OrderBy {
         term: OrderByTerm::Timestamp,
         direction: OrderDirection::Asc,
@@ -95,7 +96,7 @@ pub async fn test_simple_query_chat_function() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_simple_query_with_float_filter() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
         metric_name: "jaccard_similarity".to_string(),
         value: 0.5,
@@ -127,7 +128,7 @@ pub async fn test_simple_query_with_float_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_demonstration_output_source() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let opts = ListInferencesParams {
         function_name: Some("extract_entities"),
         output_source: InferenceOutputSource::Demonstration,
@@ -149,7 +150,7 @@ pub async fn test_demonstration_output_source() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_boolean_metric_filter() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let filter_node = InferenceFilter::BooleanMetric(BooleanMetricFilter {
         metric_name: "exact_match".to_string(),
         value: true,
@@ -174,7 +175,7 @@ pub async fn test_boolean_metric_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_and_filter_multiple_float_metrics() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let filter_node = InferenceFilter::And {
         children: vec![
             InferenceFilter::FloatMetric(FloatMetricFilter {
@@ -208,7 +209,7 @@ pub async fn test_and_filter_multiple_float_metrics() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_or_filter_mixed_metrics() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let filter_node = InferenceFilter::Or {
         children: vec![
             InferenceFilter::FloatMetric(FloatMetricFilter {
@@ -246,7 +247,7 @@ async fn test_or_filter_mixed_metrics() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_not_filter() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let filter_node = InferenceFilter::Not {
         child: Box::new(InferenceFilter::Or {
             children: vec![
@@ -272,7 +273,7 @@ async fn test_not_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_simple_time_filter() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let filter_node = InferenceFilter::Time(TimeFilter {
         time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
         comparison_operator: TimeComparisonOperator::GreaterThan,
@@ -326,7 +327,7 @@ async fn test_simple_time_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_simple_tag_filter() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let filter_node = InferenceFilter::Tag(TagFilter {
         key: "tensorzero::evaluation_name".to_string(),
         value: "entity_extraction".to_string(),
@@ -354,7 +355,7 @@ async fn test_simple_tag_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_combined_time_and_tag_filter() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
     let filter_node = InferenceFilter::And {
         children: vec![
             InferenceFilter::Time(TimeFilter {
@@ -389,7 +390,7 @@ async fn test_combined_time_and_tag_filter() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_query_by_ids_json_only() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
 
     // First, get some JSON inference IDs
     let opts = ListInferencesParams {
@@ -430,7 +431,7 @@ pub async fn test_query_by_ids_json_only() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_query_by_ids_chat_only() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
 
     // First, get some Chat inference IDs
     let opts = ListInferencesParams {
@@ -470,7 +471,7 @@ pub async fn test_query_by_ids_chat_only() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_query_by_ids_unknown_id_returns_empty() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
 
     // Query by an unknown ID
     let opts = ListInferencesParams {
@@ -484,7 +485,7 @@ pub async fn test_query_by_ids_unknown_id_returns_empty() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_query_by_ids_mixed_types() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
 
     // Get some JSON inference IDs
     let json_opts = ListInferencesParams {
@@ -553,7 +554,7 @@ pub async fn test_query_by_ids_mixed_types() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_query_by_ids_with_order_by_timestamp() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
 
     // Get some mixed inference IDs
     let json_opts = ListInferencesParams {
@@ -621,7 +622,7 @@ pub async fn test_query_by_ids_with_order_by_timestamp() {
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_query_by_ids_with_order_by_metric_errors() {
-    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    let client = make_embedded_gateway().await;
 
     // Get some JSON inference IDs
     let opts = ListInferencesParams {
