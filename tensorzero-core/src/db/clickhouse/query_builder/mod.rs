@@ -574,7 +574,7 @@ FROM
 WHERE
     i.function_name = {p0:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
             value: "extract_entities".to_string(),
@@ -608,7 +608,7 @@ FROM
 WHERE
     i.function_name = {p0:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
             value: "write_haiku".to_string(),
@@ -656,7 +656,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND j0.value > {p2:Float64}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1026,7 +1026,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0) OR COALESCE(j2.value = {p6:Bool}, 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1109,7 +1109,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND NOT (COALESCE((COALESCE(j0.value = {p2:Bool}, 0) OR COALESCE(j0.value = {p3:Bool}, 0)), 1))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
