@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { TimeGranularitySelector } from "./TimeGranularitySelector";
 import {
   ChartContainer,
   ChartLegend,
@@ -27,11 +28,15 @@ export function FeedbackCountsTimeseries({
   variantNames,
   timeGranularity,
   metricName,
+  time_granularity,
+  onTimeGranularityChange,
 }: {
   countsData: FeedbackCountsTimeseriesData[];
   variantNames: string[];
   timeGranularity: TimeWindow;
   metricName: string;
+  time_granularity: TimeWindow;
+  onTimeGranularityChange: (value: TimeWindow) => void;
 }) {
   // Convert date strings to timestamps for proper spacing
   const countsDataWithTimestamps = countsData.map((row) => ({
@@ -61,12 +66,25 @@ export function FeedbackCountsTimeseries({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Cumulative Feedback Counts Over Time</CardTitle>
-        <CardDescription>
-          Cumulative count of feedback samples for metric {metricName} received
-          by each variant over time.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
+        <div className="space-y-1.5">
+          <CardTitle>
+            Cumulative Feedback Count:{" "}
+            <span className="font-mono font-semibold">{metricName}</span>
+          </CardTitle>
+          <CardDescription>
+            This chart displays the cumulative count of feedback samples for
+            metric <span className="font-mono text-xs">{metricName}</span>{" "}
+            received by each variant.
+          </CardDescription>
+        </div>
+        <TimeGranularitySelector
+          time_granularity={time_granularity}
+          onTimeGranularityChange={onTimeGranularityChange}
+          includeCumulative={false}
+          includeMinute={true}
+          includeHour={true}
+        />
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-80 w-full">
@@ -87,7 +105,7 @@ export function FeedbackCountsTimeseries({
               tickMargin={10}
               axisLine={true}
               label={{
-                value: "Feedback Sample Count",
+                value: "Cumulative Feedback Count",
                 angle: -90,
                 position: "insideLeft",
                 style: { textAnchor: "middle" },

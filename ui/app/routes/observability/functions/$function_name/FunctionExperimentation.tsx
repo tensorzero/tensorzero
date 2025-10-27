@@ -10,7 +10,6 @@ import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { memo } from "react";
 import { FeedbackCountsTimeseries } from "~/components/function/variant/FeedbackCountsTimeseries";
 import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackMeansTimeseries";
-import { TimeGranularitySelector } from "~/components/function/variant/TimeGranularitySelector";
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 import { transformFeedbackTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
@@ -121,42 +120,42 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
       : "";
 
   return (
-    <>
-      <ExperimentationPieChart variantWeights={variantWeights} />
+    <Tabs defaultValue="weights" className="w-full">
       {shouldShowTimeseries && (
-        <div className="space-y-4">
-          <TimeGranularitySelector
-            time_granularity={timeGranularity}
-            onTimeGranularityChange={onTimeGranularityChange}
-            includeCumulative={false}
-            includeMinute={true}
-            includeHour={true}
-          />
-          <Tabs defaultValue="means" className="w-full">
-            <TabsList>
-              <TabsTrigger value="means">Mean Feedback Estimates</TabsTrigger>
-              <TabsTrigger value="counts">Feedback Counts</TabsTrigger>
-            </TabsList>
-            <TabsContent value="means">
-              <FeedbackMeansTimeseries
-                meansData={meansData}
-                countsData={countsData}
-                variantNames={variantNames}
-                timeGranularity={timeGranularity}
-                metricName={metricName}
-              />
-            </TabsContent>
-            <TabsContent value="counts">
-              <FeedbackCountsTimeseries
-                countsData={countsData}
-                variantNames={variantNames}
-                timeGranularity={timeGranularity}
-                metricName={metricName}
-              />
-            </TabsContent>
-          </Tabs>
-        </div>
+        <TabsList>
+          <TabsTrigger value="weights">Variant Weights</TabsTrigger>
+          <TabsTrigger value="means">Estimated Performance</TabsTrigger>
+          <TabsTrigger value="counts">Feedback Count</TabsTrigger>
+        </TabsList>
       )}
-    </>
+      <TabsContent value="weights">
+        <ExperimentationPieChart variantWeights={variantWeights} />
+      </TabsContent>
+      {shouldShowTimeseries && (
+        <>
+          <TabsContent value="means">
+            <FeedbackMeansTimeseries
+              meansData={meansData}
+              countsData={countsData}
+              variantNames={variantNames}
+              timeGranularity={timeGranularity}
+              metricName={metricName}
+              time_granularity={timeGranularity}
+              onTimeGranularityChange={onTimeGranularityChange}
+            />
+          </TabsContent>
+          <TabsContent value="counts">
+            <FeedbackCountsTimeseries
+              countsData={countsData}
+              variantNames={variantNames}
+              timeGranularity={timeGranularity}
+              metricName={metricName}
+              time_granularity={timeGranularity}
+              onTimeGranularityChange={onTimeGranularityChange}
+            />
+          </TabsContent>
+        </>
+      )}
+    </Tabs>
   );
 });

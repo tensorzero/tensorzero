@@ -22,6 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { TimeGranularitySelector } from "./TimeGranularitySelector";
 import {
   ChartContainer,
   ChartLegend,
@@ -39,12 +40,16 @@ export function FeedbackMeansTimeseries({
   variantNames,
   timeGranularity,
   metricName,
+  time_granularity,
+  onTimeGranularityChange,
 }: {
   meansData: FeedbackMeansTimeseriesData[];
   countsData: FeedbackCountsTimeseriesData[];
   variantNames: string[];
   timeGranularity: TimeWindow;
   metricName: string;
+  time_granularity: TimeWindow;
+  onTimeGranularityChange: (value: TimeWindow) => void;
 }) {
   const meanDataWithTimestamps: Array<
     FeedbackMeansTimeseriesData & { timestamp: number }
@@ -147,13 +152,26 @@ export function FeedbackMeansTimeseries({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Metrics Over Time</CardTitle>
-        <CardDescription>
-          Experimentation is configured to optimize metric {metricName}. Here we
-          display per-variant mean metric values, with confidence sequences when
-          available.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-4">
+        <div className="space-y-1.5">
+          <CardTitle>
+            Estimated Performance:{" "}
+            <span className="font-mono font-semibold">{metricName}</span>
+          </CardTitle>
+          <CardDescription>
+            This chart displays the estimated performance (expected mean score)
+            of each variant on the metric{" "}
+            <span className="font-mono text-xs">{metricName}</span> at a given
+            moment in time.
+          </CardDescription>
+        </div>
+        <TimeGranularitySelector
+          time_granularity={time_granularity}
+          onTimeGranularityChange={onTimeGranularityChange}
+          includeCumulative={false}
+          includeMinute={true}
+          includeHour={true}
+        />
       </CardHeader>
       <CardContent>
         <ChartContainer config={meanContainerConfig} className="h-80 w-full">
@@ -174,7 +192,7 @@ export function FeedbackMeansTimeseries({
               tickMargin={10}
               axisLine={true}
               label={{
-                value: "Mean Feedback Estimates",
+                value: "Estimated Performance",
                 angle: -90,
                 position: "insideLeft",
                 style: { textAnchor: "middle" },

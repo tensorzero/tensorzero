@@ -82,9 +82,10 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Active Variant Weights</CardTitle>
+        <CardTitle>Variant Weights</CardTitle>
         <CardDescription>
-          Distribution of sampling weights across variants
+          This chart displays the current sampling probabilities for each
+          variant.
         </CardDescription>
       </CardHeader>
       <CardContent>

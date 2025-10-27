@@ -132,9 +132,9 @@ test("should show experimentation section with pie chart for write_haiku functio
   ).toBeVisible();
 
   // Check that the pie chart card is visible
-  await expect(page.getByText("Active Variant Weights")).toBeVisible();
+  await expect(page.getByText("Variant Weights")).toBeVisible();
   await expect(
-    page.getByText("Distribution of sampling weights across variants"),
+    page.getByText("This chart displays the current sampling probabilities"),
   ).toBeVisible();
 
   // Check that all three variants are shown with 33.3% weight
@@ -165,36 +165,29 @@ test("should display feedback timeseries charts for extract_entities function", 
     page.getByRole("heading", { name: "Experimentation" }),
   ).toBeVisible();
 
-  // Check that the Mean Feedback Estimates tab is visible and selected by default
+  // Check that the Mean Estimated Performance tab is visible and selected by default
   await expect(
-    page.getByRole("tab", { name: "Mean Feedback Estimates" }),
+    page.getByRole("tab", { name: "Estimated Performance" }),
   ).toBeVisible();
 
-  // Verify the Mean Feedback Estimates chart is displayed
-  await expect(page.getByText("Metrics Over Time")).toBeVisible();
+  // Verify the Estimated Performance chart is displayed
+  await expect(page.getByText(/Estimated Performance:/)).toBeVisible();
 
   // Check that the metric name appears in the description
-  await expect(
-    page.getByText(/Experimentation is configured to optimize metric/),
-  ).toBeVisible();
   await expect(page.getByText(/jaro_winkler_similarity/)).toBeVisible();
 
   // Verify the chart is rendered
   const charts = page.locator("[data-chart]");
   await expect(charts.first()).toBeVisible();
 
-  // Switch to Feedback Counts tab
-  await page.getByRole("tab", { name: "Feedback Counts" }).click();
+  // Switch to Feedback Count tab
+  await page.getByRole("tab", { name: "Feedback Count" }).click();
 
-  // Verify the Feedback Counts chart is displayed
-  await expect(
-    page.getByText("Cumulative Feedback Counts Over Time"),
-  ).toBeVisible();
+  // Verify the Feedback Count chart is displayed
+  await expect(page.getByText(/Cumulative Feedback Count:/)).toBeVisible();
 
-  // Check that the metric name appears in the counts description
-  await expect(
-    page.getByText(/Cumulative count of feedback samples for metric/),
-  ).toBeVisible();
+  // Check that the metric name appears in the description
+  await expect(page.getByText(/jaro_winkler_similarity/)).toBeVisible();
 
   // Verify the chart is rendered (still checking for chart presence)
   await expect(charts.first()).toBeVisible();
