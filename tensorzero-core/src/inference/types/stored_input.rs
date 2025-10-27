@@ -81,7 +81,7 @@ impl StoredInput {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
     pub role: Role,
     pub content: Vec<StoredInputMessageContent>,
@@ -104,6 +104,12 @@ impl StoredInputMessage {
     }
 }
 
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database:
+///
+/// - {"type": "text", "value": "..."} -> {"type": "text", "text": "..."}
+/// - {"type": "text", "value": { ... }} -> {"type": "template", "name": "role", "arguments": { ... }}
+///
+/// The current type {"type": "text", "text": "..."} moves along as is.
 impl<'de> Deserialize<'de> for StoredInputMessage {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
