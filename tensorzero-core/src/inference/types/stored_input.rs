@@ -109,7 +109,7 @@ impl StoredInputMessage {
 /// - {"type": "text", "value": "..."} -> {"type": "text", "text": "..."}
 /// - {"type": "text", "value": { ... }} -> {"type": "template", "name": "role", "arguments": { ... }}
 ///
-/// The current type {"type": "text", "text": "..."} moves along as is.
+/// The correct type {"type": "text", "text": "..."} goes through without modification.
 impl<'de> Deserialize<'de> for StoredInputMessage {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
