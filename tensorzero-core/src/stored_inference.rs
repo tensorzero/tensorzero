@@ -753,3 +753,321 @@ pub async fn render_stored_sample<T: StoredSample>(
         tags,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::datasets::DatapointInsert;
+    use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
+    use crate::inference::types::System;
+    use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
+    use crate::tool::ToolCallConfigDatabaseInsert;
+
+    /// Helper to create a test StoredChatInference with all fields populated
+    fn create_test_chat_inference() -> StoredChatInference {
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+
+        StoredChatInference {
+            function_name: "test_function".to_string(),
+            variant_name: "test_variant".to_string(),
+            input: StoredInput {
+                system: Some(System::Text("Test system prompt".to_string())),
+                messages: vec![],
+            },
+            output: vec![
+                ContentBlockChatOutput::Text(Text {
+                    text: "Test output 1".to_string(),
+                }),
+                ContentBlockChatOutput::Text(Text {
+                    text: "Test output 2".to_string(),
+                }),
+            ],
+            dispreferred_outputs: vec![],
+            timestamp: DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            episode_id,
+            inference_id,
+            tool_params: ToolCallConfigDatabaseInsert::default(),
+            tags: {
+                let mut tags = HashMap::new();
+                tags.insert("key1".to_string(), "value1".to_string());
+                tags.insert("key2".to_string(), "value2".to_string());
+                tags
+            },
+        }
+    }
+
+    /// Helper to create a test StoredJsonInference with all fields populated
+    fn create_test_json_inference() -> StoredJsonInference {
+        let inference_id = Uuid::now_v7();
+        let episode_id = Uuid::now_v7();
+
+        StoredJsonInference {
+            function_name: "json_function".to_string(),
+            variant_name: "json_variant".to_string(),
+            input: StoredInput {
+                system: Some(System::Text("JSON system prompt".to_string())),
+                messages: vec![],
+            },
+            output: JsonInferenceOutput {
+                raw: Some(r#"{"result": "test"}"#.to_string()),
+                parsed: Some(serde_json::json!({"result": "test"})),
+            },
+            dispreferred_outputs: vec![],
+            timestamp: DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            episode_id,
+            inference_id,
+            output_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "result": {"type": "string"}
+                }
+            }),
+            tags: {
+                let mut tags = HashMap::new();
+                tags.insert("json_key".to_string(), "json_value".to_string());
+                tags
+            },
+        }
+    }
+
+    #[test]
+    fn test_chat_inference_to_datapoint_with_inference_output() {
+        let chat_inference = create_test_chat_inference();
+        let dataset_name = "test_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+
+        let original_inference_id = chat_inference.inference_id;
+        let original_episode_id = chat_inference.episode_id;
+        let original_function_name = chat_inference.function_name.clone();
+        let original_input = chat_inference.input.clone();
+        let original_output = chat_inference.output.clone();
+        let original_tool_params = chat_inference.tool_params.clone();
+        let original_tags = chat_inference.tags.clone();
+
+        let inference = StoredInference::Chat(chat_inference);
+        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+
+        match datapoint {
+            DatapointInsert::Chat(dp) => {
+                assert_eq!(dp.dataset_name, dataset_name);
+                assert_eq!(dp.function_name, original_function_name);
+                assert_eq!(dp.name, None);
+                assert_ne!(dp.id, Uuid::nil());
+                assert_eq!(dp.episode_id, Some(original_episode_id));
+                assert_eq!(dp.input, original_input);
+                assert_eq!(dp.output, Some(original_output));
+                assert_eq!(dp.tool_params, Some(original_tool_params));
+                assert_eq!(dp.tags, Some(original_tags));
+                assert_eq!(dp.staled_at, None);
+                assert_eq!(dp.source_inference_id, Some(original_inference_id));
+                assert!(!dp.is_custom);
+            }
+            DatapointInsert::Json(_) => panic!("Expected Chat datapoint, got Json"),
+        }
+    }
+
+    #[test]
+    fn test_chat_inference_to_datapoint_with_none_output() {
+        let chat_inference = create_test_chat_inference();
+        let dataset_name = "test_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::None;
+
+        let inference = StoredInference::Chat(chat_inference);
+        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+
+        match datapoint {
+            DatapointInsert::Chat(dp) => {
+                // When output_source is None, output should be None
+                assert_eq!(dp.output, None);
+
+                // All other fields should still be preserved correctly
+                assert_eq!(dp.dataset_name, dataset_name);
+                assert!(!dp.is_custom);
+            }
+            DatapointInsert::Json(_) => panic!("Expected Chat datapoint, got Json"),
+        }
+    }
+
+    #[test]
+    fn test_chat_inference_to_datapoint_with_demonstration_output() {
+        let chat_inference = create_test_chat_inference();
+        let dataset_name = "test_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::Demonstration;
+
+        let original_output = chat_inference.output.clone();
+        let inference = StoredInference::Chat(chat_inference);
+        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+
+        match datapoint {
+            DatapointInsert::Chat(dp) => {
+                // Demonstration output is joined during the query; we just make sure it's present.
+                assert_eq!(dp.output, Some(original_output));
+            }
+            DatapointInsert::Json(_) => panic!("Expected Chat datapoint, got Json"),
+        }
+    }
+
+    #[test]
+    fn test_json_inference_to_datapoint_with_inference_output() {
+        let json_inference = create_test_json_inference();
+        let dataset_name = "json_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+
+        let original_inference_id = json_inference.inference_id;
+        let original_episode_id = json_inference.episode_id;
+        let original_function_name = json_inference.function_name.clone();
+        let original_input = json_inference.input.clone();
+        let original_output = json_inference.output.clone();
+        let original_output_schema = json_inference.output_schema.clone();
+        let original_tags = json_inference.tags.clone();
+
+        let inference = StoredInference::Json(json_inference);
+        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+
+        match datapoint {
+            DatapointInsert::Json(dp) => {
+                assert_eq!(dp.dataset_name, dataset_name);
+                assert_eq!(dp.function_name, original_function_name);
+                assert_eq!(dp.name, None);
+                assert_ne!(dp.id, Uuid::nil());
+                assert_eq!(dp.episode_id, Some(original_episode_id));
+                assert_eq!(dp.input, original_input);
+                assert_eq!(dp.output, Some(original_output));
+                assert_eq!(dp.output_schema, original_output_schema);
+                assert_eq!(dp.tags, Some(original_tags));
+                assert_eq!(dp.staled_at, None);
+                assert_eq!(dp.source_inference_id, Some(original_inference_id));
+                assert!(!dp.is_custom);
+            }
+            DatapointInsert::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+        }
+    }
+
+    #[test]
+    fn test_json_inference_to_datapoint_with_none_output() {
+        let json_inference = create_test_json_inference();
+        let dataset_name = "json_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::None;
+
+        let inference = StoredInference::Json(json_inference);
+        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+
+        match datapoint {
+            DatapointInsert::Json(dp) => {
+                // When output_source is None, output should be None
+                assert_eq!(dp.output, None);
+
+                // All other fields should still be preserved correctly
+                assert_eq!(dp.dataset_name, dataset_name);
+                assert!(!dp.is_custom);
+            }
+            DatapointInsert::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+        }
+    }
+
+    #[test]
+    fn test_json_inference_to_datapoint_with_demonstration_output() {
+        let json_inference = create_test_json_inference();
+        let dataset_name = "json_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::Demonstration;
+
+        let original_output = json_inference.output.clone();
+        let inference = StoredInference::Json(json_inference);
+        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+
+        match datapoint {
+            DatapointInsert::Json(dp) => {
+                // Demonstration output is joined during the query; we just make sure it's present.
+                assert_eq!(dp.output, Some(original_output));
+            }
+            DatapointInsert::Chat(_) => panic!("Expected Json datapoint, got Chat"),
+        }
+    }
+
+    #[test]
+    fn test_new_datapoint_id_is_generated_for_each_conversion() {
+        let chat_inference = create_test_chat_inference();
+        let dataset_name = "test_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+
+        // Convert the same inference twice
+        let inference1 = StoredInference::Chat(chat_inference.clone());
+        let inference2 = StoredInference::Chat(chat_inference);
+        let datapoint1 = inference1.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint2 = inference2.into_datapoint_insert(dataset_name, &output_source);
+
+        // Extract IDs
+        let id1 = match datapoint1 {
+            DatapointInsert::Chat(dp) => dp.id,
+            DatapointInsert::Json(_) => panic!("Expected Chat"),
+        };
+
+        let id2 = match datapoint2 {
+            DatapointInsert::Chat(dp) => dp.id,
+            DatapointInsert::Json(_) => panic!("Expected Chat"),
+        };
+
+        // IDs should be different (each conversion generates a new UUID)
+        assert_ne!(
+            id1, id2,
+            "Datapoint IDs should be unique for each conversion"
+        );
+    }
+
+    #[test]
+    fn test_chat_inference_with_empty_tags() {
+        let mut chat_inference = create_test_chat_inference();
+        chat_inference.tags = HashMap::new();
+
+        let dataset_name = "test_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+
+        let inference = StoredInference::Chat(chat_inference);
+        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+
+        match datapoint {
+            DatapointInsert::Chat(dp) => {
+                // Empty HashMap should be converted to Some(empty HashMap)
+                assert_eq!(dp.tags, Some(HashMap::new()));
+            }
+            DatapointInsert::Json(_) => panic!("Expected Chat datapoint"),
+        }
+    }
+
+    #[test]
+    fn test_json_inference_with_empty_tags() {
+        let mut json_inference = create_test_json_inference();
+        json_inference.tags = HashMap::new();
+
+        let dataset_name = "test_dataset";
+        let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+
+        let inference = StoredInference::Json(json_inference);
+        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+
+        match datapoint {
+            DatapointInsert::Json(dp) => {
+                // Empty HashMap should be converted to Some(empty HashMap)
+                assert_eq!(dp.tags, Some(HashMap::new()));
+            }
+            DatapointInsert::Chat(_) => panic!("Expected Json datapoint"),
+        }
+    }
+
+    #[test]
+    fn test_stored_inference_id() {
+        let chat_inference = create_test_chat_inference();
+        let json_inference = create_test_json_inference();
+
+        let chat_id = StoredInference::Chat(chat_inference.clone()).id();
+        let json_id = StoredInference::Json(json_inference.clone()).id();
+
+        assert_eq!(chat_id, chat_inference.inference_id);
+        assert_eq!(json_id, json_inference.inference_id);
+    }
+}
