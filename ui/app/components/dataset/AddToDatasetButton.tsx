@@ -14,6 +14,12 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { ToastAction } from "~/components/ui/toast";
 import { useReadOnly } from "~/context/read-only";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 
 export interface AddToDatasetButtonProps {
   // Required fields for creating a datapoint
@@ -95,24 +101,41 @@ export function AddToDatasetButton({
     setOutputDialogOpen(false);
   };
 
+  const datasetSelector = (
+    <DatasetSelector
+      selected={selectedDataset}
+      onSelect={(dataset) => {
+        setSelectedDataset(dataset);
+        if (alwaysUseInherit) {
+          handleDatasetAction(dataset, "inherit");
+        } else {
+          setOutputDialogOpen(true);
+        }
+      }}
+      placeholder="Add to dataset"
+      buttonProps={{
+        size: "sm",
+      }}
+      disabled={isReadOnly}
+    />
+  );
+
   return (
     <>
-      <DatasetSelector
-        selected={selectedDataset}
-        onSelect={(dataset) => {
-          setSelectedDataset(dataset);
-          if (alwaysUseInherit) {
-            handleDatasetAction(dataset, "inherit");
-          } else {
-            setOutputDialogOpen(true);
-          }
-        }}
-        placeholder="Add to dataset"
-        buttonProps={{
-          size: "sm",
-        }}
-        disabled={isReadOnly}
-      />
+      {isReadOnly ? (
+        <TooltipProvider>
+          <Tooltip delayDuration={100}>
+            <TooltipTrigger asChild>
+              <span className="inline-block">{datasetSelector}</span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>This feature is not available in read-only mode</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        datasetSelector
+      )}
 
       <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>
         <AlertDialogContent className="min-w-[600px]">
