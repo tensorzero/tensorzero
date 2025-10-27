@@ -1013,6 +1013,36 @@ impl From<ToolConfig> for ClientSideFunctionTool {
     }
 }
 
+impl From<ToolCallConfigDatabaseInsert> for DynamicToolParams {
+    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
+        let additional_tools = if db_insert.dynamic_tools.is_empty() {
+            None
+        } else {
+            Some(
+                db_insert
+                    .dynamic_tools
+                    .into_iter()
+                    .map(|tool| match tool {
+                        Tool::ClientSideFunction(client_side_tool) => client_side_tool,
+                    })
+                    .collect(),
+            )
+        };
+
+        DynamicToolParams {
+            allowed_tools: db_insert.allowed_tools.into_dynamic_allowed_tools(),
+            additional_tools,
+            tool_choice: Some(db_insert.tool_choice),
+            parallel_tool_calls: db_insert.parallel_tool_calls,
+            provider_tools: if db_insert.dynamic_provider_tools.is_empty() {
+                None
+            } else {
+                Some(db_insert.dynamic_provider_tools)
+            },
+        }
+    }
+}
+
 pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
     let tool_schema = DynamicJSONSchema::new(schema);
     let implicit_tool = ToolConfig::DynamicImplicit(DynamicImplicitToolConfig {

@@ -336,14 +336,19 @@ pub struct OpenAISupervisedRow<'a> {
 }
 
 impl<'a> OpenAISupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
+    pub async fn from_rendered_sample(
+        inference: &'a LazyRenderedSample,
+        config: &'a Config,
+    ) -> Result<Self, Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
-            Some(tool_params) => {
-                (
-                    tool_params.parallel_tool_calls.unwrap_or_default(),
-                    tool_params.tools_available(&inference.function_name, config)?.into_iter().map(Into::into).collect(),
-                )
-            }
+            Some(tool_params) => (
+                tool_params.parallel_tool_calls.unwrap_or_default(),
+                tool_params
+                    .tools_available(&inference.function_name, config)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
             None => (false, vec![]),
         };
         let mut messages = prepare_openai_messages(
@@ -412,14 +417,19 @@ pub struct OpenAIReinforcementRow<'a> {
 }
 
 impl<'a> OpenAIReinforcementRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
+    pub async fn from_rendered_sample(
+        inference: &'a LazyRenderedSample,
+        config: &'a Config,
+    ) -> Result<Self, Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
-            Some(tool_params) => {
-                (
-                    tool_params.parallel_tool_calls.unwrap_or_default(),
-                    tool_params.tools_available(&inference.function_name, config)?.into_iter().map(Into::into).collect(),
-                )
-            }
+            Some(tool_params) => (
+                tool_params.parallel_tool_calls.unwrap_or_default(),
+                tool_params
+                    .tools_available(&inference.function_name, config)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+            ),
             None => (false, vec![]),
         };
         let messages = prepare_openai_messages(

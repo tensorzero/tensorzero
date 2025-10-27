@@ -103,7 +103,8 @@ impl<'a> FireworksSupervisedRow<'a> {
         }
 
         // Collect owned tools and convert to FireworksTool (which owns its data)
-        let tools: Vec<_> = inference.tool_params
+        let tools: Vec<_> = inference
+            .tool_params
             .as_ref()
             .map(|tp| tp.tools_available(&inference.function_name, config))
             .transpose()?

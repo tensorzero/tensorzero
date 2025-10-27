@@ -208,7 +208,10 @@ pub struct TogetherSupervisedRow<'a> {
 }
 
 impl<'a> TogetherSupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
+    pub async fn from_rendered_sample(
+        inference: &'a LazyRenderedSample,
+        config: &'a Config,
+    ) -> Result<Self, Error> {
         let tools = match &inference.tool_params {
             Some(tool_params) => {
                 if tool_params.parallel_tool_calls.unwrap_or_default() {
@@ -216,7 +219,11 @@ impl<'a> TogetherSupervisedRow<'a> {
                         message: "Parallel tool calls are not supported for Together".to_string(),
                     }));
                 }
-                tool_params.tools_available(&inference.function_name, config)?.into_iter().map(Into::into).collect()
+                tool_params
+                    .tools_available(&inference.function_name, config)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect()
             }
             None => vec![],
         };

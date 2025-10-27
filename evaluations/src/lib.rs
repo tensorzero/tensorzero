@@ -7,7 +7,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
-use helpers::{get_cache_options, get_tool_params_args};
+use helpers::get_cache_options;
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::{
@@ -571,7 +571,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => {
             debug!("Tool parameters found, processing");
-            get_tool_params_args(tool_params, function_config).await
+            tool_params.clone().into()
         }
         None => {
             debug!("No tool parameters found");

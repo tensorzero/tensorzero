@@ -475,7 +475,8 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
         }
         // Check if tools_available contains actual tools
         if let Some(tool_info) = &example.tool_info {
-            let has_tools = !tool_info.dynamic_tools.is_empty() || !tool_info.allowed_tools.tools.is_empty();
+            let has_tools =
+                !tool_info.dynamic_tools.is_empty() || !tool_info.allowed_tools.tools.is_empty();
             if has_tools {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(

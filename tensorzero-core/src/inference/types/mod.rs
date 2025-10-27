@@ -57,9 +57,7 @@ use crate::rate_limiting::{
     get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
     RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
 };
-use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string,
-};
+use crate::serde_util::{deserialize_defaulted_json_string, deserialize_json_string};
 use crate::tool::ToolCallInput;
 use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
 use derive_builder::Builder;

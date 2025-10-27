@@ -12,7 +12,6 @@ use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointsParams,
     JsonInferenceDatapointInsert,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::endpoints::datasets::{
     validate_dataset_name, ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
     CLICKHOUSE_DATETIME_FORMAT,
@@ -22,6 +21,7 @@ use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input, JsonInferenceOutput};
 use crate::jsonschema_util::StaticJSONSchema;
+use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -966,7 +966,10 @@ mod tests {
                 panic!("Expected Chat insert");
             };
 
-            assert_eq!(updated.tool_info.as_ref().unwrap().tool_choice, ToolChoice::None);
+            assert_eq!(
+                updated.tool_info.as_ref().unwrap().tool_choice,
+                ToolChoice::None
+            );
         }
 
         #[tokio::test]

@@ -1722,7 +1722,9 @@ impl From<Tool> for GCPVertexGeminiSFTTool {
                 };
 
                 GCPVertexGeminiSFTTool {
-                    tool: GCPVertexGeminiSFTToolEnum::FunctionDeclarations(vec![function_declaration]),
+                    tool: GCPVertexGeminiSFTToolEnum::FunctionDeclarations(vec![
+                        function_declaration,
+                    ]),
                 }
             }
         }

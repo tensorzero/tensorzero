@@ -54,11 +54,16 @@ pub struct GCPVertexGeminiFineTuningRequest {
 }
 
 impl<'a> GCPVertexGeminiSupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
+    pub async fn from_rendered_sample(
+        inference: &'a LazyRenderedSample,
+        config: &'a Config,
+    ) -> Result<Self, Error> {
         let tools = match &inference.tool_params {
-            Some(tool_params) => {
-                tool_params.tools_available(&inference.function_name, config)?.into_iter().map(Into::into).collect()
-            }
+            Some(tool_params) => tool_params
+                .tools_available(&inference.function_name, config)?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             None => vec![],
         };
         let mut contents = prepare_gcp_vertex_gemini_messages(&inference.messages).await?;
