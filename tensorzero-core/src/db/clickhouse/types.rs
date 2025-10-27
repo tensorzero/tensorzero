@@ -10,7 +10,7 @@ use crate::{
     error::{Error, ErrorDetails},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
     serde_util::{deserialize_defaulted_string_or_parsed_json, deserialize_string_or_parsed_json},
-    tool::ToolCallConfigDatabaseInsert,
+    tool::{deserialize_optional_tool_info, deserialize_tool_info, ToolCallConfigDatabaseInsert},
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
 #[cfg(feature = "pyo3")]
@@ -207,7 +207,7 @@ pub struct StoredChatInference {
     pub output: Vec<ContentBlockChatOutput>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(deserialize_with = "deserialize_defaulted_string_or_parsed_json")]
+    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
 }
 

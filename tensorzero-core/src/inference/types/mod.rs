@@ -91,6 +91,7 @@ use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
 use crate::function::FunctionConfigType;
+use crate::tool::deserialize_optional_tool_info;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{cache::CacheData, config::ObjectStoreInfo};
@@ -1393,7 +1394,7 @@ pub struct ChatInferenceDatabaseInsert {
     pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
-    #[serde(flatten)]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,

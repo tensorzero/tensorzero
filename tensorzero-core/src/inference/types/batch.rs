@@ -6,7 +6,7 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     jsonschema_util::DynamicJSONSchema,
-    tool::{ToolCallConfig, ToolCallConfigDatabaseInsert},
+    tool::{deserialize_optional_tool_info, ToolCallConfig, ToolCallConfigDatabaseInsert},
     utils::uuid::validate_tensorzero_uuid,
 };
 
@@ -205,7 +205,7 @@ pub struct BatchModelInferenceRow<'a> {
     pub input_messages: Vec<StoredRequestMessage>,
     pub system: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(flatten)]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: Cow<'a, InferenceParams>,

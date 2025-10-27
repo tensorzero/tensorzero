@@ -32,7 +32,7 @@ use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
-    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
+    tool::{deserialize_optional_tool_info, DynamicToolParams, ToolCallConfigDatabaseInsert},
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
 };
@@ -1293,8 +1293,7 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(flatten)]
-    // TODO (Viraj, in this PR): test ragged deserialization of this struct's fields
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_info: Option<ToolCallConfigDatabaseInsert>,
 
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
@@ -1520,7 +1519,7 @@ pub struct UpdateChatInferenceDatapointRequest {
     #[serde(deserialize_with = "deserialize_optional_json_value")]
     pub output: Option<serde_json::Value>,
     #[serde(default)]
-    #[serde(flatten)]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,

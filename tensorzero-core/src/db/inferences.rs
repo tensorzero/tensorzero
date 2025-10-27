@@ -16,7 +16,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
 use crate::serde_util::deserialize_json_string;
 use crate::stored_inference::{StoredChatInference, StoredInference, StoredJsonInference};
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::{deserialize_optional_tool_info, ToolCallConfigDatabaseInsert};
 
 #[derive(Debug, Deserialize)]
 pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
@@ -31,8 +31,8 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<String>,
-    #[serde(flatten)]
-    pub tool_info: ToolCallConfigDatabaseInsert,
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     pub tags: HashMap<String, String>,
 }
 

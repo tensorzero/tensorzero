@@ -14,7 +14,7 @@ use tensorzero_core::inference::types::stored_input::{
 use tensorzero_core::inference::types::{ResolvedContentBlock, ResolvedRequestMessage};
 use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text},
-    tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
+    tool::{AllowedTools, ClientSideFunctionTool, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };
 use tracing_test::traced_test;
 use uuid::Uuid;
@@ -55,7 +55,7 @@ pub async fn test_render_samples_no_function() {
         output: vec![],
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_params: ToolCallConfigDatabaseInsert::default(),
+        tool_info: ToolCallConfigDatabaseInsert::default(),
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::from([("test_key".to_string(), "test_value".to_string())]),
@@ -91,7 +91,7 @@ pub async fn test_render_samples_no_variant() {
         output: vec![],
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_params: ToolCallConfigDatabaseInsert::default(),
+        tool_info: ToolCallConfigDatabaseInsert::default(),
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
@@ -135,7 +135,7 @@ pub async fn test_render_samples_missing_variable() {
         output: vec![],
         episode_id: Uuid::now_v7(),
         inference_id: Uuid::now_v7(),
-        tool_params: ToolCallConfigDatabaseInsert::default(),
+        tool_info: ToolCallConfigDatabaseInsert::default(),
         timestamp: Utc::now(),
         dispreferred_outputs: vec![],
         tags: HashMap::new(),
@@ -174,7 +174,7 @@ pub async fn test_render_samples_normal() {
             output: vec![],
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_params: ToolCallConfigDatabaseInsert::default(),
+            tool_info: ToolCallConfigDatabaseInsert::default(),
             timestamp: Utc::now(),
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -226,16 +226,18 @@ pub async fn test_render_samples_normal() {
             })],
             episode_id: Uuid::now_v7(),
             inference_id: Uuid::now_v7(),
-            tool_params: ToolCallConfigDatabaseInsert {
-                tools_available: vec![Tool {
+            tool_info: ToolCallConfigDatabaseInsert::new_for_test(
+                vec![Tool::ClientSideFunction(ClientSideFunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
                     parameters: json!({}), // Don't need to validate the arguments so we can leave blank
                     strict: false,
-                }],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-            },
+                })],
+                vec![],
+                AllowedTools::default(),
+                ToolChoice::Auto,
+                None,
+            ),
             timestamp: Utc::now(),
             dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
                 text: "Hello, world!".to_string(),

@@ -45,7 +45,7 @@ pub struct SimpleStoredSampleInfo {
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub stored_output: Option<StoredOutput>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
-    pub tool_info: ToolCallConfigDatabaseInsert,
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -85,7 +85,11 @@ impl StoredInference {
         episode_id: Bound<'py, PyAny>,
         inference_id: Bound<'py, PyAny>,
         dispreferred_outputs: Option<Bound<'py, PyAny>>,
-        tool_params: Option<Bound<'py, PyAny>>,
+        dynamic_tools: Option<Bound<'py, PyAny>>,
+        dynamic_provider_tools: Option<Bound<'py, PyAny>>,
+        allowed_tools: Option<Bound<'py, PyAny>>,
+        tool_choice: Option<Bound<'py, PyAny>>,
+        parallel_tool_calls: Option<bool>,
         output_schema: Option<Bound<'py, PyAny>>,
         tags: Option<Bound<'py, PyAny>>,
         timestamp: Bound<'py, PyAny>,
@@ -106,12 +110,14 @@ impl StoredInference {
                     dispreferred_outputs
                         .map(|x| deserialize_from_pyobj(py, &x))
                         .transpose()?;
-                let Some(tool_params) = tool_params.map(|x| deserialize_from_pyobj(py, &x)) else {
-                    return Err(PyValueError::new_err(
-                        "tool_params is required for chat inferences",
-                    ));
-                };
-                let tool_params: ToolCallConfigDatabaseInsert = tool_params?;
+                let tool_info = ToolCallConfigDatabaseInsert::new_from_python(
+                    py,
+                    dynamic_tools,
+                    dynamic_provider_tools,
+                    allowed_tools,
+                    tool_choice,
+                    parallel_tool_calls,
+                )?;
                 Ok(Self::Chat(StoredChatInference {
                     function_name,
                     variant_name,
@@ -120,7 +126,7 @@ impl StoredInference {
                     dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
                     episode_id,
                     inference_id,
-                    tool_info: tool_params,
+                    tool_info,
                     tags,
                     timestamp,
                 }))
@@ -291,8 +297,11 @@ pub struct StoredChatInference {
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(flatten)]
-    pub tool_info: ToolCallConfigDatabaseInsert,
+    #[serde(
+        flatten,
+        deserialize_with = "crate::tool::deserialize_optional_tool_info"
+    )]
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(default)]
     pub tags: HashMap<String, String>,
 }
@@ -401,7 +410,7 @@ impl StoredSample for StoredInference {
                     output: Some(output),
                     stored_output: Some(StoredOutput::Json(example.output)),
                     dispreferred_outputs,
-                    tool_info: ToolCallConfigDatabaseInsert::default(),
+                    tool_info: None,
                     output_schema: Some(example.output_schema),
                     tags: example.tags,
                 }
@@ -443,7 +452,11 @@ pub struct RenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_info: ToolCallConfigDatabaseInsert,
+    #[serde(
+        flatten,
+        deserialize_with = "crate::tool::deserialize_optional_tool_info"
+    )]
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -484,7 +497,7 @@ pub struct LazyRenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_params: ToolCallConfigDatabaseInsert,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -548,7 +561,7 @@ impl RenderedSample {
     }
 
     #[getter]
-    pub fn get_tool_params(&self) -> ToolCallConfigDatabaseInsert {
+    pub fn get_tool_params(&self) -> Option<ToolCallConfigDatabaseInsert> {
         self.tool_info.clone()
     }
 

@@ -14,7 +14,7 @@ use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Store
 use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::{deserialize_optional_tool_info, ToolCallConfigDatabaseInsert};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -52,7 +52,7 @@ pub struct ChatInferenceDatapointInsert {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(flatten)]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,

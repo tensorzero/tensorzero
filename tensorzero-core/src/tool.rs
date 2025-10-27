@@ -464,73 +464,79 @@ pub struct ToolCallConfigDatabaseInsert {
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     // We write this in case any legacy code reads the database; it should not be read in new code
+    #[serde(default)]
     tool_config: LegacyToolCallConfigDatabaseInsert,
 }
 
-/// Custom Deserialize implementation for ToolCallConfigDatabaseInsert that handles three formats:
+/// Custom deserializer implementation for ToolCallConfigDatabaseInsert that handles three formats:
 /// 1. Full format: Contains all fields (dynamic_tools, dynamic_provider_tools, allowed_tools, etc.)
 /// 2. Legacy format: Contains only tool_config field (for backwards compatibility)
-/// 3. Missing/Empty: Returns the default value
+/// 3. Missing/Empty: Returns None
 ///
 /// This allows ToolCallConfigDatabaseInsert to be used as a non-optional field with #[serde(default)]
-impl<'de> Deserialize<'de> for ToolCallConfigDatabaseInsert {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum Helper {
-            Full {
-                dynamic_tools: Vec<Tool>,
-                dynamic_provider_tools: Vec<ProviderTool>,
-                allowed_tools: AllowedTools,
-                tool_choice: ToolChoice,
-                parallel_tool_calls: Option<bool>,
-                tool_config: LegacyToolCallConfigDatabaseInsert,
-            },
-            Legacy {
-                tool_config: LegacyToolCallConfigDatabaseInsert,
-            },
-            Empty,
-        }
-
-        let helper = Helper::deserialize(deserializer)?;
-
-        match helper {
-            Helper::Full {
-                dynamic_tools,
-                dynamic_provider_tools,
-                allowed_tools,
-                tool_choice,
-                parallel_tool_calls,
-                tool_config,
-            } => Ok(ToolCallConfigDatabaseInsert {
-                dynamic_tools,
-                dynamic_provider_tools,
-                allowed_tools,
-                tool_choice,
-                parallel_tool_calls,
-                tool_config,
-            }),
-            Helper::Legacy { tool_config } => {
-                // Here we translate the legacy format to the current format for backcompat.
-                // We'll use the existing function tools for tools available (can't recover dynamic tools from historical data)
-                Ok(ToolCallConfigDatabaseInsert {
-                    dynamic_tools: Vec::new(),
-                    dynamic_provider_tools: Vec::new(),
-                    allowed_tools: AllowedTools {
-                        tools: Vec::new(),
-                        choice: AllowedToolsChoice::FunctionDefault,
-                    },
-                    tool_choice: tool_config.tool_choice.clone(),
-                    parallel_tool_calls: tool_config.parallel_tool_calls,
-                    tool_config,
-                })
-            }
-            Helper::Empty => Ok(ToolCallConfigDatabaseInsert::default()),
-        }
+pub fn deserialize_optional_tool_info<'de, D>(
+    deserializer: D,
+) -> Result<Option<ToolCallConfigDatabaseInsert>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Helper {
+        Full {
+            dynamic_tools: Vec<Tool>,
+            dynamic_provider_tools: Vec<ProviderTool>,
+            allowed_tools: AllowedTools,
+            tool_choice: ToolChoice,
+            parallel_tool_calls: Option<bool>,
+            tool_config: LegacyToolCallConfigDatabaseInsert,
+        },
+        Legacy {
+            tool_config: LegacyToolCallConfigDatabaseInsert,
+        },
+        Empty {},
     }
+
+    let helper = Helper::deserialize(deserializer)?;
+
+    match helper {
+        Helper::Full {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            tool_config,
+        } => Ok(Some(ToolCallConfigDatabaseInsert {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            tool_config,
+        })),
+
+        Helper::Legacy { tool_config } => Ok(Some(ToolCallConfigDatabaseInsert {
+            dynamic_tools: vec![],
+            dynamic_provider_tools: vec![],
+            allowed_tools: AllowedTools::default(),
+            tool_choice: tool_config.tool_choice.clone(),
+            parallel_tool_calls: tool_config.parallel_tool_calls,
+            tool_config,
+        })),
+
+        Helper::Empty {} => Ok(None),
+    }
+}
+
+/// Non-optional deserializer that uses the optional deserializer and defaults to empty if None
+pub fn deserialize_tool_info<'de, D>(
+    deserializer: D,
+) -> Result<ToolCallConfigDatabaseInsert, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_optional_tool_info(deserializer).map(|opt| opt.unwrap_or_default())
 }
 
 impl std::fmt::Display for ToolCallConfigDatabaseInsert {
@@ -599,6 +605,70 @@ impl ToolCallConfigDatabaseInsert {
             parallel_tool_calls,
             tool_config,
         }
+    }
+
+    #[cfg(feature = "pyo3")]
+    pub fn new_from_python<'py>(
+        py: Python<'py>,
+        dynamic_tools: Option<Bound<'py, PyAny>>,
+        dynamic_provider_tools: Option<Bound<'py, PyAny>>,
+        allowed_tools: Option<Bound<'py, PyAny>>,
+        tool_choice: Option<Bound<'py, PyAny>>,
+        parallel_tool_calls: Option<bool>,
+    ) -> PyResult<Option<Self>> {
+        use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
+
+        // If all inputs are None, return None
+        if dynamic_tools.is_none()
+            && dynamic_provider_tools.is_none()
+            && allowed_tools.is_none()
+            && tool_choice.is_none()
+            && parallel_tool_calls.is_none()
+        {
+            return Ok(None);
+        }
+
+        // Deserialize each field with defaults
+        let dynamic_tools: Vec<Tool> = dynamic_tools
+            .map(|x| deserialize_from_pyobj(py, &x))
+            .transpose()?
+            .unwrap_or_default();
+
+        let dynamic_provider_tools: Vec<ProviderTool> = dynamic_provider_tools
+            .map(|x| deserialize_from_pyobj(py, &x))
+            .transpose()?
+            .unwrap_or_default();
+
+        let allowed_tools: AllowedTools = allowed_tools
+            .map(|x| deserialize_from_pyobj(py, &x))
+            .transpose()?
+            .unwrap_or_default();
+
+        let tool_choice: ToolChoice = tool_choice
+            .map(|x| deserialize_from_pyobj(py, &x))
+            .transpose()?
+            .unwrap_or_default();
+
+        // Construct legacy tool_config for backwards compatibility
+        let tool_config = LegacyToolCallConfigDatabaseInsert {
+            tools_available: dynamic_tools
+                .iter()
+                .map(|t| match t {
+                    Tool::ClientSideFunction(csf) => csf.clone(),
+                })
+                .collect(),
+            tool_choice: tool_choice.clone(),
+            parallel_tool_calls,
+        };
+
+        Ok(Some(Self {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            tool_config,
+        }))
     }
 
     /// TODO: document extensively
@@ -2071,7 +2141,10 @@ mod tests {
         assert_eq!(result.dynamic_tools[0].name(), "test_tool");
         assert_eq!(result.dynamic_provider_tools.len(), 1);
         assert_eq!(result.allowed_tools.tools, vec!["test_tool"]);
-        assert_eq!(result.allowed_tools.choice, AllowedToolsChoice::DynamicAllowedTools);
+        assert_eq!(
+            result.allowed_tools.choice,
+            AllowedToolsChoice::DynamicAllowedTools
+        );
         assert_eq!(result.tool_choice, ToolChoice::Auto);
         assert_eq!(result.parallel_tool_calls, Some(true));
     }
@@ -2100,7 +2173,10 @@ mod tests {
         assert_eq!(result.dynamic_tools.len(), 0);
         assert_eq!(result.dynamic_provider_tools.len(), 0);
         assert_eq!(result.allowed_tools.tools.len(), 0);
-        assert_eq!(result.allowed_tools.choice, AllowedToolsChoice::FunctionDefault);
+        assert_eq!(
+            result.allowed_tools.choice,
+            AllowedToolsChoice::FunctionDefault
+        );
         // But tool_choice and parallel_tool_calls should come from tool_config
         assert_eq!(result.tool_choice, ToolChoice::Required);
         assert_eq!(result.parallel_tool_calls, Some(false));
@@ -2120,7 +2196,10 @@ mod tests {
         assert_eq!(result.dynamic_tools.len(), 0);
         assert_eq!(result.dynamic_provider_tools.len(), 0);
         assert_eq!(result.allowed_tools.tools.len(), 0);
-        assert_eq!(result.allowed_tools.choice, AllowedToolsChoice::FunctionDefault);
+        assert_eq!(
+            result.allowed_tools.choice,
+            AllowedToolsChoice::FunctionDefault
+        );
         assert_eq!(result.tool_choice, ToolChoice::Auto);
         assert_eq!(result.parallel_tool_calls, None);
     }
@@ -2160,7 +2239,10 @@ mod tests {
         assert_eq!(result.tool_info.dynamic_tools[0].name(), "ragged_tool");
         assert_eq!(result.tool_info.dynamic_provider_tools.len(), 0);
         assert_eq!(result.tool_info.allowed_tools.tools, vec!["ragged_tool"]);
-        assert_eq!(result.tool_info.tool_choice, ToolChoice::Specific("ragged_tool".to_string()));
+        assert_eq!(
+            result.tool_info.tool_choice,
+            ToolChoice::Specific("ragged_tool".to_string())
+        );
         assert_eq!(result.tool_info.parallel_tool_calls, None);
     }
 
@@ -2258,7 +2340,10 @@ mod tests {
         assert_eq!(result.dynamic_tools[1].name(), "tool2");
         assert_eq!(result.dynamic_provider_tools.len(), 2);
         assert_eq!(result.allowed_tools.tools, vec!["tool1", "tool2"]);
-        assert_eq!(result.tool_choice, ToolChoice::Specific("tool1".to_string()));
+        assert_eq!(
+            result.tool_choice,
+            ToolChoice::Specific("tool1".to_string())
+        );
         assert_eq!(result.parallel_tool_calls, Some(false));
     }
 
