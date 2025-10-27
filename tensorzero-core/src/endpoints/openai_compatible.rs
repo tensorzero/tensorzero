@@ -779,7 +779,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
     fn try_from(
         openai_compatible_messages: Vec<OpenAICompatibleMessage>,
     ) -> Result<Self, Self::Error> {
-        let mut system_messages = Vec::new();
+        let mut system_message = None;
         let mut messages = Vec::new();
         let mut tool_call_id_to_name = HashMap::new();
         let first_system = matches!(
@@ -789,20 +789,52 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
         for message in openai_compatible_messages {
             match message {
                 OpenAICompatibleMessage::System(msg) => {
+                    let had_prior_system = system_message.is_some();
                     let system_content =
                         convert_openai_message_content("system".to_string(), msg.content.clone())?;
+
                     for content in system_content {
-                        system_messages.push(match content {
-                            InputMessageContent::Text(text) => Value::String(text.text),
-                            InputMessageContent::RawText(raw_text) => Value::String(raw_text.value),
+                        let text = match content {
+                            InputMessageContent::Text(t) => Some(t.text),
+                            InputMessageContent::RawText(rt) => Some(rt.value),
+                            InputMessageContent::Template(t) => {
+                                if system_message.is_some() {
+                                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                        message: "System message cannot contain template with other content".to_string(),
+                                    }.into());
+                                }
+                                system_message = Some(System::Template(t.arguments));
+                                None
+                            }
                             _ => {
                                 return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                    message: "System message must be a text content block"
-                                        .to_string(),
-                                }
-                                .into())
+                                    message: "System message must contain only text or template content blocks".to_string(),
+                                }.into())
                             }
-                        });
+                        };
+
+                        if let Some(text) = text {
+                            match &mut system_message {
+                                None => system_message = Some(System::Text(text)),
+                                Some(System::Text(s)) => {
+                                    s.push('\n');
+                                    s.push_str(&text);
+                                }
+                                Some(System::Template(_)) => {
+                                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                        message: "Cannot add text after template system message"
+                                            .to_string(),
+                                    }
+                                    .into());
+                                }
+                            }
+                        }
+                    }
+
+                    if had_prior_system {
+                        tracing::warn!("Multiple system messages provided. They will be concatenated and moved to the start of the conversation.");
+                    } else if !first_system {
+                        tracing::warn!("Moving system message to the start of the conversation.");
                     }
                 }
                 OpenAICompatibleMessage::User(msg) => {
@@ -852,46 +884,10 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             }
         }
 
-        if system_messages.len() <= 1 {
-            if system_messages.len() == 1 && !first_system {
-                tracing::warn!("Moving system message to the start of the conversation");
-            }
-
-            let system = system_messages
-                .pop()
-                .map(|v| match v {
-                    Value::String(s) => Ok::<System, Error>(System::Text(s)),
-                    Value::Object(map) => Ok::<System, Error>(System::Template(Arguments(map))),
-                    _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                        message: "System message content must be a string or an object".to_string(),
-                    }
-                    .into()),
-                })
-                .transpose()?;
-
-            Ok(Input { system, messages })
-        } else {
-            let mut output = String::new();
-            for (i, system_message) in system_messages.iter().enumerate() {
-                if let Value::String(msg) = system_message {
-                    if i > 0 {
-                        output.push('\n');
-                    }
-                    output.push_str(msg);
-                } else {
-                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                        message: "Multiple system messages provided, but not all were strings"
-                            .to_string(),
-                    }
-                    .into());
-                }
-            }
-            tracing::warn!("Multiple system messages provided - they will be concatenated and moved to the start of the conversation");
-            Ok(Input {
-                system: Some(System::Text(output)),
-                messages,
-            })
-        }
+        Ok(Input {
+            system: system_message,
+            messages,
+        })
     }
 }
 
@@ -1662,6 +1658,186 @@ mod tests {
                     text: "Assistant message".to_string(),
                 })],
             }]
+        );
+
+        // Try a system message with legacy template format (tensorzero::arguments)
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Alfred Pennyworth"
+                    }
+                }]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(
+            input.system,
+            Some(System::Template(Arguments(
+                json!({"assistant_name": "Alfred Pennyworth"})
+                    .as_object()
+                    .unwrap()
+                    .clone()
+            )))
+        );
+        assert_eq!(input.messages.len(), 0);
+
+        // Try a system message with new template format
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "tensorzero::template",
+                    "name": "system",
+                    "arguments": {
+                        "assistant_name": "Jarvis"
+                    }
+                }]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(
+            input.system,
+            Some(System::Template(Arguments(
+                json!({"assistant_name": "Jarvis"})
+                    .as_object()
+                    .unwrap()
+                    .clone()
+            )))
+        );
+
+        // Error: system message with template and text content (multiple content blocks)
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([
+                    {"type": "text", "text": "Hello"},
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "Alfred"
+                        }
+                    }
+                ]),
+            },
+        )];
+        let result: Result<Input, Error> = messages.try_into();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "System message cannot contain template with other content".to_string(),
+            }
+        );
+
+        // Error: text system message followed by template system message
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("You are helpful.".to_string()),
+            }),
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Alfred"
+                    }
+                }]),
+            }),
+        ];
+        let result: Result<Input, Error> = messages.try_into();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "System message cannot contain template with other content".to_string(),
+            }
+        );
+
+        // Error: template system message followed by text system message
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Alfred"
+                    }
+                }]),
+            }),
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("You are helpful.".to_string()),
+            }),
+        ];
+        let result: Result<Input, Error> = messages.try_into();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "Cannot add text after template system message".to_string(),
+            }
+        );
+
+        // Error: multiple template system messages
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Alfred"
+                    }
+                }]),
+            }),
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "tensorzero::template",
+                    "name": "system",
+                    "arguments": {
+                        "assistant_name": "Jarvis"
+                    }
+                }]),
+            }),
+        ];
+        let result: Result<Input, Error> = messages.try_into();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "System message cannot contain template with other content".to_string(),
+            }
+        );
+
+        // Success: system message with multiple text content blocks (should concatenate within single message)
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([
+                    {"type": "text", "text": "You are helpful."},
+                    {"type": "text", "text": "You are concise."}
+                ]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(
+            input.system,
+            Some(System::Text(
+                "You are helpful.\nYou are concise.".to_string()
+            ))
+        );
+
+        // Success: system message with tensorzero::raw_text
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "tensorzero::raw_text",
+                    "value": "Raw system text"
+                }]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(
+            input.system,
+            Some(System::Text("Raw system text".to_string()))
         );
     }
 
