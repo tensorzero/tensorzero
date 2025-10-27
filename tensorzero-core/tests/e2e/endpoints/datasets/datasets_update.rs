@@ -51,7 +51,7 @@ async fn test_update_chat_datapoint_output() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Original output".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: Some(tags),
         auxiliary: String::new(),
         staled_at: None,
@@ -269,7 +269,7 @@ async fn test_update_multiple_datapoints() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Output 1".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -295,7 +295,7 @@ async fn test_update_multiple_datapoints() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Output 2".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -428,7 +428,7 @@ async fn test_update_datapoint_type_mismatch() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Output".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -490,7 +490,7 @@ async fn test_update_datapoint_with_metadata() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Output".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -622,7 +622,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Original output".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -704,11 +704,13 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Output".to_string(),
         })]),
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_info: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![],
+            vec![],
+            Default::default(),
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -793,7 +795,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Output".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: Some(tags),
         auxiliary: String::new(),
         staled_at: None,
@@ -875,7 +877,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Output".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,

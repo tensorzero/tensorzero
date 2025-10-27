@@ -14,7 +14,10 @@ use tensorzero_core::inference::types::stored_input::{
 use tensorzero_core::inference::types::{ResolvedContentBlock, ResolvedRequestMessage};
 use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text},
-    tool::{AllowedTools, ClientSideFunctionTool, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
+    tool::{
+        AllowedTools, ClientSideFunctionTool, ToolCallConfigDatabaseInsert, ToolCallOutput,
+        ToolChoice,
+    },
 };
 use tracing_test::traced_test;
 use uuid::Uuid;
@@ -770,16 +773,18 @@ pub async fn test_render_datapoints_normal() {
                 raw_name: "get_temperature".to_string(),
                 raw_arguments: "{\"location\":\"Tokyo\"}".to_string(),
             })]),
-            tool_params: Some(ToolCallConfigDatabaseInsert {
-                tools_available: vec![Tool {
+            tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+                vec![Tool::ClientSideFunction(ClientSideFunctionTool {
                     name: "get_temperature".to_string(),
                     description: "Get the temperature of a location".to_string(),
                     parameters: json!({}), // Don't need to validate the arguments so we can leave blank
                     strict: false,
-                }],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-            }),
+                })],
+                vec![],
+                Default::default(),
+                ToolChoice::Auto,
+                None,
+            )),
             tags: None,
             auxiliary: "{}".to_string(),
             is_deleted: false,

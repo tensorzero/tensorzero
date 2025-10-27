@@ -372,7 +372,7 @@ async fn test_create_delete_datapoint_chat() {
         }
 
         // Verify tool_params if present for the list datapoint
-        if let Some(tool_params) = &list_datapoint.tool_params {
+        if let Some(tool_params) = &list_datapoint.tool_info {
             let tools_available = &tool_params.tools_available;
             assert!(!tools_available.is_empty());
             let first_tool = tools_available[0].clone();
@@ -2994,7 +2994,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             arguments: Some(json!({"title": "Russell Hoban"})),
             raw_arguments: "{\"title\": \"Russell Hoban\"}".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,

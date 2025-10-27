@@ -595,7 +595,7 @@ async fn test_count_datasets() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -616,7 +616,7 @@ async fn test_count_datasets() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -677,7 +677,7 @@ async fn test_count_datapoints_for_dataset_function_chat() {
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "test".to_string(),
             })]),
-            tool_params: None,
+            tool_info: None,
             tags: None,
             auxiliary: String::new(),
             staled_at: None,
@@ -799,7 +799,7 @@ async fn test_insert_datapoint_chat() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "response".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: Some(tags),
         auxiliary: String::new(),
         staled_at: None,
@@ -904,7 +904,7 @@ async fn test_insert_datapoint_validates_dataset_name_builder() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -936,7 +936,7 @@ async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -1099,7 +1099,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
             text: "Code flows like water\nTests catch bugs in their net now\nPeace in the program"
                 .to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: Some(tags),
         auxiliary: String::new(),
         staled_at: None,
@@ -1325,7 +1325,7 @@ async fn test_handles_duplicate_insertions_gracefully() {
             text: "Copies everywhere\nDuplicates fill the database\nUnique keys break down"
                 .to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: Some(tags),
         auxiliary: String::new(),
         staled_at: None,
@@ -1472,7 +1472,7 @@ async fn test_insert_datapoint_handles_invalid_dataset_names() {
             messages: vec![],
         },
         output: Some(vec![]),
-        tool_params: None,
+        tool_info: None,
         tags: Some(tags),
         auxiliary: String::new(),
         staled_at: None,
@@ -1512,7 +1512,7 @@ async fn test_get_adjacent_datapoint_ids() {
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "test".to_string(),
             })]),
-            tool_params: None,
+            tool_info: None,
             tags: None,
             auxiliary: String::new(),
             staled_at: None,
@@ -1625,7 +1625,7 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test response".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -1752,7 +1752,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "chat response 1".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -1807,7 +1807,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "chat response 2".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -1883,7 +1883,7 @@ async fn test_get_datapoints_with_non_existent_ids() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -1943,7 +1943,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -2028,7 +2028,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -2107,7 +2107,7 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "test".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -2181,7 +2181,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "response".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -2368,7 +2368,7 @@ async fn test_datapoint_with_mixed_file_types() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "response".to_string(),
         })]),
-        tool_params: None,
+        tool_info: None,
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
