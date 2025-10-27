@@ -107,6 +107,7 @@ pub mod batch;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod file;
+mod input_message;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
@@ -456,129 +457,13 @@ impl LazyResolvedInputMessageContent {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see below).
+/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct InputMessage {
     pub role: Role,
     pub content: Vec<InputMessageContent>,
-}
-
-/// Custom deserializer for InputMessage that handles legacy formats:
-/// - `"content": "text"` → `vec![Text { text }]`
-/// - `"content": {...}` → `vec![Template { name: role, arguments }]`
-/// - `"content": [{"type": "text", "arguments": {...}}]` → `vec![Template { name: role, arguments }]`
-impl<'de> Deserialize<'de> for InputMessage {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        use serde::de::{self, MapAccess, Visitor};
-
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
-        enum Field {
-            Role,
-            Content,
-        }
-
-        struct InputMessageVisitor;
-
-        impl<'de> Visitor<'de> for InputMessageVisitor {
-            type Value = InputMessage;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("struct InputMessage")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<InputMessage, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut role: Option<Role> = None;
-                let mut content: Option<Value> = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Role => {
-                            if role.is_some() {
-                                return Err(de::Error::duplicate_field("role"));
-                            }
-                            role = Some(map.next_value()?);
-                        }
-                        Field::Content => {
-                            if content.is_some() {
-                                return Err(de::Error::duplicate_field("content"));
-                            }
-                            content = Some(map.next_value()?);
-                        }
-                    }
-                }
-
-                let role = role.ok_or_else(|| de::Error::missing_field("role"))?;
-                let content_value = content.ok_or_else(|| de::Error::missing_field("content"))?;
-
-                // Transform content based on its type
-                let content_vec: Result<Vec<InputMessageContent>, V::Error> = match content_value {
-                    // Legacy: "content": "text string"
-                    Value::String(text) => Ok(vec![InputMessageContent::Text(Text { text })]),
-                    // Legacy: "content": {"key": "value", ...}
-                    Value::Object(obj) => {
-                        tracing::warn!("Deprecation Warning: passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
-                        let arguments = Arguments(obj);
-                        Ok(vec![InputMessageContent::Template(Template {
-                            name: role.implicit_template_name().to_string(),
-                            arguments,
-                        })])
-                    }
-                    // Array: need to check each element for legacy text formats
-                    Value::Array(arr) => {
-                        arr.into_iter()
-                            .map(|mut value| {
-                                // Check if this is a legacy Text with arguments: {"type": "text", "arguments": ...}
-                                if let Some(obj) = value.as_object_mut() {
-                                    if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
-                                        if let Some(arguments_value) = obj.remove("arguments") {
-                                            // Convert to Template format
-                                            let mut new_obj = serde_json::Map::new();
-                                            new_obj.insert(
-                                                "type".to_string(),
-                                                Value::String("template".to_string()),
-                                            );
-                                            new_obj.insert(
-                                                "name".to_string(),
-                                                Value::String(
-                                                    role.implicit_template_name().to_string(),
-                                                ),
-                                            );
-                                            new_obj
-                                                .insert("arguments".to_string(), arguments_value);
-                                            *obj = new_obj;
-                                        }
-                                    }
-                                }
-
-                                // Deserialize the (possibly transformed) value
-                                serde_json::from_value(value).map_err(de::Error::custom)
-                            })
-                            .collect()
-                    }
-                    _ => Err(de::Error::custom(
-                        "content must be a string, object, or array",
-                    )),
-                };
-
-                Ok(InputMessage {
-                    role,
-                    content: content_vec?,
-                })
-            }
-        }
-
-        const FIELDS: &[&str] = &["role", "content"];
-        deserializer.deserialize_struct("InputMessage", FIELDS, InputMessageVisitor)
-    }
 }
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
