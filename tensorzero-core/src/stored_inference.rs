@@ -1,5 +1,9 @@
 use std::collections::HashMap;
 
+use crate::db::datasets::{
+    ChatInferenceDatapointInsert, DatapointInsert, JsonInferenceDatapointInsert,
+};
+use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, deserialize_from_pyobj, serialize_to_dict, uuid_to_python,
@@ -67,6 +71,79 @@ impl std::fmt::Display for StoredInference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+impl StoredInference {
+    pub fn id(&self) -> Uuid {
+        match self {
+            StoredInference::Json(inference) => inference.inference_id,
+            StoredInference::Chat(inference) => inference.inference_id,
+        }
+    }
+
+    /// Convert a StoredInference to a DatapointInsert. Generates a new datapoint ID in the process.
+    /// Returns the datapoint ID and the insert struct.
+    /// The output_source parameter allows overriding to None even if the inference has an output.
+    pub fn to_datapoint_insert(
+        &self,
+        dataset_name: &str,
+        output_source: &Option<CreateDatapointsFromInferenceOutputSource>,
+    ) -> (Uuid, DatapointInsert) {
+        let datapoint_id = Uuid::now_v7();
+
+        match self {
+            StoredInference::Json(json_inference) => {
+                // If output_source is explicitly None, set output to None regardless of what's in the inference
+                let output = match output_source {
+                    Some(CreateDatapointsFromInferenceOutputSource::None) => None,
+                    _ => Some(json_inference.output.clone()),
+                };
+
+                let datapoint = JsonInferenceDatapointInsert {
+                    dataset_name: dataset_name.to_string(),
+                    function_name: json_inference.function_name.clone(),
+                    name: None,
+                    id: datapoint_id,
+                    episode_id: Some(json_inference.episode_id),
+                    input: json_inference.input.clone(),
+                    output,
+                    output_schema: json_inference.output_schema.clone(),
+                    tags: Some(json_inference.tags.clone()),
+                    auxiliary: String::new(),
+                    staled_at: None,
+                    source_inference_id: Some(json_inference.inference_id),
+                    is_custom: false,
+                };
+
+                (datapoint_id, DatapointInsert::Json(datapoint))
+            }
+            StoredInference::Chat(chat_inference) => {
+                // If output_source is explicitly None, set output to None regardless of what's in the inference
+                let output = match output_source {
+                    Some(CreateDatapointsFromInferenceOutputSource::None) => None,
+                    _ => Some(chat_inference.output.clone()),
+                };
+
+                let datapoint = ChatInferenceDatapointInsert {
+                    dataset_name: dataset_name.to_string(),
+                    function_name: chat_inference.function_name.clone(),
+                    name: None,
+                    id: datapoint_id,
+                    episode_id: Some(chat_inference.episode_id),
+                    input: chat_inference.input.clone(),
+                    output,
+                    tool_params: Some(chat_inference.tool_params.clone()),
+                    tags: Some(chat_inference.tags.clone()),
+                    auxiliary: String::new(),
+                    staled_at: None,
+                    source_inference_id: Some(chat_inference.inference_id),
+                    is_custom: false,
+                };
+
+                (datapoint_id, DatapointInsert::Chat(datapoint))
+            }
+        }
     }
 }
 

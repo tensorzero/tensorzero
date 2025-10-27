@@ -213,7 +213,7 @@ pub struct CreateDatapointsFromInferenceRequest {
     pub params: CreateDatapointsFromInferenceRequestParams,
 
     /// When creating the datapoint, this specifies the source of the output for the datapoint.
-    /// If not provided, the source of the output for the datapoint will be determined by the source of the inference.
+    /// If not provided, by default we will use the original inference output as the datapoint's output.
     pub output_source: Option<CreateDatapointsFromInferenceOutputSource>,
 }
 
@@ -257,7 +257,7 @@ pub struct CreateDatapointsFromInferenceResponse {
 /// Result of creating a single datapoint from an inference.
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, tag = "status", rename_all = "snake_case"))]
+#[cfg_attr(test, ts(export))]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum CreateDatapointResult {
     /// Successfully created datapoint.
