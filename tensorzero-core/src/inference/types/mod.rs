@@ -456,7 +456,7 @@ impl LazyResolvedInputMessageContent {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-/// `InputMessage` has a custom deserializer that addresses legacy data formats in we used to support (see below).
+/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see below).
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
