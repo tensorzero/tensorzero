@@ -8,7 +8,7 @@ use crate::db::clickhouse::query_builder::DatapointFilter;
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
-// use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::{AllowedTools, ProviderTool, Tool, ToolChoice};
 
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -54,10 +54,25 @@ pub struct UpdateChatDatapointRequest {
     #[serde(default)]
     pub output: Option<Vec<ContentBlockChatOutput>>,
 
-    /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    /// TODO: figure out how to handle this
-    // #[serde(default, deserialize_with = "deserialize_double_option")]
-    // pub tool_params: Option<Option<ToolCallConfigDatabaseInsert>>,
+    /// Dynamic tools. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub dynamic_tools: Option<Option<Vec<Tool>>>,
+
+    /// Dynamic provider tools. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub dynamic_provider_tools: Option<Option<Vec<ProviderTool>>>,
+
+    /// Allowed tools. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub allowed_tools: Option<Option<AllowedTools>>,
+
+    /// Tool choice. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub tool_choice: Option<Option<ToolChoice>>,
+
+    /// Parallel tool calls. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub parallel_tool_calls: Option<Option<bool>>,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will be overwrite the existing tags.

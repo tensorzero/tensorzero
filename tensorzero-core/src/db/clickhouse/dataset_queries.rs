@@ -712,7 +712,10 @@ fn convert_chat_datapoint_to_json_string(
         "staled_at": chat_datapoint.staled_at,
     });
     // tool_params in clickhouse is a non-null String
-    let tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_info {
+    // TODO (Viraj, in this PR): Shuyang is assigned an issue to make this serde-compatible. In the mean time
+    // we should emulate a #[serde(flatten)] on this type so that we're able to write tests that should continue
+    // working with the serde change
+    let _tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_info {
         serde_json::to_value(tool_params)?
     } else {
         json!("")
@@ -2182,7 +2185,7 @@ mod tests {
             output: Some(vec![ContentBlockChatOutput::Text(Text {
                 text: "response".to_string(),
             })]),
-            tool_params: None,
+            tool_info: None,
             tags: Some(HashMap::from([(
                 "test_tag".to_string(),
                 "test_value".to_string(),
@@ -2403,7 +2406,7 @@ mod tests {
                 output: Some(vec![ContentBlockChatOutput::Text(Text {
                     text: "response_1".to_string(),
                 })]),
-                tool_params: None,
+                tool_info: None,
                 tags: None,
                 auxiliary: String::new(),
                 staled_at: None,

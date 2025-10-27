@@ -453,7 +453,7 @@ impl ToolCallConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
     pub dynamic_tools: Vec<Tool>,
@@ -462,6 +462,7 @@ pub struct ToolCallConfigDatabaseInsert {
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     // We write this in case any legacy code reads the database; it should not be read in new code
+    #[serde(default)]
     tool_config: LegacyToolCallConfigDatabaseInsert,
 }
 
@@ -473,6 +474,36 @@ impl std::fmt::Display for ToolCallConfigDatabaseInsert {
 }
 
 impl ToolCallConfigDatabaseInsert {
+    /// Updates the fields of this ToolCallConfigDatabaseInsert with the provided values.
+    /// Each parameter is a double option:
+    /// - `None` means no update (leave unchanged)
+    /// - `Some(None)` means set to the default/empty value
+    /// - `Some(Some(value))` means set to the provided value
+    pub fn update(
+        &mut self,
+        dynamic_tools: Option<Option<Vec<Tool>>>,
+        dynamic_provider_tools: Option<Option<Vec<ProviderTool>>>,
+        allowed_tools: Option<Option<AllowedTools>>,
+        tool_choice: Option<Option<ToolChoice>>,
+        parallel_tool_calls: Option<Option<bool>>,
+    ) {
+        if let Some(value) = dynamic_tools {
+            self.dynamic_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = dynamic_provider_tools {
+            self.dynamic_provider_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = allowed_tools {
+            self.allowed_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = tool_choice {
+            self.tool_choice = value.unwrap_or_default();
+        }
+        if let Some(value) = parallel_tool_calls {
+            self.parallel_tool_calls = value;
+        }
+    }
+
     /// TODO: document extensively
     pub fn into_tool_call_config(
         self,
@@ -497,10 +528,10 @@ impl ToolCallConfigDatabaseInsert {
     }
 
     pub fn tools_available(
-        self,
+        &self,
         function_name: &str,
         config: &Config,
-    ) -> Result<impl Iterator<Item = Tool>, Error> {
+    ) -> Result<impl Iterator<Item = Tool> + '_, Error> {
         let function_config = config.get_function(function_name)?;
 
         // Get the list of tool names from allowed_tools based on whether they were dynamically set
@@ -514,7 +545,7 @@ impl ToolCallConfigDatabaseInsert {
             }
             AllowedToolsChoice::DynamicAllowedTools => {
                 // Use the dynamically specified tool names
-                self.allowed_tools.tools
+                self.allowed_tools.tools.clone()
             }
         };
 
@@ -536,7 +567,7 @@ impl ToolCallConfigDatabaseInsert {
         // Combine static tools and dynamic tools
         let all_tools = static_tools
             .into_iter()
-            .chain(self.dynamic_tools.into_iter());
+            .chain(self.dynamic_tools.iter().cloned());
 
         Ok(all_tools)
     }
@@ -912,21 +943,6 @@ impl ToolConfig {
             ToolConfig::Dynamic(config) => config.strict,
             ToolConfig::Implicit(_config) => false,
             ToolConfig::DynamicImplicit(_config) => false,
-        }
-    }
-}
-
-impl From<ToolCallConfig> for LegacyToolCallConfigDatabaseInsert {
-    fn from(tool_call_config: ToolCallConfig) -> Self {
-        Self {
-            tools_available: tool_call_config
-                .static_tools_available
-                .into_iter()
-                .chain(tool_call_config.dynamic_tools_available)
-                .map(ToolConfig::into)
-                .collect(),
-            tool_choice: tool_call_config.tool_choice,
-            parallel_tool_calls: tool_call_config.parallel_tool_calls,
         }
     }
 }

@@ -474,13 +474,13 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
             }));
         }
         // Check if tools_available contains actual tools
-        if let Some(tool_params) = &example.tool_params {
-            if !tool_params.tools_available.is_empty() {
+        if let Some(tool_info) = &example.tool_info {
+            let has_tools = !tool_info.dynamic_tools.is_empty() || !tool_info.allowed_tools.tools.is_empty();
+            if has_tools {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
-                        "DICL optimization does not support tool calls. Training example {} contains {} available tools.",
-                        i + 1,
-                        tool_params.tools_available.len()
+                        "DICL optimization does not support tool calls. Training example {} has tool configuration.",
+                        i + 1
                     ),
                 }));
             }

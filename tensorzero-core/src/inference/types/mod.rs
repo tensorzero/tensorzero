@@ -58,7 +58,7 @@ use crate::rate_limiting::{
     RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
 };
 use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
+    deserialize_defaulted_json_string, deserialize_json_string,
 };
 use crate::tool::ToolCallInput;
 use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
@@ -1876,7 +1876,7 @@ impl ChatInferenceDatabaseInsert {
             .processing_time
             .map(|duration| duration.as_millis() as u32);
 
-        let tool_params = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
+        let tool_info = metadata.tool_config.map(ToolCallConfigDatabaseInsert::from);
         let inference_params = chat_result.inference_params;
 
         Self {
@@ -1885,7 +1885,7 @@ impl ChatInferenceDatabaseInsert {
             variant_name: metadata.variant_name,
             episode_id: metadata.episode_id,
             input,
-            tool_params,
+            tool_info,
             inference_params,
             output: chat_result.content,
             processing_time_ms,

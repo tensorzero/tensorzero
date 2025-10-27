@@ -208,7 +208,7 @@ pub struct TogetherSupervisedRow<'a> {
 }
 
 impl<'a> TogetherSupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
         let tools = match &inference.tool_params {
             Some(tool_params) => {
                 if tool_params.parallel_tool_calls.unwrap_or_default() {
@@ -216,7 +216,8 @@ impl<'a> TogetherSupervisedRow<'a> {
                         message: "Parallel tool calls are not supported for Together".to_string(),
                     }));
                 }
-                tool_params.tools_available.iter().map(Into::into).collect()
+                let available_tools: Vec<_> = tool_params.tools_available(&inference.function_name, config)?.collect();
+                available_tools.iter().map(Into::into).collect()
             }
             None => vec![],
         };
@@ -710,7 +711,7 @@ impl Optimizer for TogetherSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        config: &Config,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()
@@ -726,7 +727,7 @@ impl Optimizer for TogetherSFTConfig {
         let train_rows: Vec<TogetherSupervisedRow> = try_join_all(
             train_examples
                 .iter()
-                .map(TogetherSupervisedRow::from_rendered_sample),
+                .map(|ex| TogetherSupervisedRow::from_rendered_sample(ex, config)),
         )
         .await?;
 
@@ -735,7 +736,7 @@ impl Optimizer for TogetherSFTConfig {
                 try_join_all(
                     examples
                         .iter()
-                        .map(TogetherSupervisedRow::from_rendered_sample),
+                        .map(|ex| TogetherSupervisedRow::from_rendered_sample(ex, config)),
                 )
                 .await?,
             )

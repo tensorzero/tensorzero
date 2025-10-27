@@ -45,7 +45,7 @@ pub struct SimpleStoredSampleInfo {
     pub output: Option<Vec<ContentBlockChatOutput>>,
     pub stored_output: Option<StoredOutput>,
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -383,7 +383,7 @@ impl StoredSample for StoredInference {
                 output: Some(example.output.clone()),
                 stored_output: Some(StoredOutput::Chat(example.output)),
                 dispreferred_outputs: example.dispreferred_outputs,
-                tool_params: Some(example.tool_info),
+                tool_info: Some(example.tool_info),
                 output_schema: None,
                 tags: example.tags,
             },
@@ -402,7 +402,7 @@ impl StoredSample for StoredInference {
                     output: Some(output),
                     stored_output: Some(StoredOutput::Json(example.output)),
                     dispreferred_outputs,
-                    tool_params: None,
+                    tool_info: None,
                     output_schema: Some(example.output_schema),
                     tags: example.tags,
                 }
@@ -466,7 +466,7 @@ impl RenderedSample {
             dispreferred_outputs: self.dispreferred_outputs,
             episode_id: self.episode_id,
             inference_id: self.inference_id,
-            tool_params: self.tool_params,
+            tool_params: self.tool_info,
             output_schema: self.output_schema,
             tags: self.tags,
         }
@@ -550,7 +550,7 @@ impl RenderedSample {
 
     #[getter]
     pub fn get_tool_params(&self) -> Option<ToolCallConfigDatabaseInsert> {
-        self.tool_params.clone()
+        self.tool_info.clone()
     }
 
     #[getter]
@@ -653,7 +653,7 @@ pub async fn render_stored_sample<T: StoredSample>(
         output,
         stored_output,
         dispreferred_outputs,
-        tool_params,
+        tool_info,
         output_schema,
         episode_id,
         inference_id,
@@ -669,7 +669,7 @@ pub async fn render_stored_sample<T: StoredSample>(
         output,
         stored_output,
         dispreferred_outputs,
-        tool_params,
+        tool_info,
         output_schema,
         tags,
     })

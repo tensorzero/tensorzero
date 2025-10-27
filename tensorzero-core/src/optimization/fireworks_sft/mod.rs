@@ -45,6 +45,7 @@ use crate::providers::openai::tensorzero_to_openai_assistant_message;
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::stored_inference::LazyRenderedSample;
 use crate::stored_inference::RenderedSample;
+use crate::tool::Tool;
 use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
@@ -86,21 +87,34 @@ pub struct FireworksSupervisedRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     tools: Vec<FireworksTool<'a>>,
+    #[serde(skip)]
+    _owned_tools: Vec<Tool>,
 }
 
 impl<'a> FireworksSupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        let tools = match &inference.tool_params {
-            Some(tool_params) => {
-                if tool_params.parallel_tool_calls.unwrap_or_default() {
-                    return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
-                        message: "Parallel tool calls are not supported for Fireworks".to_string(),
-                    }));
-                }
-                tool_params.tools_available.iter().map(Into::into).collect()
+    pub async fn from_rendered_sample(
+        inference: &'a LazyRenderedSample,
+        config: &'a Config,
+    ) -> Result<Self, Error> {
+        // Check for parallel tool calls first
+        if let Some(tool_params) = &inference.tool_params {
+            if tool_params.parallel_tool_calls.unwrap_or_default() {
+                return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                    message: "Parallel tool calls are not supported for Fireworks".to_string(),
+                }));
             }
-            None => vec![],
-        };
+        }
+
+        // Collect owned tools
+        let _owned_tools: Vec<_> = inference.tool_params
+            .as_ref()
+            .map(|tp| tp.tools_available(&inference.function_name, config))
+            .transpose()?
+            .map(|iter| iter.collect::<Vec<_>>())
+            .unwrap_or_default();
+
+        // Now create borrowed tools from owned tools
+        let tools: Vec<_> = _owned_tools.iter().map(Into::into).collect();
         let mut messages = prepare_fireworks_messages(
             inference.system_input.as_deref(),
             &inference.messages,
@@ -136,7 +150,7 @@ impl<'a> FireworksSupervisedRow<'a> {
         )
         .await?;
         messages.push(final_assistant_message);
-        Ok(Self { messages, tools })
+        Ok(Self { messages, tools, _owned_tools })
     }
 }
 
@@ -541,7 +555,7 @@ impl Optimizer for FireworksSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        config: &Config,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()
@@ -556,22 +570,21 @@ impl Optimizer for FireworksSFTConfig {
         let train_rows: Vec<FireworksSupervisedRow<'_>> = try_join_all(
             train_examples
                 .iter()
-                .map(FireworksSupervisedRow::from_rendered_sample),
+                .map(|example| FireworksSupervisedRow::from_rendered_sample(example, config)),
         )
         .await?;
 
-        let val_rows = if let Some(examples) = val_examples.as_ref() {
-            Some(
-                try_join_all(
-                    examples
-                        .iter()
-                        .map(FireworksSupervisedRow::from_rendered_sample),
+        let val_rows =
+            if let Some(examples) = val_examples.as_ref() {
+                Some(
+                    try_join_all(examples.iter().map(|example| {
+                        FireworksSupervisedRow::from_rendered_sample(example, config)
+                    }))
+                    .await?,
                 )
-                .await?,
-            )
-        } else {
-            None
-        };
+            } else {
+                None
+            };
 
         let api_key = self.credentials.get_api_key(credentials)?;
 

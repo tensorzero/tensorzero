@@ -277,7 +277,7 @@ async fn insert_from_existing(
                 episode_id: Some(inference.episode_id),
                 input: inference.input,
                 output,
-                tool_params: inference.tool_params,
+                tool_info: inference.tool_info,
                 tags: Some(inference.tags),
                 auxiliary: String::new(),
                 is_deleted: false,
@@ -379,7 +379,7 @@ pub async fn update_datapoint_handler(
             // If there are no tool params in the UpdateChatInferenceDatapointRequest, we use the default tool params (empty tools).
             // This is consistent with how they are serialized at inference time.
             let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
-                chat.tool_params
+                chat.tool_info
                     .clone()
                     .map(|x| x.into_tool_call_config(&function_config, &app_state.config.tools))
                     .transpose()?
@@ -416,7 +416,7 @@ pub async fn update_datapoint_handler(
                 episode_id: chat.episode_id,
                 input: resolved_input.into_stored_input(),
                 output,
-                tool_params: chat.tool_params,
+                tool_info: chat.tool_info,
                 tags: chat.tags,
                 auxiliary: chat.auxiliary,
                 is_deleted: chat.is_deleted,
@@ -674,7 +674,8 @@ pub async fn insert_datapoint(
                     episode_id: None,
                     input: resolved_input.into_stored_input(),
                     output,
-                    tool_params: tool_config.as_ref().map(|x| x.clone().into()),
+                    // tool_params: tool_config.as_ref().map(|x| x.clone().into()),
+                    tool_info: tool_config.clone().map(Into::into),
                     tags: chat.tags,
                     auxiliary: String::new(),
                     is_deleted: false,
@@ -1136,7 +1137,7 @@ impl Datapoint {
 
     pub fn tool_call_config(&self) -> Option<&ToolCallConfigDatabaseInsert> {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
+            Datapoint::Chat(datapoint) => datapoint.tool_info.as_ref(),
             Datapoint::Json(_datapoint) => None,
         }
     }
@@ -1292,8 +1293,8 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[cfg_attr(test, ts(optional))]
     #[serde(flatten)]
+    // TODO (Viraj, in this PR): test ragged deserialization of this struct's fields
     pub tool_info: Option<ToolCallConfigDatabaseInsert>,
 
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
@@ -1338,7 +1339,7 @@ impl From<ChatInferenceDatapoint> for ChatInferenceDatapointInsert {
             episode_id: datapoint.episode_id,
             input: datapoint.input,
             output: datapoint.output,
-            tool_params: datapoint.tool_params,
+            tool_info: datapoint.tool_info,
             tags: datapoint.tags,
             auxiliary: datapoint.auxiliary,
             staled_at: datapoint.staled_at,
@@ -1456,7 +1457,7 @@ impl StoredSample for Datapoint {
                 output: datapoint.output.clone(),
                 stored_output: datapoint.output.map(StoredOutput::Chat),
                 dispreferred_outputs: Vec::default(),
-                tool_params: datapoint.tool_params,
+                tool_info: datapoint.tool_info,
                 output_schema: None,
                 episode_id: None,
                 inference_id: None,
@@ -1474,7 +1475,7 @@ impl StoredSample for Datapoint {
                     output,
                     stored_output,
                     dispreferred_outputs: Vec::default(),
-                    tool_params: None,
+                    tool_info: None,
                     output_schema: Some(datapoint.output_schema),
                     episode_id: None,
                     inference_id: None,

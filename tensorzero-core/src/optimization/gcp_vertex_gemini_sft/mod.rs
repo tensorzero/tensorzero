@@ -241,7 +241,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        config: &Config,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()
@@ -257,7 +257,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
         let train_rows: Vec<GCPVertexGeminiSupervisedRow> = try_join_all(
             train_examples
                 .iter()
-                .map(GCPVertexGeminiSupervisedRow::from_rendered_sample),
+                .map(|ex| GCPVertexGeminiSupervisedRow::from_rendered_sample(ex, config)),
         )
         .await?;
 
@@ -266,7 +266,7 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 try_join_all(
                     examples
                         .iter()
-                        .map(GCPVertexGeminiSupervisedRow::from_rendered_sample),
+                        .map(|ex| GCPVertexGeminiSupervisedRow::from_rendered_sample(ex, config)),
                 )
                 .await?,
             )

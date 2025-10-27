@@ -1,4 +1,4 @@
-use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+use crate::serde_util::deserialize_json_string;
 use crate::{
     endpoints::{
         batch_inference::{BatchEpisodeIdInput, BatchOutputSchemas},

@@ -10,7 +10,7 @@ use super::{
     OpenAIRequestMessage, OpenAISFTTool,
 };
 use crate::{
-    config::TimeoutsConfig,
+    config::{Config, TimeoutsConfig},
     endpoints::openai_compatible::JsonSchemaInfo,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlock, ContentBlockChatOutput},
@@ -336,12 +336,15 @@ pub struct OpenAISupervisedRow<'a> {
 }
 
 impl<'a> OpenAISupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
-            Some(tool_params) => (
-                tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params.tools_available.iter().map(Into::into).collect(),
-            ),
+            Some(tool_params) => {
+                let available_tools: Vec<_> = tool_params.tools_available(&inference.function_name, config)?.collect();
+                (
+                    tool_params.parallel_tool_calls.unwrap_or_default(),
+                    available_tools.iter().map(Into::into).collect(),
+                )
+            }
             None => (false, vec![]),
         };
         let mut messages = prepare_openai_messages(
@@ -410,12 +413,15 @@ pub struct OpenAIReinforcementRow<'a> {
 }
 
 impl<'a> OpenAIReinforcementRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
-            Some(tool_params) => (
-                tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params.tools_available.iter().map(Into::into).collect(),
-            ),
+            Some(tool_params) => {
+                let available_tools: Vec<_> = tool_params.tools_available(&inference.function_name, config)?.collect();
+                (
+                    tool_params.parallel_tool_calls.unwrap_or_default(),
+                    available_tools.iter().map(Into::into).collect(),
+                )
+            }
             None => (false, vec![]),
         };
         let messages = prepare_openai_messages(
@@ -604,6 +610,7 @@ pub enum OpenAIFineTuningJobStatus {
 #[cfg(test)]
 mod tests {
     use crate::{
+        config::Config,
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
             StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
@@ -650,7 +657,8 @@ mod tests {
             tags: HashMap::new(),
         };
         let lazy_inference = inference.into_lazy_rendered_sample();
-        let row = OpenAISupervisedRow::from_rendered_sample(&lazy_inference)
+        let config = Config::default();
+        let row = OpenAISupervisedRow::from_rendered_sample(&lazy_inference, &config)
             .await
             .unwrap();
         assert_eq!(row.messages.len(), 3);
@@ -721,7 +729,8 @@ mod tests {
             tags: HashMap::new(),
         };
         let lazy_inference = inference.into_lazy_rendered_sample();
-        let row = OpenAIReinforcementRow::from_rendered_sample(&lazy_inference)
+        let config = Config::default();
+        let row = OpenAIReinforcementRow::from_rendered_sample(&lazy_inference, &config)
             .await
             .unwrap();
         assert_eq!(row.messages.len(), 2); // System and User messages (no assistant message added)
@@ -807,7 +816,8 @@ mod tests {
             tags: HashMap::new(),
         };
         let lazy_inference = inference.into_lazy_rendered_sample();
-        let row = OpenAIReinforcementRow::from_rendered_sample(&lazy_inference)
+        let config = Config::default();
+        let row = OpenAIReinforcementRow::from_rendered_sample(&lazy_inference, &config)
             .await
             .unwrap();
 

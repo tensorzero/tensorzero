@@ -14,7 +14,7 @@ use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
 use crate::db::clickhouse::ClickhouseFormat;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
-use crate::serde_util::{deserialize_defaulted_string, deserialize_json_string};
+use crate::serde_util::deserialize_json_string;
 use crate::stored_inference::{StoredChatInference, StoredInference, StoredJsonInference};
 use crate::tool::ToolCallConfigDatabaseInsert;
 
@@ -62,7 +62,7 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             dispreferred_outputs,
             episode_id: value.episode_id,
             inference_id: value.inference_id,
-            tool_params: value.tool_params,
+            tool_info: value.tool_info,
             tags: value.tags,
             timestamp: value.timestamp,
         })

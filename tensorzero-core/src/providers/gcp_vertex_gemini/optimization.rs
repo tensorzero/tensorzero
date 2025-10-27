@@ -8,7 +8,7 @@ use super::{
     GCPVertexGeminiFileURI, GCPVertexGeminiSupervisedRow,
 };
 use crate::{
-    config::TimeoutsConfig,
+    config::{Config, TimeoutsConfig},
     error::{Error, ErrorDetails},
     inference::types::{ContentBlock, FlattenUnknown},
     model::{UninitializedModelConfig, UninitializedModelProvider, UninitializedProviderConfig},
@@ -54,9 +54,12 @@ pub struct GCPVertexGeminiFineTuningRequest {
 }
 
 impl<'a> GCPVertexGeminiSupervisedRow<'a> {
-    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
+    pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
         let tools = match &inference.tool_params {
-            Some(tool_params) => tool_params.tools_available.iter().map(Into::into).collect(),
+            Some(tool_params) => {
+                let available_tools: Vec<_> = tool_params.tools_available(&inference.function_name, config)?.collect();
+                available_tools.iter().map(Into::into).collect()
+            }
             None => vec![],
         };
         let mut contents = prepare_gcp_vertex_gemini_messages(&inference.messages).await?;
