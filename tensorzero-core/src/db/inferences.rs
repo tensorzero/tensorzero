@@ -31,8 +31,8 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub output: Vec<ContentBlockChatOutput>,
     #[serde(default)]
     pub dispreferred_outputs: Vec<String>,
-    #[serde(deserialize_with = "deserialize_defaulted_string")]
-    pub tool_params: ToolCallConfigDatabaseInsert,
+    #[serde(flatten)]
+    pub tool_info: ToolCallConfigDatabaseInsert,
     pub tags: HashMap<String, String>,
 }
 

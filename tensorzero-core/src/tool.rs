@@ -11,6 +11,7 @@ use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
+    config::Config,
     error::{Error, ErrorDetails},
     function::FunctionConfig,
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
@@ -452,15 +453,23 @@ impl ToolCallConfig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
-    dynamic_tools: Vec<Tool>,
-    dynamic_provider_tools: Vec<ProviderTool>,
-    allowed_tools: AllowedTools,
-    tool_choice: ToolChoice,
-    parallel_tool_calls: Option<bool>,
+    pub dynamic_tools: Vec<Tool>,
+    pub dynamic_provider_tools: Vec<ProviderTool>,
+    pub allowed_tools: AllowedTools,
+    pub tool_choice: ToolChoice,
+    pub parallel_tool_calls: Option<bool>,
     // We write this in case any legacy code reads the database; it should not be read in new code
     tool_config: LegacyToolCallConfigDatabaseInsert,
+}
+
+impl std::fmt::Display for ToolCallConfigDatabaseInsert {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 impl ToolCallConfigDatabaseInsert {
@@ -485,6 +494,51 @@ impl ToolCallConfigDatabaseInsert {
             }),
             FunctionConfig::Json(_) => Ok(None),
         }
+    }
+
+    pub fn tools_available(
+        self,
+        function_name: &str,
+        config: &Config,
+    ) -> Result<impl Iterator<Item = Tool>, Error> {
+        let function_config = config.get_function(function_name)?;
+
+        // Get the list of tool names from allowed_tools based on whether they were dynamically set
+        let tool_names = match self.allowed_tools.choice {
+            AllowedToolsChoice::FunctionDefault => {
+                // Use the function's configured tool names
+                function_config
+                    .tools()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            }
+            AllowedToolsChoice::DynamicAllowedTools => {
+                // Use the dynamically specified tool names
+                self.allowed_tools.tools
+            }
+        };
+
+        // Collect static tools from config
+        let static_tools: Vec<Tool> = tool_names
+            .iter()
+            .filter_map(|tool_name| {
+                config.tools.get(tool_name).map(|static_tool| {
+                    Tool::ClientSideFunction(ClientSideFunctionTool {
+                        description: static_tool.description.clone(),
+                        parameters: static_tool.parameters.value.clone(),
+                        name: static_tool.name.clone(),
+                        strict: static_tool.strict,
+                    })
+                })
+            })
+            .collect();
+
+        // Combine static tools and dynamic tools
+        let all_tools = static_tools
+            .into_iter()
+            .chain(self.dynamic_tools.into_iter());
+
+        Ok(all_tools)
     }
 }
 

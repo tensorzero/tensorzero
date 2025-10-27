@@ -52,8 +52,8 @@ pub struct ChatInferenceDatapointInsert {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(flatten)]
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,

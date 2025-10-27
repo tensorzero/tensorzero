@@ -120,7 +120,7 @@ impl StoredInference {
                     dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
                     episode_id,
                     inference_id,
-                    tool_params,
+                    tool_info: tool_params,
                     tags,
                     timestamp,
                 }))
@@ -237,7 +237,7 @@ impl StoredInference {
     pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
             StoredInference::Chat(example) => {
-                example.tool_params.clone().into_py_any(py)?.into_bound(py)
+                example.tool_info.clone().into_py_any(py)?.into_bound(py)
             }
             // Json inferences don't have tool params
             StoredInference::Json(_) => py.None().into_bound(py),
@@ -292,7 +292,8 @@ pub struct StoredChatInference {
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     #[serde(default)]
-    pub tool_params: ToolCallConfigDatabaseInsert,
+    #[serde(flatten)]
+    pub tool_info: ToolCallConfigDatabaseInsert,
     #[serde(default)]
     pub tags: HashMap<String, String>,
 }
@@ -382,7 +383,7 @@ impl StoredSample for StoredInference {
                 output: Some(example.output.clone()),
                 stored_output: Some(StoredOutput::Chat(example.output)),
                 dispreferred_outputs: example.dispreferred_outputs,
-                tool_params: Some(example.tool_params),
+                tool_params: Some(example.tool_info),
                 output_schema: None,
                 tags: example.tags,
             },
@@ -443,7 +444,7 @@ pub struct RenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }

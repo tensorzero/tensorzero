@@ -1292,11 +1292,9 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(flatten)]
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
 
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1521,7 +1519,8 @@ pub struct UpdateChatInferenceDatapointRequest {
     #[serde(deserialize_with = "deserialize_optional_json_value")]
     pub output: Option<serde_json::Value>,
     #[serde(default)]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(flatten)]
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
     #[serde(default)]

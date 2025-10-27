@@ -384,7 +384,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         params: &CountDatapointsForDatasetFunctionParams,
     ) -> Result<u32, Error> {
         let query = "
-        SELECT toUInt32(count()) as count 
+        SELECT toUInt32(count()) as count
         FROM {table:Identifier}
         WHERE dataset_name = {dataset_name:String}
             AND function_name = {function_name:String}";
@@ -690,12 +690,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 fn convert_chat_datapoint_to_json_string(
     chat_datapoint: &ChatInferenceDatapointInsert,
 ) -> Result<String, Error> {
-    // tool_params in clickhouse is a non-null String
-    let tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_params {
-        serde_json::to_value(tool_params)?
-    } else {
-        json!("")
-    };
     // Tags in clickhouse is a Non-null Map(String, String)
     let tags_value = if let Some(tags) = &chat_datapoint.tags {
         serde_json::to_value(tags)?
@@ -711,13 +705,18 @@ fn convert_chat_datapoint_to_json_string(
         "episode_id": chat_datapoint.episode_id,
         "input": chat_datapoint.input,
         "output": chat_datapoint.output,
-        "tool_params": tool_params_value,
         "tags": tags_value,
         "auxiliary": chat_datapoint.auxiliary,
         "source_inference_id": chat_datapoint.source_inference_id,
         "is_custom": chat_datapoint.is_custom,
         "staled_at": chat_datapoint.staled_at,
     });
+    // tool_params in clickhouse is a non-null String
+    let tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_info {
+        serde_json::to_value(tool_params)?
+    } else {
+        json!("")
+    };
     serde_json::to_string(&json_value).map_err(|e| {
         Error::new(ErrorDetails::Serialization {
             message: format!("Failed to serialize chat datapoint: {e}"),
@@ -3124,18 +3123,18 @@ mod tests {
                     '' as output_schema,");
                 assert_query_contains(query,
                     "tags,
-                    auxiliary, 
-                    source_inference_id, 
-                    is_deleted, 
-                    is_custom, 
-                    staled_at, 
+                    auxiliary,
+                    source_inference_id,
+                    is_deleted,
+                    is_custom,
+                    staled_at,
                     formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at");
                 assert_query_contains(query, "FROM ChatInferenceDatapoint AS i FINAL
                     WHERE true
                     AND dataset_name = {dataset_name:String}
                     AND id IN ['123e4567-e89b-12d3-a456-426614174000']
                     AND staled_at IS NULL");
-                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC 
+                assert_query_contains(query, "ORDER BY updated_at DESC, id DESC
                     LIMIT {subquery_page_size:UInt32}");
                 assert_query_contains(query, "UNION ALL");
                 assert_query_contains(query, "

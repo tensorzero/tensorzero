@@ -1395,9 +1395,8 @@ pub struct ChatInferenceDatabaseInsert {
     pub input: StoredInput,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub output: Vec<ContentBlockChatOutput>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(flatten)]
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: InferenceParams,
     pub processing_time_ms: Option<u32>,

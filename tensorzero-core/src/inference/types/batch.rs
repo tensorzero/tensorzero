@@ -205,8 +205,8 @@ pub struct BatchModelInferenceRow<'a> {
     pub input_messages: Vec<StoredRequestMessage>,
     pub system: Option<Cow<'a, str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(flatten)]
+    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: Cow<'a, InferenceParams>,
     pub output_schema: Option<String>,
