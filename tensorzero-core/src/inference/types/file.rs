@@ -1,3 +1,49 @@
+//! File Handling for TensorZero Inference Inputs
+//!
+//! This module defines file types for different stages of the file lifecycle:
+//! from client requests through async processing to database storage and retrieval.
+//!
+//! # File Type Categories
+//!
+//! ## 1. `File` - Input from Client Requests
+//! The primary enum representing files as they arrive from API requests.
+//! Four variants handle different input formats:
+//! - **`Url`**: A file URL that needs to be fetched
+//! - **`Base64`**: A base64-encoded file with data already present
+//! - **`ObjectStoragePointer`**: A pointer to an object storage location (metadata only, no data)
+//! - **`ObjectStorage`**: A complete object storage file (metadata + data)
+//!
+//! ## 2. `LazyFile` - Async Processing
+//! An intermediate type used during inference processing. Enables lazy evaluation
+//! of file operations using shared futures for concurrent access.
+//! Four variants mirror the `File` variants:
+//! - **`Url`**: Contains a `FileFuture` that will fetch and store the file
+//! - **`Base64`**: Contains a `PendingObjectStoreFile` (base64 data + pending object storage path)
+//! - **`ObjectStoragePointer`**: Contains a `FileFuture` that will fetch from object storage
+//! - **`ObjectStorage`**: Contains resolved `ObjectStorageFile` (no async work needed)
+//!
+//! The shared futures allow multiple model providers to await the same file resolution
+//! without redundant fetches or computations.
+//!
+//! ## 3. `StoredFile` - Database Persistence
+//! A newtype wrapper around `ObjectStoragePointer` used for ClickHouse storage.
+//! Only stores metadata (source URL, mime type, storage path) without the actual file data.
+//! The storage path is content-addressed, allowing files to be re-fetched when needed.
+//!
+//! # Flow Between Types
+//!
+//! ```text
+//! Client Request → File
+//!                   ↓
+//!              LazyFile (with futures for async operations)
+//!                   ↓ .resolve()
+//!           ObjectStorageFile (metadata + data)
+//!                   ↓ .into_stored_file()
+//!              StoredFile (metadata only, persisted to ClickHouse)
+//!                   ↓ .reresolve() (fetch data from storage)
+//!           ObjectStorageFile (metadata + data)
+//! ```
+
 use std::borrow::Cow;
 
 use futures::FutureExt;
@@ -271,8 +317,8 @@ impl<'de> Deserialize<'de> for ObjectStoragePointer {
 pub enum File {
     Url(UrlFile),                               // a file URL
     Base64(Base64File),                         // a base64-encoded file
-    ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (without data)
-    ObjectStorage(ObjectStorageFile),           // a file from object storage (pointer + data)
+    ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (metadata only)
+    ObjectStorage(ObjectStorageFile),           // a file from object storage (metadata + data)
 }
 
 // Allow deserializing File as either tagged or untagged format.
