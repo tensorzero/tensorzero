@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use serde::ser::{SerializeMap, Serializer};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -15,6 +16,61 @@ use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
 };
 use crate::tool::ToolCallConfigDatabaseInsert;
+
+fn serialize_optional_chat_output<S>(
+    value: &Option<Vec<ContentBlockChatOutput>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(output) => output.serialize(serializer),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn serialize_optional_json_output<S>(
+    value: &Option<JsonInferenceOutput>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(output) => output.serialize(serializer),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn serialize_tool_params_or_empty_string<S>(
+    value: &Option<ToolCallConfigDatabaseInsert>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(params) => params.serialize(serializer),
+        None => serializer.serialize_str(""),
+    }
+}
+
+fn serialize_tags_or_empty_map<S>(
+    value: &Option<HashMap<String, String>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(tags) => tags.serialize(serializer),
+        None => {
+            let map = serializer.serialize_map(Some(0))?;
+            map.end()
+        }
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -48,13 +104,13 @@ pub struct ChatInferenceDatapointInsert {
     pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: StoredInput,
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[serde(serialize_with = "serialize_optional_chat_output")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[serde(serialize_with = "serialize_tool_params_or_empty_string")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_tags_or_empty_map")]
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
     pub staled_at: Option<String>,
@@ -73,12 +129,12 @@ pub struct JsonInferenceDatapointInsert {
     pub episode_id: Option<Uuid>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: StoredInput,
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[serde(serialize_with = "serialize_optional_json_output")]
     pub output: Option<JsonInferenceOutput>,
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "serialize_tags_or_empty_map")]
     pub tags: Option<HashMap<String, String>>,
     pub auxiliary: String,
     pub staled_at: Option<String>,

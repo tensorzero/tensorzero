@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use itertools::Itertools;
-use serde_json::json;
 use std::collections::HashMap;
 use std::num::ParseIntError;
 
@@ -685,79 +684,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
     }
 }
 
-/// Internal helper: Build the JSON value for the insert to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
-/// TODO(shuyangli): Consider restructuring the types so this takes a RawChatDatapointInsert (or something that directly corresponds to the internal ClickHouse structure).
-fn convert_chat_datapoint_to_json_string(
-    chat_datapoint: &ChatInferenceDatapointInsert,
-) -> Result<String, Error> {
-    // tool_params in clickhouse is a non-null String
-    let tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_params {
-        serde_json::to_value(tool_params)?
-    } else {
-        json!("")
-    };
-    // Tags in clickhouse is a Non-null Map(String, String)
-    let tags_value = if let Some(tags) = &chat_datapoint.tags {
-        serde_json::to_value(tags)?
-    } else {
-        json!({})
-    };
-
-    let json_value = json!({
-        "dataset_name": chat_datapoint.dataset_name,
-        "function_name": chat_datapoint.function_name,
-        "id": chat_datapoint.id,
-        "name": chat_datapoint.name,
-        "episode_id": chat_datapoint.episode_id,
-        "input": chat_datapoint.input,
-        "output": chat_datapoint.output,
-        "tool_params": tool_params_value,
-        "tags": tags_value,
-        "auxiliary": chat_datapoint.auxiliary,
-        "source_inference_id": chat_datapoint.source_inference_id,
-        "is_custom": chat_datapoint.is_custom,
-        "staled_at": chat_datapoint.staled_at,
-    });
-    serde_json::to_string(&json_value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize chat datapoint: {e}"),
-        })
-    })
-}
-
-/// Internal helper: Build the JSON value for the insert to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
-/// TODO(shuyangli): Consider restructuring the types so this takes a RawJsonDatapointInsert (or something that directly corresponds to the internal ClickHouse structure).
-fn convert_json_datapoint_to_json_string(
-    json_datapoint: &JsonInferenceDatapointInsert,
-) -> Result<String, Error> {
-    // Tags in clickhouse is a Non-null Map(String, String)
-    let tags_value = if let Some(tags) = &json_datapoint.tags {
-        serde_json::to_value(tags)?
-    } else {
-        json!({})
-    };
-    let json_value = json!({
-        "dataset_name": json_datapoint.dataset_name,
-        "function_name": json_datapoint.function_name,
-        "id": json_datapoint.id,
-        "name": json_datapoint.name,
-        "episode_id": json_datapoint.episode_id,
-        "input": json_datapoint.input,
-        "output": json_datapoint.output,
-        "output_schema": json_datapoint.output_schema,
-        "tags": tags_value,
-        "auxiliary": json_datapoint.auxiliary,
-        "source_inference_id": json_datapoint.source_inference_id,
-        "is_custom": json_datapoint.is_custom,
-        "staled_at": json_datapoint.staled_at,
-    });
-    serde_json::to_string(&json_value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize json datapoint: {e}"),
-        })
-    })
-}
-
 impl ClickHouseConnectionInfo {
     /// Internal helper: Puts chat datapoints into the database
     /// Returns the number of rows written
@@ -774,7 +700,13 @@ impl ClickHouseConnectionInfo {
 
         let serialized_datapoints = datapoints
             .iter()
-            .map(|datapoint| convert_chat_datapoint_to_json_string(datapoint))
+            .map(|datapoint| {
+                serde_json::to_string(datapoint).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to serialize chat datapoint: {e}"),
+                    })
+                })
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         let query = r"
@@ -842,7 +774,13 @@ impl ClickHouseConnectionInfo {
 
         let serialized_datapoints = datapoints
             .iter()
-            .map(|datapoint| convert_json_datapoint_to_json_string(datapoint))
+            .map(|datapoint| {
+                serde_json::to_string(datapoint).map_err(|e| {
+                    Error::new(ErrorDetails::Serialization {
+                        message: format!("Failed to serialize json datapoint: {e}"),
+                    })
+                })
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         let query = r"
