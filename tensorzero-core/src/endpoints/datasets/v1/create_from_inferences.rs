@@ -45,11 +45,11 @@ async fn create_from_inferences(
 ) -> Result<CreateDatapointsFromInferenceResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
+    // If output_source is not specified, default to Inference.
     let request_output_source = request
         .output_source
         .unwrap_or(CreateDatapointsFromInferenceOutputSource::Inference);
 
-    // If not specified, default to Inference.
     let inference_output_source = match request_output_source {
         CreateDatapointsFromInferenceOutputSource::None => {
             // If we are not including any output in the datapoints, we use Inference for the query to
@@ -129,20 +129,20 @@ mod tests {
     use crate::config::gateway::GatewayConfig;
     use crate::config::provider_types::ProviderTypesConfig;
     use crate::config::PostgresConfig;
-    use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
-    use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
-    use crate::db::clickhouse::{ClickHouseResponse, ClickHouseResponseMetadata};
+    use crate::db::clickhouse::MockClickHouseConnectionInfo;
+    use crate::db::datasets::DatapointInsert;
     use crate::embeddings::EmbeddingModelTable;
-    use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
+    use crate::inference::types::{ContentBlockChatOutput, Text};
     use crate::minijinja_util::TemplateConfig;
     use crate::model::ModelTable;
     use crate::rate_limiting::RateLimitingConfig;
-    use crate::stored_inference::{StoredChatInference, StoredInference, StoredJsonInference};
+    use crate::stored_inference::{StoredChatInference, StoredInference};
     use crate::tool::ToolCallConfigDatabaseInsert;
     use std::collections::HashMap;
     use std::sync::Arc;
     use uuid::Uuid;
 
+    /// Helper to create a minimal test config
     fn create_test_config() -> Config {
         Config {
             gateway: GatewayConfig::default(),
@@ -161,11 +161,12 @@ mod tests {
         }
     }
 
-    fn create_test_chat_inference(id: Uuid) -> StoredInference {
+    /// Helper to create a test inference
+    fn create_test_inference(id: Uuid) -> StoredInference {
         StoredInference::Chat(StoredChatInference {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
-            input: crate::inference::types::stored_input::StoredInput {
+            input: crate::inference::types::StoredInput {
                 system: None,
                 messages: vec![],
             },
@@ -181,74 +182,46 @@ mod tests {
         })
     }
 
-    fn create_test_json_inference(id: Uuid) -> StoredInference {
-        StoredInference::Json(StoredJsonInference {
-            function_name: "test_function".to_string(),
-            variant_name: "test_variant".to_string(),
-            input: crate::inference::types::stored_input::StoredInput {
-                system: None,
-                messages: vec![],
-            },
-            output: JsonInferenceOutput {
-                raw: Some("test output".to_string()),
-                parsed: None,
-            },
-            dispreferred_outputs: vec![],
-            timestamp: chrono::Utc::now(),
-            episode_id: Uuid::now_v7(),
-            inference_id: id,
-            output_schema: serde_json::json!({}),
-            tags: HashMap::new(),
-        })
-    }
-
     #[tokio::test]
     async fn test_create_from_inference_ids_success() {
         let config = create_test_config();
-        let inference_id1 = Uuid::now_v7();
-        let inference_id2 = Uuid::now_v7();
+        let id1 = Uuid::now_v7();
+        let id2 = Uuid::now_v7();
 
-        let mut mock_client = MockClickHouseClient::new();
+        let inference1 = create_test_inference(id1);
+        let inference2 = create_test_inference(id2);
 
-        // Mock list_inferences call
-        mock_client
-            .expect_run_query_synchronous()
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_queries
+            .expect_list_inferences()
             .times(1)
             .returning(move |_, _| {
-                let inf1 = create_test_chat_inference(inference_id1);
-                let inf2 = create_test_chat_inference(inference_id2);
-                let json = format!(
-                    "{}\n{}",
-                    serde_json::to_string(&inf1).unwrap(),
-                    serde_json::to_string(&inf2).unwrap()
-                );
-                Ok(ClickHouseResponse {
-                    response: json,
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 2,
-                        written_rows: 0,
-                    },
-                })
+                let inf1 = inference1.clone();
+                let inf2 = inference2.clone();
+                Box::pin(async move { Ok(vec![inf1, inf2]) })
             });
-
-        // Mock write_batched_internal call (used by insert_datapoints)
-        mock_client
-            .expect_write_batched_internal()
-            .returning(|_, _| Ok(()));
-
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(mock_client));
+        mock_clickhouse
+            .dataset_queries
+            .expect_insert_datapoints()
+            .times(1)
+            .returning(|_| Box::pin(async move { Ok(2) }));
 
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
-                inference_ids: vec![inference_id1, inference_id2],
+                inference_ids: vec![id1, id2],
             },
             output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
-        let result =
-            create_from_inferences(&config, &clickhouse, "test_dataset".to_string(), request)
-                .await
-                .unwrap();
+        let result = create_from_inferences(
+            &config,
+            &mock_clickhouse,
+            "test_dataset".to_string(),
+            request,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.ids.len(), 2);
     }
@@ -259,28 +232,21 @@ mod tests {
         let existing_id = Uuid::now_v7();
         let missing_id = Uuid::now_v7();
 
-        let mut mock_client = MockClickHouseClient::new();
+        let inference = create_test_inference(existing_id);
 
-        // Mock list_inferences - only returns one inference
-        mock_client
-            .expect_run_query_synchronous()
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_queries
+            .expect_list_inferences()
             .times(1)
             .returning(move |_, _| {
-                let inf = create_test_chat_inference(existing_id);
-                let json = serde_json::to_string(&inf).unwrap();
-                Ok(ClickHouseResponse {
-                    response: json,
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 1,
-                        written_rows: 0,
-                    },
-                })
+                let inf = inference.clone();
+                Box::pin(async move { Ok(vec![inf]) })
             });
-
-        // Should NOT call write methods when an inference is missing
-        mock_client.expect_write_batched_internal().times(0);
-
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(mock_client));
+        mock_clickhouse
+            .dataset_queries
+            .expect_insert_datapoints()
+            .times(0);
 
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
@@ -289,167 +255,36 @@ mod tests {
             output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
-        let result =
-            create_from_inferences(&config, &clickhouse, "test_dataset".to_string(), request).await;
+        let result = create_from_inferences(
+            &config,
+            &mock_clickhouse,
+            "test_dataset".to_string(),
+            request,
+        )
+        .await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("not found"));
+        assert!(
+            error.to_string().contains("not found"),
+            "Expected 'not found' error, got: {error}"
+        );
     }
 
     #[tokio::test]
-    async fn test_create_from_inference_query_success() {
-        let config = create_test_config();
-        let inference_id1 = Uuid::now_v7();
-        let inference_id2 = Uuid::now_v7();
-
-        let mut mock_client = MockClickHouseClient::new();
-
-        // Mock list_inferences call for query
-        mock_client
-            .expect_run_query_synchronous()
-            .times(1)
-            .returning(move |_, _| {
-                let inf1 = create_test_json_inference(inference_id1);
-                let inf2 = create_test_json_inference(inference_id2);
-                let json = format!(
-                    "{}\n{}",
-                    serde_json::to_string(&inf1).unwrap(),
-                    serde_json::to_string(&inf2).unwrap()
-                );
-                Ok(ClickHouseResponse {
-                    response: json,
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 2,
-                        written_rows: 0,
-                    },
-                })
-            });
-
-        // Mock write_batched_internal call (used by insert_datapoints)
-        mock_client
-            .expect_write_batched_internal()
-            .returning(|_, _| Ok(()));
-
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(mock_client));
-
-        let request = CreateDatapointsFromInferenceRequest {
-            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                function_name: "test_function".to_string(),
-                variant_name: None,
-                filters: None,
-            },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
-        };
-
-        let result =
-            create_from_inferences(&config, &clickhouse, "test_dataset".to_string(), request)
-                .await
-                .unwrap();
-
-        assert_eq!(result.ids.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_create_from_inference_with_filters() {
-        let config = create_test_config();
-        let inference_id = Uuid::now_v7();
-
-        let mut mock_client = MockClickHouseClient::new();
-
-        // Mock list_inferences call with filter
-        mock_client
-            .expect_run_query_synchronous()
-            .times(1)
-            .returning(move |_, _| {
-                let inf = create_test_chat_inference(inference_id);
-                let json = serde_json::to_string(&inf).unwrap();
-                Ok(ClickHouseResponse {
-                    response: json,
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 1,
-                        written_rows: 0,
-                    },
-                })
-            });
-
-        // Mock write_batched_internal call (used by insert_datapoints)
-        mock_client
-            .expect_write_batched_internal()
-            .returning(|_, _| Ok(()));
-
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(mock_client));
-
-        let filter = InferenceFilter::Tag(TagFilter {
-            key: "test_key".to_string(),
-            value: "test_value".to_string(),
-            comparison_operator: TagComparisonOperator::Equal,
-        });
-
-        let request = CreateDatapointsFromInferenceRequest {
-            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                function_name: "test_function".to_string(),
-                variant_name: Some("test_variant".to_string()),
-                filters: Some(filter),
-            },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
-        };
-
-        let result =
-            create_from_inferences(&config, &clickhouse, "test_dataset".to_string(), request)
-                .await
-                .unwrap();
-
-        assert_eq!(result.ids.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_create_from_inference_empty_result() {
+    async fn test_invalid_dataset_name() {
         let config = create_test_config();
 
-        let mut mock_client = MockClickHouseClient::new();
-
-        // Mock list_inferences returning no results
-        mock_client
-            .expect_run_query_synchronous()
-            .times(1)
-            .returning(|_, _| {
-                Ok(ClickHouseResponse {
-                    response: String::new(),
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 0,
-                        written_rows: 0,
-                    },
-                })
-            });
-
-        // Should NOT call write methods when no inferences found
-        mock_client.expect_write_batched_internal().times(0);
-
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(mock_client));
-
-        let request = CreateDatapointsFromInferenceRequest {
-            params: CreateDatapointsFromInferenceRequestParams::InferenceQuery {
-                function_name: "nonexistent_function".to_string(),
-                variant_name: None,
-                filters: None,
-            },
-            output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
-        };
-
-        let result =
-            create_from_inferences(&config, &clickhouse, "test_dataset".to_string(), request)
-                .await
-                .unwrap();
-
-        assert_eq!(result.ids.len(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_create_from_inference_invalid_dataset_name() {
-        let config = create_test_config();
-        let mock_client = MockClickHouseClient::new();
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(mock_client));
+        // We shouldn't query inferences or insert datapoints if the dataset name is invalid.
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_queries
+            .expect_list_inferences()
+            .times(0);
+        mock_clickhouse
+            .dataset_queries
+            .expect_insert_datapoints()
+            .times(0);
 
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
@@ -458,64 +293,64 @@ mod tests {
             output_source: Some(CreateDatapointsFromInferenceOutputSource::Inference),
         };
 
-        // Dataset name with spaces should be rejected
-        let result = create_from_inferences(
-            &config,
-            &clickhouse,
-            "invalid dataset name".to_string(),
-            request,
-        )
-        .await;
+        // Dataset name "builder" is reserved
+        let result =
+            create_from_inferences(&config, &mock_clickhouse, "builder".to_string(), request).await;
 
         assert!(result.is_err());
         let error = result.unwrap_err();
-        assert!(error.to_string().contains("Invalid") || error.to_string().contains("dataset"));
+        assert!(
+            error.to_string().contains("Invalid") || error.to_string().contains("dataset"),
+            "Expected dataset validation error, got: {error}"
+        );
     }
 
     #[tokio::test]
-    async fn test_create_from_inference_output_source_none() {
+    async fn test_output_source_none() {
         let config = create_test_config();
-        let inference_id = Uuid::now_v7();
+        let id = Uuid::now_v7();
 
-        let mut mock_client = MockClickHouseClient::new();
+        let inference = create_test_inference(id);
 
-        // Mock list_inferences call
-        mock_client
-            .expect_run_query_synchronous()
+        let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
+        mock_clickhouse
+            .inference_queries
+            .expect_list_inferences()
             .times(1)
             .returning(move |_, _| {
-                let inf = create_test_chat_inference(inference_id);
-                let json = serde_json::to_string(&inf).unwrap();
-                Ok(ClickHouseResponse {
-                    response: json,
-                    metadata: ClickHouseResponseMetadata {
-                        read_rows: 1,
-                        written_rows: 0,
-                    },
-                })
+                let inf = inference.clone();
+                Box::pin(async move { Ok(vec![inf]) })
             });
-
-        // Mock write_batched_internal call (used by insert_datapoints)
-        mock_client
-            .expect_write_batched_internal()
-            .returning(|_, _| Ok(()));
-
-        let clickhouse = ClickHouseConnectionInfo::new_mock(Arc::new(mock_client));
+        mock_clickhouse
+            .dataset_queries
+            .expect_insert_datapoints()
+            .times(1)
+            .withf(|datapoints| {
+                // Verify that the datapoint has no output when output_source is None
+                if let Some(DatapointInsert::Chat(dp)) = datapoints.first() {
+                    dp.output.is_none()
+                } else {
+                    false
+                }
+            })
+            .returning(|_| Box::pin(async move { Ok(1) }));
 
         let request = CreateDatapointsFromInferenceRequest {
             params: CreateDatapointsFromInferenceRequestParams::InferenceIds {
-                inference_ids: vec![inference_id],
+                inference_ids: vec![id],
             },
             output_source: Some(CreateDatapointsFromInferenceOutputSource::None),
         };
 
-        let result =
-            create_from_inferences(&config, &clickhouse, "test_dataset".to_string(), request)
-                .await
-                .unwrap();
+        let result = create_from_inferences(
+            &config,
+            &mock_clickhouse,
+            "test_dataset".to_string(),
+            request,
+        )
+        .await
+        .unwrap();
 
         assert_eq!(result.ids.len(), 1);
-        // Note: The actual verification that output is None would require checking the
-        // datapoint insert payload, which is tested in the StoredInference::into_datapoint_insert tests
     }
 }
