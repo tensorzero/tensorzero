@@ -780,7 +780,7 @@ async fn write_start_batch_inference<'a>(
             )
             .await?,
             system: row.system.map(Cow::Borrowed),
-            tool_params,
+            tool_info: tool_params,
             inference_params: Cow::Borrowed(row.inference_params),
             output_schema: row.output_schema.map(Value::to_string),
             raw_request: Cow::Borrowed(row.raw_request),
@@ -982,7 +982,7 @@ pub async fn write_completed_batch_inference<'a>(
             input,
             input_messages,
             system,
-            tool_params,
+            tool_info,
             inference_params,
             output_schema,
             raw_request,
@@ -1020,7 +1020,7 @@ pub async fn write_completed_batch_inference<'a>(
             cached: false,
             finish_reason,
         };
-        let tool_config: Option<ToolCallConfig> = tool_params
+        let tool_config: Option<ToolCallConfig> = tool_info
             .map(|x| x.into_tool_call_config(&function, &config.tools))
             .transpose()?
             .flatten();
