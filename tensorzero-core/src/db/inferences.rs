@@ -171,17 +171,44 @@ impl TryFrom<&str> for InferenceOutputSource {
         }
     }
 }
-/// Parameters for a ListInferences request.
+/// Parameters for a ListInferences query.
 #[derive(Debug, Clone)]
 pub struct ListInferencesParams<'a> {
-    pub function_name: &'a str,
+    /// Function name to query. If provided, only inferences from this function will be returned.
+    pub function_name: Option<&'a str>,
+    /// Inference IDs. If provided, only inferences with these IDs will be returned.
+    pub ids: Option<&'a [Uuid]>,
+    /// Variant name to query.
     pub variant_name: Option<&'a str>,
+    /// Episode ID to query.
+    pub episode_id: Option<&'a Uuid>,
+    /// Filters to apply to the query.
     pub filters: Option<&'a InferenceFilter>,
+    /// Source of the inference output to query.
     pub output_source: InferenceOutputSource,
+    /// Maximum number of inferences to return.
     pub limit: Option<u64>,
+    /// Number of inferences to skip.
     pub offset: Option<u64>,
     pub order_by: Option<&'a [OrderBy]>,
     pub format: ClickhouseFormat,
+}
+
+impl Default for ListInferencesParams<'_> {
+    fn default() -> Self {
+        Self {
+            function_name: None,
+            ids: None,
+            variant_name: None,
+            episode_id: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            order_by: None,
+            format: ClickhouseFormat::JsonEachRow,
+        }
+    }
 }
 
 #[async_trait]
