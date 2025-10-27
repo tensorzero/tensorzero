@@ -7,7 +7,7 @@ use tensorzero_core::{
         get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
         CLICKHOUSE_URL,
     },
-    inference::types::{ContentBlockChatOutput, Text},
+    inference::types::{ContentBlockChatOutput, System, Text},
 };
 use uuid::Uuid;
 
@@ -563,7 +563,12 @@ async fn e2e_test_named_system_template_no_schema() {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
             input: tensorzero::ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "AskJeeves"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![],
             },
             ..Default::default()
@@ -625,7 +630,12 @@ async fn e2e_test_named_system_template_with_schema() {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
             input: tensorzero::ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "AskJeeves"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![],
             },
             ..Default::default()
@@ -662,7 +672,12 @@ async fn e2e_test_named_system_template_with_schema() {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
             input: tensorzero::ClientInput {
-                system: Some(serde_json::json!({"assistant_name": 123})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": 123})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![],
             },
             ..Default::default()

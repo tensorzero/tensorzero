@@ -11,6 +11,7 @@ use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
+use crate::inference::types::System;
 use crate::inference::types::TemplateInput;
 use crate::inference::types::{Role, Text, Thought, ToolCall, ToolResult};
 use futures::future::try_join_all;
@@ -37,7 +38,7 @@ use pyo3::prelude::*;
 pub struct StoredInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(test, ts(optional))]
-    pub system: Option<Value>,
+    pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<StoredInputMessage>,
 }

@@ -1,6 +1,5 @@
 #![expect(clippy::panic, clippy::print_stdout, clippy::unwrap_used)]
 use base64::Engine;
-use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tensorzero_core::rate_limiting::ScopeInfo;
@@ -27,7 +26,7 @@ use tensorzero_core::{
         stored_input::StoredFile,
         Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
         ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
-        StoredInputMessage, StoredInputMessageContent, Text,
+        StoredInputMessage, StoredInputMessageContent, System, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -304,7 +303,7 @@ fn generate_text_example() -> RenderedSample {
             }],
         },
         stored_input: StoredInput {
-            system: Some(json!(system_prompt)),
+            system: Some(System::Text(system_prompt.clone())),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -395,7 +394,7 @@ fn generate_tool_call_example() -> RenderedSample {
             ],
         },
         stored_input: StoredInput {
-            system: Some(json!(system_prompt)),
+            system: Some(System::Text(system_prompt.clone())),
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
@@ -508,7 +507,7 @@ fn generate_image_example() -> RenderedSample {
             }],
         },
         stored_input: StoredInput {
-            system: Some(json!(system_prompt)),
+            system: Some(System::Text(system_prompt.clone())),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![

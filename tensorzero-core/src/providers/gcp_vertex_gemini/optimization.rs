@@ -249,7 +249,7 @@ mod tests {
     use crate::{
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
         providers::gcp_vertex_gemini::GCPVertexGeminiContentPart,
         stored_inference::{RenderedSample, StoredOutput},
@@ -275,7 +275,9 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                system: Some(System::Text(
+                    "You are a helpful assistant named Dr. M.M. Patel.".to_string(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
