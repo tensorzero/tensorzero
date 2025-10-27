@@ -8,7 +8,8 @@ import type { InferenceFilter } from "./InferenceFilter";
 export type CreateDatapointsFromInferenceRequest = {
   /**
    * When creating the datapoint, this specifies the source of the output for the datapoint.
-   * If not provided, the source of the output for the datapoint will be determined by the source of the inference.
+   * If not provided, by default we will use the original inference output as the datapoint's output
+   * (equivalent to `inference`).
    */
   output_source?: CreateDatapointsFromInferenceOutputSource;
 } & (

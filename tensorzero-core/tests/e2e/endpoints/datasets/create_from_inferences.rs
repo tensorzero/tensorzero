@@ -5,9 +5,8 @@ use tensorzero_core::db::clickhouse::query_builder::{
     InferenceFilter, TagComparisonOperator, TagFilter,
 };
 use tensorzero_core::endpoints::datasets::v1::types::{
-    CreateDatapointResult, CreateDatapointsFromInferenceOutputSource,
-    CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsFromInferenceResponse,
+    CreateDatapointsFromInferenceOutputSource, CreateDatapointsFromInferenceRequest,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsFromInferenceResponse,
 };
 use tensorzero_core::inference::types::Input;
 
@@ -70,24 +69,9 @@ async fn test_create_from_inference_ids_success() {
     assert_eq!(response.status(), 200);
     let result: CreateDatapointsFromInferenceResponse = response.json().await.unwrap();
 
-    assert_eq!(result.datapoints.len(), 2);
-    for datapoint in &result.datapoints {
-        match datapoint {
-            CreateDatapointResult::Success { id, inference_id } => {
-                assert!(
-                    inference_id == &inference_id1 || inference_id == &inference_id2,
-                    "Unexpected inference_id: {}",
-                    inference_id
-                );
-                assert_ne!(id, &Uuid::nil());
-            }
-            CreateDatapointResult::Error {
-                inference_id,
-                error,
-            } => {
-                panic!("Unexpected error for inference {}: {}", inference_id, error);
-            }
-        }
+    assert_eq!(result.ids.len(), 2);
+    for id in &result.ids {
+        assert_ne!(id, &Uuid::nil());
     }
 }
 
@@ -153,20 +137,7 @@ async fn test_create_from_inference_query_success() {
     let result: CreateDatapointsFromInferenceResponse = response.json().await.unwrap();
 
     // Should have created exactly 3 datapoints (one for each inference we created)
-    assert_eq!(result.datapoints.len(), 3, "Expected exactly 3 datapoints");
-
-    // All should be successful
-    for datapoint in &result.datapoints {
-        match datapoint {
-            CreateDatapointResult::Success { .. } => {}
-            CreateDatapointResult::Error {
-                inference_id,
-                error,
-            } => {
-                panic!("Unexpected error for inference {}: {}", inference_id, error);
-            }
-        }
-    }
+    assert_eq!(result.ids.len(), 3, "Expected exactly 3 datapoints");
 }
 
 #[tokio::test]
@@ -212,13 +183,9 @@ async fn test_create_from_inference_duplicate_error() {
         .unwrap();
     assert_eq!(response1.status(), 200);
     let result1: CreateDatapointsFromInferenceResponse = response1.json().await.unwrap();
-    assert_eq!(result1.datapoints.len(), 1);
-    assert!(matches!(
-        &result1.datapoints[0],
-        CreateDatapointResult::Success { .. }
-    ));
+    assert_eq!(result1.ids.len(), 1);
 
-    // Try to create datapoint from the same inference again
+    // Try to create datapoint from the same inference again - should succeed and create another datapoint
     let response2 = client
         .post(get_gateway_endpoint(
             "/v1/datasets/test_dataset_dup/from_inferences",
@@ -229,21 +196,10 @@ async fn test_create_from_inference_duplicate_error() {
         .unwrap();
     assert_eq!(response2.status(), 200);
     let result2: CreateDatapointsFromInferenceResponse = response2.json().await.unwrap();
-    assert_eq!(result2.datapoints.len(), 1);
+    assert_eq!(result2.ids.len(), 1);
 
-    // Should get an error about duplicate
-    match &result2.datapoints[0] {
-        CreateDatapointResult::Error { error, .. } => {
-            assert!(
-                error.contains("already exists"),
-                "Expected 'already exists' error, got: {}",
-                error
-            );
-        }
-        CreateDatapointResult::Success { .. } => {
-            panic!("Expected error for duplicate, got success");
-        }
-    }
+    // The datapoint IDs should be different
+    assert_ne!(result1.ids[0], result2.ids[0]);
 }
 
 #[tokio::test]
@@ -291,20 +247,14 @@ async fn test_create_from_inference_missing_ids() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 200);
-    let result: CreateDatapointsFromInferenceResponse = response.json().await.unwrap();
-
-    // Should only get one result (for the real inference)
-    // The missing inference is silently skipped
-    assert_eq!(result.datapoints.len(), 1);
-    match &result.datapoints[0] {
-        CreateDatapointResult::Success { inference_id, .. } => {
-            assert_eq!(inference_id, &real_inference_id);
-        }
-        CreateDatapointResult::Error { .. } => {
-            panic!("Expected success for real inference");
-        }
-    }
+    // Should get an error because one of the inferences doesn't exist
+    assert_eq!(response.status(), 400);
+    let error: serde_json::Value = response.json().await.unwrap();
+    let error_message = error["error"].as_str().unwrap();
+    assert!(
+        error_message.contains("not found"),
+        "Expected 'not found' error, got: {error_message}"
+    );
 }
 
 #[tokio::test]
@@ -388,20 +338,7 @@ async fn test_create_from_inference_with_filters() {
     let result: CreateDatapointsFromInferenceResponse = response.json().await.unwrap();
 
     // Should have created exactly 1 datapoint (only the inference with matching tag)
-    assert_eq!(result.datapoints.len(), 1, "Expected exactly 1 datapoint");
-
-    // Should be successful
-    for datapoint in &result.datapoints {
-        match datapoint {
-            CreateDatapointResult::Success { .. } => {}
-            CreateDatapointResult::Error {
-                inference_id,
-                error,
-            } => {
-                panic!("Unexpected error for inference {}: {}", inference_id, error);
-            }
-        }
-    }
+    assert_eq!(result.ids.len(), 1, "Expected exactly 1 datapoint");
 }
 
 #[tokio::test]
@@ -446,12 +383,8 @@ async fn test_create_from_inference_dataset_name_with_spaces() {
         .await
         .unwrap();
 
-    // Dataset names with spaces are allowed
+    // Dataset names with spaces are allowed - should succeed
     assert_eq!(response.status(), 200);
     let result: CreateDatapointsFromInferenceResponse = response.json().await.unwrap();
-    assert_eq!(result.datapoints.len(), 1);
-    assert!(matches!(
-        &result.datapoints[0],
-        CreateDatapointResult::Success { .. }
-    ));
+    assert_eq!(result.ids.len(), 1);
 }

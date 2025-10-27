@@ -265,9 +265,9 @@ pub struct TimeFilter {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
-/// Filter tree for querying inferences.
+/// Filters for querying inferences.
 pub enum InferenceFilter {
-    /// Filter by the value of afloat metric
+    /// Filter by the value of a float metric
     FloatMetric(FloatMetricFilter),
 
     /// Filter by the value of a boolean metric

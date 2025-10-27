@@ -5,7 +5,7 @@ import type { TagFilter } from "./TagFilter";
 import type { TimeFilter } from "./TimeFilter";
 
 /**
- * Filter tree for querying inferences.
+ * Filters for querying inferences.
  */
 export type InferenceFilter =
   | ({ type: "float_metric" } & FloatMetricFilter)
