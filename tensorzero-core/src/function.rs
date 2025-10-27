@@ -28,7 +28,7 @@ use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, System, TextKind,
+    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, System,
 };
 use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
@@ -596,13 +596,8 @@ fn validate_all_text_input(
     for (index, message) in input.messages.iter().enumerate() {
         for block in &message.content {
             match block {
-                InputMessageContent::Text(kind) => {
-                    let content = match kind {
-                        TextKind::Arguments { arguments } => {
-                            Cow::Owned(Value::Object(arguments.0.clone()))
-                        }
-                        TextKind::Text { text } => Cow::Owned(Value::String(text.clone())),
-                    };
+                InputMessageContent::Text(text) => {
+                    let content = Cow::Owned(Value::String(text.text.clone()));
                     let schema = match &message.role {
                         Role::Assistant => schemas.get_implicit_assistant_schema(),
                         Role::User => schemas.get_implicit_user_schema(),
@@ -616,7 +611,7 @@ fn validate_all_text_input(
                     )?;
                 }
                 InputMessageContent::Template(template) => {
-                    // TODO - figure out a way to avoid this clone
+                    // TODO: figure out a way to avoid this clone
                     let value = Value::Object(template.arguments.0.clone());
                     validate_single_message(
                         &value,
@@ -681,6 +676,7 @@ mod tests {
     use crate::inference::types::Latency;
     use crate::inference::types::RawText;
     use crate::inference::types::RequestMessagesOrBatch;
+    use crate::inference::types::Template;
     use crate::inference::types::Text;
     use crate::inference::types::Thought;
     use crate::inference::types::Usage;
@@ -745,7 +741,8 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "assistant".to_string(),
                     arguments: Arguments(
                         json!({ "name": "assistant name" })
                             .as_object()
@@ -905,7 +902,8 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
                         serde_json::Value::String("user name".to_string()),
@@ -976,7 +974,8 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "assistant".to_string(),
                     arguments: Arguments(
                         json!({ "name": "assistant name" })
                             .as_object()
@@ -1051,7 +1050,8 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
                         serde_json::Value::String("user name".to_string()),
@@ -1060,7 +1060,8 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "assistant".to_string(),
                     arguments: Arguments(
                         json!({ "name": "assistant name" })
                             .as_object()
@@ -1197,13 +1198,15 @@ mod tests {
             InputMessage {
                 role: Role::User,
                 content: vec![
-                    InputMessageContent::Text(TextKind::Arguments {
+                    InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(serde_json::Map::from_iter([(
                             "name".to_string(),
                             serde_json::Value::String("user name".to_string()),
                         )])),
                     }),
-                    InputMessageContent::Text(TextKind::Arguments {
+                    InputMessageContent::Template(Template {
+                        name: "user".to_string(),
                         arguments: Arguments(
                             json!({ "name": "extra content" })
                                 .as_object()
@@ -1215,7 +1218,8 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "assistant".to_string(),
                     arguments: Arguments(
                         json!({ "name": "assistant name" })
                             .as_object()
@@ -1276,7 +1280,8 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
                         serde_json::Value::String("user name".to_string()),
@@ -1285,7 +1290,8 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "assistant".to_string(),
                     arguments: Arguments(
                         json!({ "name": "assistant name" })
                             .as_object()
@@ -1439,7 +1445,8 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
                         serde_json::Value::String("user name".to_string()),
@@ -1516,7 +1523,8 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "assistant".to_string(),
                     arguments: Arguments(
                         json!({ "name": "assistant name" })
                             .as_object()
@@ -1589,7 +1597,8 @@ mod tests {
         let messages = vec![
             InputMessage {
                 role: Role::User,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "user".to_string(),
                     arguments: Arguments(serde_json::Map::from_iter([(
                         "name".to_string(),
                         serde_json::Value::String("user name".to_string()),
@@ -1598,7 +1607,8 @@ mod tests {
             },
             InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Arguments {
+                content: vec![InputMessageContent::Template(Template {
+                    name: "assistant".to_string(),
                     arguments: Arguments(
                         json!({ "name": "assistant name" })
                             .as_object()

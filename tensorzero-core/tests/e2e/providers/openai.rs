@@ -22,7 +22,7 @@ use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind,
+    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, Text, TextKind,
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
@@ -1943,7 +1943,7 @@ pub async fn test_start_batch_inference_write_file() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text { text: "Tell me about this image".to_string() }),
+                    content: vec![InputMessageContent::Text(Text { text: "Tell me about this image".to_string() }),
                     InputMessageContent::File(File::Url {
                         url: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png".parse().unwrap(),
                         mime_type: None,

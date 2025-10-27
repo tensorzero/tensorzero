@@ -39,8 +39,9 @@ use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
     current_timestamp, Arguments, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason,
-    Input, InputMessage, InputMessageContent, RawText, Role, System, Template, TextKind, Usage,
+    Input, InputMessage, InputMessageContent, RawText, Role, System, Template, Text, Usage,
 };
+
 use crate::tool::{
     DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
 };
@@ -619,7 +620,7 @@ enum OpenAICompatibleFinishReason {
     Length,
     ContentFilter,
     ToolCalls,
-    // FunctionCall, we never generate this and it is deprecated
+    // FunctionCall: we never generate this and it is deprecated
 }
 
 impl From<FinishReason> for OpenAICompatibleFinishReason {
@@ -788,15 +789,11 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
         for message in openai_compatible_messages {
             match message {
                 OpenAICompatibleMessage::System(msg) => {
-                    let system_content = convert_openai_message_content(msg.content.clone())?;
+                    let system_content =
+                        convert_openai_message_content("system".to_string(), msg.content.clone())?;
                     for content in system_content {
                         system_messages.push(match content {
-                            InputMessageContent::Text(TextKind::Text { text }) => {
-                                Value::String(text)
-                            }
-                            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                                Value::Object(arguments.0)
-                            }
+                            InputMessageContent::Text(text) => Value::String(text.text),
                             InputMessageContent::RawText(raw_text) => Value::String(raw_text.value),
                             _ => {
                                 return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
@@ -811,13 +808,16 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
                 OpenAICompatibleMessage::User(msg) => {
                     messages.push(InputMessage {
                         role: Role::User,
-                        content: convert_openai_message_content(msg.content)?,
+                        content: convert_openai_message_content("user".to_string(), msg.content)?,
                     });
                 }
                 OpenAICompatibleMessage::Assistant(msg) => {
                     let mut message_content = Vec::new();
                     if let Some(content) = msg.content {
-                        message_content.extend(convert_openai_message_content(content)?);
+                        message_content.extend(convert_openai_message_content(
+                            "assistant".to_string(),
+                            content,
+                        )?);
                     }
                     if let Some(tool_calls) = msg.tool_calls {
                         for tool_call in tool_calls {
@@ -987,9 +987,12 @@ fn parse_base64_image_data_url(url: &str) -> Result<(MediaType, &str), Error> {
     Ok((image_type, data))
 }
 
-fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageContent>, Error> {
+fn convert_openai_message_content(
+    role: String,
+    content: Value,
+) -> Result<Vec<InputMessageContent>, Error> {
     match content {
-        Value::String(s) => Ok(vec![InputMessageContent::Text(TextKind::Text { text: s })]),
+        Value::String(s) => Ok(vec![InputMessageContent::Text(Text { text: s })]),
         Value::Array(a) => {
             let mut outputs = Vec::with_capacity(a.len());
             for val in a {
@@ -997,8 +1000,11 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                 let output = match block {
                     Ok(OpenAICompatibleContentBlock::RawText(raw_text)) => InputMessageContent::RawText(raw_text),
                     Ok(OpenAICompatibleContentBlock::Template(template)) => InputMessageContent::Template(template),
-                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(TextKind::Text {text }),
-                    Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => InputMessageContent::Text(TextKind::Arguments { arguments: tensorzero_arguments }),
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(Text { text }),
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => {
+                        tracing::warn!("Deprecation Warning: Using `tensorzero::arguments` in text content blocks is deprecated. Please use `{{\"type\": \"tensorzero::template\", \"name\": \"role\", \"arguments\": {{...}}}}` instead.");
+                        InputMessageContent::Template(Template { name: role.clone(), arguments: tensorzero_arguments })
+                    }
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
                         if image_url.url.scheme() == "data" {
                             let url_str = image_url.url.to_string();
@@ -1029,9 +1035,9 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                                 }));
                             }
                         }
-                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
+                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
                         if let Value::Object(obj) = val {
-                            InputMessageContent::Text(TextKind::Arguments { arguments: Arguments(obj) })
+                            InputMessageContent::Template(Template { name: role.clone(), arguments: Arguments(obj) })
                         } else {
                             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                                 message: format!("Content block `{val}` is not an object"),
@@ -1483,7 +1489,7 @@ mod tests {
         assert_eq!(params.input.messages[0].role, Role::User);
         assert_eq!(
             params.input.messages[0].content[0],
-            InputMessageContent::Text(TextKind::Text {
+            InputMessageContent::Text(Text {
                 text: "Hello, world!".to_string(),
             })
         );
@@ -1506,7 +1512,7 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::User);
         assert_eq!(
             input.messages[0].content[0],
-            InputMessageContent::Text(TextKind::Text {
+            InputMessageContent::Text(Text {
                 text: "Hello, world!".to_string(),
             })
         );
@@ -1581,7 +1587,8 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::Assistant);
         assert_eq!(
             input.messages[0].content[0],
-            InputMessageContent::Text(TextKind::Arguments {
+            InputMessageContent::Template(Template {
+                name: "assistant".to_string(),
                 arguments: Arguments(
                     json!({
                         "country": "Japan",
@@ -1613,7 +1620,7 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::Assistant);
         assert_eq!(input.messages[0].content.len(), 2);
 
-        let expected_text = InputMessageContent::Text(TextKind::Text {
+        let expected_text = InputMessageContent::Text(Text {
             text: "Hello, world!".to_string(),
         });
         let expected_tool_call = InputMessageContent::ToolCall(ToolCallInput {
@@ -1651,7 +1658,7 @@ mod tests {
             result.messages,
             vec![InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Assistant message".to_string(),
                 })],
             }]
@@ -1662,17 +1669,19 @@ mod tests {
     fn test_convert_openai_message_content() {
         // text content
         let content = "Hello, world!".to_string();
-        let value = convert_openai_message_content(Value::String(content.clone())).unwrap();
+        let value =
+            convert_openai_message_content("user".to_string(), Value::String(content.clone()))
+                .unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Text(TextKind::Text { text: content })]
+            vec![InputMessageContent::Text(Text { text: content })]
         );
         // tensorzero::raw_text
         let content = json!([{
             "type": "tensorzero::raw_text",
             "value": "This is raw text"
         }]);
-        let value = convert_openai_message_content(content.clone()).unwrap();
+        let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
             vec![InputMessageContent::RawText(RawText {
@@ -1684,10 +1693,11 @@ mod tests {
             "country": "Japan",
             "city": "Tokyo",
         }]);
-        let value = convert_openai_message_content(content.clone()).unwrap();
+        let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
+            vec![InputMessageContent::Template(Template {
+                name: "user".to_string(),
                 arguments: Arguments(
                     json!({
                         "country": "Japan",
@@ -1703,7 +1713,8 @@ mod tests {
             "country": "Japan",
             "city": "Tokyo",
         });
-        let error = convert_openai_message_content(content.clone()).unwrap_err();
+        let error =
+            convert_openai_message_content("user".to_string(), content.clone()).unwrap_err();
         let details = error.get_details();
         assert_eq!(
             *details,
@@ -1712,7 +1723,7 @@ mod tests {
             }
         );
         let content = json!([]);
-        let messages = convert_openai_message_content(content).unwrap();
+        let messages = convert_openai_message_content("user".to_string(), content).unwrap();
         assert_eq!(messages, vec![]);
 
         let arguments_block = json!([{
@@ -1721,10 +1732,11 @@ mod tests {
                 "custom_key": "custom_val"
             }
         }]);
-        let value = convert_openai_message_content(arguments_block).unwrap();
+        let value = convert_openai_message_content("user".to_string(), arguments_block).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
+            vec![InputMessageContent::Template(Template {
+                name: "user".to_string(),
                 arguments: Arguments(
                     json!({
                         "custom_key": "custom_val",
@@ -1743,7 +1755,7 @@ mod tests {
                 "custom_key": "custom_val",
             }
         }]);
-        let value = convert_openai_message_content(template_block).unwrap();
+        let value = convert_openai_message_content("user".to_string(), template_block).unwrap();
         assert_eq!(
             value,
             vec![InputMessageContent::Template(Template {
@@ -1765,10 +1777,11 @@ mod tests {
             "country": "Japan",
             "city": "Tokyo",
         }]);
-        let value = convert_openai_message_content(content.clone()).unwrap();
+        let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
+            vec![InputMessageContent::Template(Template {
+                name: "user".to_string(),
                 arguments: Arguments(
                     json!({
                         "country": "Japan",
@@ -1788,7 +1801,7 @@ mod tests {
             "type": "text",
             "my_custom_arg": 123
         }]);
-        let err = convert_openai_message_content(other_content.clone())
+        let err = convert_openai_message_content("user".to_string(), other_content.clone())
             .expect_err("Should not accept invalid block");
         assert_eq!(err.to_string(), "Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`");
     }

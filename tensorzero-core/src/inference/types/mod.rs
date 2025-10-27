@@ -80,7 +80,6 @@ use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
-use serde_untagged::UntaggedEnumVisitor;
 use std::borrow::Borrow;
 use std::ops::Add;
 use std::{
@@ -213,7 +212,7 @@ impl InputMessage {
             content: self
                 .content
                 .into_iter()
-                .map(|content| content.into_lazy_resolved_input_message(self.role, context))
+                .map(|content| content.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
         })
     }
@@ -253,7 +252,7 @@ impl LazyResolvedInputMessage {
     }
 }
 
-/// Extracts the StorageKind from the FetchContext, or returns an error if the object store is not configured.
+/// Extracts the `StorageKind` from the `FetchContext`, or returns an error if the object store is not configured.
 fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
     let object_store_info = context.object_store_info.as_ref().ok_or_else(|| {
         Error::new(ErrorDetails::ObjectStoreUnconfigured {
@@ -264,16 +263,15 @@ fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
 }
 
 impl InputMessageContent {
-    /// The 'role' parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
+    /// The `role` parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
     /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
-    /// we can remove the 'role' parameter.
+    /// we can remove the `role` parameter.
     pub fn into_lazy_resolved_input_message(
         self,
-        role: Role,
         context: FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
-            InputMessageContent::Text(TextKind::Text { text }) => {
+            InputMessageContent::Text(Text { text }) => {
                 LazyResolvedInputMessageContent::Text(Text { text })
             }
             InputMessageContent::RawText(raw_text) => {
@@ -284,15 +282,6 @@ impl InputMessageContent {
             }
             InputMessageContent::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)
-            }
-            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                // Map the legacy `{{"type": "text", "arguments": ...}}` format to an explicit
-                // `{{"type": "template", "name": "<role>", "arguments": ...}}` format, with the template
-                // name chosen based on the message role.
-                LazyResolvedInputMessageContent::Template(Template {
-                    name: role.implicit_template_name().to_string(),
-                    arguments,
-                })
             }
             InputMessageContent::ToolCall(tool_call) => {
                 LazyResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
@@ -467,14 +456,129 @@ impl LazyResolvedInputMessageContent {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+/// `InputMessage` has a custom deserializer that addresses legacy data formats in we used to support (see below).
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct InputMessage {
     pub role: Role,
-    #[serde(deserialize_with = "deserialize_content")]
     pub content: Vec<InputMessageContent>,
+}
+
+/// Custom deserializer for InputMessage that handles legacy formats:
+/// - `"content": "text"` → `vec![Text { text }]`
+/// - `"content": {...}` → `vec![Template { name: role, arguments }]`
+/// - `"content": [{"type": "text", "arguments": {...}}]` → `vec![Template { name: role, arguments }]`
+impl<'de> Deserialize<'de> for InputMessage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        use serde::de::{self, MapAccess, Visitor};
+
+        #[derive(Deserialize)]
+        #[serde(field_identifier, rename_all = "lowercase")]
+        enum Field {
+            Role,
+            Content,
+        }
+
+        struct InputMessageVisitor;
+
+        impl<'de> Visitor<'de> for InputMessageVisitor {
+            type Value = InputMessage;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("struct InputMessage")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<InputMessage, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut role: Option<Role> = None;
+                let mut content: Option<Value> = None;
+
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        Field::Role => {
+                            if role.is_some() {
+                                return Err(de::Error::duplicate_field("role"));
+                            }
+                            role = Some(map.next_value()?);
+                        }
+                        Field::Content => {
+                            if content.is_some() {
+                                return Err(de::Error::duplicate_field("content"));
+                            }
+                            content = Some(map.next_value()?);
+                        }
+                    }
+                }
+
+                let role = role.ok_or_else(|| de::Error::missing_field("role"))?;
+                let content_value = content.ok_or_else(|| de::Error::missing_field("content"))?;
+
+                // Transform content based on its type
+                let content_vec: Result<Vec<InputMessageContent>, V::Error> = match content_value {
+                    // Legacy: "content": "text string"
+                    Value::String(text) => Ok(vec![InputMessageContent::Text(Text { text })]),
+                    // Legacy: "content": {"key": "value", ...}
+                    Value::Object(obj) => {
+                        tracing::warn!("Deprecation Warning: passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
+                        let arguments = Arguments(obj);
+                        Ok(vec![InputMessageContent::Template(Template {
+                            name: role.implicit_template_name().to_string(),
+                            arguments,
+                        })])
+                    }
+                    // Array: need to check each element for legacy text formats
+                    Value::Array(arr) => {
+                        arr.into_iter()
+                            .map(|mut value| {
+                                // Check if this is a legacy Text with arguments: {"type": "text", "arguments": ...}
+                                if let Some(obj) = value.as_object_mut() {
+                                    if obj.get("type").and_then(|v| v.as_str()) == Some("text") {
+                                        if let Some(arguments_value) = obj.remove("arguments") {
+                                            // Convert to Template format
+                                            let mut new_obj = serde_json::Map::new();
+                                            new_obj.insert(
+                                                "type".to_string(),
+                                                Value::String("template".to_string()),
+                                            );
+                                            new_obj.insert(
+                                                "name".to_string(),
+                                                Value::String(
+                                                    role.implicit_template_name().to_string(),
+                                                ),
+                                            );
+                                            new_obj
+                                                .insert("arguments".to_string(), arguments_value);
+                                            *obj = new_obj;
+                                        }
+                                    }
+                                }
+
+                                // Deserialize the (possibly transformed) value
+                                serde_json::from_value(value).map_err(de::Error::custom)
+                            })
+                            .collect()
+                    }
+                    _ => Err(de::Error::custom(
+                        "content must be a string, object, or array",
+                    )),
+                };
+
+                Ok(InputMessage {
+                    role,
+                    content: content_vec?,
+                })
+            }
+        }
+
+        const FIELDS: &[&str] = &["role", "content"];
+        deserializer.deserialize_struct("InputMessage", FIELDS, InputMessageVisitor)
+    }
 }
 
 /// A newtype wrapper around Map<String, Value> for template and system arguments
@@ -504,7 +608,7 @@ pub enum System {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
 pub enum InputMessageContent {
-    Text(TextKind),
+    Text(Text),
     Template(Template),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
@@ -1497,7 +1601,7 @@ pub struct ModelInferenceDatabaseInsert {
 #[cfg(test)]
 impl From<String> for InputMessageContent {
     fn from(text: String) -> Self {
-        InputMessageContent::Text(TextKind::Text { text })
+        InputMessageContent::Text(Text { text })
     }
 }
 
@@ -1520,26 +1624,6 @@ impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
         ContentBlockChatOutput::Text(Text { text })
     }
-}
-
-fn deserialize_content<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<InputMessageContent>, D::Error> {
-    #[expect(clippy::redundant_closure_for_method_calls)]
-    UntaggedEnumVisitor::new()
-        .string(|text| {
-            Ok(vec![InputMessageContent::Text(TextKind::Text {
-                text: text.to_string(),
-            })])
-        })
-        .map(|object| {
-            tracing::warn!("Deprecation Warning: passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
-            Ok(vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: object.deserialize()?,
-            })])
-        })
-        .seq(|seq| seq.deserialize())
-        .deserialize(deserializer)
 }
 
 impl From<String> for ContentBlock {
@@ -2768,13 +2852,13 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::Text { text }) => {
-                assert_eq!(text, "Hello, world!");
+            InputMessageContent::Text(text) => {
+                assert_eq!(&text.text, "Hello, world!");
             }
             _ => panic!("Expected Text content: {message:?}"),
         }
 
-        // Test case for object content
+        // Test case for object content (should be converted to Template)
         let input = json!({
             "role": "assistant",
             "content": {"key": "value"}
@@ -2783,10 +2867,14 @@ mod tests {
         assert_eq!(message.role, Role::Assistant);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                assert_eq!(&arguments.0, json!({"key": "value"}).as_object().unwrap());
+            InputMessageContent::Template(template) => {
+                assert_eq!(template.name, "assistant");
+                assert_eq!(
+                    &template.arguments.0,
+                    json!({"key": "value"}).as_object().unwrap()
+                );
             }
-            _ => panic!("Expected Text content"),
+            _ => panic!("Expected Template content"),
         }
 
         // Test case for multiple content items
@@ -2801,8 +2889,8 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::Text { text }) => {
-                assert_eq!(text, "Hello");
+            InputMessageContent::Text(text) => {
+                assert_eq!(&text.text, "Hello");
             }
             _ => panic!("Expected Text content"),
         }

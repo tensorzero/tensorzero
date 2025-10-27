@@ -765,11 +765,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new input text".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "new input text".into(),
+                    })],
                 }],
             };
 
@@ -1141,11 +1139,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new input".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "new input".into(),
+                    })],
                 }],
             };
             let new_output = vec![ContentBlockChatOutput::Text(Text {
@@ -1515,11 +1511,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new json input".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(Text {
+                        text: "new json input".into(),
+                    })],
                 }],
             };
             let new_schema =

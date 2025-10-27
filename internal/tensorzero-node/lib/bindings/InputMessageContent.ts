@@ -2,14 +2,14 @@
 import type { File } from "./File";
 import type { RawText } from "./RawText";
 import type { Template } from "./Template";
-import type { TextKind } from "./TextKind";
+import type { Text } from "./Text";
 import type { Thought } from "./Thought";
 import type { ToolCallInput } from "./ToolCallInput";
 import type { ToolResult } from "./ToolResult";
 import type { Unknown } from "./Unknown";
 
 export type InputMessageContent =
-  | ({ type: "text" } & TextKind)
+  | ({ type: "text" } & Text)
   | ({ type: "template" } & Template)
   | ({ type: "tool_call" } & ToolCallInput)
   | ({ type: "tool_result" } & ToolResult)

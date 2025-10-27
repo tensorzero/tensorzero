@@ -3,7 +3,8 @@ use serde_untagged::UntaggedEnumVisitor;
 use tensorzero_core::{
     error::Error,
     inference::types::{
-        File, InputMessageContent, RawText, Role, System, Template, TextKind, Thought, Unknown,
+        File, InputMessageContent, RawText, Role, System, Template, Text, TextKind, Thought,
+        Unknown,
     },
     tool::{ToolCallInput, ToolResult},
 };
@@ -55,11 +56,20 @@ pub enum ClientInputMessageContent {
     Unknown(Unknown),
 }
 
-impl TryFrom<ClientInputMessageContent> for InputMessageContent {
-    type Error = Error;
-    fn try_from(this: ClientInputMessageContent) -> Result<Self, Error> {
-        Ok(match this {
-            ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
+impl ClientInputMessageContent {
+    pub fn to_input_message_content(self, role: &Role) -> Result<InputMessageContent, Error> {
+        use tensorzero_core::inference::types::Text;
+
+        Ok(match self {
+            ClientInputMessageContent::Text(TextKind::Text { text }) => {
+                InputMessageContent::Text(Text { text })
+            }
+            ClientInputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                InputMessageContent::Template(Template {
+                    name: role.implicit_template_name().to_string(),
+                    arguments,
+                })
+            }
             ClientInputMessageContent::Template(template) => {
                 InputMessageContent::Template(template)
             }
@@ -113,7 +123,7 @@ pub(super) fn test_client_input_to_input(
                     role,
                     content: content
                         .into_iter()
-                        .map(test_client_to_message_content)
+                        .map(|content| test_client_to_message_content(role, content))
                         .collect(),
                 }
             })
@@ -122,10 +132,19 @@ pub(super) fn test_client_input_to_input(
 }
 
 pub(super) fn test_client_to_message_content(
+    role: Role,
     content: ClientInputMessageContent,
 ) -> InputMessageContent {
     match content {
-        ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
+        ClientInputMessageContent::Text(TextKind::Text { text }) => {
+            InputMessageContent::Text(Text { text })
+        }
+        ClientInputMessageContent::Text(TextKind::Arguments { arguments }) => {
+            InputMessageContent::Template(Template {
+                name: role.to_string(),
+                arguments,
+            })
+        }
         ClientInputMessageContent::Template(template) => InputMessageContent::Template(template),
         ClientInputMessageContent::ToolCall(ToolCallInput {
             id,
