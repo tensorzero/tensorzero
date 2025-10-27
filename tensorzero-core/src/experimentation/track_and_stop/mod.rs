@@ -98,6 +98,128 @@ pub struct TrackAndStopConfig {
     task_spawned: AtomicBool,
 }
 
+/// Public representation of Track-and-Stop state for external callers (tests, UI, monitoring).
+/// This type exposes sampling probabilities but hides internal implementation details like
+/// the `Nursery` struct and atomic counters.
+#[derive(Debug, Clone, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TrackAndStopStateInfo {
+    Stopped {
+        winner_variant_name: String,
+    },
+    NurseryOnly {
+        /// Uniform probability distribution over nursery variants
+        sampling_probabilities: HashMap<String, f64>,
+    },
+    BanditsOnly {
+        /// Optimized sampling probabilities for bandit arms
+        sampling_probabilities: HashMap<String, f64>,
+    },
+    NurseryAndBandits {
+        /// Combined sampling probabilities for both nursery and bandit variants
+        sampling_probabilities: HashMap<String, f64>,
+    },
+    NurseryAndStopped {
+        /// Combined sampling probabilities for nursery and stopped variant
+        sampling_probabilities: HashMap<String, f64>,
+        winner_variant_name: String,
+    },
+}
+
+impl From<&TrackAndStopState> for TrackAndStopStateInfo {
+    fn from(state: &TrackAndStopState) -> Self {
+        match state {
+            TrackAndStopState::Stopped {
+                winner_variant_name,
+            } => TrackAndStopStateInfo::Stopped {
+                winner_variant_name: winner_variant_name.clone(),
+            },
+            TrackAndStopState::NurseryOnly(nursery) => {
+                // Compute uniform probabilities for nursery variants
+                let nursery_arm_prob = nursery.nursery_arm_probability();
+                let sampling_probabilities = nursery
+                    .variants
+                    .iter()
+                    .map(|variant| (variant.clone(), nursery_arm_prob))
+                    .collect();
+                TrackAndStopStateInfo::NurseryOnly {
+                    sampling_probabilities,
+                }
+            }
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities,
+            } => TrackAndStopStateInfo::BanditsOnly {
+                sampling_probabilities: sampling_probabilities.clone(),
+            },
+            TrackAndStopState::NurseryAndBandits {
+                nursery,
+                sampling_probabilities,
+            } => {
+                // Compute combined probabilities
+                let nursery_mass = nursery.nursery_total_mass(sampling_probabilities.len());
+                let bandit_mass = 1.0 - nursery_mass;
+
+                let mut combined = HashMap::new();
+
+                // Add nursery variants with uniform probability within nursery mass
+                let nursery_prob = nursery.nursery_arm_probability() * nursery_mass;
+                for variant in &nursery.variants {
+                    combined.insert(variant.clone(), nursery_prob);
+                }
+
+                // Add bandit variants scaled by bandit mass
+                for (variant, prob) in sampling_probabilities {
+                    combined.insert(variant.clone(), prob * bandit_mass);
+                }
+
+                TrackAndStopStateInfo::NurseryAndBandits {
+                    sampling_probabilities: combined,
+                }
+            }
+            TrackAndStopState::NurseryAndStopped {
+                nursery,
+                stopped_variant_name,
+            } => {
+                // Compute combined probabilities
+                let nursery_mass = nursery.nursery_total_mass(1); // 1 other variant (the stopped one)
+                let stopped_prob = 1.0 - nursery_mass;
+
+                let mut combined = HashMap::new();
+
+                // Add nursery variants with uniform probability within nursery mass
+                let nursery_prob = nursery.nursery_arm_probability() * nursery_mass;
+                for variant in &nursery.variants {
+                    combined.insert(variant.clone(), nursery_prob);
+                }
+
+                // Add stopped variant
+                combined.insert(stopped_variant_name.clone(), stopped_prob);
+
+                TrackAndStopStateInfo::NurseryAndStopped {
+                    sampling_probabilities: combined,
+                    winner_variant_name: stopped_variant_name.clone(),
+                }
+            }
+        }
+    }
+}
+
+impl TrackAndStopConfig {
+    /// Returns the current state of the Track-and-Stop experiment.
+    ///
+    /// This method provides a snapshot of the current sampling probabilities and phase
+    /// (nursery, bandit, or stopped). The returned state includes computed sampling
+    /// probabilities for all variants, which is useful for:
+    /// - Testing: verifying the experiment is in the expected state
+    /// - Monitoring: observing how probabilities evolve over time
+    /// - UI: displaying the current experiment status to users
+    pub fn get_state(&self) -> TrackAndStopStateInfo {
+        let state = self.state.load();
+        TrackAndStopStateInfo::from(state.as_ref())
+    }
+}
+
 #[derive(Debug)]
 enum TrackAndStopState {
     Stopped {
@@ -140,6 +262,33 @@ impl Nursery {
     // Increments the index at which to start searching for an active variant
     fn get_variant_idx_round_robin(&self) -> u64 {
         self.index.fetch_add(1, Ordering::Relaxed) % self.variants.len() as u64
+    }
+
+    /// Returns uniform sampling probability for each nursery variant.
+    /// This is 1/N where N is the number of nursery variants.
+    /// Returns 0.0 if the nursery is empty.
+    fn nursery_arm_probability(&self) -> f64 {
+        if self.variants.is_empty() {
+            0.0
+        } else {
+            1.0 / self.variants.len() as f64
+        }
+    }
+
+    /// Returns the total probability mass that should be allocated to the nursery
+    /// when there are `num_other_variants` non-nursery variants.
+    ///
+    /// The allocation formula is: nursery_variants / (nursery_variants + other_variants)
+    /// This gives each variant (nursery or not) equal 1 / K probability, where K is the
+    /// total number of variants.
+    fn nursery_total_mass(&self, num_other_variants: usize) -> f64 {
+        let num_nursery = self.variants.len();
+        let total = num_nursery + num_other_variants;
+        if total == 0 {
+            0.0
+        } else {
+            num_nursery as f64 / total as f64
+        }
     }
 
     /// Try to sample an active variant from the nursery using round-robin.
@@ -850,25 +999,22 @@ impl TrackAndStopState {
             }
             TrackAndStopState::NurseryOnly(nursery) => {
                 // Do round-robin sampling from the variants until we find one that is active
-                // If there is no intersection, return none
                 Ok(nursery.sample_active(active_variants))
             }
             TrackAndStopState::NurseryAndBandits {
                 sampling_probabilities,
                 nursery,
             } => {
-                // Allocate 1/K probability to each nursery arm, where K is the total number of arms
-                // Total nursery probability = nursery.variants.len() / K
-                let num_nursery_variants = nursery.variants.len();
-                let num_bandit_variants = sampling_probabilities.len();
-                let total_variants = num_nursery_variants + num_bandit_variants;
-                let nursery_probability = num_nursery_variants as f64 / total_variants as f64;
-
-                let bandit_mass = 1.0 - nursery_probability;
-                if (bandit_mass <= f64::EPSILON) || (uniform_sample < nursery_probability) {
+                // Total probability mass assigned to nursery variants
+                let nursery_mass = nursery.nursery_total_mass(sampling_probabilities.len());
+                // Total probability mass assigned to bandit variants
+                let bandit_mass = 1.0 - nursery_mass;
+                // If `uniform_sample` has chosen the nursery, or if `bandit_mass`` is numerically essentially 0, sample a nursery variant
+                if (bandit_mass <= f64::EPSILON) || (uniform_sample < nursery_mass) {
                     Ok(nursery.sample_active(active_variants))
+                // Otherwise sample a bandit variant
                 } else {
-                    let bandit_sample = (uniform_sample - nursery_probability) / bandit_mass;
+                    let bandit_sample = (uniform_sample - nursery_mass) / bandit_mass;
                     sample_with_probabilities(
                         active_variants,
                         sampling_probabilities,
@@ -878,21 +1024,13 @@ impl TrackAndStopState {
             }
             TrackAndStopState::BanditsOnly {
                 sampling_probabilities,
-            } => {
-                // Sample from the active bandits using probability sampling
-                sample_with_probabilities(active_variants, sampling_probabilities, uniform_sample)
-            }
+            } => sample_with_probabilities(active_variants, sampling_probabilities, uniform_sample),
             TrackAndStopState::NurseryAndStopped {
                 nursery,
                 stopped_variant_name,
             } => {
-                // Allocate 1/K probability to each nursery arm, where K is the total number of arms
-                // Total nursery probability = nursery.variants.len() / K
-                let num_nursery_variants = nursery.variants.len();
-                let total_variants = num_nursery_variants + 1; // +1 for the stopped variant
-                let nursery_probability = num_nursery_variants as f64 / total_variants as f64;
-
-                if uniform_sample < nursery_probability {
+                let nursery_mass = nursery.nursery_total_mass(1); // 1 other variant (winner variant)
+                if uniform_sample < nursery_mass {
                     Ok(nursery.sample_active(active_variants))
                 } else if active_variants.contains_key(stopped_variant_name) {
                     Ok(Some(stopped_variant_name))
@@ -2057,6 +2195,149 @@ mod tests {
                 }
             }
             _ => panic!("Expected NurseryAndBandits state, got {state:?}"),
+        }
+    }
+
+    // Tests for get_state() method
+    #[test]
+    fn test_get_state_stopped() {
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.1,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::Stopped {
+                winner_variant_name: "A".to_string(),
+            }))),
+            task_spawned: AtomicBool::new(false),
+        };
+
+        let state_info = config.get_state();
+        match state_info {
+            TrackAndStopStateInfo::Stopped {
+                winner_variant_name,
+            } => {
+                assert_eq!(winner_variant_name, "A");
+            }
+            _ => panic!("Expected Stopped state info, got {state_info:?}"),
+        }
+    }
+
+    #[test]
+    fn test_get_state_nursery_only() {
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.1,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::NurseryOnly(
+                Nursery::new(vec!["A".to_string(), "B".to_string(), "C".to_string()]),
+            )))),
+            task_spawned: AtomicBool::new(false),
+        };
+
+        let state_info = config.get_state();
+        match state_info {
+            TrackAndStopStateInfo::NurseryOnly {
+                sampling_probabilities,
+            } => {
+                assert_eq!(sampling_probabilities.len(), 3);
+                // All should have uniform probability (1/3)
+                for &prob in sampling_probabilities.values() {
+                    assert!((prob - 1.0 / 3.0).abs() < 1e-9);
+                }
+            }
+            _ => panic!("Expected NurseryOnly state info, got {state_info:?}"),
+        }
+    }
+
+    #[test]
+    fn test_get_state_bandits_only() {
+        let mut probs = HashMap::new();
+        probs.insert("A".to_string(), 0.3);
+        probs.insert("B".to_string(), 0.7);
+
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.1,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
+                sampling_probabilities: probs.clone(),
+            }))),
+            task_spawned: AtomicBool::new(false),
+        };
+
+        let state_info = config.get_state();
+        match state_info {
+            TrackAndStopStateInfo::BanditsOnly {
+                sampling_probabilities,
+            } => {
+                assert_eq!(sampling_probabilities.len(), 2);
+                assert!((sampling_probabilities["A"] - 0.3).abs() < 1e-9);
+                assert!((sampling_probabilities["B"] - 0.7).abs() < 1e-9);
+            }
+            _ => panic!("Expected BanditsOnly state info, got {state_info:?}"),
+        }
+    }
+
+    #[test]
+    fn test_get_state_nursery_and_bandits() {
+        let mut probs = HashMap::new();
+        probs.insert("A".to_string(), 0.4);
+        probs.insert("B".to_string(), 0.6);
+
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.1,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(
+                TrackAndStopState::NurseryAndBandits {
+                    nursery: Nursery::new(vec!["C".to_string()]),
+                    sampling_probabilities: probs,
+                },
+            ))),
+            task_spawned: AtomicBool::new(false),
+        };
+
+        let state_info = config.get_state();
+        match state_info {
+            TrackAndStopStateInfo::NurseryAndBandits {
+                sampling_probabilities,
+            } => {
+                assert_eq!(sampling_probabilities.len(), 3);
+                // C gets 1/3 of total probability (nursery)
+                // A and B share the remaining 2/3 in a 0.4:0.6 ratio
+                assert!((sampling_probabilities["C"] - 1.0 / 3.0).abs() < 1e-9);
+                assert!((sampling_probabilities["A"] - 0.4 * 2.0 / 3.0).abs() < 1e-9);
+                assert!((sampling_probabilities["B"] - 0.6 * 2.0 / 3.0).abs() < 1e-9);
+
+                // Sum should be 1.0
+                let sum: f64 = sampling_probabilities.values().sum();
+                assert!((sum - 1.0).abs() < 1e-9);
+            }
+            _ => panic!("Expected NurseryAndBandits state info, got {state_info:?}"),
         }
     }
 }
