@@ -140,7 +140,8 @@ pub use streams::{
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<Value>,
+    #[cfg_attr(test, ts(optional))]
+    pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<InputMessage>,
 }
@@ -511,6 +512,14 @@ pub struct InputMessage {
 pub struct TemplateInput {
     pub name: String,
     pub arguments: Map<String, Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[serde(untagged)]
+#[ts(export)]
+pub enum System {
+    Text(String),
+    Template(Map<String, Value>),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]

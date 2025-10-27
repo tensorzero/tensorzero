@@ -338,7 +338,7 @@ export function prepareInferenceActionRequest(
     function_name: null,
     model_name: null,
     episode_id: null,
-    input: { system: null, messages: [] },
+    input: { system: undefined, messages: [] },
     stream: null,
     params: {
       chat_completion: {
