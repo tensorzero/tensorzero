@@ -33,6 +33,7 @@ use tensorzero_core::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::TextChunk;
 use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::tool::ClientSideFunctionTool;
 use tensorzero_core::tool::ToolCallOutput;
 use tracing_test::traced_test;
 use uuid::Uuid;
@@ -422,7 +423,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
             max_age_s: None,
         },
         dynamic_tool_params: DynamicToolParams {
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![Tool::ClientSideFunction(ClientSideFunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the temperature".to_string(),
                 parameters: json!({
@@ -433,7 +434,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
                     "required": ["other_param"]
                 }),
                 strict: true,
-            }]),
+            })]),
             ..Default::default()
         },
         ..Default::default()

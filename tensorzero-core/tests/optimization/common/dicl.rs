@@ -1198,7 +1198,7 @@ fn create_pinocchio_example(
         stored_output: Some(stored_output),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
+        tool_info: None,
         output_schema: if is_json_function {
             Some(json!({
                 "type": "object",

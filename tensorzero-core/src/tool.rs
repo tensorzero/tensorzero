@@ -506,6 +506,36 @@ impl ToolCallConfigDatabaseInsert {
         }
     }
 
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_for_test(
+        dynamic_tools: Vec<Tool>,
+        dynamic_provider_tools: Vec<ProviderTool>,
+        allowed_tools: AllowedTools,
+        tool_choice: ToolChoice,
+        parallel_tool_calls: Option<bool>,
+    ) -> Self {
+        // Compute the legacy tool_config field
+        let tool_config = LegacyToolCallConfigDatabaseInsert {
+            tools_available: dynamic_tools
+                .iter()
+                .map(|t| match t {
+                    Tool::ClientSideFunction(csf) => csf.clone(),
+                })
+                .collect(),
+            tool_choice: tool_choice.clone(),
+            parallel_tool_calls,
+        };
+
+        Self {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            tool_config,
+        }
+    }
+
     /// TODO: document extensively
     pub fn into_tool_call_config(
         self,
