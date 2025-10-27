@@ -3,7 +3,7 @@ import {
   TensorZeroClient,
   DatabaseClient,
   getConfig,
-  estimateTrackAndStopOptimalProbabilities,
+  computeDisplayProbabilities,
 } from "../index.js";
 
 const UI_FIXTURES_CONFIG_PATH = "../../ui/fixtures/config/tensorzero.toml";
@@ -203,74 +203,110 @@ it("should get config with evaluations", async () => {
   expect(config.evaluations.images!.function_name).toBe("image_judger");
 });
 
-describe("estimateTrackAndStopOptimalProbabilities", () => {
-  it("should compute optimal probabilities from feedback data", () => {
-    const result = estimateTrackAndStopOptimalProbabilities({
-      feedback: [
-        { variant_name: "variant_a", mean: 0.7, variance: 0.05, count: 100n },
-        { variant_name: "variant_b", mean: 0.85, variance: 0.03, count: 100n },
-      ],
-      metric_optimize: "max",
-    });
+describe("computeDisplayProbabilities", () => {
+  it("should compute uniform probabilities for write_haiku (uniform experimentation)", async () => {
+    const probabilities = await computeDisplayProbabilities(
+      "write_haiku",
+      UI_FIXTURES_CONFIG_PATH,
+    );
+    const parsed = JSON.parse(probabilities);
 
-    expect(result).toBeDefined();
-    expect(typeof result).toBe("object");
-    expect(result.variant_a).toBeDefined();
-    expect(result.variant_b).toBeDefined();
-    expect(typeof result.variant_a).toBe("number");
-    expect(typeof result.variant_b).toBe("number");
+    // write_haiku has 3 variants, so each should get 1/3
+    expect(Object.keys(parsed).length).toBe(3);
+    expect(parsed["initial_prompt_gpt4o_mini"]).toBeCloseTo(1 / 3, 5);
+    expect(parsed["initial_prompt_haiku_3_5"]).toBeCloseTo(1 / 3, 5);
+    expect(parsed["better_prompt_haiku_3_5"]).toBeCloseTo(1 / 3, 5);
 
-    // Probabilities should sum to approximately 1
-    const sum = result.variant_a + result.variant_b;
+    // Probabilities should sum to 1.0
+    const sum = Object.values(parsed).reduce(
+      (acc: number, val) => acc + (val as number),
+      0,
+    );
     expect(sum).toBeCloseTo(1.0, 5);
-
-    // Both variants should get non-zero probability
-    expect(result.variant_a).toBeGreaterThan(0);
-    expect(result.variant_b).toBeGreaterThan(0);
   });
 
-  it("should handle minimize optimization", () => {
-    const result = estimateTrackAndStopOptimalProbabilities({
-      feedback: [
-        { variant_name: "variant_a", mean: 100, variance: 50, count: 100n },
-        { variant_name: "variant_b", mean: 50, variance: 20, count: 100n },
-      ],
-      metric_optimize: "min",
-    });
+  it("should compute static weights for ask_question (static weights experimentation)", async () => {
+    const probabilities = await computeDisplayProbabilities(
+      "ask_question",
+      UI_FIXTURES_CONFIG_PATH,
+    );
+    const parsed = JSON.parse(probabilities);
 
-    expect(result).toBeDefined();
-
-    // Probabilities should sum to approximately 1
-    const sum = result.variant_a + result.variant_b;
-    expect(sum).toBeCloseTo(1.0, 5);
-
-    // Both variants should get non-zero probability
-    expect(result.variant_a).toBeGreaterThan(0);
-    expect(result.variant_b).toBeGreaterThan(0);
+    // ask_question has baseline with weight 1, and two variants with weight 0
+    // So only baseline should appear with probability 1.0
+    expect(Object.keys(parsed).length).toBe(1);
+    expect(parsed["baseline"]).toBe(1.0);
   });
 
-  it("should handle optional parameters", () => {
-    const result = estimateTrackAndStopOptimalProbabilities({
-      feedback: [
-        { variant_name: "v1", mean: 0.5, variance: 0.1, count: 50n },
-        { variant_name: "v2", mean: 0.6, variance: 0.1, count: 50n },
-        { variant_name: "v3", mean: 0.55, variance: 0.1, count: 50n },
-      ],
-      metric_optimize: "max",
-      epsilon: 0.05,
-      min_prob: 0.1,
-    });
+  it("should compute static weights for generate_secret (single variant)", async () => {
+    const probabilities = await computeDisplayProbabilities(
+      "generate_secret",
+      UI_FIXTURES_CONFIG_PATH,
+    );
+    const parsed = JSON.parse(probabilities);
 
-    expect(result).toBeDefined();
-    expect(Object.keys(result).length).toBe(3);
+    // generate_secret has a single variant with weight 1
+    expect(Object.keys(parsed).length).toBe(1);
+    expect(parsed["baseline"]).toBe(1.0);
+  });
 
-    // All probabilities should be at least min_prob
-    expect(result.v1).toBeGreaterThanOrEqual(0.1);
-    expect(result.v2).toBeGreaterThanOrEqual(0.1);
-    expect(result.v3).toBeGreaterThanOrEqual(0.1);
+  it("should compute track-and-stop probabilities for extract_entities", async () => {
+    const probabilities = await computeDisplayProbabilities(
+      "extract_entities",
+      UI_FIXTURES_CONFIG_PATH,
+    );
+    const parsed = JSON.parse(probabilities);
 
-    // Should sum to 1
-    const sum = result.v1 + result.v2 + result.v3;
+    // extract_entities has track_and_stop with 3 candidate variants
+    // Without feedback data, should be in nursery phase with uniform probabilities
+    expect(Object.keys(parsed).length).toBe(3);
+    expect(parsed["gpt4o_mini_initial_prompt"]).toBeCloseTo(1 / 3, 5);
+    expect(parsed["gpt4o_initial_prompt"]).toBeCloseTo(1 / 3, 5);
+    expect(parsed["llama_8b_initial_prompt"]).toBeCloseTo(1 / 3, 5);
+
+    // Probabilities should sum to 1.0
+    const sum = Object.values(parsed).reduce(
+      (acc: number, val) => acc + (val as number),
+      0,
+    );
+    expect(sum).toBeCloseTo(1.0, 5);
+  });
+
+  it("should throw error for non-existent function", async () => {
+    await expect(
+      computeDisplayProbabilities(
+        "nonexistent_function",
+        UI_FIXTURES_CONFIG_PATH,
+      ),
+    ).rejects.toThrow("Function nonexistent_function not found");
+  });
+
+  it("should work with null config path (uses default)", async () => {
+    // This will fail if there's no default config, but documents the API
+    await expect(
+      computeDisplayProbabilities("write_haiku", null),
+    ).rejects.toThrow();
+  });
+
+  it("should return probabilities that sum to 1.0 for multi_hop_rag_agent (4 variants, uniform)", async () => {
+    const probabilities = await computeDisplayProbabilities(
+      "multi_hop_rag_agent",
+      UI_FIXTURES_CONFIG_PATH,
+    );
+    const parsed = JSON.parse(probabilities);
+
+    // multi_hop_rag_agent has 4 variants, uniform distribution
+    expect(Object.keys(parsed).length).toBe(4);
+    expect(parsed["baseline"]).toBeCloseTo(0.25, 5);
+    expect(parsed["gpt-4.1-mini"]).toBeCloseTo(0.25, 5);
+    expect(parsed["gemini-2.5-flash"]).toBeCloseTo(0.25, 5);
+    expect(parsed["claude-3.5-haiku"]).toBeCloseTo(0.25, 5);
+
+    // Probabilities should sum to 1.0
+    const sum = Object.values(parsed).reduce(
+      (acc: number, val) => acc + (val as number),
+      0,
+    );
     expect(sum).toBeCloseTo(1.0, 5);
   });
 });

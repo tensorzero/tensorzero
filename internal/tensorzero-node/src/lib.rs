@@ -15,10 +15,6 @@ use tensorzero_core::{
     cache::CacheEnabledMode,
     config::{Config, ConfigFileGlob, MetricConfigOptimize},
     db::{clickhouse::ClickHouseConnectionInfo, feedback::FeedbackByVariant},
-    experimentation::track_and_stop::estimate_optimal_probabilities::{
-        estimate_optimal_probabilities as estimate_track_and_stop_optimal_probabilities_core,
-        EstimateOptimalProbabilitiesArgs,
-    },
 };
 use uuid::Uuid;
 
@@ -390,33 +386,98 @@ pub fn get_quantiles() -> Vec<f64> {
 
 #[derive(serde::Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
-pub struct EstimateTrackAndStopOptimalProbabilitiesParams {
+pub struct ComputeTrackAndStopStateParams {
+    pub candidate_variants: Vec<String>,
     pub feedback: Vec<FeedbackByVariant>,
-    pub epsilon: Option<f64>,
-    pub variance_floor: Option<f64>,
+    pub min_samples_per_variant: u64,
+    pub delta: f64,
+    pub epsilon: f64,
     pub min_prob: Option<f64>,
-    pub reg0: Option<f64>,
     pub metric_optimize: MetricConfigOptimize,
 }
 
+/// Computes the Track-and-Stop state (including sampling probabilities) from config and feedback.
+///
+/// This function is the single source of truth for computing the experiment state in the UI.
+/// It handles all the logic including:
+/// - Determining which variants are in nursery vs bandit phase
+/// - Computing optimal probabilities for bandit variants
+/// - Detecting if a winner has been found (stopped state)
+/// - Correctly allocating probability mass to nursery and bandit variants
+///
+/// Returns a JSON string with both the state information and display probabilities.
 #[napi]
-pub fn estimate_track_and_stop_optimal_probabilities(
-    params: String,
-) -> Result<String, napi::Error> {
-    let params: EstimateTrackAndStopOptimalProbabilitiesParams =
+pub fn compute_track_and_stop_state(params: String) -> Result<String, napi::Error> {
+    use std::collections::HashMap;
+
+    let params: ComputeTrackAndStopStateParams =
         serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
-    let args = EstimateOptimalProbabilitiesArgs {
-        feedback: params.feedback,
-        epsilon: params.epsilon,
-        variance_floor: params.variance_floor,
-        min_prob: params.min_prob,
-        reg0: params.reg0,
-        metric_optimize: params.metric_optimize,
+    let state = tensorzero_core::experimentation::track_and_stop::compute_track_and_stop_state(
+        &params.candidate_variants,
+        params.feedback,
+        params.min_samples_per_variant,
+        params.delta,
+        params.epsilon,
+        params.min_prob,
+        params.metric_optimize,
+    )
+    .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+    // Compute display probabilities from the state
+    let display_probabilities = state.get_display_sampling_probabilities();
+
+    // Return both state and display probabilities
+    #[derive(serde::Serialize)]
+    struct Response {
+        state: tensorzero_core::experimentation::track_and_stop::TrackAndStopState,
+        display_probabilities: HashMap<String, f64>,
+    }
+
+    let response = Response {
+        state,
+        display_probabilities,
     };
 
-    let result = estimate_track_and_stop_optimal_probabilities_core(args)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    serde_json::to_string(&response).map_err(|e| napi::Error::from_reason(e.to_string()))
+}
 
-    serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
+#[derive(serde::Deserialize)]
+struct ComputeDisplayProbabilitiesParams {
+    function_name: String,
+    config_path: Option<String>,
+}
+
+/// Computes display probabilities for any experimentation type.
+///
+/// This function handles all experimentation types (uniform, static_weights, track_and_stop) by:
+/// - Loading the config from the specified path (or default)
+/// - Getting the function's experimentation config
+/// - Calling get_display_sampling_probabilities() on the experimentation config
+///
+/// Returns a JSON string with display probabilities as a HashMap<String, f64>.
+#[napi]
+pub async fn compute_display_probabilities(params: String) -> Result<String, napi::Error> {
+    let params: ComputeDisplayProbabilitiesParams =
+        serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+    let config_path = params
+        .config_path
+        .as_ref()
+        .map(Path::new)
+        .map(|path| path.to_path_buf());
+    let config = tensorzero::get_config_no_verify_credentials(config_path)
+        .await
+        .map_err(|e| napi::Error::from_reason(format!("Failed to get config: {e}")))?;
+
+    let function_config = config.functions.get(&params.function_name).ok_or_else(|| {
+        napi::Error::from_reason(format!("Function {} not found", params.function_name))
+    })?;
+
+    let display_probabilities = function_config
+        .experimentation()
+        .get_display_sampling_probabilities(function_config.variants());
+
+    serde_json::to_string(&display_probabilities)
+        .map_err(|e| napi::Error::from_reason(e.to_string()))
 }

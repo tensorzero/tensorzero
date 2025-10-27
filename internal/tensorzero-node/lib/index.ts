@@ -10,7 +10,6 @@ import type {
   DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
-  EstimateTrackAndStopOptimalProbabilitiesParams,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
@@ -58,8 +57,8 @@ const {
   DatabaseClient: NativeDatabaseClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
-  estimateTrackAndStopOptimalProbabilities:
-    nativeEstimateTrackAndStopOptimalProbabilities,
+  computeTrackAndStopState,
+  computeDisplayProbabilities,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -138,6 +137,9 @@ export async function getConfig(configPath: string | null): Promise<Config> {
 // Export quantiles array from migration_0035
 export { getQuantiles };
 
+// Export experimentation computation functions
+export { computeTrackAndStopState, computeDisplayProbabilities };
+
 interface RunEvaluationStreamingParams {
   gatewayUrl: string;
   clickhouseUrl: string;
@@ -208,29 +210,6 @@ export async function runEvaluationStreaming(
       }
     },
   );
-}
-
-/**
- * Estimates optimal sampling probabilities for bandit experiments.
- *
- * Given feedback statistics (mean, variance, count) for each variant,
- * this function computes the optimal probability of sampling each variant
- * to efficiently identify the best arm while respecting an ε-tolerance
- * for sub-optimality.
- *
- * The algorithm uses Second-Order Cone Programming (SOCP) to solve
- * an optimization problem that balances exploration and exploitation.
- *
- * @param params - Parameters including feedback data and optimization settings
- * @returns A mapping from variant names to optimal sampling probabilities
- */
-export function estimateTrackAndStopOptimalProbabilities(
-  params: EstimateTrackAndStopOptimalProbabilitiesParams,
-): Record<string, number> {
-  const paramsString = safeStringify(params);
-  const resultString =
-    nativeEstimateTrackAndStopOptimalProbabilities(paramsString);
-  return JSON.parse(resultString) as Record<string, number>;
 }
 
 function safeStringify(obj: unknown) {

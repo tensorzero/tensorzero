@@ -42,7 +42,11 @@ import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { TimeWindow } from "tensorzero-node";
-import { computeTrackAndStopOptimalProbabilities } from "~/utils/experimentation.server";
+import {
+  computeTrackAndStopState,
+  computeDisplayProbabilities,
+} from "tensorzero-node";
+import { getConfigPath } from "~/utils/config/index.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -149,12 +153,63 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedbackTimeseriesPromise,
   ]);
 
-  // Compute optimal probabilities for track_and_stop experimentation
-  const optimal_probabilities = await computeTrackAndStopOptimalProbabilities(
-    function_name,
-    function_config,
-    config,
-  );
+  // Compute display probabilities for all experimentation types
+  let display_probabilities: Record<string, number> = {};
+  let track_and_stop_state: unknown = undefined;
+
+  if (function_config.experimentation.type === "track_and_stop") {
+    try {
+      const dbClient = await getNativeDatabaseClient();
+      const experimentationConfig = function_config.experimentation;
+      const metric_config = config.metrics[experimentationConfig.metric];
+
+      if (metric_config) {
+        const feedback = await dbClient.getFeedbackByVariant({
+          metric_name: experimentationConfig.metric,
+          function_name,
+          variant_names: experimentationConfig.candidate_variants,
+        });
+
+        // Compute the track-and-stop state (includes display probabilities)
+        const stateJson = computeTrackAndStopState(
+          JSON.stringify({
+            candidate_variants: experimentationConfig.candidate_variants,
+            feedback,
+            min_samples_per_variant:
+              experimentationConfig.min_samples_per_variant,
+            delta: experimentationConfig.delta,
+            epsilon: experimentationConfig.epsilon,
+            min_prob: experimentationConfig.min_prob,
+            metric_optimize: metric_config.optimize,
+          }),
+        );
+
+        track_and_stop_state = JSON.parse(stateJson);
+        // Extract display probabilities from track-and-stop state
+        display_probabilities = (
+          track_and_stop_state as {
+            display_probabilities: Record<string, number>;
+          }
+        ).display_probabilities;
+      }
+    } catch (error) {
+      logger.error("Failed to compute track-and-stop state:", error);
+    }
+  } else {
+    // For uniform and static_weights, compute display probabilities from config
+    try {
+      const configPath = getConfigPath();
+      const probabilitiesJson = await computeDisplayProbabilities(
+        JSON.stringify({
+          function_name,
+          config_path: configPath,
+        }),
+      );
+      display_probabilities = JSON.parse(probabilitiesJson);
+    } catch (error) {
+      logger.error("Failed to compute display probabilities:", error);
+    }
+  }
 
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
     let variant_config = function_config.variants[
@@ -208,8 +263,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_performances,
     variant_throughput,
     variant_counts: variant_counts_with_metadata,
-    optimal_probabilities,
+    track_and_stop_state,
     feedback_timeseries,
+    display_probabilities,
   };
 }
 
@@ -223,8 +279,9 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_performances,
     variant_throughput,
     variant_counts,
-    optimal_probabilities,
+    track_and_stop_state,
     feedback_timeseries,
+    display_probabilities,
   } = loaderData;
 
   const navigate = useNavigate();
@@ -330,7 +387,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             <FunctionExperimentation
               functionConfig={function_config}
               functionName={function_name}
-              optimalProbabilities={optimal_probabilities}
+              trackAndStopState={track_and_stop_state}
+              displayProbabilities={display_probabilities}
             />
             {feedback_timeseries && feedback_timeseries.length > 0 && (
               <FeedbackSamplesTimeseries

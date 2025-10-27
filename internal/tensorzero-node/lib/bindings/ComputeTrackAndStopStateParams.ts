@@ -2,11 +2,12 @@
 import type { FeedbackByVariant } from "./FeedbackByVariant";
 import type { MetricConfigOptimize } from "./MetricConfigOptimize";
 
-export type EstimateTrackAndStopOptimalProbabilitiesParams = {
+export type ComputeTrackAndStopStateParams = {
+  candidate_variants: Array<string>;
   feedback: Array<FeedbackByVariant>;
-  epsilon?: number;
-  variance_floor?: number;
+  min_samples_per_variant: bigint;
+  delta: number;
+  epsilon: number;
   min_prob?: number;
-  reg0?: number;
   metric_optimize: MetricConfigOptimize;
 };
