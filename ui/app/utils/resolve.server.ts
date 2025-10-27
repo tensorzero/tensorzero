@@ -10,7 +10,7 @@ import type {
   ModelInferenceInputMessageContent,
   ResolvedBase64File,
   Role,
-  TextInput,
+  LegacyTextInput,
 } from "./clickhouse/common";
 import type {
   FunctionConfig,
@@ -207,7 +207,7 @@ async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
 // So as we prepare the input for display, we check this and return an unambiguous type of structured or unstructured text.
 // TODO (Gabriel): this function uses legacy types and should be deprecated ASAP. It won't handle sad paths very well.
 function prepareDisplayText(
-  textBlock: TextInput,
+  textBlock: LegacyTextInput,
   role: Role,
   functionConfig: FunctionConfig | null,
 ): DisplayInputMessageContent {

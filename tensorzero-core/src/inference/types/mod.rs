@@ -668,6 +668,7 @@ impl Text {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[serde(deny_unknown_fields)]
 pub struct RawText {
     pub value: String,
 }
@@ -697,6 +698,7 @@ impl RawText {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
+#[serde(deny_unknown_fields)]
 pub struct Unknown {
     /// The underlying content block to be passed to the model provider.
     pub data: Value,
