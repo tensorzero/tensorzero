@@ -1470,14 +1470,6 @@ mod tests {
             },
         ];
 
-        // let config = ToolCallConfig::new_for_test(
-        //     vec![],
-        //     vec![],
-        //     ToolChoice::Auto,
-        //     None,
-        //     Some(provider_tools),
-        //     AllowedTools::default(),
-        // );
         let config = ToolCallConfig {
             provider_tools: Some(provider_tools),
             ..Default::default()
