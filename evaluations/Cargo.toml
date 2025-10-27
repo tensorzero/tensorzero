@@ -23,7 +23,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
-indicatif = "0.18.0"
+indicatif = "0.18.1"
 
 [dev-dependencies]
 tensorzero = { path = "../clients/rust" }
