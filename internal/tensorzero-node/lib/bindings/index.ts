@@ -27,7 +27,6 @@ export * from "./ChatInferenceDatapoint";
 export * from "./ChatInferenceDatapointInsert";
 export * from "./ChatInferenceResponse";
 export * from "./ChatTemplates";
-export * from "./ClickhouseFormat";
 export * from "./ClientInferenceParams";
 export * from "./ClientInput";
 export * from "./ClientInputMessage";
