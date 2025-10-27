@@ -5,7 +5,7 @@ use std::{
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 #[cfg(feature = "pyo3")]
@@ -453,7 +453,7 @@ impl ToolCallConfig {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 // TODO(Viraj, in this PR): adjust the deserialization logic or the tools_available method to handle the reading of historical data
@@ -464,8 +464,73 @@ pub struct ToolCallConfigDatabaseInsert {
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     // We write this in case any legacy code reads the database; it should not be read in new code
-    #[serde(default)]
     tool_config: LegacyToolCallConfigDatabaseInsert,
+}
+
+/// Custom Deserialize implementation for ToolCallConfigDatabaseInsert that handles three formats:
+/// 1. Full format: Contains all fields (dynamic_tools, dynamic_provider_tools, allowed_tools, etc.)
+/// 2. Legacy format: Contains only tool_config field (for backwards compatibility)
+/// 3. Missing/Empty: Returns the default value
+///
+/// This allows ToolCallConfigDatabaseInsert to be used as a non-optional field with #[serde(default)]
+impl<'de> Deserialize<'de> for ToolCallConfigDatabaseInsert {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Helper {
+            Full {
+                dynamic_tools: Vec<Tool>,
+                dynamic_provider_tools: Vec<ProviderTool>,
+                allowed_tools: AllowedTools,
+                tool_choice: ToolChoice,
+                parallel_tool_calls: Option<bool>,
+                tool_config: LegacyToolCallConfigDatabaseInsert,
+            },
+            Legacy {
+                tool_config: LegacyToolCallConfigDatabaseInsert,
+            },
+            Empty,
+        }
+
+        let helper = Helper::deserialize(deserializer)?;
+
+        match helper {
+            Helper::Full {
+                dynamic_tools,
+                dynamic_provider_tools,
+                allowed_tools,
+                tool_choice,
+                parallel_tool_calls,
+                tool_config,
+            } => Ok(ToolCallConfigDatabaseInsert {
+                dynamic_tools,
+                dynamic_provider_tools,
+                allowed_tools,
+                tool_choice,
+                parallel_tool_calls,
+                tool_config,
+            }),
+            Helper::Legacy { tool_config } => {
+                // Here we translate the legacy format to the current format for backcompat.
+                // We'll use the existing function tools for tools available (can't recover dynamic tools from historical data)
+                Ok(ToolCallConfigDatabaseInsert {
+                    dynamic_tools: Vec::new(),
+                    dynamic_provider_tools: Vec::new(),
+                    allowed_tools: AllowedTools {
+                        tools: Vec::new(),
+                        choice: AllowedToolsChoice::FunctionDefault,
+                    },
+                    tool_choice: tool_config.tool_choice.clone(),
+                    parallel_tool_calls: tool_config.parallel_tool_calls,
+                    tool_config,
+                })
+            }
+            Helper::Empty => Ok(ToolCallConfigDatabaseInsert::default()),
+        }
+    }
 }
 
 impl std::fmt::Display for ToolCallConfigDatabaseInsert {

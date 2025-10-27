@@ -291,8 +291,8 @@ pub struct StoredChatInference {
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(default)]
     #[serde(flatten)]
+    #[serde(default)]
     pub tool_info: ToolCallConfigDatabaseInsert,
     #[serde(default)]
     pub tags: HashMap<String, String>,
@@ -444,7 +444,7 @@ pub struct RenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_info: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_info: ToolCallConfigDatabaseInsert,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
