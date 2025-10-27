@@ -950,7 +950,7 @@ mod tests {
 
             let serialized = serde_json::to_value(&file).unwrap();
             let file_type = serialized["file_type"].as_str().unwrap();
-            assert_eq!(file_type, "object_storage");
+            assert_eq!(file_type, "object_storage_pointer");
             assert!(serialized.get("source_url").is_some());
             assert!(serialized.get("mime_type").is_some());
             assert!(serialized.get("storage_path").is_some());
@@ -1033,7 +1033,7 @@ mod tests {
         #[test]
         fn test_file_object_storage_deserialize_tagged() {
             let json = serde_json::json!({
-                "file_type": "object_storage",
+                "file_type": "object_storage_pointer",
                 "source_url": "https://example.com/image.png",
                 "mime_type": "image/png",
                 "storage_path": {
