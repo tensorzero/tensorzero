@@ -1035,7 +1035,7 @@ fn convert_openai_message_content(
                                 }));
                             }
                         }
-                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
+                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}}}` to pass arbitrary JSON values to TensorZero: {e}"#);
                         if let Value::Object(obj) = val {
                             InputMessageContent::Template(Template { name: role.clone(), arguments: Arguments(obj) })
                         } else {
