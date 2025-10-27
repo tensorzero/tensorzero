@@ -196,7 +196,7 @@ impl Optimizer for OpenAISFTConfig {
         val_examples: Option<Vec<RenderedSample>>,
         credentials: &InferenceCredentials,
         _clickhouse_connection_info: &ClickHouseConnectionInfo,
-        _config: &Config,
+        config: &Config,
     ) -> Result<Self::Handle, Error> {
         let train_examples = train_examples
             .into_iter()
@@ -212,7 +212,7 @@ impl Optimizer for OpenAISFTConfig {
         let train_rows: Vec<OpenAISupervisedRow> = try_join_all(
             train_examples
                 .iter()
-                .map(OpenAISupervisedRow::from_rendered_sample),
+                .map(|ex| OpenAISupervisedRow::from_rendered_sample(ex, config)),
         )
         .await?;
 
@@ -221,7 +221,7 @@ impl Optimizer for OpenAISFTConfig {
                 try_join_all(
                     examples
                         .iter()
-                        .map(OpenAISupervisedRow::from_rendered_sample),
+                        .map(|ex| OpenAISupervisedRow::from_rendered_sample(ex, config)),
                 )
                 .await?,
             )

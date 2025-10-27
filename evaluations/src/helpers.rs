@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::{Args, OutputFormat};
 
+/// TODO (Viraj, in this PR): get rid of this function entirely
 /// Given the function config for the evaluation and the tool call config that was written to the database,
 /// recover the dynamic tool params that were used to generate the tool call config.
 /// This will be used to help full out the params for the inference request in this evaluation.

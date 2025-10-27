@@ -57,8 +57,7 @@ impl<'a> GCPVertexGeminiSupervisedRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
         let tools = match &inference.tool_params {
             Some(tool_params) => {
-                let available_tools: Vec<_> = tool_params.tools_available(&inference.function_name, config)?.collect();
-                available_tools.iter().map(Into::into).collect()
+                tool_params.tools_available(&inference.function_name, config)?.into_iter().map(Into::into).collect()
             }
             None => vec![],
         };

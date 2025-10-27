@@ -45,7 +45,6 @@ use crate::providers::openai::tensorzero_to_openai_assistant_message;
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::stored_inference::LazyRenderedSample;
 use crate::stored_inference::RenderedSample;
-use crate::tool::Tool;
 use crate::{
     db::clickhouse::ClickHouseConnectionInfo,
     endpoints::inference::InferenceCredentials,
@@ -53,7 +52,7 @@ use crate::{
     inference::types::ContentBlock,
     model::CredentialLocationWithFallback,
     providers::{
-        fireworks::{FireworksCredentials, FireworksTool, PROVIDER_TYPE},
+        fireworks::{FireworksCredentials, FireworksSFTTool, PROVIDER_TYPE},
         openai::OpenAIRequestMessage,
     },
 };
@@ -86,9 +85,7 @@ pub struct FireworksFineTuningRequest {
 pub struct FireworksSupervisedRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<FireworksTool<'a>>,
-    #[serde(skip)]
-    _owned_tools: Vec<Tool>,
+    tools: Vec<FireworksSFTTool>,
 }
 
 impl<'a> FireworksSupervisedRow<'a> {
@@ -105,16 +102,13 @@ impl<'a> FireworksSupervisedRow<'a> {
             }
         }
 
-        // Collect owned tools
-        let _owned_tools: Vec<_> = inference.tool_params
+        // Collect owned tools and convert to FireworksTool (which owns its data)
+        let tools: Vec<_> = inference.tool_params
             .as_ref()
             .map(|tp| tp.tools_available(&inference.function_name, config))
             .transpose()?
-            .map(|iter| iter.collect::<Vec<_>>())
+            .map(|iter| iter.into_iter().map(Into::into).collect())
             .unwrap_or_default();
-
-        // Now create borrowed tools from owned tools
-        let tools: Vec<_> = _owned_tools.iter().map(Into::into).collect();
         let mut messages = prepare_fireworks_messages(
             inference.system_input.as_deref(),
             &inference.messages,
@@ -150,7 +144,7 @@ impl<'a> FireworksSupervisedRow<'a> {
         )
         .await?;
         messages.push(final_assistant_message);
-        Ok(Self { messages, tools, _owned_tools })
+        Ok(Self { messages, tools })
     }
 }
 

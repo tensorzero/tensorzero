@@ -43,8 +43,8 @@ use super::{
     helpers_thinking_block::{process_think_blocks, ThinkingState},
     openai::{
         get_chat_url, handle_openai_error, prepare_openai_tools, tensorzero_to_openai_messages,
-        OpenAIFunction, OpenAIRequestMessage, OpenAISystemRequestMessage, OpenAITool,
-        OpenAIToolChoice, OpenAIToolType, OpenAIUsage,
+        OpenAIFunction, OpenAIRequestMessage, OpenAISFTFunction, OpenAISystemRequestMessage,
+        OpenAITool, OpenAIToolChoice, OpenAIToolType, OpenAIUsage,
     },
 };
 
@@ -445,25 +445,11 @@ fn tensorzero_to_fireworks_system_message(
     })
 }
 
+// Borrowed version for inference (hot path)
 #[derive(Debug, PartialEq, Serialize)]
 pub struct FireworksTool<'a> {
     r#type: OpenAIToolType,
     function: OpenAIFunction<'a>,
-}
-
-impl<'a> From<&'a Tool> for FireworksTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
-        match tool {
-            Tool::ClientSideFunction(tool) => FireworksTool {
-                r#type: OpenAIToolType::Function,
-                function: OpenAIFunction {
-                    name: &tool.name,
-                    description: Some(&tool.description),
-                    parameters: &tool.parameters,
-                },
-            },
-        }
-    }
 }
 
 impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
@@ -471,6 +457,28 @@ impl<'a> From<OpenAITool<'a>> for FireworksTool<'a> {
         FireworksTool {
             r#type: tool.r#type,
             function: tool.function,
+        }
+    }
+}
+
+// Owned version for SFT (optimization)
+#[derive(Debug, PartialEq, Serialize)]
+pub struct FireworksSFTTool {
+    r#type: OpenAIToolType,
+    function: OpenAISFTFunction,
+}
+
+impl From<Tool> for FireworksSFTTool {
+    fn from(tool: Tool) -> Self {
+        match tool {
+            Tool::ClientSideFunction(tool) => FireworksSFTTool {
+                r#type: OpenAIToolType::Function,
+                function: OpenAISFTFunction {
+                    name: tool.name,
+                    description: Some(tool.description),
+                    parameters: tool.parameters,
+                },
+            },
         }
     }
 }

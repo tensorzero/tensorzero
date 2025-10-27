@@ -21,7 +21,7 @@ use crate::model::{
 };
 use crate::optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput};
 use crate::providers::helpers::UrlParseErrExt;
-use crate::providers::openai::{tensorzero_to_openai_assistant_message, OpenAITool};
+use crate::providers::openai::{tensorzero_to_openai_assistant_message, OpenAISFTTool};
 use crate::providers::openai::{OpenAIMessagesConfig, OpenAIRequestMessage};
 use crate::providers::together::{
     prepare_together_messages, TogetherCredentials, PROVIDER_TYPE, TOGETHER_API_BASE,
@@ -204,7 +204,7 @@ impl std::fmt::Display for UninitializedTogetherSFTConfig {
 pub struct TogetherSupervisedRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<OpenAITool<'a>>,
+    tools: Vec<OpenAISFTTool>,
 }
 
 impl<'a> TogetherSupervisedRow<'a> {
@@ -216,8 +216,7 @@ impl<'a> TogetherSupervisedRow<'a> {
                         message: "Parallel tool calls are not supported for Together".to_string(),
                     }));
                 }
-                let available_tools: Vec<_> = tool_params.tools_available(&inference.function_name, config)?.collect();
-                available_tools.iter().map(Into::into).collect()
+                tool_params.tools_available(&inference.function_name, config)?.into_iter().map(Into::into).collect()
             }
             None => vec![],
         };

@@ -1836,21 +1836,30 @@ impl<'a> From<&'a ToolConfig> for OpenAITool<'a> {
     }
 }
 
+// Owned version of OpenAIFunction for SFT (no lifetime dependency)
 #[derive(Debug, PartialEq, Serialize)]
-pub struct OpenAISFTTool<'a> {
-    pub r#type: OpenAIToolType,
-    pub function: OpenAIFunction<'a>,
+pub struct OpenAISFTFunction {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub parameters: Value,
 }
 
-impl<'a> From<&'a Tool> for OpenAISFTTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+#[derive(Debug, PartialEq, Serialize)]
+pub struct OpenAISFTTool {
+    pub r#type: OpenAIToolType,
+    pub function: OpenAISFTFunction,
+}
+
+impl From<Tool> for OpenAISFTTool {
+    fn from(tool: Tool) -> Self {
         match tool {
             Tool::ClientSideFunction(tool) => OpenAISFTTool {
                 r#type: OpenAIToolType::Function,
-                function: OpenAIFunction {
-                    name: &tool.name,
-                    description: Some(&tool.description),
-                    parameters: &tool.parameters,
+                function: OpenAISFTFunction {
+                    name: tool.name,
+                    description: Some(tool.description),
+                    parameters: tool.parameters,
                 },
             },
         }

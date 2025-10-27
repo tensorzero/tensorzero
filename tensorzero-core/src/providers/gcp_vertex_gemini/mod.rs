@@ -300,7 +300,7 @@ pub struct GCPVertexGeminiSupervisedRow<'a> {
     contents: Vec<GCPVertexGeminiContent<'a>>,
     system_instruction: Option<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<GCPVertexGeminiSFTTool<'a>>,
+    tools: Vec<GCPVertexGeminiSFTTool>,
 }
 
 pub async fn upload_rows_to_gcp_object_store(
@@ -1689,26 +1689,40 @@ fn capitalize_type(s: &str) -> String {
     s.to_uppercase()
 }
 
+// Owned version for SFT (no lifetime dependency)
 #[derive(Debug, PartialEq, Serialize)]
-pub struct GCPVertexGeminiSFTTool<'a> {
-    #[serde(flatten)]
-    pub tool: GCPVertexGeminiTool<'a>,
+pub struct GCPVertexGeminiSFTFunctionDeclaration {
+    name: String,
+    description: Option<String>,
+    parameters: Option<Value>,
 }
 
-impl<'a> From<&'a Tool> for GCPVertexGeminiSFTTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum GCPVertexGeminiSFTToolEnum {
+    FunctionDeclarations(Vec<GCPVertexGeminiSFTFunctionDeclaration>),
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct GCPVertexGeminiSFTTool {
+    #[serde(flatten)]
+    pub tool: GCPVertexGeminiSFTToolEnum,
+}
+
+impl From<Tool> for GCPVertexGeminiSFTTool {
+    fn from(tool: Tool) -> Self {
         match tool {
             Tool::ClientSideFunction(tool) => {
                 let mut parameters = tool.parameters.clone();
                 capitalize_types(&mut parameters);
-                let function_declaration = GCPVertexGeminiFunctionDeclaration {
-                    name: &tool.name,
-                    description: Some(&tool.description),
+                let function_declaration = GCPVertexGeminiSFTFunctionDeclaration {
+                    name: tool.name,
+                    description: Some(tool.description),
                     parameters: Some(parameters),
                 };
 
                 GCPVertexGeminiSFTTool {
-                    tool: GCPVertexGeminiTool::FunctionDeclarations(vec![function_declaration]),
+                    tool: GCPVertexGeminiSFTToolEnum::FunctionDeclarations(vec![function_declaration]),
                 }
             }
         }

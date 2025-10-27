@@ -332,17 +332,16 @@ pub struct OpenAISupervisedRow<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     parallel_tool_calls: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<OpenAISFTTool<'a>>,
+    tools: Vec<OpenAISFTTool>,
 }
 
 impl<'a> OpenAISupervisedRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => {
-                let available_tools: Vec<_> = tool_params.tools_available(&inference.function_name, config)?.collect();
                 (
                     tool_params.parallel_tool_calls.unwrap_or_default(),
-                    available_tools.iter().map(Into::into).collect(),
+                    tool_params.tools_available(&inference.function_name, config)?.into_iter().map(Into::into).collect(),
                 )
             }
             None => (false, vec![]),
@@ -408,7 +407,7 @@ pub struct OpenAIReinforcementRow<'a> {
     #[serde(flatten)]
     output: OpenAIReinforcementOutput<'a>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    tools: Vec<OpenAISFTTool<'a>>,
+    tools: Vec<OpenAISFTTool>,
     parallel_tool_calls: bool,
 }
 
@@ -416,10 +415,9 @@ impl<'a> OpenAIReinforcementRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample, config: &'a Config) -> Result<Self, Error> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => {
-                let available_tools: Vec<_> = tool_params.tools_available(&inference.function_name, config)?.collect();
                 (
                     tool_params.parallel_tool_calls.unwrap_or_default(),
-                    available_tools.iter().map(Into::into).collect(),
+                    tool_params.tools_available(&inference.function_name, config)?.into_iter().map(Into::into).collect(),
                 )
             }
             None => (false, vec![]),
