@@ -3,10 +3,23 @@ import {
   TensorZeroClient,
   DatabaseClient,
   getConfig,
-  computeDisplayProbabilities,
+  computeDisplayProbabilities as nativeComputeDisplayProbabilities,
 } from "../index.js";
 
 const UI_FIXTURES_CONFIG_PATH = "../../ui/fixtures/config/tensorzero.toml";
+
+// Wrapper for cleaner test API
+async function computeDisplayProbabilities(
+  functionName: string,
+  configPath: string | null,
+): Promise<string> {
+  return nativeComputeDisplayProbabilities(
+    JSON.stringify({
+      function_name: functionName,
+      config_path: configPath,
+    }),
+  );
+}
 
 describe("TensorZeroClient Integration Tests", () => {
   it("should be able to import TensorZeroClient", () => {
