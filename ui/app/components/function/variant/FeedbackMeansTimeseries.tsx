@@ -159,10 +159,9 @@ export function FeedbackMeansTimeseries({
             <span className="font-mono font-semibold">{metricName}</span>
           </CardTitle>
           <CardDescription>
-            This chart displays the estimated performance (expected mean score)
-            of each variant on the metric{" "}
-            <span className="font-mono text-xs">{metricName}</span> at a given
-            moment in time.
+            This chart displays the cumulative mean score of each variant. The
+            shaded areas indicate 95% confidence. The snapshots depict how the
+            estimates are converging over time.
           </CardDescription>
         </div>
         <TimeGranularitySelector
