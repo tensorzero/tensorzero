@@ -22,6 +22,7 @@ use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, E
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
+use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -711,8 +712,7 @@ async fn tensorzero_to_openrouter_user_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
-                    &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
@@ -781,8 +781,7 @@ async fn tensorzero_to_openrouter_assistant_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
-                    &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {

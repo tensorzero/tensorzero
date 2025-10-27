@@ -24,7 +24,7 @@ use tensorzero_core::{
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
         ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput,
-        ObjectStorageFile, RequestMessage, ResolvedContentBlock, ResolvedObjectStorageFile,
+        ObjectStorageFile, ObjectStoragePointer, RequestMessage, ResolvedContentBlock,
         ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
@@ -489,8 +489,8 @@ fn generate_image_example() -> RenderedSample {
                     ResolvedContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    ResolvedContentBlock::File(Box::new(ResolvedObjectStorageFile {
-                        file: ObjectStorageFile {
+                    ResolvedContentBlock::File(Box::new(ObjectStorageFile {
+                        file: ObjectStoragePointer {
                             source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             storage_path: StoragePath {
@@ -514,7 +514,7 @@ fn generate_image_example() -> RenderedSample {
                         text: "What is the main color of this image?".to_string(),
                     }),
                     StoredInputMessageContent::File(Box::new(StoredFile(
-                        tensorzero_core::inference::types::file::ObjectStorageFile {
+                        tensorzero_core::inference::types::file::ObjectStoragePointer {
                             source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             storage_path: StoragePath {

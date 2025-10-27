@@ -18,7 +18,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::inference::types::{
@@ -642,8 +642,7 @@ async fn tensorzero_to_groq_user_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
-                    &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         url: format!("data:{};base64,{}", file.mime_type, data),
@@ -707,8 +706,7 @@ async fn tensorzero_to_groq_assistant_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
-                    &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         url: format!("data:{};base64,{}", file.mime_type, data),

@@ -2151,14 +2151,16 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
     // Create a StoredFile with ObjectStorage
-    let stored_file = StoredFile(tensorzero_core::inference::types::file::ObjectStorageFile {
-        source_url: Some("https://example.com/original.png".parse().unwrap()),
-        mime_type: mime::IMAGE_PNG,
-        storage_path: StoragePath {
-            kind: StorageKind::Disabled,
-            path: ObjectStorePath::parse("test/files/image.png").unwrap(),
+    let stored_file = StoredFile(
+        tensorzero_core::inference::types::file::ObjectStoragePointer {
+            source_url: Some("https://example.com/original.png".parse().unwrap()),
+            mime_type: mime::IMAGE_PNG,
+            storage_path: StoragePath {
+                kind: StorageKind::Disabled,
+                path: ObjectStorePath::parse("test/files/image.png").unwrap(),
+            },
         },
-    });
+    );
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2231,14 +2233,16 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
     // Create a StoredFile with ObjectStorage
-    let stored_file = StoredFile(tensorzero_core::inference::types::file::ObjectStorageFile {
-        source_url: Some("https://example.com/data.json".parse().unwrap()),
-        mime_type: mime::APPLICATION_JSON,
-        storage_path: StoragePath {
-            kind: StorageKind::Disabled,
-            path: ObjectStorePath::parse("test/files/data.json").unwrap(),
+    let stored_file = StoredFile(
+        tensorzero_core::inference::types::file::ObjectStoragePointer {
+            source_url: Some("https://example.com/data.json".parse().unwrap()),
+            mime_type: mime::APPLICATION_JSON,
+            storage_path: StoragePath {
+                kind: StorageKind::Disabled,
+                path: ObjectStorePath::parse("test/files/data.json").unwrap(),
+            },
         },
-    });
+    );
 
     let json_datapoint = DatapointInsert::Json(JsonInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2312,23 +2316,27 @@ async fn test_datapoint_with_mixed_file_types() {
     let dataset_name = format!("test_mixed_files_{}", Uuid::now_v7());
 
     // Create multiple StoredFiles
-    let stored_file1 = StoredFile(tensorzero_core::inference::types::file::ObjectStorageFile {
-        source_url: Some("https://example.com/image1.png".parse().unwrap()),
-        mime_type: mime::IMAGE_PNG,
-        storage_path: StoragePath {
-            kind: StorageKind::Disabled,
-            path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
+    let stored_file1 = StoredFile(
+        tensorzero_core::inference::types::file::ObjectStoragePointer {
+            source_url: Some("https://example.com/image1.png".parse().unwrap()),
+            mime_type: mime::IMAGE_PNG,
+            storage_path: StoragePath {
+                kind: StorageKind::Disabled,
+                path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
+            },
         },
-    });
+    );
 
-    let stored_file2 = StoredFile(tensorzero_core::inference::types::file::ObjectStorageFile {
-        source_url: None, // No source URL
-        mime_type: mime::IMAGE_JPEG,
-        storage_path: StoragePath {
-            kind: StorageKind::Disabled,
-            path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
+    let stored_file2 = StoredFile(
+        tensorzero_core::inference::types::file::ObjectStoragePointer {
+            source_url: None, // No source URL
+            mime_type: mime::IMAGE_JPEG,
+            storage_path: StoragePath {
+                kind: StorageKind::Disabled,
+                path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
+            },
         },
-    });
+    );
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),

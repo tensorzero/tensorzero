@@ -21,7 +21,7 @@ use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
-    FunctionType, Latency, ModelInferenceRequestJsonMode, Role, Text,
+    FunctionType, Latency, ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
@@ -596,8 +596,7 @@ impl<'a> AnthropicMessageContent<'a> {
                     );
                     // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
                     let resolved_file = file.resolve().await?;
-                    let crate::inference::types::ResolvedObjectStorageFile { file, data } =
-                        &*resolved_file;
+                    let ObjectStorageFile { file, data } = &*resolved_file;
                     let document = AnthropicDocumentSource::Base64 {
                         media_type: file.mime_type.clone(),
                         data: data.clone(),

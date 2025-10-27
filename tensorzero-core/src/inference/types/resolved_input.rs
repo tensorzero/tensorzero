@@ -11,8 +11,8 @@ use serde_json::Value;
 use url::Url;
 
 use super::{
-    storage::StoragePath, Base64File, PendingObjectStoreFile, ResolvedObjectStorageFile, Role,
-    Text, Thought,
+    storage::StoragePath, Base64File, ObjectStorageFile, PendingObjectStoreFile, Role, Text,
+    Thought,
 };
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
@@ -56,14 +56,14 @@ pub enum LazyFile {
     // Client sent a base64-encoded file → skip fetch, must store
     Base64(PendingObjectStoreFile),
     // Client sent an object storage file → must fetch, skip store
-    ObjectStorage {
+    ObjectStoragePointer {
         metadata: Base64FileMetadata,
         storage_path: StoragePath,
         #[serde(skip)]
         future: FileFuture,
     },
     // Client sent a resolved object storage file → skip fetch & store
-    ResolvedObjectStorage(ResolvedObjectStorageFile),
+    ObjectStorage(ObjectStorageFile),
 }
 
 #[cfg(any(test, feature = "e2e_tests"))]
@@ -76,15 +76,15 @@ impl std::cmp::PartialEq for LazyFile {
 }
 
 impl LazyFile {
-    pub async fn resolve(&self) -> Result<Cow<'_, ResolvedObjectStorageFile>, Error> {
+    pub async fn resolve(&self) -> Result<Cow<'_, ObjectStorageFile>, Error> {
         match self {
             LazyFile::Url {
                 future,
                 file_url: _,
             } => Ok(Cow::Owned(future.clone().await?)),
             LazyFile::Base64(pending) => Ok(Cow::Borrowed(&pending.0)),
-            LazyFile::ObjectStorage { future, .. } => Ok(Cow::Owned(future.clone().await?)),
-            LazyFile::ResolvedObjectStorage(resolved) => Ok(Cow::Borrowed(resolved)),
+            LazyFile::ObjectStoragePointer { future, .. } => Ok(Cow::Owned(future.clone().await?)),
+            LazyFile::ObjectStorage(resolved) => Ok(Cow::Borrowed(resolved)),
         }
     }
 }
@@ -104,7 +104,7 @@ pub struct FileUrl {
 /// (if we're not forwarding an image url to the model provider), as well as when writing the
 /// file to the object store (if enabled).
 pub type FileFuture =
-    Shared<Pin<Box<dyn Future<Output = Result<ResolvedObjectStorageFile, Error>> + Send>>>;
+    Shared<Pin<Box<dyn Future<Output = Result<ObjectStorageFile, Error>> + Send>>>;
 
 #[derive(Clone, Debug)]
 pub enum LazyResolvedInputMessageContent {
@@ -375,7 +375,7 @@ pub enum ResolvedInputMessageContent {
     },
     Thought(Thought),
     #[cfg_attr(any(feature = "pyo3", test), serde(alias = "image"))]
-    File(Box<ResolvedObjectStorageFile>),
+    File(Box<ObjectStorageFile>),
     Unknown {
         data: Value,
         model_provider_name: Option<String>,
@@ -438,9 +438,9 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
             }
-            ResolvedInputMessageContent::File(resolved) => LazyResolvedInputMessageContent::File(
-                Box::new(LazyFile::ResolvedObjectStorage(*resolved)),
-            ),
+            ResolvedInputMessageContent::File(resolved) => {
+                LazyResolvedInputMessageContent::File(Box::new(LazyFile::ObjectStorage(*resolved)))
+            }
             ResolvedInputMessageContent::Unknown {
                 data,
                 model_provider_name,
@@ -456,11 +456,11 @@ impl RateLimitedInputContent for LazyFile {
     fn estimated_input_token_usage(&self) -> u64 {
         match self {
             LazyFile::Base64(_) => {}
-            LazyFile::ResolvedObjectStorage(_) => {}
-            LazyFile::ObjectStorage { .. } => {}
+            LazyFile::ObjectStorage(_) => {}
+            LazyFile::ObjectStoragePointer { .. } => {}
             // Forwarding a url is inherently incompatible with input token estimation,
             // so we'll need to continue using a hardcoded value here, even if we start
-            // estimating tokens for Base64 and ResolvedObjectStorage
+            // estimating tokens for Base64 and ObjectStorageFile
             LazyFile::Url {
                 file_url: _,
                 future: _,

@@ -183,10 +183,10 @@ pub struct UrlFile {
 
 /// A file stored in an object storage backend, without data.
 /// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
-/// Note: `File` supports both `ObjectStorageFile` and `ResolvedObjectStorageFile`.
+/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
-pub struct ObjectStorageFile {
+pub struct ObjectStoragePointer {
     #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
     #[ts(optional)]
     pub source_url: Option<Url>,
@@ -197,26 +197,26 @@ pub struct ObjectStorageFile {
 
 /// A file stored in an object storage backend, with data.
 /// This struct can NOT be stored in the database.
-/// Note: `File` supports both `ObjectStorageFile` and `ResolvedObjectStorageFile`.
+/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
-pub struct ResolvedObjectStorageFile {
+pub struct ObjectStorageFile {
     #[serde(flatten)]
-    pub file: ObjectStorageFile,
+    pub file: ObjectStoragePointer,
     // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
     // TODO: should we add a wrapper type to enforce base64?
     pub data: String,
 }
 
-/// A newtype wrapper around `ResolvedObjectStorageFile` that represents file data
+/// A newtype wrapper around `ObjectStorageFile` that represents file data
 /// from a base64 input that needs to be written to object storage.
 /// The `storage_path` inside is content-addressed (computed from data) and represents
 /// where the file WILL be written, not where it currently exists.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct PendingObjectStoreFile(pub ResolvedObjectStorageFile);
+pub struct PendingObjectStoreFile(pub ObjectStorageFile);
 
 impl std::ops::Deref for PendingObjectStoreFile {
-    type Target = ResolvedObjectStorageFile;
+    type Target = ObjectStorageFile;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
@@ -224,9 +224,9 @@ impl std::ops::Deref for PendingObjectStoreFile {
 
 /// Implement a custom deserializer for ObjectStorageFile to show a deprecation warning for the `url` field
 ///
-/// IMPORTANT: This deserializer can't be fully removed. Eventually, we'll want to move it from `ObjectStorageFile`
+/// IMPORTANT: This deserializer can't be fully removed. Eventually, we'll want to move it from `ObjectStoragePointer`
 /// to `StoredFile`, but ClickHouse will still have legacy data with `url`.
-impl<'de> Deserialize<'de> for ObjectStorageFile {
+impl<'de> Deserialize<'de> for ObjectStoragePointer {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -252,7 +252,7 @@ impl<'de> Deserialize<'de> for ObjectStorageFile {
         let helper: ObjectStorageFileHelper =
             serde_json::from_value(value).map_err(serde::de::Error::custom)?;
 
-        Ok(ObjectStorageFile {
+        Ok(ObjectStoragePointer {
             source_url: helper.source_url,
             mime_type: helper.mime_type,
             storage_path: helper.storage_path,
@@ -269,10 +269,10 @@ impl<'de> Deserialize<'de> for ObjectStorageFile {
 // deserialization accepts both tagged and untagged formats for backwards compatibility.
 // TODO(#4107): Remove this once we're confident that clients are sending us the tagged version.
 pub enum File {
-    Url(UrlFile),
-    Base64(Base64File),
-    ObjectStorage(ObjectStorageFile),
-    ResolvedObjectStorage(ResolvedObjectStorageFile),
+    Url(UrlFile),                               // a file URL
+    Base64(Base64File),                         // a base64-encoded file
+    ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (without data)
+    ObjectStorage(ObjectStorageFile),           // a file from object storage (pointer + data)
 }
 
 // Allow deserializing File as either tagged or untagged format.
@@ -295,14 +295,14 @@ impl<'de> Deserialize<'de> for File {
                 mime_type: MediaType,
                 data: String,
             },
-            ObjectStorage {
+            ObjectStoragePointer {
                 source_url: Option<Url>,
                 mime_type: MediaType,
                 storage_path: StoragePath,
             },
-            ResolvedObjectStorage {
+            ObjectStorage {
                 #[serde(flatten)]
-                file: ObjectStorageFile,
+                file: ObjectStoragePointer,
                 data: String,
             },
         }
@@ -319,14 +319,14 @@ impl<'de> Deserialize<'de> for File {
                 mime_type: MediaType,
                 data: String,
             },
-            ObjectStorage {
+            ObjectStoragePointer {
                 source_url: Option<Url>,
                 mime_type: MediaType,
                 storage_path: StoragePath,
             },
-            ResolvedObjectStorage {
+            ObjectStorage {
                 #[serde(flatten)]
-                file: ObjectStorageFile,
+                file: ObjectStoragePointer,
                 data: String,
             },
         }
@@ -350,20 +350,17 @@ impl<'de> Deserialize<'de> for File {
                     source_url: None,
                 }))
             }
-            FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStorage {
+            FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
-            }) => Ok(File::ObjectStorage(ObjectStorageFile {
+            }) => Ok(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
             })),
-            FileTaggedOrUntagged::Tagged(TaggedFile::ResolvedObjectStorage { file, data }) => {
-                Ok(File::ResolvedObjectStorage(ResolvedObjectStorageFile {
-                    file,
-                    data,
-                }))
+            FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStorage { file, data }) => {
+                Ok(File::ObjectStorage(ObjectStorageFile { file, data }))
             }
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Url { url, mime_type }) => {
                 Ok(File::Url(UrlFile { url, mime_type }))
@@ -375,22 +372,18 @@ impl<'de> Deserialize<'de> for File {
                     source_url: None,
                 }))
             }
-            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStorage {
+            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
-            }) => Ok(File::ObjectStorage(ObjectStorageFile {
+            }) => Ok(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
             })),
-            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ResolvedObjectStorage {
-                file,
-                data,
-            }) => Ok(File::ResolvedObjectStorage(ResolvedObjectStorageFile {
-                file,
-                data,
-            })),
+            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStorage { file, data }) => {
+                Ok(File::ObjectStorage(ObjectStorageFile { file, data }))
+            }
         }
     }
 }
@@ -507,28 +500,28 @@ impl File {
             File::Base64(base64_file) => {
                 Ok(Base64File { source_url: None, ..base64_file })
             }
-            File::ObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
+            File::ObjectStoragePointer(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
                 message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
             })),
-            File::ResolvedObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
+            File::ObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
-                message: format!("File::ResolvedObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+                message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
             })),
         }
     }
 
     pub fn into_stored_file(self) -> Result<StoredFile, Error> {
         match self {
-            File::ResolvedObjectStorage(ResolvedObjectStorageFile { file, data: _ }) => {
+            File::ObjectStorage(ObjectStorageFile { file, data: _ }) => {
                 Ok(StoredFile(file))
             }
-            File::Url(_) | File::Base64(_) | File::ObjectStorage(_) => {
+            File::Url(_) | File::Base64(_) | File::ObjectStoragePointer(_) => {
                 Err(Error::new(ErrorDetails::InternalError {
                     message: format!(
-                        "File::into_stored_file should only be called on ResolvedObjectStorage! {IMPOSSIBLE_ERROR_MESSAGE}"
+                        "File::into_stored_file should only be called on ObjectStorage! {IMPOSSIBLE_ERROR_MESSAGE}"
                     ),
                 }))
             }
@@ -556,18 +549,18 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                         // We ignore errors here, since an error during file resolution means that
                         // we cannot have included the file bytes in `raw_request`.
                         if let Some(Ok(resolved)) = future.clone().now_or_never() {
-                            Some(Cow::Owned(File::ResolvedObjectStorage(resolved)))
+                            Some(Cow::Owned(File::ObjectStorage(resolved)))
                         } else {
                             None
                         }
                     }
                     LazyFile::Base64(pending) => {
-                        Some(Cow::Owned(File::ResolvedObjectStorage(pending.0.clone())))
+                        Some(Cow::Owned(File::ObjectStorage(pending.0.clone())))
                     }
-                    LazyFile::ResolvedObjectStorage(resolved) => {
-                        Some(Cow::Owned(File::ResolvedObjectStorage(resolved.clone())))
+                    LazyFile::ObjectStorage(resolved) => {
+                        Some(Cow::Owned(File::ObjectStorage(resolved.clone())))
                     }
-                    LazyFile::ObjectStorage { future, .. } => {
+                    LazyFile::ObjectStoragePointer { future, .. } => {
                         // If we actually sent the file bytes to some model provider, then the
                         // Shared future must be ready, so we'll get a file from `now_or_never`.
                         // Otherwise, the file cannot have been sent to a model provider (since the
@@ -576,7 +569,7 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                         // We ignore errors here, since an error during file resolution means that
                         // we cannot have included the file bytes in `raw_request`.
                         if let Some(Ok(resolved)) = future.clone().now_or_never() {
-                            Some(Cow::Owned(File::ResolvedObjectStorage(resolved)))
+                            Some(Cow::Owned(File::ObjectStorage(resolved)))
                         } else {
                             None
                         }
@@ -584,9 +577,9 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                 };
                 if let Some(file) = file_with_path {
                     let data = match &*file {
-                        File::ResolvedObjectStorage(resolved) => &resolved.data,
+                        File::ObjectStorage(resolved) => &resolved.data,
                         File::Base64(base64) => &base64.data,
-                        File::Url(_) | File::ObjectStorage(_) => {
+                        File::Url(_) | File::ObjectStoragePointer(_) => {
                             // These variants should not occur in resolved files
                             continue;
                         }
@@ -669,8 +662,7 @@ mod tests {
 
     use crate::inference::types::{
         file::{
-            filename_to_mime_type, sanitize_raw_request, ObjectStorageFile,
-            ResolvedObjectStorageFile,
+            filename_to_mime_type, sanitize_raw_request, ObjectStorageFile, ObjectStoragePointer,
         },
         resolved_input::LazyFile,
         storage::{StorageKind, StoragePath},
@@ -690,9 +682,9 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
-                                ResolvedObjectStorageFile {
-                                    file: ObjectStorageFile {
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
                                         source_url: None,
                                         mime_type: mime::IMAGE_JPEG,
                                         storage_path: StoragePath {
@@ -706,9 +698,9 @@ mod tests {
                                     data: "my-image-1-data".to_string(),
                                 }
                             ))),
-                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
-                                ResolvedObjectStorageFile {
-                                    file: ObjectStorageFile {
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
                                         source_url: None,
                                         mime_type: mime::IMAGE_JPEG,
                                         storage_path: StoragePath {
@@ -722,9 +714,9 @@ mod tests {
                                     data: "my-image-2-data".to_string(),
                                 }
                             ))),
-                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
-                                ResolvedObjectStorageFile {
-                                    file: ObjectStorageFile {
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
                                         source_url: None,
                                         mime_type: mime::IMAGE_JPEG,
                                         storage_path: StoragePath {
@@ -743,9 +735,9 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
-                                ResolvedObjectStorageFile {
-                                    file: ObjectStorageFile {
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
                                         source_url: None,
                                         mime_type: mime::IMAGE_JPEG,
                                         storage_path: StoragePath {
@@ -759,9 +751,9 @@ mod tests {
                                     data: "my-image-3-data".to_string(),
                                 }
                             ))),
-                            ContentBlock::File(Box::new(LazyFile::ResolvedObjectStorage(
-                                ResolvedObjectStorageFile {
-                                    file: ObjectStorageFile {
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
                                         source_url: None,
                                         mime_type: mime::IMAGE_JPEG,
                                         storage_path: StoragePath {
@@ -853,7 +845,7 @@ mod tests {
 
     mod file_serde_tests {
         use crate::inference::types::{
-            file::{Base64File, ObjectStorageFile, UrlFile},
+            file::{Base64File, ObjectStoragePointer, UrlFile},
             storage::{StorageKind, StoragePath},
             File,
         };
@@ -901,7 +893,7 @@ mod tests {
 
         #[test]
         fn test_file_object_storage_serialize_always_tagged() {
-            let file = File::ObjectStorage(ObjectStorageFile {
+            let file = File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url: Some("https://example.com/image.png".parse().unwrap()),
                 mime_type: mime::IMAGE_PNG,
                 storage_path: StoragePath {
@@ -1006,7 +998,7 @@ mod tests {
             });
 
             let file: File = serde_json::from_value(json).unwrap();
-            assert!(matches!(file, File::ObjectStorage(_)));
+            assert!(matches!(file, File::ObjectStoragePointer(_)));
         }
 
         #[test]
@@ -1023,7 +1015,7 @@ mod tests {
             });
 
             let file: File = serde_json::from_value(json).unwrap();
-            assert!(matches!(file, File::ObjectStorage(_)));
+            assert!(matches!(file, File::ObjectStoragePointer(_)));
         }
 
         #[test]

@@ -1,7 +1,7 @@
 use crate::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 use tensorzero_core::inference::types::{
-    Base64File, File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent,
-    ResolvedObjectStorageFile, TextKind,
+    Base64File, File, ObjectStorageFile, ResolvedInput, ResolvedInputMessage,
+    ResolvedInputMessageContent, TextKind,
 };
 use tensorzero_core::tool::{ToolCall, ToolCallInput};
 
@@ -59,7 +59,7 @@ fn resolved_input_message_content_to_client_input_message_content(
             ClientInputMessageContent::Thought(thought)
         }
         ResolvedInputMessageContent::File(resolved) => {
-            let ResolvedObjectStorageFile { file, data } = *resolved;
+            let ObjectStorageFile { file, data } = *resolved;
             let mime_type = file.mime_type;
 
             ClientInputMessageContent::File(File::Base64(Base64File {
@@ -84,7 +84,7 @@ mod tests {
 
     use tensorzero_core::inference::types::{
         storage::{StorageKind, StoragePath},
-        Base64File, ObjectStorageFile, ResolvedObjectStorageFile,
+        Base64File, ObjectStorageFile, ObjectStoragePointer,
     };
     use url::Url;
 
@@ -132,15 +132,14 @@ mod tests {
         };
 
         // Create the resolved input message content with an image
-        let resolved_content =
-            ResolvedInputMessageContent::File(Box::new(ResolvedObjectStorageFile {
-                file: ObjectStorageFile {
-                    source_url: Some(Url::parse("http://notaurl.com").unwrap()),
-                    mime_type: mime::IMAGE_JPEG,
-                    storage_path: storage_path.clone(),
-                },
-                data: image_data.to_string(),
-            }));
+        let resolved_content = ResolvedInputMessageContent::File(Box::new(ObjectStorageFile {
+            file: ObjectStoragePointer {
+                source_url: Some(Url::parse("http://notaurl.com").unwrap()),
+                mime_type: mime::IMAGE_JPEG,
+                storage_path: storage_path.clone(),
+            },
+            data: image_data.to_string(),
+        }));
 
         // Call the function under test
         let result =

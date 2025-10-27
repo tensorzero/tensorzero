@@ -909,6 +909,7 @@ mod tests {
     use crate::config::SchemaData;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceIds};
     use crate::experimentation::ExperimentationConfig;
+    use crate::inference::types::file::ObjectStoragePointer;
     use crate::inference::types::resolved_input::LazyResolvedInputMessage;
     use crate::inference::types::stored_input::StoredFile;
     use crate::inference::types::StoredInputMessage;
@@ -918,7 +919,7 @@ mod tests {
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
             storage::{StorageKind, StoragePath},
-            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            ResolvedInputMessage, ResolvedInputMessageContent, Role, TemplateInput, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -1101,7 +1102,7 @@ mod tests {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             }),
                             StoredInputMessageContent::File(Box::new(StoredFile(
-                                crate::inference::types::file::ObjectStorageFile {
+                                ObjectStoragePointer {
                                     source_url: None,
                                     mime_type: mime::IMAGE_PNG,
                                     storage_path: StoragePath {
@@ -1622,8 +1623,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_request_message_dicl_with_template() {
-        use crate::inference::types::TemplateInput;
-
         let message = LazyResolvedInputMessage {
             role: Role::User,
             content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
@@ -1679,8 +1678,6 @@ mod tests {
 
     #[test]
     fn test_lazy_content_to_resolved_with_template() {
-        use crate::inference::types::TemplateInput;
-
         let template = LazyResolvedInputMessageContent::Template(TemplateInput {
             name: "test_template".to_string(),
             arguments: serde_json::json!({"foo": "bar"})

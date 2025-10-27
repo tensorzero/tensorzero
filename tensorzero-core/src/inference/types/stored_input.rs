@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
-use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile};
+use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile, ObjectStoragePointer};
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
 use crate::inference::types::storage::StoragePath;
@@ -247,8 +247,8 @@ impl StoredInputMessageContent {
             StoredInputMessageContent::File(file) => {
                 let data = resolver.resolve(file.storage_path.clone()).await?;
                 Ok(ResolvedInputMessageContent::File(Box::new(
-                    crate::inference::types::ResolvedObjectStorageFile {
-                        file: crate::inference::types::ObjectStorageFile {
+                    ObjectStorageFile {
+                        file: ObjectStoragePointer {
                             source_url: file.source_url.clone(),
                             mime_type: file.mime_type.clone(),
                             storage_path: file.storage_path.clone(),
@@ -268,8 +268,8 @@ impl StoredInputMessageContent {
     }
 }
 
-/// A newtype wrapper around `ObjectStorageFile` that handles legacy deserialization formats.
-/// This ensures `StoredFile` stays in sync with `ObjectStorageFile` and prevents type drift.
+/// A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.
+/// This ensures `StoredFile` stays in sync with `ObjectStoragePointer` and prevents type drift.
 ///
 /// The custom deserializer handles:
 /// - Legacy nested format: `{ file: { source_url, mime_type }, storage_path }`
@@ -281,22 +281,22 @@ impl StoredInputMessageContent {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[repr(transparent)]
 #[serde(transparent)]
-pub struct StoredFile(pub ObjectStorageFile);
+pub struct StoredFile(pub ObjectStoragePointer);
 
 impl Deref for StoredFile {
-    type Target = ObjectStorageFile;
+    type Target = ObjectStoragePointer;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl From<ObjectStorageFile> for StoredFile {
-    fn from(file: ObjectStorageFile) -> Self {
+impl From<ObjectStoragePointer> for StoredFile {
+    fn from(file: ObjectStoragePointer) -> Self {
         Self(file)
     }
 }
 
-impl From<StoredFile> for ObjectStorageFile {
+impl From<StoredFile> for ObjectStoragePointer {
     fn from(file: StoredFile) -> Self {
         file.0
     }
@@ -327,7 +327,7 @@ impl<'de> Deserialize<'de> for StoredFile {
             let legacy: LegacyStoredFile =
                 serde_json::from_value(value).map_err(de::Error::custom)?;
 
-            return Ok(StoredFile(ObjectStorageFile {
+            return Ok(StoredFile(ObjectStoragePointer {
                 source_url: legacy.file.source_url,
                 mime_type: legacy.file.mime_type,
                 storage_path: legacy.storage_path,
@@ -336,7 +336,8 @@ impl<'de> Deserialize<'de> for StoredFile {
 
         // For the new flattened format, delegate to ObjectStorageFile's deserializer
         // which already handles the "url" vs "source_url" alias deprecation
-        let file: ObjectStorageFile = serde_json::from_value(value).map_err(de::Error::custom)?;
+        let file: ObjectStoragePointer =
+            serde_json::from_value(value).map_err(de::Error::custom)?;
         Ok(StoredFile(file))
     }
 }
@@ -654,7 +655,7 @@ mod tests {
     fn test_serialize_stored_file_always_flattened() {
         use crate::inference::types::storage::{StorageKind, StoragePath};
 
-        let stored_file = StoredFile(ObjectStorageFile {
+        let stored_file = StoredFile(ObjectStoragePointer {
             source_url: Some("https://example.com/image.png".parse().unwrap()),
             mime_type: mime::IMAGE_PNG,
             storage_path: StoragePath {
@@ -677,7 +678,7 @@ mod tests {
     fn test_round_trip_stored_file_serialization() {
         use crate::inference::types::storage::{StorageKind, StoragePath};
 
-        let original = StoredFile(ObjectStorageFile {
+        let original = StoredFile(ObjectStoragePointer {
             source_url: Some("https://example.com/test.png".parse().unwrap()),
             mime_type: mime::IMAGE_PNG,
             storage_path: StoragePath {

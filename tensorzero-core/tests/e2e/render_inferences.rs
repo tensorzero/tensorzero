@@ -254,7 +254,7 @@ pub async fn test_render_samples_normal() {
                             text: "What is this a picture of?".to_string(),
                         }),
                         StoredInputMessageContent::File(Box::new(StoredFile(
-                            tensorzero_core::inference::types::file::ObjectStorageFile {
+                            tensorzero_core::inference::types::file::ObjectStoragePointer {
                                 source_url: None,
                                 mime_type: mime::IMAGE_PNG,
                                 storage_path: StoragePath {
@@ -802,7 +802,7 @@ pub async fn test_render_datapoints_normal() {
                             text: "What is this a picture of?".to_string(),
                         }),
                         StoredInputMessageContent::File(Box::new(StoredFile(
-                            tensorzero_core::inference::types::file::ObjectStorageFile {
+                            tensorzero_core::inference::types::file::ObjectStoragePointer {
                                 source_url: None,
                                 mime_type: mime::IMAGE_PNG,
                                 storage_path: StoragePath {

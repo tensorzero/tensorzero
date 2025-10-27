@@ -1466,7 +1466,7 @@ mod tests {
     use crate::inference::types::{
         storage::{StorageKind, StoragePath},
         Base64File, ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
-        JsonInferenceResultChunk, ObjectStorageFile, Role, TextChunk, UrlFile,
+        JsonInferenceResultChunk, ObjectStoragePointer, Role, TextChunk, UrlFile,
     };
 
     #[tokio::test]
@@ -1858,7 +1858,7 @@ mod tests {
         assert_eq!(input_with_object_storage.messages[0].content.len(), 1);
         assert_eq!(
             input_with_object_storage.messages[0].content[0],
-            InputMessageContent::File(File::ObjectStorage(ObjectStorageFile {
+            InputMessageContent::File(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 storage_path: StoragePath {

@@ -393,7 +393,8 @@ mod tests {
     use crate::inference::types::storage::{StorageKind, StoragePath};
     use crate::inference::types::{
         Base64File, ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
-        JsonInferenceOutput, ObjectStorageFile, Role, StoredInputMessageContent, Text,
+        JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputMessage,
+        StoredInputMessageContent, Text, TextKind,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
@@ -422,7 +423,7 @@ mod tests {
                 path: ObjectStorePath::parse("test/path/image.png").unwrap(),
             };
 
-            let file = File::ObjectStorage(ObjectStorageFile {
+            let file = File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url: Some("https://example.com/original.png".parse().unwrap()),
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
@@ -628,7 +629,7 @@ mod tests {
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
                     system: None,
-                    messages: vec![crate::inference::types::StoredInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
                             text: "original input".to_string(),
@@ -665,7 +666,7 @@ mod tests {
                 episode_id: Some(Uuid::now_v7()),
                 input: StoredInput {
                     system: None,
-                    messages: vec![crate::inference::types::StoredInputMessage {
+                    messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
                             text: "original input".to_string(),
@@ -766,11 +767,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new input text".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: "new input text".into(),
+                    })],
                 }],
             };
 
@@ -1142,11 +1141,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new input".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: "new input".into(),
+                    })],
                 }],
             };
             let new_output = vec![ContentBlockChatOutput::Text(Text {
@@ -1516,11 +1513,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new json input".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: "new json input".into(),
+                    })],
                 }],
             };
             let new_schema =

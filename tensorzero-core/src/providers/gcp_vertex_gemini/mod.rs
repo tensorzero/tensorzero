@@ -45,7 +45,7 @@ use crate::inference::types::batch::{
 };
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
@@ -2050,8 +2050,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
             }
             Cow::Borrowed(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
-                    &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
@@ -2064,8 +2063,7 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
             }
             Cow::Owned(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let crate::inference::types::ResolvedObjectStorageFile { file, data } =
-                    &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {

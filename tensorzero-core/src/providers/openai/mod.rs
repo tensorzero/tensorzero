@@ -36,6 +36,7 @@ use crate::inference::types::batch::{
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
     batch::{BatchStatus, StartBatchProviderInferenceResponse},
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -1575,7 +1576,7 @@ pub(super) async fn prepare_file_message(
         }
         _ => {
             let resolved_file = file.resolve().await?;
-            let crate::inference::types::ResolvedObjectStorageFile { file, data } = &*resolved_file;
+            let ObjectStorageFile { file, data } = &*resolved_file;
             let base64_url = format!("data:{};base64,{}", file.mime_type, data);
             if file.mime_type.type_() == mime::IMAGE {
                 Ok(OpenAIContentBlock::ImageUrl {
@@ -2652,7 +2653,10 @@ mod tests {
     use tracing_test::traced_test;
 
     use crate::inference::types::storage::{StorageKind, StoragePath};
-    use crate::inference::types::{FunctionType, PendingObjectStoreFile, RequestMessage};
+    use crate::inference::types::{
+        FunctionType, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
+        RequestMessage,
+    };
     use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
@@ -4023,16 +4027,14 @@ mod tests {
             kind: StorageKind::Disabled,
             path: object_store::path::Path::parse("dummy-path").unwrap(),
         };
-        let file = LazyFile::Base64(PendingObjectStoreFile(
-            crate::inference::types::ResolvedObjectStorageFile {
-                file: crate::inference::types::ObjectStorageFile {
-                    source_url: None,
-                    mime_type: mime::TEXT_PLAIN,
-                    storage_path: dummy_storage_path.clone(),
-                },
-                data: BASE64_STANDARD.encode(b"Hello, world!"),
+        let file = LazyFile::Base64(PendingObjectStoreFile(ObjectStorageFile {
+            file: ObjectStoragePointer {
+                source_url: None,
+                mime_type: mime::TEXT_PLAIN,
+                storage_path: dummy_storage_path.clone(),
             },
-        ));
+            data: BASE64_STANDARD.encode(b"Hello, world!"),
+        }));
         let first_res = prepare_file_message(
             &file,
             OpenAIMessagesConfig {
@@ -4092,8 +4094,8 @@ mod tests {
                     mime_type: None,
                 },
                 future: async move {
-                    Ok(crate::inference::types::ResolvedObjectStorageFile {
-                        file: crate::inference::types::ObjectStorageFile {
+                    Ok(ObjectStorageFile {
+                        file: ObjectStoragePointer {
                             source_url: None,
                             // Deliberately use a different mime type to make sure we adjust the input filename
                             mime_type: mime::IMAGE_JPEG,
@@ -4146,8 +4148,8 @@ mod tests {
                     mime_type: None,
                 },
                 future: async move {
-                    Ok(crate::inference::types::ResolvedObjectStorageFile {
-                        file: crate::inference::types::ObjectStorageFile {
+                    Ok(ObjectStorageFile {
+                        file: ObjectStoragePointer {
                             source_url: None,
                             // Deliberately use a different mime type to make sure we adjust the input filename
                             mime_type: mime::IMAGE_JPEG,
@@ -4229,8 +4231,8 @@ mod tests {
                     mime_type: Some(mime::APPLICATION_PDF),
                 },
                 future: async {
-                    Ok(crate::inference::types::ResolvedObjectStorageFile {
-                        file: crate::inference::types::ObjectStorageFile {
+                    Ok(ObjectStorageFile {
+                        file: ObjectStoragePointer {
                             source_url: None,
                             mime_type: mime::APPLICATION_PDF,
                             storage_path: StoragePath {

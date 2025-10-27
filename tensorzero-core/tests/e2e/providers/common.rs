@@ -2632,7 +2632,7 @@ pub async fn check_base64_pdf_response(
                     text: "Describe the contents of the PDF".to_string(),
                 }),
                 StoredContentBlock::File(Box::new(StoredFile(
-                    tensorzero_core::inference::types::file::ObjectStorageFile {
+                    tensorzero_core::inference::types::file::ObjectStoragePointer {
                         source_url: None,
                         mime_type: mime::APPLICATION_PDF,
                         storage_path: expected_storage_path.clone(),
@@ -2787,7 +2787,7 @@ pub async fn check_base64_image_response(
                     text: "Describe the contents of the image".to_string(),
                 }),
                 StoredContentBlock::File(Box::new(StoredFile(
-                    tensorzero_core::inference::types::file::ObjectStorageFile {
+                    tensorzero_core::inference::types::file::ObjectStoragePointer {
                         source_url: None,
                         mime_type: mime::IMAGE_PNG,
                         storage_path: expected_storage_path.clone(),
@@ -2936,7 +2936,7 @@ pub async fn check_url_image_response(
                 content: vec![StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }), StoredContentBlock::File(Box::new(StoredFile(
-                    tensorzero_core::inference::types::file::ObjectStorageFile {
+                    tensorzero_core::inference::types::file::ObjectStoragePointer {
                         source_url: Some(image_url.clone()),
                         mime_type: mime::IMAGE_PNG,
                         storage_path: StoragePath {
