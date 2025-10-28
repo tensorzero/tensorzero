@@ -368,7 +368,7 @@ impl FunctionConfig {
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
         let tool_config = self.prepare_tool_config(dynamic_params, static_tools)?;
-        Ok(tool_config.map(|config| config.into()))
+        Ok(tool_config.map(std::convert::Into::into))
     }
 
     /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams by subtracting static tools

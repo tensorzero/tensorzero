@@ -235,10 +235,8 @@ async fn prepare_chat_update(
     }
     if let Some(new_tool_params) = update.tool_params {
         updated_datapoint.tool_params = match new_tool_params {
-            Some(dynamic_params) => function_config.dynamic_tool_params_to_database_insert(
-                dynamic_params,
-                &app_state.config.tools,
-            )?,
+            Some(dynamic_params) => function_config
+                .dynamic_tool_params_to_database_insert(dynamic_params, &app_state.config.tools)?,
             None => None,
         };
     }
