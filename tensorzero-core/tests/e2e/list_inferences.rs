@@ -474,8 +474,9 @@ pub async fn test_query_by_ids_unknown_id_returns_empty() {
     let client = make_embedded_gateway().await;
 
     // Query by an unknown ID
+    let unknown_id = [Uuid::new_v4()];
     let opts = ListInferencesParams {
-        ids: Some(&[Uuid::new_v4()]),
+        ids: Some(&unknown_id),
         ..Default::default()
     };
     let res = client.experimental_list_inferences(opts).await.unwrap();

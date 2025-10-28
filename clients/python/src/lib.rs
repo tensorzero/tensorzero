@@ -51,6 +51,10 @@ use tensorzero_core::{
     },
 };
 use tensorzero_core::{
+    endpoints::datasets::{Datapoint, DatapointWire},
+    stored_inference::{StoredInference, StoredInferenceWire},
+};
+use tensorzero_core::{
     endpoints::{
         datasets::InsertDatapointParams,
         workflow_evaluation_run::WorkflowEvaluationRunEpisodeParams,
@@ -62,10 +66,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
-    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream,
-    LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle, RenderedSample,
-    StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, DynamicToolParams,
+    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, LaunchOptimizationParams,
+    ListInferencesParams, OptimizationJobHandle, RenderedSample, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -97,7 +101,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
-    m.add_class::<StoredInference>()?;
+    m.add_class::<StoredInferenceWire>()?;
     m.add_class::<EvaluationJobHandler>()?;
     m.add_class::<AsyncEvaluationJobHandler>()?;
     m.add_class::<UninitializedOpenAIRFTConfig>()?;
@@ -106,7 +110,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedDiclOptimizationConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
-    m.add_class::<Datapoint>()?;
+    m.add_class::<DatapointWire>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
     m.add_class::<ConfigPyClass>()?;
@@ -1057,25 +1061,26 @@ impl TensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to get the datapoint from.
     /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `Datapoint` object.
+    /// :return: A `DatapointWire` object.
     #[pyo3(signature = (*, dataset_name, datapoint_id))]
     fn get_datapoint<'py>(
         this: PyRef<'py, Self>,
         dataset_name: String,
         datapoint_id: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, Datapoint>> {
+    ) -> PyResult<Bound<'py, DatapointWire>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-        tokio_block_on_without_gil(this.py(), fut)
-            .map(|x| x.into_pyobject(this.py()))
-            .map_err(|e| convert_error(this.py(), e))?
+        let storage: Datapoint =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        let wire: DatapointWire = storage.into();
+        wire.into_pyobject(this.py())
     }
 
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to get the datapoints from.
-    /// :return: A list of `Datapoint` objects.
+    /// :return: A list of `DatapointWire` objects.
     #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
     fn list_datapoints(
         this: PyRef<'_, Self>,
@@ -1089,11 +1094,12 @@ impl TensorZeroGateway {
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
             Ok(resp) => {
-                let datapoints = resp
+                let datapoints: Vec<DatapointWire> = resp.into_iter().map(Into::into).collect();
+                let py_datapoints = datapoints
                     .into_iter()
                     .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
-                PyList::new(this.py(), datapoints)
+                PyList::new(this.py(), py_datapoints)
             }
             Err(e) => Err(convert_error(this.py(), e)),
         }
@@ -1204,7 +1210,7 @@ impl TensorZeroGateway {
         order_by: Option<Bound<'_, PyAny>>,
         limit: Option<u64>,
         offset: Option<u64>,
-    ) -> PyResult<Vec<StoredInference>> {
+    ) -> PyResult<Vec<StoredInferenceWire>> {
         let client = this.as_super().client.clone();
         let filters = filters
             .as_ref()
@@ -1232,7 +1238,9 @@ impl TensorZeroGateway {
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+        let storage: Vec<StoredInference> =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        Ok(storage.into_iter().map(Into::into).collect())
     }
 
     /// DEPRECATED: use `experimental_render_samples` instead.
@@ -1905,7 +1913,7 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to get the datapoint from.
     /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `Datapoint` object.
+    /// :return: A `DatapointWire` object.
     #[pyo3(signature = (*, dataset_name, datapoint_id))]
     fn get_datapoint<'a>(
         this: PyRef<'a, Self>,
@@ -1917,7 +1925,10 @@ impl AsyncTensorZeroGateway {
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
-                Ok(resp) => Ok(resp.into_py_any(py)?),
+                Ok(resp) => {
+                    let wire: DatapointWire = resp.into();
+                    Ok(wire.into_py_any(py)?)
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1926,7 +1937,7 @@ impl AsyncTensorZeroGateway {
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to get the datapoints from.
-    /// :return: A list of `Datapoint` objects.
+    /// :return: A list of `DatapointWire` objects.
     #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
     fn list_datapoints(
         this: PyRef<'_, Self>,
@@ -1941,7 +1952,11 @@ impl AsyncTensorZeroGateway {
                 .list_datapoints(dataset_name, function_name, limit, offset)
                 .await;
             Python::attach(|py| match res {
-                Ok(datapoints) => Ok(PyList::new(py, datapoints)?.unbind()),
+                Ok(datapoints) => {
+                    let wire_datapoints: Vec<DatapointWire> =
+                        datapoints.into_iter().map(Into::into).collect();
+                    Ok(PyList::new(py, wire_datapoints)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2087,7 +2102,11 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.experimental_list_inferences(params).await;
             Python::attach(|py| match res {
-                Ok(stored_inferences) => Ok(PyList::new(py, stored_inferences)?.unbind()),
+                Ok(stored_inferences) => {
+                    let wire_inferences: Vec<StoredInferenceWire> =
+                        stored_inferences.into_iter().map(Into::into).collect();
+                    Ok(PyList::new(py, wire_inferences)?.unbind())
+                }
                 Err(e) => Err(convert_error(py, e)),
             })
         })

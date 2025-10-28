@@ -7,7 +7,7 @@ use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult,
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::endpoints::datasets::Datapoint;
+use crate::endpoints::datasets::{Datapoint, DatapointWire};
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
@@ -20,7 +20,7 @@ use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
-    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
+    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredInferenceWire, StoredSample,
 };
 use pyo3::types::PyNone;
 
@@ -365,10 +365,14 @@ pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
 ) -> PyResult<StoredSampleItem> {
-    if obj.is_instance_of::<StoredInference>() {
-        Ok(StoredSampleItem::StoredInference(obj.extract()?))
-    } else if obj.is_instance_of::<Datapoint>() {
-        Ok(StoredSampleItem::Datapoint(obj.extract()?))
+    if obj.is_instance_of::<StoredInferenceWire>() {
+        // Extract wire type and convert to storage type
+        let wire: StoredInferenceWire = obj.extract()?;
+        Ok(StoredSampleItem::StoredInference(wire.into()))
+    } else if obj.is_instance_of::<DatapointWire>() {
+        // Extract wire type and convert to storage type
+        let wire: DatapointWire = obj.extract()?;
+        Ok(StoredSampleItem::Datapoint(wire.into()))
     } else {
         deserialize_from_pyobj(py, obj)
     }

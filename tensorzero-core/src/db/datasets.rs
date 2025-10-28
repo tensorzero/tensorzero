@@ -15,7 +15,7 @@ use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
     serialize_none_as_empty_map, serialize_none_as_empty_string,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::ToolCallConfigWire;
 
 /// Datapoint types that are directly serialized and inserted into ClickHouse.
 /// These should be internal-only types but are exposed to tensorzero-node.
@@ -81,7 +81,7 @@ pub struct ChatInferenceDatapointInsert {
         deserialize_with = "deserialize_optional_string_or_parsed_json",
         serialize_with = "serialize_none_as_empty_string"
     )]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_params: Option<ToolCallConfigWire>,
 
     /// Tags associated with this datapoint. Optional.
     #[serde(default, serialize_with = "serialize_none_as_empty_map")]

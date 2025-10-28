@@ -5,10 +5,10 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::DatapointFilter;
-use crate::endpoints::datasets::Datapoint;
+use crate::endpoints::datasets::DatapointWire;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::ToolCallConfigWire;
 
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -56,7 +56,7 @@ pub struct UpdateChatDatapointRequest {
 
     /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    pub tool_params: Option<Option<ToolCallConfigDatabaseInsert>>,
+    pub tool_params: Option<Option<ToolCallConfigWire>>,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will be overwrite the existing tags.
@@ -188,5 +188,5 @@ pub struct GetDatapointsRequest {
 #[cfg_attr(test, ts(export))]
 pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
-    pub datapoints: Vec<Datapoint>,
+    pub datapoints: Vec<DatapointWire>,
 }

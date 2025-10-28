@@ -32,7 +32,7 @@ use tensorzero_core::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
-    tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
+    tool::{Tool, ToolCall, ToolCallConfigWire, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
@@ -443,7 +443,7 @@ fn generate_tool_call_example() -> RenderedSample {
         },
         output: Some(tool_call_output.clone()),
         stored_output: Some(StoredOutput::Chat(tool_call_output)),
-        tool_params: Some(ToolCallConfigDatabaseInsert {
+        tool_params: Some(ToolCallConfigWire {
             tools_available: vec![Tool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),

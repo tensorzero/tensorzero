@@ -1052,10 +1052,10 @@ mod tests {
     }
 
     fn create_test_rendered_sample_with_tools(tools: Vec<crate::tool::Tool>) -> RenderedSample {
-        use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+        use crate::tool::{ToolCallConfigWire, ToolChoice};
 
         let mut sample = create_test_rendered_sample();
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+        sample.tool_params = Some(ToolCallConfigWire {
             tools_available: tools,
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
@@ -1066,7 +1066,7 @@ mod tests {
     fn create_test_rendered_sample_with_tool_content() -> RenderedSample {
         use crate::{
             inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
-            tool::{ToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
+            tool::{ToolCall, ToolCallConfigWire, ToolChoice},
         };
         use serde_json::json;
 
@@ -1083,7 +1083,7 @@ mod tests {
         });
 
         // Also add empty tool params to make it realistic
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+        sample.tool_params = Some(ToolCallConfigWire {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: Some(false),
@@ -1095,7 +1095,7 @@ mod tests {
     fn create_test_rendered_sample_with_tool_result() -> RenderedSample {
         use crate::{
             inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
-            tool::{ToolCallConfigDatabaseInsert, ToolChoice, ToolResult},
+            tool::{ToolCallConfigWire, ToolChoice, ToolResult},
         };
 
         let mut sample = create_test_rendered_sample();
@@ -1111,7 +1111,7 @@ mod tests {
         });
 
         // Also add empty tool params to make it realistic
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
+        sample.tool_params = Some(ToolCallConfigWire {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: Some(false),

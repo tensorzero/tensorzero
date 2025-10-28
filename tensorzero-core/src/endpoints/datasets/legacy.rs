@@ -32,15 +32,13 @@ use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
-    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
+    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert, ToolCallConfigWire},
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
 };
 
 #[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::{
-    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
-};
+use crate::inference::types::pyo3_helpers::{content_block_chat_output_to_python, uuid_to_python};
 
 #[cfg(debug_assertions)]
 use crate::utils::gateway::AppStateData;
@@ -1107,11 +1105,155 @@ pub struct InsertDatapointResponse {
     id: Uuid,
 }
 
+/// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+pub enum DatapointWire {
+    Chat(ChatInferenceDatapointWire),
+    Json(JsonInferenceDatapoint),
+}
+
+impl std::fmt::Display for DatapointWire {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl DatapointWire {
+    pub fn dataset_name(&self) -> &str {
+        match self {
+            DatapointWire::Chat(datapoint) => &datapoint.dataset_name,
+            DatapointWire::Json(datapoint) => &datapoint.dataset_name,
+        }
+    }
+
+    pub fn function_name(&self) -> &str {
+        match self {
+            DatapointWire::Chat(datapoint) => &datapoint.function_name,
+            DatapointWire::Json(datapoint) => &datapoint.function_name,
+        }
+    }
+
+    pub fn id(&self) -> Uuid {
+        match self {
+            DatapointWire::Chat(datapoint) => datapoint.id,
+            DatapointWire::Json(datapoint) => datapoint.id,
+        }
+    }
+
+    pub fn input(&self) -> &StoredInput {
+        match self {
+            DatapointWire::Chat(datapoint) => &datapoint.input,
+            DatapointWire::Json(datapoint) => &datapoint.input,
+        }
+    }
+
+    pub fn tool_call_config(&self) -> Option<&ToolCallConfigWire> {
+        match self {
+            DatapointWire::Chat(datapoint) => datapoint.tool_params.as_ref(),
+            DatapointWire::Json(_) => None,
+        }
+    }
+}
+
+impl From<Datapoint> for DatapointWire {
+    fn from(storage: Datapoint) -> Self {
+        match storage {
+            Datapoint::Chat(chat) => DatapointWire::Chat(chat.into()),
+            Datapoint::Json(json) => DatapointWire::Json(json),
+        }
+    }
+}
+
+impl From<DatapointWire> for Datapoint {
+    fn from(wire: DatapointWire) -> Self {
+        match wire {
+            DatapointWire::Chat(chat) => Datapoint::Chat(chat.into()),
+            DatapointWire::Json(json) => Datapoint::Json(json),
+        }
+    }
+}
+
+impl From<ChatInferenceDatapointWire> for ChatInferenceDatapoint {
+    fn from(wire: ChatInferenceDatapointWire) -> Self {
+        Self {
+            dataset_name: wire.dataset_name,
+            function_name: wire.function_name,
+            id: wire.id,
+            episode_id: wire.episode_id,
+            input: wire.input,
+            output: wire.output,
+            tool_params: wire.tool_params.map(Into::into),
+            tags: wire.tags,
+            auxiliary: wire.auxiliary,
+            is_deleted: wire.is_deleted,
+            is_custom: wire.is_custom,
+            source_inference_id: wire.source_inference_id,
+            staled_at: wire.staled_at,
+            updated_at: wire.updated_at,
+            name: wire.name,
+        }
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl DatapointWire {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+
+    #[getter]
+    pub fn get_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        uuid_to_python(py, self.id())
+    }
+
+    #[getter]
+    pub fn get_input<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.input().clone().into_bound_py_any(py)
+    }
+
+    #[getter]
+    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            DatapointWire::Chat(datapoint) => match &datapoint.output {
+                Some(output) => output
+                    .iter()
+                    .map(|x| content_block_chat_output_to_python(py, x.clone()))
+                    .collect::<PyResult<Vec<_>>>()?
+                    .into_bound_py_any(py)?,
+                None => py.None().into_bound(py),
+            },
+            DatapointWire::Json(datapoint) => datapoint.output.clone().into_bound_py_any(py)?,
+        })
+    }
+
+    #[getter]
+    pub fn get_dataset_name(&self) -> String {
+        self.dataset_name().to_string()
+    }
+
+    #[getter]
+    pub fn get_function_name(&self) -> String {
+        self.function_name().to_string()
+    }
+
+    #[getter]
+    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self.tool_call_config() {
+            Some(tool_params) => tool_params.clone().into_bound_py_any(py),
+            None => Ok(py.None().into_bound(py)),
+        }
+    }
+}
+
+/// Storage variant of Datapoint enum for database operations (no Python/TypeScript bindings)
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Datapoint {
     Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
@@ -1161,79 +1303,6 @@ impl Datapoint {
     }
 }
 
-/// These input datapoints are used as input types by the `insert_datapoint` endpoint
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Datapoint {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-
-    #[getter]
-    pub fn get_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        uuid_to_python(py, self.id())
-    }
-
-    #[getter]
-    pub fn get_input<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        self.input().clone().into_bound_py_any(py)
-    }
-
-    #[getter]
-    pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            Datapoint::Chat(datapoint) => match &datapoint.output {
-                Some(output) => output
-                    .iter()
-                    .map(|x| content_block_chat_output_to_python(py, x.clone()))
-                    .collect::<PyResult<Vec<_>>>()?
-                    .into_bound_py_any(py)?,
-                None => py.None().into_bound(py),
-            },
-            Datapoint::Json(datapoint) => datapoint.output.clone().into_bound_py_any(py)?,
-        })
-    }
-
-    #[getter]
-    pub fn get_dataset_name(&self) -> String {
-        self.dataset_name().to_string()
-    }
-
-    #[getter]
-    pub fn get_function_name(&self) -> String {
-        self.function_name().to_string()
-    }
-
-    #[getter]
-    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self.tool_call_config() {
-            Some(tool_params) => tool_params.clone().into_bound_py_any(py),
-            None => Ok(py.None().into_bound(py)),
-        }
-    }
-
-    #[getter]
-    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self.output_schema() {
-            Some(output_schema) => serialize_to_dict(py, output_schema)?.into_bound(py),
-            None => py.None().into_bound(py),
-        })
-    }
-
-    #[getter]
-    pub fn get_is_custom(&self) -> bool {
-        match self {
-            Datapoint::Chat(datapoint) => datapoint.is_custom,
-            Datapoint::Json(datapoint) => datapoint.is_custom,
-        }
-    }
-
-    #[getter]
-    pub fn get_name(&self) -> Option<String> {
-        self.name().map(std::string::ToString::to_string)
-    }
-}
-
 impl std::fmt::Display for Datapoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
@@ -1274,11 +1343,12 @@ pub struct JsonDatapointInsert {
     pub tags: Option<HashMap<String, String>>,
 }
 
+/// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct ChatInferenceDatapoint {
+pub struct ChatInferenceDatapointWire {
     pub dataset_name: String,
     pub function_name: String,
     pub id: Uuid,
@@ -1294,13 +1364,12 @@ pub struct ChatInferenceDatapoint {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
+    pub tool_params: Option<ToolCallConfigWire>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
     pub tags: Option<HashMap<String, String>>,
-    #[serde(skip_serializing, default)] // this will become an object
+    #[serde(skip_serializing, default)]
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(default)]
@@ -1317,6 +1386,72 @@ pub struct ChatInferenceDatapoint {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[cfg_attr(test, ts(optional))]
+    pub name: Option<String>,
+}
+
+impl std::fmt::Display for ChatInferenceDatapointWire {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl From<ChatInferenceDatapoint> for ChatInferenceDatapointWire {
+    fn from(storage: ChatInferenceDatapoint) -> Self {
+        Self {
+            dataset_name: storage.dataset_name,
+            function_name: storage.function_name,
+            id: storage.id,
+            episode_id: storage.episode_id,
+            input: storage.input,
+            output: storage.output,
+            tool_params: storage.tool_params.map(Into::into),
+            tags: storage.tags,
+            auxiliary: storage.auxiliary,
+            is_deleted: storage.is_deleted,
+            is_custom: storage.is_custom,
+            source_inference_id: storage.source_inference_id,
+            staled_at: storage.staled_at,
+            updated_at: storage.updated_at,
+            name: storage.name,
+        }
+    }
+}
+
+/// Storage variant of ChatInferenceDatapoint for database operations (no Python/TypeScript bindings)
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct ChatInferenceDatapoint {
+    pub dataset_name: String,
+    pub function_name: String,
+    pub id: Uuid,
+    pub episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
+    pub input: StoredInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub tags: Option<HashMap<String, String>>,
+    #[serde(skip_serializing, default)] // this will become an object
+    pub auxiliary: String,
+    pub is_deleted: bool,
+    #[serde(default)]
+    pub is_custom: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub source_inference_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub staled_at: Option<String>,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub name: Option<String>,
 }
 
@@ -1337,7 +1472,7 @@ impl From<ChatInferenceDatapoint> for ChatInferenceDatapointInsert {
             episode_id: datapoint.episode_id,
             input: datapoint.input,
             output: datapoint.output,
-            tool_params: datapoint.tool_params,
+            tool_params: datapoint.tool_params.map(Into::into),
             tags: datapoint.tags,
             auxiliary: datapoint.auxiliary,
             staled_at: datapoint.staled_at,
