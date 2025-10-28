@@ -18,7 +18,7 @@ use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
 };
-use tensorzero_core::tool::{ToolCallConfigWire, ToolChoice};
+use tensorzero_core::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
 
 use crate::common::get_gateway_endpoint;
 
@@ -738,7 +738,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         output: Some(vec![ContentBlockChatOutput::Text(Text {
             text: "Output".to_string(),
         })]),
-        tool_params: Some(ToolCallConfigWire {
+        tool_params: Some(ToolCallConfigDatabaseInsert {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,

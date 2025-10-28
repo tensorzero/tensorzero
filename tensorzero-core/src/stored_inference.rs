@@ -53,7 +53,7 @@ pub struct SimpleStoredSampleInfo {
 /// Wire variant of StoredInference for API responses with Python/TypeScript bindings
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "StoredInference"))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum StoredInferenceWire {

@@ -1108,7 +1108,7 @@ pub struct InsertDatapointResponse {
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum DatapointWire {
@@ -1472,7 +1472,7 @@ impl From<ChatInferenceDatapoint> for ChatInferenceDatapointInsert {
             episode_id: datapoint.episode_id,
             input: datapoint.input,
             output: datapoint.output,
-            tool_params: datapoint.tool_params.map(Into::into),
+            tool_params: datapoint.tool_params,
             tags: datapoint.tags,
             auxiliary: datapoint.auxiliary,
             staled_at: datapoint.staled_at,

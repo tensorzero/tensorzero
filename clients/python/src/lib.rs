@@ -1061,7 +1061,7 @@ impl TensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to get the datapoint from.
     /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `DatapointWire` object.
+    /// :return: A `Datapoint` object.
     #[pyo3(signature = (*, dataset_name, datapoint_id))]
     fn get_datapoint<'py>(
         this: PyRef<'py, Self>,
@@ -1080,7 +1080,7 @@ impl TensorZeroGateway {
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to get the datapoints from.
-    /// :return: A list of `DatapointWire` objects.
+    /// :return: A list of `Datapoint` objects.
     #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
     fn list_datapoints(
         this: PyRef<'_, Self>,
@@ -1913,7 +1913,7 @@ impl AsyncTensorZeroGateway {
     ///
     /// :param dataset_name: The name of the dataset to get the datapoint from.
     /// :param datapoint_id: The ID of the datapoint to get.
-    /// :return: A `DatapointWire` object.
+    /// :return: A `Datapoint` object.
     #[pyo3(signature = (*, dataset_name, datapoint_id))]
     fn get_datapoint<'a>(
         this: PyRef<'a, Self>,

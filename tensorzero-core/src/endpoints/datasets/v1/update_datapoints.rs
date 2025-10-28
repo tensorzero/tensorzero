@@ -234,7 +234,7 @@ async fn prepare_chat_update(
         updated_datapoint.output = Some(new_output);
     }
     if let Some(new_tool_params) = update.tool_params {
-        updated_datapoint.tool_params = new_tool_params;
+        updated_datapoint.tool_params = new_tool_params.map(Into::into);
     }
     if let Some(new_tags) = update.tags {
         updated_datapoint.tags = Some(new_tags);
@@ -525,7 +525,7 @@ mod tests {
         StoredInputMessageContent, Text, TextKind,
     };
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::tool::{ToolCallConfigDatabaseInsert, ToolCallConfigWire, ToolChoice};
+    use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
@@ -1063,7 +1063,7 @@ mod tests {
             let fetch_context = create_fetch_context(&app_state.http_client);
             let dataset_name = "test_dataset";
             let existing = create_sample_chat_datapoint(dataset_name);
-            let original_tool_params = existing.tool_params.clone().map(Into::into);
+            let original_tool_params = existing.tool_params.clone();
 
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
@@ -1133,7 +1133,7 @@ mod tests {
             let dataset_name = "test_dataset";
             let existing = create_sample_chat_datapoint(dataset_name);
 
-            let new_tool_params = ToolCallConfigWire {
+            let new_tool_params = ToolCallConfigDatabaseInsert {
                 tools_available: vec![],
                 tool_choice: ToolChoice::None,
                 parallel_tool_calls: Some(false),
@@ -1143,7 +1143,7 @@ mod tests {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Some(Some(new_tool_params.clone())),
+                tool_params: Some(Some(new_tool_params.clone().into())),
                 tags: None,
                 metadata: None,
             };
@@ -1354,7 +1354,7 @@ mod tests {
             let new_output = vec![ContentBlockChatOutput::Text(Text {
                 text: "new output".to_string(),
             })];
-            let new_tool_params = ToolCallConfigWire {
+            let new_tool_params = ToolCallConfigDatabaseInsert {
                 tools_available: vec![],
                 tool_choice: ToolChoice::None,
                 parallel_tool_calls: Some(false),
@@ -1365,7 +1365,7 @@ mod tests {
                 id: existing.id,
                 input: Some(new_input),
                 output: Some(new_output.clone()),
-                tool_params: Some(Some(new_tool_params.clone())),
+                tool_params: Some(Some(new_tool_params.clone().into())),
                 tags: Some(new_tags.clone()),
                 metadata: Some(DatapointMetadataUpdate {
                     name: Some(Some("updated_name".to_string())),
@@ -1794,13 +1794,7 @@ mod tests {
                     // The other fields should stay the same.
                     assert_eq!(dp.input, existing_datapoint.input);
                     assert_eq!(dp.output, existing_datapoint.output);
-                    assert_eq!(
-                        dp.tool_params,
-                        existing_datapoint
-                            .tool_params
-                            .as_ref()
-                            .map(|tp| tp.clone().into())
-                    );
+                    assert_eq!(dp.tool_params, existing_datapoint.tool_params.clone());
                     assert_eq!(dp.tags, existing_datapoint.tags);
                     assert_eq!(dp.staled_at, existing_datapoint.staled_at);
                     assert_eq!(

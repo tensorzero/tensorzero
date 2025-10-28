@@ -15,18 +15,14 @@ use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
     serialize_none_as_empty_map, serialize_none_as_empty_string,
 };
-use crate::tool::ToolCallConfigWire;
+use crate::tool::ToolCallConfigDatabaseInsert;
 
 /// Datapoint types that are directly serialized and inserted into ClickHouse.
 /// These should be internal-only types but are exposed to tensorzero-node.
 #[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub enum DatapointInsert {
-    #[serde(rename = "chat")]
     Chat(ChatInferenceDatapointInsert),
-    #[serde(rename = "json")]
     Json(JsonInferenceDatapointInsert),
 }
 
@@ -44,8 +40,6 @@ impl DatapointInsert {
 /// the structure of the ChatInferenceDatapoint table in ClickHouse.
 /// Theis should be an internal-only type, but it's exposed to tensorzero-node.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
 pub struct ChatInferenceDatapointInsert {
     /// Name of the dataset to write to. Required.
     pub dataset_name: String,
@@ -81,7 +75,7 @@ pub struct ChatInferenceDatapointInsert {
         deserialize_with = "deserialize_optional_string_or_parsed_json",
         serialize_with = "serialize_none_as_empty_string"
     )]
-    pub tool_params: Option<ToolCallConfigWire>,
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
 
     /// Tags associated with this datapoint. Optional.
     #[serde(default, serialize_with = "serialize_none_as_empty_map")]
@@ -106,8 +100,6 @@ pub struct ChatInferenceDatapointInsert {
 /// the structure of the JsonInferenceDatapoint table in ClickHouse.
 /// Theis should be an internal-only type, but it's exposed to tensorzero-node.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapointInsert {
     /// Name of the dataset to write to. Required.
     pub dataset_name: String,
