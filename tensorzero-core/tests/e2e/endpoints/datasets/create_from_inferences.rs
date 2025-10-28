@@ -32,7 +32,7 @@ async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
         .await
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_ids_success() {
     let client = Client::new();
     let (clickhouse, config) = get_test_setup().await;
@@ -102,7 +102,7 @@ async fn test_create_from_inference_query_success() {
     assert!(!result.ids.is_empty(), "Expected at least one datapoint");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_same_inference_multiple_times_succeeds() {
     let client = Client::new();
     let (clickhouse, config) = get_test_setup().await;
@@ -155,7 +155,7 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
     assert_ne!(result1.ids[0], result2.ids[0]);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_from_inference_missing_ids_error() {
     let client = Client::new();
     let (clickhouse, config) = get_test_setup().await;
