@@ -23,9 +23,8 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::{
-    AllowedTools, AllowedToolsChoice, ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
-};
+use crate::tool::create_implicit_tool_call_config_with_allowed_tools;
+use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -127,6 +126,9 @@ impl UninitializedBestOfNSamplingConfig {
         })
     }
 }
+
+const IMPLICIT_TOOL_NAME: &str = "respond";
+
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
         #[expect(clippy::expect_used)]
@@ -141,17 +143,14 @@ lazy_static! {
         }))
         .expect("Failed to create schema for evaluator output")
     };
-    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = ToolCallConfig {
-        tools_available: vec![ToolConfig::Implicit(ImplicitToolConfig {
-            parameters: EVALUATOR_OUTPUT_SCHEMA.clone(),
-        })],
-        tool_choice: ToolChoice::Specific("respond".to_string()),
-        parallel_tool_calls: None,
-        provider_tools: vec![],
-        allowed_tools: AllowedTools {
-            tools: vec!["respond".to_string()],
-            choice: AllowedToolsChoice::FunctionDefault,
-        }
+    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = {
+        create_implicit_tool_call_config_with_allowed_tools(
+            EVALUATOR_OUTPUT_SCHEMA.clone(),
+            AllowedTools {
+                tools: vec![IMPLICIT_TOOL_NAME.to_string()],
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+        )
     };
 }
 

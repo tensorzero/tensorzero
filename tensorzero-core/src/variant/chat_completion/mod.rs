@@ -797,7 +797,7 @@ mod tests {
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{AllowedTools, ToolCallConfig, ToolChoice};
+    use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
         inference::types::{ContentBlockChunk, Role, TextChunk},
@@ -2609,16 +2609,7 @@ mod tests {
             schemas: SchemaData::load(None, None, None, UninitializedSchemas::default(), "test")
                 .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema_value.clone()).unwrap(),
-            implicit_tool_call_config: ToolCallConfig {
-                tools_available: vec![],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-                provider_tools: vec![],
-                allowed_tools: AllowedTools::default(),
-            },
-            description: None,
-            all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            ..Default::default()
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {

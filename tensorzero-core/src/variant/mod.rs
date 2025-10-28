@@ -898,13 +898,7 @@ mod tests {
         let stream = false;
 
         // Define a dummy tool config for testing
-        let tool_config = ToolCallConfig {
-            tools_available: vec![],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: vec![],
-            allowed_tools: crate::tool::AllowedTools::default(),
-        };
+        let tool_config = ToolCallConfig::default();
         let tool_config_arc = Arc::new(tool_config.clone());
 
         // Create a sample inference config
@@ -1286,13 +1280,7 @@ mod tests {
                 "required": ["answer"]
             }))
             .unwrap(),
-            implicit_tool_call_config: crate::tool::ToolCallConfig {
-                tools_available: vec![],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-                provider_tools: vec![],
-                allowed_tools: crate::tool::AllowedTools::default(),
-            },
+            implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),
