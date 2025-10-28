@@ -711,8 +711,8 @@ impl ErrorDetails {
     fn status_code(&self) -> StatusCode {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
-            ErrorDetails::TensorZeroAuth { .. } => StatusCode::BAD_REQUEST,
-            ErrorDetails::ApiKeyMissing { .. } => StatusCode::UNAUTHORIZED,
+            ErrorDetails::TensorZeroAuth { .. } => StatusCode::UNAUTHORIZED,
+            ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,

@@ -48,7 +48,10 @@ async fn test_simple_tensorzero_missing_auth() {
 
         let status = response.status();
         let text = response.text().await.unwrap();
-        assert_eq!(text, "Dummy error");
+        assert_eq!(
+            text,
+            "{\"error\":\"TensorZero authentication error: Authorization header is required\"}"
+        );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 }

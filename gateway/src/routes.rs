@@ -34,7 +34,7 @@ pub fn build_axum_router(
 ) -> (Router, InFlightRequestsCounter) {
     let api_routes = build_api_routes(otel_tracer, metrics_handle);
     // The path was just `/` (or multiple slashes)
-    let router = if base_path.is_empty() {
+    let mut router = if base_path.is_empty() {
         Router::new().merge(api_routes)
     } else {
         Router::new().nest(base_path, api_routes)
@@ -42,10 +42,10 @@ pub fn build_axum_router(
 
     let (in_flight_requests_layer, in_flight_requests_counter) = InFlightRequestsLayer::pair();
 
-    let mut final_router = router.fallback(endpoints::fallback::handle_404);
+    router = router.fallback(endpoints::fallback::handle_404);
 
     if app_state.config.gateway.auth.enabled {
-        final_router = router.layer(middleware::from_fn_with_state(
+        router = router.layer(middleware::from_fn_with_state(
             app_state.clone(),
             tensorzero_auth_middleware,
         ));
@@ -53,7 +53,7 @@ pub fn build_axum_router(
     // Everything added from this point onwards does *NOT* have authentication applied - that is,
     // it wraps the authentication middleware
     // increase the default body limit from 2MB to 100MB
-    final_router = final_router
+    let final_router = router
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .layer(axum::middleware::from_fn(
