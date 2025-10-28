@@ -412,7 +412,7 @@ pub async fn update_datapoint_handler(
                 name: chat.name,
                 id: path_params.datapoint_id,
                 episode_id: chat.episode_id,
-                input: resolved_input.into_stored_input(),
+                input: resolved_input.into_stored_input()?,
                 output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
@@ -486,7 +486,7 @@ pub async fn update_datapoint_handler(
                 name: json.name,
                 id: path_params.datapoint_id,
                 episode_id: json.episode_id,
-                input: resolved_input.into_stored_input(),
+                input: resolved_input.into_stored_input()?,
                 output,
                 output_schema: json.output_schema,
                 tags: json.tags,
@@ -670,7 +670,7 @@ pub async fn insert_datapoint(
                     name: chat.name,
                     id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input.into_stored_input(),
+                    input: resolved_input.into_stored_input()?,
                     output,
                     tool_params: tool_config.as_ref().map(|x| x.clone().into()),
                     tags: chat.tags,
@@ -754,7 +754,7 @@ pub async fn insert_datapoint(
                     name: json.name,
                     id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input.into_stored_input(),
+                    input: resolved_input.into_stored_input()?,
                     output,
                     output_schema,
                     tags: json.tags,
@@ -1295,7 +1295,6 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]

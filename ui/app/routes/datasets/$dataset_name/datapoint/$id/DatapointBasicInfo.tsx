@@ -17,6 +17,7 @@ import {
   toInferenceUrl,
   toEpisodeUrl,
 } from "~/utils/urls";
+import { useReadOnly } from "~/context/read-only";
 
 interface BasicInfoProps {
   datapoint: ParsedDatasetRow;
@@ -42,6 +43,7 @@ export default function DatapointBasicInfo({
   onRenameDatapoint,
 }: BasicInfoProps) {
   const function_config = useFunctionConfig(datapoint.function_name);
+  const isReadOnly = useReadOnly();
   const type = function_config?.type || "unknown";
 
   // Create timestamp tooltip
@@ -59,7 +61,8 @@ export default function DatapointBasicInfo({
             label={datapoint.name}
             defaultLabel="—"
             font="mono"
-            onSetLabel={onRenameDatapoint}
+            onSetLabel={isReadOnly ? undefined : onRenameDatapoint}
+            tooltipLabel={"Rename"}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>

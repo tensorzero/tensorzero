@@ -29,6 +29,7 @@ import {
   ChartLegend,
   ChartLegendContent,
 } from "~/components/ui/chart";
+import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 type LatencyMetric = "response_time_ms" | "ttft_ms";
 
@@ -238,14 +239,14 @@ function transformLatencyData(
 export function ModelLatency({
   modelLatencyDataPromise,
   quantiles,
-  timeGranularity,
-  onTimeGranularityChange,
 }: {
   modelLatencyDataPromise: Promise<ModelLatencyDatapoint[]>;
   quantiles: number[];
-  timeGranularity: TimeWindow;
-  onTimeGranularityChange: (granularity: TimeWindow) => void;
 }) {
+  const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
+    "latencyTimeGranularity",
+    "week",
+  );
   const [selectedMetric, setSelectedMetric] =
     useState<LatencyMetric>("response_time_ms");
 

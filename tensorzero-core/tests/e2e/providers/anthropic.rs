@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use tensorzero::{
     test_helpers::make_embedded_gateway_with_config, ClientInferenceParams, ClientInput,
     ClientInputMessage, ClientInputMessageContent, File, InferenceOutput, InferenceResponse, Role,
+    UrlFile,
 };
 use url::Url;
 use uuid::Uuid;
@@ -444,7 +445,7 @@ async fn test_thinking_signature() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
             }
         ]
     });
@@ -621,11 +622,11 @@ async fn test_redacted_thinking() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"}]
+                "content": [{"type": "text", "text": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"}]
             },
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -842,7 +843,7 @@ async fn test_streaming_thinking() {
             "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]}
     );
@@ -1008,10 +1009,10 @@ async fn test_forward_image_url() {
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
-                ClientInputMessageContent::File(File::Url {
+                ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG)
-                }),
+                })),
                 ],
             }],
             ..Default::default()
@@ -1085,10 +1086,10 @@ async fn test_forward_file_url() {
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
-                ClientInputMessageContent::File(File::Url {
+                ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF)
-                }),
+                })),
                 ],
             }],
             ..Default::default()

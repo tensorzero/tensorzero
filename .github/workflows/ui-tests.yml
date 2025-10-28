@@ -2,6 +2,10 @@ name: UI Tests
 
 on:
   workflow_call:
+    inputs:
+      is_merge_group:
+        required: true
+        type: boolean
 
 jobs:
   ui-tests:
@@ -10,7 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('["24.12-alpine", "latest-alpine"]') || fromJSON('["latest-alpine"]') }}
+        clickhouse_version: ${{ inputs.is_merge_group && fromJSON('["24.12-alpine", "latest-alpine"]') || fromJSON('["latest-alpine"]') }}
 
     steps:
       - name: Set DNS
@@ -99,6 +103,8 @@ jobs:
 
       - name: Run `pnpm test` for tensorzero-node
         working-directory: internal/tensorzero-node
+        env:
+          TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/tensorzero_ui_fixtures
         run: pnpm test
 
       - name: Print Docker Compose logs

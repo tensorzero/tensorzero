@@ -163,6 +163,28 @@ pub struct DynamicImplicitToolConfig {
     pub parameters: DynamicJSONSchema,
 }
 
+/// Records / lists the tools that were allowed in the request
+/// Also lists how they were set (default, dynamically set)
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[cfg_attr(test, ts(export))]
+pub struct AllowedTools {
+    pub tools: Vec<String>,
+    pub choice: AllowedToolsChoice,
+}
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[cfg_attr(test, ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum AllowedToolsChoice {
+    // If `allowed_tools` is not explicitly passed, we set the function tools
+    // by default and add any dynamic tools
+    #[default]
+    FunctionDefault,
+    // If `allowed_tools` was explicitly passed we use that list only and then automatically add dynamically set tools
+    DynamicAllowedTools,
+    // We may add a third behavior if we deprecate the current default.
+}
+
 /// Contains all information required to tell an LLM what tools it can call
 /// and what sorts of tool calls (parallel, none, etc) it is allowed to respond with.
 /// Most inference providers can convert this into their desired tool format.
@@ -171,9 +193,10 @@ pub struct DynamicImplicitToolConfig {
 #[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
-    pub provider_tools: Option<Vec<ProviderTool>>,
+    pub provider_tools: Vec<ProviderTool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
+    pub allowed_tools: AllowedTools,
 }
 
 impl ToolCallConfig {
@@ -186,10 +209,17 @@ impl ToolCallConfig {
     ) -> Result<Option<Self>, Error> {
         // If `allowed_tools` is not provided, use the function's configured tools.
         // This means we allow all tools for the function.
-        let allowed_tools = dynamic_tool_params
-            .allowed_tools
-            .as_deref()
-            .unwrap_or(function_tools);
+        let mut allowed_tools = match dynamic_tool_params.allowed_tools {
+            Some(allowed_tools) => AllowedTools {
+                tools: allowed_tools,
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            None => AllowedTools {
+                tools: function_tools.to_vec(),
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+        };
+
         // Make a set for all names in additional tools
         let additional_tool_names: HashSet<&str> = dynamic_tool_params
             .additional_tools
@@ -201,6 +231,7 @@ impl ToolCallConfig {
         // If a tool name is in allowed_tools but not in static_tools, check if it's a dynamic tool.
         // If it's neither static nor dynamic, throw an error.
         let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
+            .tools
             .iter()
             .filter_map(|tool_name| {
                 if let Some(static_tool) = static_tools.get(tool_name) {
@@ -226,9 +257,7 @@ impl ToolCallConfig {
                 // Today we automatically add dynamically configured tools to the allowed tools list but in future we may
                 // change this behavior to be more in line with OpenAI's (if allowed_tools is set do not add tools.
                 // This warning is unusable today.
-                let allowed_tools_set: HashSet<&str> =
-                    allowed_tools.iter().map(String::as_str).collect();
-                if !allowed_tools_set.contains(tool.name.as_str()) {
+                if !allowed_tools.tools.contains(&tool.name) {
                     tracing::info!(
                         tool_name = %tool.name,
                         "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
@@ -240,9 +269,10 @@ impl ToolCallConfig {
                 tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
                     description: tool.description,
                     parameters: DynamicJSONSchema::new(tool.parameters),
-                    name: tool.name,
+                    name: tool.name.clone(),
                     strict: tool.strict,
                 }));
+                allowed_tools.tools.push(tool.name);
             }
         }
 
@@ -281,17 +311,18 @@ impl ToolCallConfig {
             .parallel_tool_calls
             .or(function_parallel_tool_calls);
 
-        let tool_call_config_option =
-            if tools_available.is_empty() && dynamic_tool_params.provider_tools.is_none() {
-                None
-            } else {
-                Some(Self {
-                    tools_available,
-                    tool_choice,
-                    provider_tools: dynamic_tool_params.provider_tools,
-                    parallel_tool_calls,
-                })
-            };
+        let provider_tools = dynamic_tool_params.provider_tools.unwrap_or_default();
+        let tool_call_config_option = if tools_available.is_empty() && provider_tools.is_empty() {
+            None
+        } else {
+            Some(Self {
+                tools_available,
+                provider_tools,
+                tool_choice,
+                parallel_tool_calls,
+                allowed_tools,
+            })
+        };
 
         Ok(tool_call_config_option)
     }
@@ -311,14 +342,9 @@ impl ToolCallConfig {
         model_provider_name: &str,
     ) -> Vec<&ProviderTool> {
         self.provider_tools
-            .as_ref()
-            .map(|tools| {
-                tools
-                    .iter()
-                    .filter(|t| t.scope.matches(model_name, model_provider_name))
-                    .collect()
-            })
-            .unwrap_or_default()
+            .iter()
+            .filter(|t| t.scope.matches(model_name, model_provider_name))
+            .collect()
     }
 }
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
@@ -557,7 +583,8 @@ impl ToolCallConfig {
             tools_available: vec![implicit_tool_config],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
+            allowed_tools: AllowedTools::default(),
         }
     }
 }
@@ -722,7 +749,8 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: None,
+        provider_tools: vec![],
+        allowed_tools: AllowedTools::default(),
     }
 }
 
@@ -862,8 +890,9 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
                 .collect(),
             tool_choice: db_insert.tool_choice,
             parallel_tool_calls: db_insert.parallel_tool_calls,
-            provider_tools: None, // TODO(Viraj): address this once we start storing
-                                  // provider tools
+            // TODO(Viraj): address this once we start storing provider tools
+            provider_tools: vec![],
+            allowed_tools: AllowedTools::default(),
         }
     }
 }
@@ -876,7 +905,8 @@ pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallCon
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: None,
+        provider_tools: vec![],
+        allowed_tools: AllowedTools::default(),
     }
 }
 
@@ -1397,9 +1427,10 @@ mod tests {
 
         let config = ToolCallConfig {
             tools_available: vec![],
-            provider_tools: Some(provider_tools),
+            provider_tools,
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
         };
 
         // Test matching gpt-4/openai: should return unscoped + gpt4_tool
@@ -1424,12 +1455,13 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
 
-        // Test with None provider_tools
+        // Test with empty provider_tools
         let config_no_tools = ToolCallConfig {
             tools_available: vec![],
-            provider_tools: None,
+            provider_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
+            allowed_tools: AllowedTools::default(),
         };
         let result = config_no_tools.get_scoped_provider_tools("gpt-4", "openai");
         assert_eq!(result.len(), 0);

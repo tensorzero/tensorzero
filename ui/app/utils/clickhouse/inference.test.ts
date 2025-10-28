@@ -35,9 +35,10 @@ test("countInferencesForFunction returns correct counts", async () => {
     output_schema: { value: {} },
     implicit_tool_call_config: {
       tools_available: [],
-      provider_tools: null,
+      provider_tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
+      allowed_tools: { tools: [], choice: "function_default" },
     },
     experimentation: { type: "uniform" },
   });
@@ -68,9 +69,13 @@ test("countInferencesForVariant returns correct counts", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
-        provider_tools: null,
+        provider_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
+        allowed_tools: {
+          tools: [],
+          choice: "function_default",
+        },
       },
       experimentation: { type: "uniform" },
     },
@@ -336,7 +341,7 @@ test("queryInferenceTableByEpisodeId pages through a sample of results correctly
 test("queryInferenceTableBounds", async () => {
   const bounds = await queryInferenceTableBounds();
   expect(bounds.first_id).toBe("01934c9a-be70-74e2-8e6d-8eb19531638c");
-  expect(bounds.last_id).toBe("019926fd-1a06-7fe2-b7f4-2318de2f2046");
+  expect(bounds.last_id).toBe("019a0881-7437-7495-b506-782079c593bf");
 });
 
 test("queryInferenceTableBounds with episode_id", async () => {
@@ -570,7 +575,7 @@ describe("getAdjacentInferenceIds", () => {
       lastInferenceId.data[0].last_inference_id,
     );
     expect(adjacentInferenceIds.previous_id).toBe(
-      "0197177a-7c00-70a2-82a6-741f60a03b2e",
+      "019926fd-1a06-7fe2-b7f4-2318de2f2046",
     );
     expect(adjacentInferenceIds.next_id).toBeNull();
   });

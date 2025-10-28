@@ -8,12 +8,16 @@ use axum::{
     Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
-use tensorzero_core::observability::{RouterExt as _, TracerWrapper};
+use tensorzero_core::observability::OtelEnabledRoutes;
+use tensorzero_core::{endpoints, utils::gateway::AppStateData};
 use tensorzero_core::{
-    endpoints::{self, openai_compatible::RouterExt},
-    utils::gateway::AppStateData,
+    endpoints::openai_compatible::build_openai_compatible_routes,
+    observability::{RouterExt as _, TracerWrapper},
 };
-use tower_http::trace::{DefaultOnFailure, TraceLayer};
+use tower_http::{
+    metrics::{in_flight_requests::InFlightRequestsCounter, InFlightRequestsLayer},
+    trace::{DefaultOnFailure, TraceLayer},
+};
 use tracing::Level;
 
 /// Builds the final Axum router for the gateway,
@@ -23,7 +27,7 @@ pub fn build_axum_router(
     otel_tracer: Option<Arc<TracerWrapper>>,
     app_state: AppStateData,
     metrics_handle: PrometheusHandle,
-) -> Router {
+) -> (Router, InFlightRequestsCounter) {
     let api_routes = build_api_routes(otel_tracer, metrics_handle);
     // The path was just `/` (or multiple slashes)
     let router = if base_path.is_empty() {
@@ -32,7 +36,9 @@ pub fn build_axum_router(
         Router::new().nest(base_path, api_routes)
     };
 
-    router
+    let (in_flight_requests_layer, in_flight_requests_counter) = InFlightRequestsLayer::pair();
+
+    let final_router = router
         .fallback(endpoints::fallback::handle_404)
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
@@ -44,7 +50,10 @@ pub fn build_axum_router(
         // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
         // We log failed requests messages at 'DEBUG', since we already have our own error-logging code,
         .layer(TraceLayer::new_for_http().on_failure(DefaultOnFailure::new().level(Level::DEBUG)))
-        .with_state(app_state.clone())
+        // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
+        .layer(in_flight_requests_layer)
+        .with_state(app_state.clone());
+    (final_router, in_flight_requests_counter)
 }
 
 async fn add_version_header(request: Request, next: Next) -> Response {
@@ -77,32 +86,46 @@ fn build_api_routes(
     otel_tracer: Option<Arc<TracerWrapper>>,
     metrics_handle: PrometheusHandle,
 ) -> Router<AppStateData> {
+    let (otel_enabled_routes, otel_enabled_router) = build_otel_enabled_routes();
     Router::new()
-        .merge(build_otel_enabled_routes())
-        .apply_otel_http_trace_layer(otel_tracer)
+        .merge(otel_enabled_router)
         .merge(build_non_otel_enabled_routes(metrics_handle))
+        .apply_top_level_otel_http_trace_layer(otel_tracer, otel_enabled_routes)
 }
 
 /// Defines routes that should have top-level OpenTelemetry HTTP spans created
 /// All of these routes will have a span named `METHOD <ROUTE>` (e.g. `POST /batch_inference/{batch_id}`)
 /// sent to OpenTelemetry
-fn build_otel_enabled_routes() -> Router<AppStateData> {
-    Router::new()
-        .route("/inference", post(endpoints::inference::inference_handler))
-        .route(
+fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
+    let mut routes = vec![
+        ("/inference", post(endpoints::inference::inference_handler)),
+        (
             "/batch_inference",
             post(endpoints::batch_inference::start_batch_inference_handler),
-        )
-        .route(
+        ),
+        (
             "/batch_inference/{batch_id}",
             get(endpoints::batch_inference::poll_batch_inference_handler),
-        )
-        .route(
+        ),
+        (
             "/batch_inference/{batch_id}/inference/{inference_id}",
             get(endpoints::batch_inference::poll_batch_inference_handler),
-        )
-        .register_openai_compatible_routes()
-        .route("/feedback", post(endpoints::feedback::feedback_handler))
+        ),
+        ("/feedback", post(endpoints::feedback::feedback_handler)),
+    ];
+    routes.extend(build_openai_compatible_routes().routes);
+    let mut router = Router::new();
+    let mut route_names = Vec::with_capacity(routes.len());
+    for (path, handler) in routes {
+        route_names.push(path);
+        router = router.route(path, handler);
+    }
+    (
+        OtelEnabledRoutes {
+            routes: route_names,
+        },
+        router,
+    )
 }
 
 // Defines routes that should not have top-level OpenTelemetry HTTP spans created
@@ -140,6 +163,18 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         .route(
             "/v1/datasets/{dataset_name}/datapoints",
             patch(endpoints::datasets::v1::update_datapoints_handler),
+        )
+        .route(
+            "/v1/datasets/{dataset_name}/datapoints/metadata",
+            patch(endpoints::datasets::v1::update_datapoints_metadata_handler),
+        )
+        .route(
+            "/v1/datasets/{dataset_name}/list_datapoints",
+            post(endpoints::datasets::v1::list_datapoints_handler),
+        )
+        .route(
+            "/v1/datasets/get_datapoints",
+            post(endpoints::datasets::v1::get_datapoints_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",

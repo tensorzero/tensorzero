@@ -28,7 +28,7 @@ use crate::endpoints::inference::InferenceParams;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{
     ChatInferenceResult, ContentBlockOutput, InferenceResult, Input, InputMessageContent,
-    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, TextKind,
+    JsonInferenceResult, ModelInferenceResponseWithMetadata, Role, System, TextKind,
 };
 use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
@@ -57,7 +57,7 @@ pub struct FunctionConfigJsonPyClass {
     pub inner: Arc<FunctionConfig>,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub enum FunctionConfigType {
     Chat,
@@ -573,13 +573,19 @@ fn validate_all_text_input(
 ) -> Result<(), Error> {
     match (input.system.as_ref(), schemas.get_implicit_system_schema()) {
         // If there is any system message passed we validate it
-        (Some(system), _) => validate_single_message(
-            system,
-            schemas.get_implicit_system_schema().map(|s| &s.schema),
-            "system",
-            all_templates_names,
-            None,
-        ),
+        (Some(system), _) => {
+            let system_value = match system {
+                System::Text(text) => Cow::Owned(Value::String(text.clone())),
+                System::Template(map) => Cow::Owned(Value::Object(map.clone())),
+            };
+            validate_single_message(
+                &system_value,
+                schemas.get_implicit_system_schema().map(|s| &s.schema),
+                "system",
+                all_templates_names,
+                None,
+            )
+        }
         // If there is no system message and no schema we accept
         (None, None) => Ok(()),
         // If no system message is passed and we have a schema we fail
@@ -725,7 +731,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -747,7 +753,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system name")),
+            system: Some(System::Text("system name".to_string())),
             messages,
         };
 
@@ -775,7 +781,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -812,7 +818,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -837,7 +843,12 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!({ "name": "system name" })),
+            system: Some(System::Template(
+                json!({ "name": "system name" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages,
         };
 
@@ -874,7 +885,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
         let validation_result = function_config.validate_input(&input);
@@ -901,7 +912,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -938,7 +949,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
         let validation_result = function_config.validate_input(&input);
@@ -968,7 +979,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1014,7 +1025,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1048,7 +1059,12 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!({ "name": "system name" })),
+            system: Some(System::Template(
+                json!({ "name": "system name" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages,
         };
 
@@ -1097,7 +1113,12 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!({ "name": "system name" })),
+            system: Some(System::Template(
+                json!({ "name": "system name" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages,
         };
 
@@ -1137,7 +1158,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(Value::String("system content".to_string())),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1186,7 +1207,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(Value::String("system content".to_string())),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1226,7 +1247,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1251,7 +1272,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1300,7 +1321,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1327,7 +1348,12 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!({ "name": "system name" })),
+            system: Some(System::Template(
+                json!({ "name": "system name" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages,
         };
 
@@ -1370,7 +1396,7 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1398,7 +1424,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1440,7 +1466,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1471,7 +1497,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1515,7 +1541,7 @@ mod tests {
             },
         ];
         let input = Input {
-            system: Some(json!("system content")),
+            system: Some(System::Text("system content".to_string())),
             messages,
         };
 
@@ -1549,7 +1575,12 @@ mod tests {
         ];
 
         let input = Input {
-            system: Some(json!({ "name": "system name" })),
+            system: Some(System::Template(
+                json!({ "name": "system name" })
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages,
         };
 

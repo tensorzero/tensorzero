@@ -19,9 +19,9 @@ import { Badge } from "~/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "~/components/ui/tooltip";
+import { useReadOnly } from "~/context/read-only";
 
 interface BasicInfoProps {
   evaluation_name: string;
@@ -44,6 +44,7 @@ export default function BasicInfo({
 }: BasicInfoProps) {
   const functionName = evaluation_config.function_name;
   const functionConfig = useFunctionConfig(functionName);
+  const isReadOnly = useReadOnly();
   const functionType = functionConfig?.type;
   const functionIconConfig = functionType
     ? getFunctionTypeIcon(functionType)
@@ -58,7 +59,8 @@ export default function BasicInfo({
             label={datapoint_name}
             defaultLabel="—"
             font="mono"
-            onSetLabel={onRenameDatapoint}
+            onSetLabel={isReadOnly ? undefined : onRenameDatapoint}
+            tooltipLabel={"Rename"}
           />
         </BasicInfoItemContent>
       </BasicInfoItem>
@@ -109,18 +111,16 @@ export default function BasicInfo({
               font="mono"
             />
             {datapoint_staled_at && (
-              <TooltipProvider delayDuration={200}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="secondary" className="cursor-help">
-                      Stale
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    This datapoint has since been edited or deleted.
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="cursor-help">
+                    Stale
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  This datapoint has since been edited or deleted.
+                </TooltipContent>
+              </Tooltip>
             )}
           </div>
         </BasicInfoItemContent>

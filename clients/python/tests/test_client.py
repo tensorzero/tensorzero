@@ -1316,12 +1316,10 @@ def test_image_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "FileWithPath": {
-                "file": {
-                    "url": None,
-                    "mime_type": "image/png",
-                    "data": ferris_png,
-                },
+            "Base64": {
+                "source_url": None,
+                "mime_type": "image/png",
+                "data": ferris_png,
                 "storage_path": {
                     "kind": {"type": "disabled"},
                     "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1364,12 +1362,10 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "FileWithPath": {
-                "file": {
-                    "url": None,
-                    "mime_type": "image/png",
-                    "data": ferris_png,
-                },
+            "Base64": {
+                "source_url": None,
+                "mime_type": "image/png",
+                "data": ferris_png,
                 "storage_path": {
                     "kind": {"type": "disabled"},
                     "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png",
@@ -1417,12 +1413,10 @@ def test_file_inference_base64(sync_client: TensorZeroGateway):
     json_content = json.loads(content[0].text)
     assert json_content == [
         {
-            "FileWithPath": {
-                "file": {
-                    "url": None,
-                    "mime_type": "application/pdf",
-                    "data": deepseek_paper_pdf,
-                },
+            "Base64": {
+                "source_url": None,
+                "mime_type": "application/pdf",
+                "data": deepseek_paper_pdf,
                 "storage_path": {
                     "kind": {"type": "disabled"},
                     "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
@@ -3495,7 +3489,12 @@ def test_embedded_client_no_spurious_log(capfd: CaptureFixture[str]):
     assert client is not None
     captured = capfd.readouterr()
     assert captured.err == ""
-    assert captured.out == ""
+    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set, b
+        for line in captured.out.splitlines():
+            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
+    else:
+        assert captured.out == ""
 
 
 @pytest.mark.asyncio
@@ -3511,7 +3510,12 @@ async def test_async_embedded_client_no_spurious_log(
     assert client is not None
     captured = capfd.readouterr()
     assert captured.err == ""
-    assert captured.out == ""
+    if os.environ.get("TENSORZERO_E2E_PROXY") is not None:
+        # We'll get some logs lines in CI due to TENSORZERO_E2E_PROXY being set, b
+        for line in captured.out.splitlines():
+            assert "Using proxy URL from TENSORZERO_E2E_PROXY" in line, f"Unexpected log line: {line}"
+    else:
+        assert captured.out == ""
 
 
 @pytest.mark.asyncio

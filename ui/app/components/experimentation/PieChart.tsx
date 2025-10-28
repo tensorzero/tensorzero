@@ -1,5 +1,6 @@
 import { Pie, PieChart, Cell } from "recharts";
 import { CHART_COLORS } from "~/utils/chart";
+import { memo } from "react";
 
 import {
   Card,
@@ -47,7 +48,7 @@ function CustomTooltipContent({ active, payload }: TooltipProps) {
   );
 }
 
-export function ExperimentationPieChart({
+export const ExperimentationPieChart = memo(function ExperimentationPieChart({
   variantWeights,
 }: {
   variantWeights: VariantWeight[];
@@ -81,9 +82,10 @@ export function ExperimentationPieChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Active Variant Weights</CardTitle>
+        <CardTitle>Variant Weights</CardTitle>
         <CardDescription>
-          Distribution of sampling weights across variants
+          This chart displays the current sampling probabilities for each
+          variant.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -114,4 +116,4 @@ export function ExperimentationPieChart({
       </CardContent>
     </Card>
   );
-}
+});

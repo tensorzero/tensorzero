@@ -5,6 +5,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{debug_handler, Json};
 use futures::stream::Stream;
 use futures::FutureExt;
+use futures_core::FusedStream;
 use metrics::counter;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
@@ -183,7 +184,7 @@ pub async fn inference_handler(
 }
 
 pub type InferenceStream =
-    Pin<Box<dyn Stream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
+    Pin<Box<dyn FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send>>;
 
 pub enum InferenceOutput {
     NonStreaming(InferenceResponse),
@@ -763,7 +764,7 @@ fn create_stream(
     metadata: InferenceMetadata,
     mut stream: InferenceResultStream,
     clickhouse_connection_info: ClickHouseConnectionInfo,
-) -> impl Stream<Item = Result<InferenceResponseChunk, Error>> + Send {
+) -> impl FusedStream<Item = Result<InferenceResponseChunk, Error>> + Send {
     async_stream::stream! {
         let mut buffer = vec![];
         let mut extra_usage = Some(metadata.previous_model_inference_results.iter().map(ModelInferenceResponseWithMetadata::usage_considering_cached).sum());
@@ -1009,26 +1010,30 @@ async fn write_inference(
     futures.push(Box::pin(async {
         // Write the inference to the Inference table
         match result {
-            InferenceResult::Chat(result) => {
-                let chat_inference = ChatInferenceDatabaseInsert::new(
-                    result,
-                    input.clone().into_stored_input(),
-                    metadata,
-                );
-                let _ = clickhouse_connection_info
-                    .write_batched(&[chat_inference], TableName::ChatInference)
-                    .await;
-            }
-            InferenceResult::Json(result) => {
-                let json_inference = JsonInferenceDatabaseInsert::new(
-                    result,
-                    input.clone().into_stored_input(),
-                    metadata,
-                );
-                let _ = clickhouse_connection_info
-                    .write_batched(&[json_inference], TableName::JsonInference)
-                    .await;
-            }
+            InferenceResult::Chat(result) => match input.clone().into_stored_input() {
+                Ok(stored_input) => {
+                    let chat_inference =
+                        ChatInferenceDatabaseInsert::new(result, stored_input, metadata);
+                    let _ = clickhouse_connection_info
+                        .write_batched(&[chat_inference], TableName::ChatInference)
+                        .await;
+                }
+                Err(e) => {
+                    tracing::error!("Failed to convert input to stored input: {e:?}");
+                }
+            },
+            InferenceResult::Json(result) => match input.clone().into_stored_input() {
+                Ok(stored_input) => {
+                    let json_inference =
+                        JsonInferenceDatabaseInsert::new(result, stored_input, metadata);
+                    let _ = clickhouse_connection_info
+                        .write_batched(&[json_inference], TableName::JsonInference)
+                        .await;
+                }
+                Err(e) => {
+                    tracing::error!("Failed to convert input to stored input: {e:?}");
+                }
+            },
         }
     }));
     futures::future::join_all(futures).await;
@@ -1460,8 +1465,8 @@ mod tests {
 
     use crate::inference::types::{
         storage::{StorageKind, StoragePath},
-        ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
-        JsonInferenceResultChunk, Role, TextChunk,
+        Base64File, ChatInferenceResultChunk, ContentBlockChunk, File, InputMessageContent,
+        JsonInferenceResultChunk, ObjectStoragePointer, Role, TextChunk, UrlFile,
     };
 
     #[tokio::test]
@@ -1694,10 +1699,10 @@ mod tests {
         assert_eq!(input_with_url.messages[0].content.len(), 1);
         assert_eq!(
             input_with_url.messages[0].content[0],
-            InputMessageContent::File(File::Url {
+            InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
-            })
+            }))
         );
     }
 
@@ -1725,29 +1730,31 @@ mod tests {
         assert_eq!(input_with_base64.messages[0].content.len(), 1);
         assert_eq!(
             input_with_base64.messages[0].content[0],
-            InputMessageContent::File(File::Base64 {
+            InputMessageContent::File(File::Base64(Base64File {
+                source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
-            })
+            }))
         );
     }
 
     #[test]
     fn test_serialize_file_content_always_tagged() {
         // Test that serialization always produces tagged format
-        let file_url = File::Url {
+        let file_url = File::Url(UrlFile {
             url: "https://example.com/file.txt".parse().unwrap(),
             mime_type: Some(mime::IMAGE_PNG),
-        };
+        });
         let serialized = serde_json::to_value(&file_url).unwrap();
         assert_eq!(serialized["file_type"], "url");
         assert_eq!(serialized["url"], "https://example.com/file.txt");
         assert_eq!(serialized["mime_type"], "image/png");
 
-        let file_base64 = File::Base64 {
+        let file_base64 = File::Base64(Base64File {
+            source_url: None,
             mime_type: mime::IMAGE_PNG,
             data: "fake_base64_data".to_string(),
-        };
+        });
         let serialized = serde_json::to_value(&file_base64).unwrap();
         assert_eq!(serialized["file_type"], "base64");
         assert_eq!(serialized["mime_type"], "image/png");
@@ -1777,10 +1784,10 @@ mod tests {
         assert_eq!(input_with_url.messages[0].content.len(), 1);
         assert_eq!(
             input_with_url.messages[0].content[0],
-            InputMessageContent::File(File::Url {
+            InputMessageContent::File(File::Url(UrlFile {
                 url: "https://example.com/file.txt".parse().unwrap(),
                 mime_type: None,
-            })
+            }))
         );
     }
 
@@ -1808,10 +1815,11 @@ mod tests {
         assert_eq!(input_with_base64.messages[0].content.len(), 1);
         assert_eq!(
             input_with_base64.messages[0].content[0],
-            InputMessageContent::File(File::Base64 {
+            InputMessageContent::File(File::Base64(Base64File {
+                source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "fake_base64_data".to_string(),
-            })
+            }))
         );
     }
 
@@ -1850,7 +1858,7 @@ mod tests {
         assert_eq!(input_with_object_storage.messages[0].content.len(), 1);
         assert_eq!(
             input_with_object_storage.messages[0].content[0],
-            InputMessageContent::File(File::ObjectStorage {
+            InputMessageContent::File(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 storage_path: StoragePath {
@@ -1863,17 +1871,18 @@ mod tests {
                     },
                     path: Path::from("test-path"),
                 },
-            })
+            }))
         );
     }
 
     #[test]
     fn test_file_roundtrip_serialization() {
         // Test that serialize -> deserialize maintains data integrity
-        let original = File::Base64 {
+        let original = File::Base64(Base64File {
+            source_url: None,
             mime_type: mime::IMAGE_JPEG,
             data: "base64data".to_string(),
-        };
+        });
 
         let serialized = serde_json::to_string(&original).unwrap();
         let deserialized: File = serde_json::from_str(&serialized).unwrap();

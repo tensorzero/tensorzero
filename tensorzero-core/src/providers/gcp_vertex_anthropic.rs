@@ -25,7 +25,7 @@ use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::require_image;
-use crate::inference::types::resolved_input::FileWithPath;
+use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FunctionType,
     Latency, ModelInferenceRequestJsonMode, Role, Text, TextChunk,
@@ -555,16 +555,13 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
             ))),
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {
                         source: AnthropicDocumentSource::Base64 {
                             media_type: file.mime_type.clone(),
-                            data: file.data()?.clone(),
+                            data: data.clone(),
                         },
                     },
                 )))
@@ -1192,35 +1189,43 @@ fn anthropic_to_tensorzero_stream_message(
         }
         GCPVertexAnthropicStreamMessage::ContentBlockDelta {
             delta: FlattenUnknown::Unknown(delta),
-            index: _,
+            index,
         } => {
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(delta.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: index.to_string(),
+                    data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
         GCPVertexAnthropicStreamMessage::ContentBlockStart {
             content_block: FlattenUnknown::Unknown(content_block),
-            index: _,
+            index,
         } => {
             if discard_unknown_chunks {
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &content_block.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for ContentBlockStart".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(content_block.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: index.to_string(),
+                    data: content_block.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
         GCPVertexAnthropicStreamMessage::MessageDelta {
             usage: _,
@@ -1230,13 +1235,17 @@ fn anthropic_to_tensorzero_stream_message(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &delta.to_string());
                 return Ok(None);
             }
-            Err(ErrorDetails::InferenceServer {
-                message: "Unsupported content block type for MessageDelta".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(delta.to_string()),
-            }
-            .into())
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: "message_delta".to_string(),
+                    data: delta.into_owned(),
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
     }
 }

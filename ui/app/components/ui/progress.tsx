@@ -23,12 +23,12 @@ export function Progress({
       {...props}
     >
       <ProgressPrimitive.Indicator
-        style={{
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-expect-error
-          "--_scale": `${value || 0}%`,
-          "--_duration": `${updateInterval}ms`,
-        }}
+        style={
+          {
+            "--_scale": `${value || 0}%`,
+            "--_duration": `${updateInterval}ms`,
+          } as React.CSSProperties
+        }
         className={clsx(
           "bg-primary h-full w-full flex-1 origin-left scale-x-[var(--_scale)] transition-all duration-[var(--_duration)]",
           {

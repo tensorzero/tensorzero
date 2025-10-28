@@ -15,7 +15,8 @@ import type { Config } from "tensorzero-node";
 import { models } from "./model_options";
 import { useCountFetcher } from "~/routes/api/curated_inferences/count.route";
 import { logger } from "~/utils/logger";
-import { useAllFunctionConfigs, useFunctionConfig } from "~/context/config";
+import { useFunctionConfig } from "~/context/config";
+import { useReadOnly } from "~/context/read-only";
 
 export function SFTForm({
   config,
@@ -28,6 +29,7 @@ export function SFTForm({
     phase: "idle" | "submitting" | "pending" | "complete",
   ) => void;
 }) {
+  const isReadOnly = useReadOnly();
   const form = useForm<SFTFormValues>({
     defaultValues: {
       function: "",
@@ -165,7 +167,6 @@ export function SFTForm({
               <FunctionFormField
                 control={form.control}
                 name="function"
-                functions={useAllFunctionConfigs()}
                 hideDefaultFunction={true}
               />
 
@@ -218,7 +219,11 @@ export function SFTForm({
 
           <Button
             type="submit"
-            disabled={submissionPhase !== "idle" || isCuratedInferenceCountLow}
+            disabled={
+              submissionPhase !== "idle" ||
+              isCuratedInferenceCountLow ||
+              isReadOnly
+            }
           >
             {getButtonText()}
           </Button>

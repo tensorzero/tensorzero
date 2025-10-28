@@ -1,6 +1,5 @@
 #![expect(clippy::panic, clippy::print_stdout, clippy::unwrap_used)]
 use base64::Engine;
-use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tensorzero_core::rate_limiting::ScopeInfo;
@@ -15,19 +14,18 @@ use tensorzero_core::{
     cache::CacheOptions,
     config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
     db::{
-        clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo, ClickhouseFormat},
+        clickhouse::{test_helpers::CLICKHOUSE_URL, ClickHouseConnectionInfo},
         postgres::PostgresConnectionInfo,
     },
     endpoints::inference::InferenceClients,
     http::TensorzeroHttpClient,
     inference::types::{
-        file::Base64FileMetadata,
-        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
-        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
-        StoredInputMessage, StoredInputMessageContent, Text,
+        ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput,
+        ObjectStorageFile, ObjectStoragePointer, RequestMessage, ResolvedContentBlock,
+        ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, System,
+        Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -241,7 +239,6 @@ pub async fn run_workflow_test_case_with_tensorzero_client(
         limit: Some(10),
         offset: None,
         val_fraction: None,
-        format: ClickhouseFormat::JsonEachRow,
         // We always mock the client tests since this is tested above
         optimizer_config: test_case.get_optimizer_info(true),
     };
@@ -304,12 +301,12 @@ fn generate_text_example() -> RenderedSample {
             }],
         },
         stored_input: StoredInput {
-            system: Some(json!(system_prompt)),
+            system: Some(System::Text(system_prompt.clone())),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: "What is the capital of France?".into(),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "What is the capital of France?".to_string(),
+                })],
             }],
         },
         output: Some(output.clone()),
@@ -395,20 +392,20 @@ fn generate_tool_call_example() -> RenderedSample {
             ],
         },
         stored_input: StoredInput {
-            system: Some(json!(system_prompt)),
+            system: Some(System::Text(system_prompt.clone())),
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What is the weather in Paris?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the weather in Paris?".to_string(),
+                    })],
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: json!("Let me look that up for you."),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "Let me look that up for you.".to_string(),
+                        }),
                         StoredInputMessageContent::ToolCall(ToolCall {
                             name: "get_weather".to_string(),
                             arguments: serde_json::json!({
@@ -432,15 +429,15 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
                 StoredInputMessage {
                     role: Role::Assistant,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("The weather in Paris is sunny, 25 degrees Celsius."),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "The weather in Paris is sunny, 25 degrees Celsius.".to_string(),
+                    })],
                 },
                 StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What is the weather in London?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the weather in London?".to_string(),
+                    })],
                 },
             ],
         },
@@ -491,42 +488,42 @@ fn generate_image_example() -> RenderedSample {
                     ResolvedContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    ResolvedContentBlock::File(Box::new(FileWithPath {
-                        file: Base64File {
-                            url: None,
+                    ResolvedContentBlock::File(Box::new(ObjectStorageFile {
+                        file: ObjectStoragePointer {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
-                            data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
+                            storage_path: StoragePath {
+                                kind: StorageKind::Disabled,
+                                path: object_store::path::Path::parse(
+                                    "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                                ).unwrap(),
+                            },
                         },
-                        storage_path: StoragePath {
-                            kind: StorageKind::Disabled,
-                            path: object_store::path::Path::parse(
-                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
-                            ).unwrap(),
-                        },
+                        data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                     })),
                 ],
             }],
         },
         stored_input: StoredInput {
-            system: Some(json!(system_prompt)),
+            system: Some(System::Text(system_prompt.clone())),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![
-                    StoredInputMessageContent::Text {
-                        value: json!("What is the main color of this image?"),
-                    },
-                    StoredInputMessageContent::File(Box::new(StoredFile {
-                        file: Base64FileMetadata {
-                            url: None,
+                    StoredInputMessageContent::Text(Text {
+                        text: "What is the main color of this image?".to_string(),
+                    }),
+                    StoredInputMessageContent::File(Box::new(StoredFile(
+                        ObjectStoragePointer {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
+                            storage_path: StoragePath {
+                                kind: StorageKind::Disabled,
+                                path: object_store::path::Path::parse(
+                                    "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                                ).unwrap(),
+                            },
                         },
-                        storage_path: StoragePath {
-                            kind: StorageKind::Disabled,
-                            path: object_store::path::Path::parse(
-                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
-                            ).unwrap(),
-                        },
-                    })),
+                    ))),
                 ],
             }],
         },

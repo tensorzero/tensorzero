@@ -10,14 +10,23 @@ use opentelemetry_sdk::{
     error::OTelSdkResult,
     trace::{SpanData, SpanExporter},
 };
-use tensorzero::test_helpers::make_embedded_gateway_with_config;
+use tensorzero::{
+    test_helpers::{
+        make_embedded_gateway_with_config, make_embedded_gateway_with_config_and_postgres,
+    },
+    InferenceParams,
+};
 use tensorzero::{
     Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     FeedbackParams, InferenceOutput, InferenceResponse, InferenceResponseChunk, Role,
 };
-use tensorzero_core::observability::setup_observability_with_exporter_override;
-use tensorzero_core::observability::LogFormat;
+use tensorzero_core::observability::{
+    enter_fake_http_request_otel, setup_observability_with_exporter_override,
+};
 use tensorzero_core::{config::OtlpTracesFormat, inference::types::TextKind};
+use tensorzero_core::{
+    endpoints::inference::ChatCompletionInferenceParams, observability::LogFormat,
+};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
@@ -121,6 +130,8 @@ pub async fn test_reproduce_tracing_bug() {
 
     let client = make_embedded_gateway_with_config(&config).await;
 
+    let _guard = enter_fake_http_request_otel();
+
     // Make an inference to initialize the tracing call-site cache
     client
         .inference(ClientInferenceParams {
@@ -206,6 +217,8 @@ struct ResponseData {
     input_tokens: i64,
     output_tokens: i64,
     total_tokens: i64,
+    estimated_tokens: i64,
+    underestimate: bool,
 }
 
 async fn make_non_streaming_inference(client: &Client) -> ResponseData {
@@ -221,9 +234,16 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
                     })],
                 }],
             },
+            params: InferenceParams {
+                chat_completion: ChatCompletionInferenceParams {
+                    max_tokens: Some(1000),
+                    ..Default::default()
+                },
+            },
             tags: HashMap::from([
                 ("first_tag".to_string(), "first_value".to_string()),
                 ("second_tag".to_string(), "second_value".to_string()),
+                ("user_id".to_string(), Uuid::now_v7().to_string()),
             ]),
             ..Default::default()
         })
@@ -246,6 +266,8 @@ async fn make_non_streaming_inference(client: &Client) -> ResponseData {
         input_tokens: response.usage.input_tokens as i64,
         output_tokens: response.usage.output_tokens as i64,
         total_tokens: (response.usage.input_tokens + response.usage.output_tokens) as i64,
+        underestimate: false,
+        estimated_tokens: 1009,
     }
 }
 
@@ -263,9 +285,16 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
                     })],
                 }],
             },
+            params: InferenceParams {
+                chat_completion: ChatCompletionInferenceParams {
+                    max_tokens: Some(1000),
+                    ..Default::default()
+                },
+            },
             tags: HashMap::from([
                 ("first_tag".to_string(), "first_value".to_string()),
                 ("second_tag".to_string(), "second_value".to_string()),
+                ("user_id".to_string(), Uuid::now_v7().to_string()),
             ]),
             stream: Some(true),
             ..Default::default()
@@ -302,6 +331,8 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
         input_tokens,
         output_tokens,
         total_tokens,
+        estimated_tokens: 1009,
+        underestimate: false,
     }
 }
 
@@ -309,13 +340,27 @@ async fn make_streaming_inference(client: &Client) -> ResponseData {
 async fn test_stream_fatal_error_usage() {
     let exporter = install_capturing_otel_exporter().await;
 
-    let config = "
+    let config = r#"
+
+    [rate_limiting]
+    enabled = true
+
+    [[rate_limiting.rules]]
+    priority = 0
+    model_inferences_per_minute = 1000
+    tokens_per_minute = 1000000
+    scope = [
+    { tag_key = "user_id", tag_value = "tensorzero::each" }
+    ]
+
     [gateway.export.otlp.traces]
     enabled = true
-    "
+    "#
     .to_string();
 
-    let client = make_embedded_gateway_with_config(&config).await;
+    let _guard = enter_fake_http_request_otel();
+
+    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
     let model_name = "dummy::fatal_stream_error";
     let res: InferenceOutput = client
         .inference(ClientInferenceParams {
@@ -329,9 +374,16 @@ async fn test_stream_fatal_error_usage() {
                     })],
                 }],
             },
+            params: InferenceParams {
+                chat_completion: ChatCompletionInferenceParams {
+                    max_tokens: Some(1000),
+                    ..Default::default()
+                },
+            },
             tags: HashMap::from([
                 ("first_tag".to_string(), "first_value".to_string()),
                 ("second_tag".to_string(), "second_value".to_string()),
+                ("user_id".to_string(), Uuid::now_v7().to_string()),
             ]),
             stream: Some(true),
             ..Default::default()
@@ -390,6 +442,8 @@ async fn test_stream_fatal_error_usage() {
                         input_tokens,
                         output_tokens,
                         total_tokens,
+                        estimated_tokens: 1009,
+                        underestimate: true,
                     },
                     OtlpTracesFormat::OpenTelemetry,
                 );
@@ -411,8 +465,10 @@ fn check_spans(
         input_tokens,
         output_tokens,
         total_tokens,
+        estimated_tokens,
         model_name,
         streaming,
+        underestimate,
     } = response_data;
 
     let all_spans = exporter.take_spans();
@@ -443,12 +499,13 @@ fn check_spans(
         root_attr_map.get("tags.second_tag").cloned(),
         Some("second_value".to_string().into())
     );
-    // Check that there are no other takes
+    assert!(root_attr_map.contains_key("tags.user_id"));
+    // Check that there are no other tags
     let tag_count = root_attr_map
         .iter()
         .filter(|(k, _)| k.starts_with("tags."))
         .count();
-    assert_eq!(tag_count, 2);
+    assert_eq!(tag_count, 3);
 
     let root_children = &spans.span_children[&root_span.span_context.span_id()];
     let [variant_span] = root_children.as_slice() else {
@@ -582,14 +639,72 @@ fn check_spans(
     }
     assert_eq!(model_attr_map["stream"], streaming.into());
 
+    let rate_limit_spans = spans
+        .span_children
+        .get(&model_provider_span.span_context.span_id())
+        .unwrap();
+    let [consume_ticket_span, return_ticket_span] = rate_limit_spans.as_slice() else {
+        panic!("Expected two rate limit spans: {rate_limit_spans:#?}");
+    };
+
+    assert_eq!(consume_ticket_span.name, "rate_limiting_consume_tickets");
+    assert_eq!(consume_ticket_span.status, Status::Ok);
+    let mut consume_ticket_attr_map = attrs_to_map(&consume_ticket_span.attributes);
+    remove_unstable_attrs(&mut consume_ticket_attr_map);
     assert_eq!(
-        spans
-            .span_children
-            .get(&model_provider_span.span_context.span_id()),
-        None
+        consume_ticket_attr_map,
+        HashMap::from([
+            (
+                "scope_info.tags.first_tag".to_string(),
+                "first_value".into()
+            ),
+            (
+                "scope_info.tags.second_tag".to_string(),
+                "second_value".into()
+            ),
+            (
+                "estimated_usage.tokens".to_string(),
+                estimated_tokens.into()
+            ),
+            ("estimated_usage.model_inferences".to_string(), 1.into()),
+            ("level".to_string(), "INFO".into()),
+        ])
     );
 
-    assert_eq!(num_spans, 4);
+    assert_eq!(return_ticket_span.name, "rate_limiting_return_tickets");
+    assert_eq!(return_ticket_span.status, Status::Ok);
+    let mut return_ticket_attr_map = attrs_to_map(&return_ticket_span.attributes);
+    remove_unstable_attrs(&mut return_ticket_attr_map);
+    assert_eq!(
+        return_ticket_attr_map,
+        HashMap::from([
+            ("actual_usage.tokens".to_string(), total_tokens.into()),
+            ("actual_usage.model_inferences".to_string(), 1.into()),
+            ("underestimate".to_string(), underestimate.into()),
+            ("level".to_string(), "INFO".into()),
+        ])
+    );
+
+    assert_eq!(num_spans, 6);
+}
+
+fn remove_unstable_attrs(attrs: &mut HashMap<String, Value>) {
+    // These values are either random or can easily change between commits,
+    // so remove them (and assert that they exist)
+    attrs.remove("code.namespace");
+    attrs.remove("code.module.name");
+    attrs.remove("code.file.path");
+    attrs.remove("code.line.number");
+    attrs.remove("thread.id");
+    attrs.remove("thread.name");
+    attrs.remove("code.filepath");
+    attrs.remove("code.lineno");
+    attrs.remove("busy_ns");
+    attrs.remove("idle_ns");
+    attrs.remove("target");
+    // We use a random value to prevent concurrent tests from trampling on each others' rate limiting buckets
+    attrs.remove("tags.user_id");
+    attrs.remove("scope_info.tags.user_id");
 }
 
 pub async fn test_capture_simple_inference_spans(
@@ -600,19 +715,33 @@ pub async fn test_capture_simple_inference_spans(
     let exporter = install_capturing_otel_exporter().await;
 
     let config = format!(
-        "
+        r#"
+    [rate_limiting]
+    enabled = true
+
+    [[rate_limiting.rules]]
+    priority = 0
+    model_inferences_per_minute = 1000
+    tokens_per_minute = 1000000
+    scope = [
+    {{ tag_key = "user_id", tag_value = "tensorzero::each" }}
+    ]
+
     [gateway.export.otlp.traces]
     enabled = true
-    format = \"{config_mode}\"
-    "
+    format = "{config_mode}"
+    "#
     );
 
-    let client = make_embedded_gateway_with_config(&config).await;
+    let client = make_embedded_gateway_with_config_and_postgres(&config).await;
+    let _guard = enter_fake_http_request_otel();
     let response_data = if streaming {
         make_streaming_inference(&client).await
     } else {
         make_non_streaming_inference(&client).await
     };
+    // Explicitly drop the client, which will block on all OpenTelemetry spans being exported
+    drop(client);
     check_spans(&exporter, response_data, mode);
 }
 
@@ -630,17 +759,30 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     let episode_uuid = Uuid::now_v7();
 
     let config = format!(
-        "
+        r#"
+    [rate_limiting]
+    enabled = true
+
+    [[rate_limiting.rules]]
+    priority = 0
+    model_inferences_per_minute = 1000
+    tokens_per_minute = 1000000
+    scope = [
+    {{ tag_key = "user_id", tag_value = "tensorzero::each" }}
+    ]
+
     [gateway.export.otlp.traces]
     enabled = true
-    format = \"{config_mode}\"
-    "
+    format = "{config_mode}"
+    "#
     );
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let (exporter, _err) = runtime.block_on(async {
         let exporter = install_capturing_otel_exporter().await;
-        let client = tensorzero::test_helpers::make_embedded_gateway_with_config(&config).await;
+        let _guard = enter_fake_http_request_otel();
+        let client =
+            tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
         let _err = client
             .inference(ClientInferenceParams {
                 episode_id: Some(episode_uuid),
@@ -654,6 +796,17 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
                         })],
                     }],
                 },
+                params: InferenceParams {
+                    chat_completion: ChatCompletionInferenceParams {
+                        max_tokens: Some(1000),
+                        ..Default::default()
+                    },
+                },
+                tags: HashMap::from([
+                    ("first_tag".to_string(), "first_value".into()),
+                    ("second_tag".to_string(), "second_value".into()),
+                    ("user_id".to_string(), Uuid::now_v7().to_string()),
+                ]),
                 ..Default::default()
             })
             .await
@@ -780,7 +933,7 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
             );
             assert_eq!(
                 model_provider_attr_map["input.value"],
-                "{\"messages\":[{\"role\":\"user\",\"content\":\"What is your name?\"}],\"model\":\"missing-model-name\",\"stream\":false}".into()
+               "{\"messages\":[{\"role\":\"user\",\"content\":\"What is your name?\"}],\"model\":\"missing-model-name\",\"max_completion_tokens\":1000,\"stream\":false}".into()
             );
             // Don't check the exact error message from OpenAI, to prevent this test from breaking whenever OpenAI changes the error details
             assert!(
@@ -794,20 +947,272 @@ pub fn test_capture_model_error(mode: OtlpTracesFormat, config_mode: &str) {
     }
 
     assert_eq!(model_attr_map["stream"], false.into());
+    let rate_limit_spans = spans
+        .span_children
+        .get(&model_provider_span.span_context.span_id())
+        .unwrap();
+    // The model provider errored, so we shouldn't try to return tickets
+    let [consume_ticket_span] = rate_limit_spans.as_slice() else {
+        panic!("Expected one rate limit span: {rate_limit_spans:#?}");
+    };
+    assert_eq!(consume_ticket_span.name, "rate_limiting_consume_tickets");
+    assert_eq!(consume_ticket_span.status, Status::Ok);
+    let mut consume_ticket_attr_map = attrs_to_map(&consume_ticket_span.attributes);
+    remove_unstable_attrs(&mut consume_ticket_attr_map);
 
     assert_eq!(
-        spans
-            .span_children
-            .get(&model_provider_span.span_context.span_id()),
-        None
+        consume_ticket_attr_map,
+        HashMap::from([
+            (
+                "scope_info.tags.first_tag".to_string(),
+                "first_value".into()
+            ),
+            (
+                "scope_info.tags.second_tag".to_string(),
+                "second_value".into()
+            ),
+            ("estimated_usage.tokens".to_string(), 1009.into()),
+            ("estimated_usage.model_inferences".to_string(), 1.into()),
+            ("level".to_string(), "INFO".into()),
+        ])
     );
 
-    assert_eq!(num_spans, 4);
+    assert_eq!(num_spans, 5);
+}
+
+#[test]
+pub fn test_capture_rate_limit_error() {
+    let episode_uuid = Uuid::now_v7();
+
+    let config = r#"
+    [rate_limiting]
+    enabled = true
+
+    [[rate_limiting.rules]]
+    priority = 0
+    model_inferences_per_minute = 1000
+    tokens_per_minute = 2
+    scope = [
+    {tag_key = "user_id", tag_value = "tensorzero::each" }
+    ]
+
+    [gateway.export.otlp.traces]
+    enabled = true
+    "#
+    .to_string();
+
+    let user_id = Uuid::now_v7().to_string();
+
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let (exporter, _res) = runtime.block_on(async {
+        let exporter = install_capturing_otel_exporter().await;
+        let _guard = enter_fake_http_request_otel();
+        let client =
+            tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres(&config).await;
+        let err = client
+            .inference(ClientInferenceParams {
+                episode_id: Some(episode_uuid),
+                model_name: Some("dummy::good".to_string()),
+                input: ClientInput {
+                    system: None,
+                    messages: vec![ClientInputMessage {
+                        role: Role::User,
+                        content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                            text: "What is your name?".to_string(),
+                        })],
+                    }],
+                },
+                params: InferenceParams {
+                    chat_completion: ChatCompletionInferenceParams {
+                        max_tokens: Some(1000),
+                        ..Default::default()
+                    },
+                },
+                tags: HashMap::from([
+                    ("first_tag".to_string(), "first_value".into()),
+                    ("second_tag".to_string(), "second_value".into()),
+                    ("user_id".to_string(), user_id.clone()),
+                ]),
+                ..Default::default()
+            })
+            .await
+            .unwrap_err();
+        (exporter, err)
+    });
+    // Shut down the runtime to wait for all `tokio::spawn` tasks to finish
+    // (so that all spans are exported)
+    drop(runtime);
+
+    let all_spans = exporter.take_spans();
+    let num_spans = all_spans.len();
+    let spans = build_span_map(all_spans);
+
+    let [root_span] = spans.root_spans.as_slice() else {
+        panic!("Expected one root span: {:#?}", spans.root_spans);
+    };
+    // Since we're using the embedded gateway, the root span will be `function_inference`
+    // (we won't have a top-level HTTP span)
+    assert_eq!(root_span.name, "function_inference");
+    assert_eq!(
+        root_span.status,
+        Status::Error {
+            description: "".into()
+        }
+    );
+    let root_attr_map = attrs_to_map(&root_span.attributes);
+    assert_eq!(root_attr_map["model_name"], "dummy::good".into());
+    assert_eq!(root_attr_map["episode_id"], episode_uuid.to_string().into());
+    assert_eq!(root_attr_map.get("function_name"), None);
+    assert_eq!(root_attr_map.get("variant_name"), None);
+
+    let root_children = &spans.span_children[&root_span.span_context.span_id()];
+    let [variant_span] = root_children.as_slice() else {
+        panic!("Expected one child span: {root_children:#?}");
+    };
+
+    assert_eq!(variant_span.name, "variant_inference");
+    assert_eq!(variant_span.status, Status::Ok);
+    let variant_attr_map = attrs_to_map(&variant_span.attributes);
+    assert_eq!(
+        variant_attr_map["function_name"],
+        "tensorzero::default".into()
+    );
+    assert_eq!(variant_attr_map["variant_name"], "dummy::good".into());
+    assert_eq!(variant_attr_map["stream"], false.into());
+
+    let variant_children = &spans.span_children[&variant_span.span_context.span_id()];
+    let [model_span] = variant_children.as_slice() else {
+        panic!("Expected one child span: {variant_children:#?}");
+    };
+
+    assert_eq!(model_span.name, "model_inference");
+    assert_eq!(
+        model_span.status,
+        Status::Error {
+            description: "".into()
+        }
+    );
+    let model_attr_map = attrs_to_map(&model_span.attributes);
+    assert_eq!(model_attr_map["model_name"], "dummy::good".into());
+    assert_eq!(model_attr_map["stream"], false.into());
+
+    let model_children = &spans.span_children[&model_span.span_context.span_id()];
+    let [model_provider_span] = model_children.as_slice() else {
+        panic!("Expected one child span: {model_children:#?}");
+    };
+    assert_eq!(model_provider_span.name, "model_provider_inference");
+    assert_eq!(model_provider_span.status, Status::Ok);
+    assert_eq!(
+        model_provider_span.events.len(),
+        0,
+        "Unexpected number of events: {model_provider_span:#?}",
+    );
+    let model_provider_attr_map = attrs_to_map(&model_provider_span.attributes);
+    assert_eq!(model_provider_attr_map["provider_name"], "dummy".into());
+
+    assert_eq!(
+        model_provider_attr_map["gen_ai.operation.name"],
+        "chat".into()
+    );
+    assert_eq!(model_provider_attr_map["gen_ai.system"], "dummy".into());
+    assert_eq!(
+        model_provider_attr_map["gen_ai.request.model"],
+        "good".into()
+    );
+
+    assert_eq!(model_attr_map["stream"], false.into());
+    let rate_limit_spans = spans
+        .span_children
+        .get(&model_provider_span.span_context.span_id())
+        .unwrap();
+    // We failed to consume tickets, so we shouldn't have a 'rate_limiting_return_tickets' span
+    let [consume_ticket_span] = rate_limit_spans.as_slice() else {
+        panic!("Expected one rate limit span: {rate_limit_spans:#?}");
+    };
+    assert_eq!(consume_ticket_span.name, "rate_limiting_consume_tickets");
+    assert_eq!(consume_ticket_span.status, Status::Error {
+        description: format!(r#"TensorZero rate limit exceeded for rule {{"resource":"token","scope_key":[{{"type":"TagEach","key":"user_id","value":"{user_id}"}}]}}. Requested 1009 units but only 2 available."#).into()
+    });
+    let mut consume_ticket_attr_map = attrs_to_map(&consume_ticket_span.attributes);
+    remove_unstable_attrs(&mut consume_ticket_attr_map);
+
+    assert_eq!(
+        consume_ticket_attr_map,
+        HashMap::from([
+            (
+                "scope_info.tags.first_tag".to_string(),
+                "first_value".into()
+            ),
+            (
+                "scope_info.tags.second_tag".to_string(),
+                "second_value".into()
+            ),
+            ("estimated_usage.tokens".to_string(), 1009.into()),
+            ("estimated_usage.model_inferences".to_string(), 1.into()),
+            ("level".to_string(), "INFO".into()),
+        ])
+    );
+
+    assert_eq!(num_spans, 5);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_suppress_otel_spans() {
+    let exporter = install_capturing_otel_exporter().await;
+
+    let client = tensorzero::test_helpers::make_embedded_gateway().await;
+    // We do *not* call `enter_fake_http_request_otel` before calling `inference`.
+    // As a result, otel reporting should get suppressed entirely.
+    // This is the behavior of an embedded client if we somehow turned on real otel exporting. (which we don't support at the moment)
+    // The main purpose of this test is to verify that otel span suppression works correctly - in a real gateway,
+    // we want to ensure that non-instrumented routes (e.g. ui routes) cannot cause otel spans to be reported,
+    // even if they call into instrumented code.
+    let res = client
+        .inference(ClientInferenceParams {
+            model_name: Some("dummy::good".to_string()),
+            input: ClientInput {
+                system: None,
+                messages: vec![ClientInputMessage {
+                    role: Role::User,
+                    content: vec![ClientInputMessageContent::Text(TextKind::Text {
+                        text: "What is your name?".to_string(),
+                    })],
+                }],
+            },
+            tags: HashMap::from([
+                ("first_tag".to_string(), "first_value".to_string()),
+                ("second_tag".to_string(), "second_value".to_string()),
+            ]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let InferenceOutput::NonStreaming(output) = res else {
+        panic!("Expected non-streaming output, got: {res:#?}");
+    };
+
+    let _feedback_res = client
+        .feedback(FeedbackParams {
+            inference_id: Some(output.inference_id()),
+            metric_name: "task_success".to_string(),
+            value: true.into(),
+            tags: HashMap::from([
+                ("my_tag".to_string(), "my_value".to_string()),
+                ("my_tag2".to_string(), "my_value2".to_string()),
+            ]),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let all_spans = exporter.take_spans();
+    assert!(all_spans.is_empty(), "Should have suppressed all spans");
 }
 
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_capture_feedback_spans() {
     let exporter = install_capturing_otel_exporter().await;
+    let _guard = enter_fake_http_request_otel();
 
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
     let res = client
