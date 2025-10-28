@@ -107,9 +107,8 @@ pub struct UpdateJsonDatapointRequest {
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option", serialize_with = "serialize_double_option")]
@@ -117,9 +116,8 @@ pub struct DatapointMetadataUpdate {
 }
 
 /// A response to a request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateDatapointsResponse {
     /// The IDs of the datapoints that were updated.
     /// These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.
@@ -128,18 +126,16 @@ pub struct UpdateDatapointsResponse {
 
 /// Request to update metadata for one or more datapoints in a dataset.
 /// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export)]
 pub struct UpdateDatapointsMetadataRequest {
     /// The datapoints to update metadata for.
     pub datapoints: Vec<UpdateDatapointMetadataRequest>,
 }
 
 /// A request to update the metadata of a single datapoint.
-#[derive(Debug, Serialize, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
+#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
 pub struct UpdateDatapointMetadataRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,

@@ -314,6 +314,7 @@ export * from "./Unknown";
 export * from "./UpdateChatDatapointRequest";
 export * from "./UpdateDatapointMetadataRequest";
 export * from "./UpdateDatapointRequest";
+export * from "./UpdateDatapointsMetadataParams";
 export * from "./UpdateDatapointsMetadataRequest";
 export * from "./UpdateDatapointsRequest";
 export * from "./UpdateDatapointsResponse";

@@ -60,7 +60,7 @@ const {
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
   estimateTrackAndStopOptimalProbabilities:
-  nativeEstimateTrackAndStopOptimalProbabilities,
+    nativeEstimateTrackAndStopOptimalProbabilities,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience

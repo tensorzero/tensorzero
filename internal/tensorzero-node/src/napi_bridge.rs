@@ -66,7 +66,35 @@
 /// Note that the order of the struct fields is important: they must match the order of the method's arguments.
 #[macro_export]
 macro_rules! napi_call {
-    // Variant 1: the Rust method takes parameters.
+    // Variant 1a: the Rust method takes parameters with references (e.g., &str).
+    ($self:expr, $method:ident, $params:expr, $param_type:ty { $(&$field:ident),+ }) => {{
+        // Deserialize the JSON parameters into a Rust struct.
+        let params_struct: $param_type = serde_json::from_str(&$params)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        // Call the Rust method with the deserialized parameters. We pass each struct field as a reference.
+        let result = $self.0.$method($(&params_struct.$field),+)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        // Serialize the result back to JSON.
+        serde_json::to_string(&result)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }};
+
+    // Variant 1b: the Rust method takes parameters (mix of owned and references).
+    ($self:expr, $method:ident, $params:expr, $param_type:ty { $($prefix:tt $field:ident),+ }) => {{
+        // Deserialize the JSON parameters into a Rust struct.
+        let params_struct: $param_type = serde_json::from_str(&$params)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        // Call the Rust method with the deserialized parameters. We pass each struct field as specified (with or without &).
+        let result = $self.0.$method($($prefix params_struct.$field),+)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        // Serialize the result back to JSON.
+        serde_json::to_string(&result)
+            .map_err(|e| napi::Error::from_reason(e.to_string()))
+    }};
+
+    // Variant 1c: the Rust method takes parameters (owned values).
     ($self:expr, $method:ident, $params:expr, $param_type:ty { $($field:ident),+ }) => {{
         // Deserialize the JSON parameters into a Rust struct.
         let params_struct: $param_type = serde_json::from_str(&$params)

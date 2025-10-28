@@ -151,25 +151,12 @@ impl DatabaseClient {
 
     #[napi]
     pub async fn update_datapoints_metadata(&self, params: String) -> Result<String, napi::Error> {
-        let parsed: serde_json::Value =
+        let params_struct: UpdateDatapointsMetadataParams =
             serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-
-        let dataset_name = parsed
-            .get("dataset_name")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| napi::Error::from_reason("Missing dataset_name".to_string()))?;
-
-        let request: UpdateDatapointsMetadataRequest = serde_json::from_value(
-            parsed
-                .get("request")
-                .ok_or_else(|| napi::Error::from_reason("Missing request".to_string()))?
-                .clone(),
-        )
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
         let result = self
             .0
-            .update_datapoints_metadata(dataset_name, request)
+            .update_datapoints_metadata(&params_struct.dataset_name, params_struct.request)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
@@ -321,4 +308,11 @@ struct GetFeedbackByVariantParams {
     function_name: String,
     #[ts(optional)]
     variant_names: Option<Vec<String>>,
+}
+
+#[derive(Deserialize, ts_rs::TS)]
+#[ts(export, optional_fields)]
+struct UpdateDatapointsMetadataParams {
+    dataset_name: String,
+    request: UpdateDatapointsMetadataRequest,
 }
