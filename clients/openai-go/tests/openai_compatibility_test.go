@@ -728,7 +728,7 @@ func TestBasicInference(t *testing.T) {
 		require.Error(t, err, "Expected an error for invalid system message")
 
 		// Validate the error
-		assert.Contains(t, err.Error(), "System message must be a text content block", "Error should indicate invalid system message")
+		assert.Contains(t, err.Error(), "System message must contain only text or template content blocks", "Error should indicate invalid system message")
 	})
 
 	t.Run("it should handle json failure", func(t *testing.T) {
