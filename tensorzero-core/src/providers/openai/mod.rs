@@ -2114,7 +2114,6 @@ pub(super) struct OpenAIUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
-    pub total_tokens: u32,
 }
 
 impl From<OpenAIUsage> for Usage {
@@ -3087,7 +3086,6 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -3186,7 +3184,6 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
-                total_tokens: 40,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -3276,7 +3273,6 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
-                total_tokens: 5,
             },
         };
         let request_body = OpenAIRequest {
@@ -3335,7 +3331,6 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
-                total_tokens: 20,
             },
         };
 
@@ -3686,7 +3681,6 @@ mod tests {
             usage: Some(OpenAIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             }),
         };
         let message = openai_to_tensorzero_chunk(
