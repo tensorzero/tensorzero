@@ -5,7 +5,7 @@ use tensorzero_core::{
         select_feedback_clickhouse, select_feedback_tags_clickhouse,
         select_inference_evaluation_human_feedback_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind},
 };
 use tokio::time::{sleep, Duration};
 use tracing_test::traced_test;
@@ -24,7 +24,7 @@ async fn e2e_test_comment_human_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -293,7 +293,7 @@ async fn e2e_test_demonstration_feedback_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -418,7 +418,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
         "output_schema": new_output_schema,
@@ -857,7 +857,7 @@ async fn e2e_test_float_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -962,7 +962,7 @@ async fn e2e_test_float_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1036,7 +1036,7 @@ async fn e2e_test_boolean_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1148,7 +1148,7 @@ async fn e2e_test_boolean_feedback() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1218,7 +1218,7 @@ async fn test_fast_inference_then_feedback() {
                     variant_name: None,
                     episode_id: None,
                     input: tensorzero::ClientInput {
-                        system: Some(json!({"assistant_name": "Alfred Pennyworth"})),
+                        system: Some(System::Template(json!({"assistant_name": "Alfred Pennyworth"}).as_object().unwrap().clone())),
                         messages: vec![tensorzero::ClientInputMessage {
                             role: Role::User,
                             content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {

@@ -444,7 +444,7 @@ async fn test_thinking_signature() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
+                "content": [{"type": "text", "text": "Hi I'm visiting Brooklyn from Brazil. What's the weather?"}]
             }
         ]
     });
@@ -621,11 +621,11 @@ async fn test_redacted_thinking() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"}]
+                "content": [{"type": "text", "text": "ANTHROPIC_MAGIC_STRING_TRIGGER_REDACTED_THINKING_46C9A13E193C177646C7398A98432ECCCE4C1253D5E2D82641AC0E52CC2876CB"}]
             },
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -842,7 +842,7 @@ async fn test_streaming_thinking() {
             "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]}
     );

@@ -20,6 +20,8 @@ import { formatMetricSummaryValue } from "~/utils/config/feedback";
 import { TableItemShortUuid } from "~/components/ui/TableItems";
 import KVChip from "~/components/ui/KVChip";
 import MetricValue from "~/components/metric/MetricValue";
+import FeedbackValue from "~/components/feedback/FeedbackValue";
+import type { FeedbackRow } from "tensorzero-node";
 
 export default function WorkflowEvaluationRunEpisodesTable({
   episodes,
@@ -38,7 +40,6 @@ export default function WorkflowEvaluationRunEpisodesTable({
 
   // Convert to sorted array for consistent column order
   const uniqueMetricNames = Array.from(allMetricNames).sort();
-  const config = useConfig();
 
   return (
     <div>
@@ -98,24 +99,20 @@ export default function WorkflowEvaluationRunEpisodesTable({
                     metricIndex !== -1
                       ? episode.feedback_values[metricIndex]
                       : null;
-                  const metricConfig = config.metrics[metricName];
                   return (
-                    <TableCell key={metricName} className="text-center">
-                      <div className="flex justify-center">
-                        {metricValue !== null && metricConfig ? (
-                          <MetricValue
-                            value={metricValue}
-                            metricType={metricConfig.type}
-                            optimize={metricConfig.optimize}
-                            cutoff={
-                              metricConfig.type === "boolean" ? 0.5 : undefined
-                            }
-                            isHumanFeedback={false}
-                          />
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </div>
+                    <TableCell
+                      key={metricName}
+                      className="max-w-[200px] text-center"
+                    >
+                      {metricValue !== null ? (
+                        <FeedbackMetricValue
+                          metricName={metricName}
+                          value={metricValue}
+                          episodeId={episode.episode_id}
+                        />
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
                     </TableCell>
                   );
                 })}
@@ -126,6 +123,51 @@ export default function WorkflowEvaluationRunEpisodesTable({
       </Table>
     </div>
   );
+}
+
+// Unified component that handles all feedback types (comments, floats, booleans)
+// Converts the simple metric name/value format to FeedbackRow format
+function FeedbackMetricValue({
+  metricName,
+  value,
+  episodeId,
+}: {
+  metricName: string;
+  value: string;
+  episodeId: string;
+}) {
+  const config = useConfig();
+  const metricConfig = config.metrics[metricName];
+
+  // Handle comment type using FeedbackValue component
+  if (metricName === "comment") {
+    const feedback: FeedbackRow = {
+      type: "comment",
+      id: episodeId,
+      target_id: episodeId,
+      target_type: "episode",
+      value: value,
+      tags: {},
+      timestamp: new Date().toISOString(),
+    };
+    return <FeedbackValue feedback={feedback} />;
+  }
+
+  // Handle float and boolean metrics with MetricValue
+  if (metricConfig) {
+    return (
+      <MetricValue
+        value={value}
+        metricType={metricConfig.type}
+        optimize={metricConfig.optimize}
+        cutoff={metricConfig.type === "boolean" ? 0.5 : undefined}
+        isHumanFeedback={false}
+      />
+    );
+  }
+
+  // Unknown metric type
+  return <span className="text-gray-400">-</span>;
 }
 
 function MetricHeader({
@@ -140,6 +182,16 @@ function MetricHeader({
   );
   const config = useConfig();
   const metricConfig = config.metrics[metricName];
+
+  // Handle comment type - just show the name without tooltip
+  if (metricName === "comment") {
+    return (
+      <div className="flex flex-col items-center">
+        <div className="font-mono">{metricName}</div>
+      </div>
+    );
+  }
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>

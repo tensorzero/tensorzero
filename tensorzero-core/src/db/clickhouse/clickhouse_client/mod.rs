@@ -3,13 +3,10 @@ use secrecy::SecretString;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use crate::config::Config;
 use crate::db::clickhouse::BatchWriterHandle;
 use crate::db::clickhouse::ClickHouseResponse;
 use crate::db::clickhouse::ExternalDataInfo;
 use crate::db::clickhouse::GetMaybeReplicatedTableEngineNameArgs;
-use crate::db::clickhouse::ListInferencesParams;
-use crate::db::clickhouse::StoredInference;
 use crate::db::clickhouse::TableName;
 use crate::db::HealthCheckable;
 use crate::error::Error;
@@ -96,14 +93,6 @@ pub trait ClickHouseClient: Send + Sync + Debug + HealthCheckable {
     /// Creates the database and migrations table
     async fn create_database_and_migrations_table(&self) -> Result<(), Error>;
 
-    /// Lists inferences from ClickHouse.
-    /// TODO: Move this to a separate trait.
-    async fn list_inferences(
-        &self,
-        config: &Config,
-        opts: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error>;
-
     /// Returns whether a cluster is configured
     fn is_cluster_configured(&self) -> bool;
 
@@ -161,11 +150,6 @@ mock! {
         ) -> Result<ClickHouseResponse, Error>;
         async fn check_database_and_migrations_table_exists(&self) -> Result<bool, Error>;
         async fn create_database_and_migrations_table(&self) -> Result<(), Error>;
-        async fn list_inferences<'a, 'b, 'c, 'd>(
-            &'a self,
-            config: &'b Config,
-            opts: &'c ListInferencesParams<'d>,
-        ) -> Result<Vec<StoredInference>, Error>;
         fn is_cluster_configured(&self) -> bool;
         fn get_on_cluster_name(&self) -> String;
         fn get_maybe_replicated_table_engine_name<'a, 'b>(

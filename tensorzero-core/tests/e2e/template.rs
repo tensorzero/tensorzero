@@ -7,7 +7,7 @@ use tensorzero_core::{
         get_clickhouse, select_chat_inference_clickhouse, select_model_inferences_clickhouse,
         CLICKHOUSE_URL,
     },
-    inference::types::{ContentBlockChatOutput, Text},
+    inference::types::{ContentBlockChatOutput, System, Text},
 };
 use uuid::Uuid;
 
@@ -113,11 +113,11 @@ async fn e2e_test_template_no_schema() {
         "system":"My system message",
         "messages":[
           {"role":"user","content":[
-            {"type":"text","value":"First user message"},
-            {"type":"text","value":"Second user message"},
+            {"type":"text","text":"First user message"},
+            {"type":"text","text":"Second user message"},
             {"type":"template","name":"my_custom_template","arguments":{"first_variable":"my_content","second_variable":"my_other_content"}}
           ]},
-          {"role":"assistant","content":[{"type":"text","value":"First assistant message"},{"type":"text","value":"Second assistant message"}]}]
+          {"role":"assistant","content":[{"type":"text","text":"First assistant message"},{"type":"text","text":"Second assistant message"}]}]
         })
     );
 }
@@ -398,7 +398,7 @@ async fn e2e_test_invalid_json_user_input_template_no_schema() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "First user message"},
-                        {"type": "text", "arguments": {"my_invalid": "user message"}},
+                        {"type": "template", "name": "user", "arguments": {"my_invalid": "user message"}},
                     ]
                 },
 
@@ -433,7 +433,7 @@ async fn e2e_test_invalid_user_input_template_no_schema() {
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "First user message"},
-                        {"type": "text", "arguments": {"my_invalid": "user message"}},
+                        {"type": "template", "name": "user", "arguments": {"my_invalid": "user message"}},
                     ]
                 },
 
@@ -468,7 +468,7 @@ async fn e2e_test_invalid_assistant_input_template_no_schema() {
                 {
                     "role": "assistant",
                     "content": [
-                        {"type": "text", "arguments": {"my_invalid": "assistant message"}},
+                        {"type": "template", "name": "assistant", "arguments": {"my_invalid": "assistant message"}},
                     ]
                 }
             ]},
@@ -502,7 +502,7 @@ async fn e2e_test_invalid_json_assistant_input_template_no_schema() {
                 {
                     "role": "assistant",
                     "content": [
-                        {"type": "text", "arguments": {"my_invalid": "assistant message"}},
+                        {"type": "template", "name": "assistant", "arguments": {"my_invalid": "assistant message"}},
                     ]
                 }
             ]},
@@ -563,7 +563,12 @@ async fn e2e_test_named_system_template_no_schema() {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
             input: tensorzero::ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "AskJeeves"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![],
             },
             ..Default::default()
@@ -625,7 +630,12 @@ async fn e2e_test_named_system_template_with_schema() {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
             input: tensorzero::ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "AskJeeves"})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": "AskJeeves"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![],
             },
             ..Default::default()
@@ -662,7 +672,12 @@ async fn e2e_test_named_system_template_with_schema() {
             function_name: Some("test_system_template".to_string()),
             variant_name: Some("test".to_string()),
             input: tensorzero::ClientInput {
-                system: Some(serde_json::json!({"assistant_name": 123})),
+                system: Some(System::Template(
+                    serde_json::json!({"assistant_name": 123})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![],
             },
             ..Default::default()
