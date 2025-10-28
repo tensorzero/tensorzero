@@ -30,7 +30,7 @@ use tensorzero_core::{
     },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
-        ContentBlockOutput, File, Role, StoredContentBlock, StoredInputMessageContent,
+        Base64File, ContentBlockOutput, File, Role, StoredContentBlock, StoredInputMessageContent,
         StoredRequestMessage, Text, TextKind,
     },
     providers::dummy::{
@@ -3226,10 +3226,11 @@ async fn test_image_inference_without_object_store() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64 {
+                        ClientInputMessageContent::File(File::Base64(Base64File {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
-                        }),
+                        })),
                     ],
                 }],
             },

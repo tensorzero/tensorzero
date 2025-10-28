@@ -495,7 +495,7 @@ impl DiclConfig {
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
         let serialized_input = serde_json::to_string(
-            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input(),
+            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input()?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -671,7 +671,7 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input.clone().into_stored_input())
+        let content = vec![serde_json::to_string(&input.clone().into_stored_input()?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -909,6 +909,7 @@ mod tests {
     use crate::config::SchemaData;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceIds};
     use crate::experimentation::ExperimentationConfig;
+    use crate::inference::types::file::ObjectStoragePointer;
     use crate::inference::types::resolved_input::LazyResolvedInputMessage;
     use crate::inference::types::stored_input::StoredFile;
     use crate::inference::types::StoredInputMessage;
@@ -918,9 +919,8 @@ mod tests {
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            file::Base64FileMetadata,
             storage::{StorageKind, StoragePath},
-            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            ResolvedInputMessage, ResolvedInputMessageContent, Role, TemplateInput, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -1075,7 +1075,7 @@ mod tests {
 
         // The content should contain the serialized Input as a Text ContentBlock
         let expected_serialized_input =
-            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
+            serde_json::to_string(&input_data.clone().into_stored_input().unwrap()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];
@@ -1122,16 +1122,16 @@ mod tests {
                             StoredInputMessageContent::Text(Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             }),
-                            StoredInputMessageContent::File(Box::new(StoredFile {
-                                file: Base64FileMetadata {
-                                    url: None,
+                            StoredInputMessageContent::File(Box::new(StoredFile(
+                                ObjectStoragePointer {
+                                    source_url: None,
                                     mime_type: mime::IMAGE_PNG,
+                                    storage_path: StoragePath {
+                                        kind: StorageKind::Disabled,
+                                        path: Default::default(),
+                                    },
                                 },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: Default::default(),
-                                },
-                            })),
+                            ))),
                         ],
                     }],
                 })
@@ -1671,8 +1671,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_request_message_dicl_with_template() {
-        use crate::inference::types::TemplateInput;
-
         let message = LazyResolvedInputMessage {
             role: Role::User,
             content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
@@ -1728,8 +1726,6 @@ mod tests {
 
     #[test]
     fn test_lazy_content_to_resolved_with_template() {
-        use crate::inference::types::TemplateInput;
-
         let template = LazyResolvedInputMessageContent::Template(TemplateInput {
             name: "test_template".to_string(),
             arguments: serde_json::json!({"foo": "bar"})

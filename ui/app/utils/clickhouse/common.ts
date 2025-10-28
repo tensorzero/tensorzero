@@ -138,7 +138,7 @@ export const base64FileSchema = z.object({
 export type Base64File = z.infer<typeof base64FileSchema>;
 
 export const resolvedBase64FileSchema = z.object({
-  dataUrl: z
+  data: z
     .string()
     .url()
     .refine((url) => url.startsWith("data:"), {
@@ -478,19 +478,14 @@ function displayInputMessageContentToStoredInputMessageContent(
     case "file":
       return {
         type: "file",
-        file: {
-          url: content.file.dataUrl,
-          mime_type: content.file.mime_type,
-        },
+        mime_type: content.file.mime_type,
         storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
     case "file_error":
       return {
         type: "file",
-        file: {
-          url: content.file.url ?? null,
-          mime_type: content.file.mime_type,
-        },
+        source_url: content.file.url ?? undefined,
+        mime_type: content.file.mime_type,
         storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
     case "template":

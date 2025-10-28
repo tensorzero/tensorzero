@@ -15,11 +15,10 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, RequestMessage, Role, Text, TextChunk, Usage,
 };
 use crate::inference::types::{
@@ -642,16 +641,11 @@ async fn tensorzero_to_groq_user_messages(
                 }));
             }
             ContentBlock::File(file) => {
-                let file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*file;
+                let resolved_file = file.resolve().await?;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
+                        url: format!("data:{};base64,{}", file.mime_type, data),
                     },
                 });
             }
@@ -712,15 +706,10 @@ async fn tensorzero_to_groq_assistant_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
-                        // This will only produce an error if we pass in a bad
-                        // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
+                        url: format!("data:{};base64,{}", file.mime_type, data),
                     },
                 });
             }

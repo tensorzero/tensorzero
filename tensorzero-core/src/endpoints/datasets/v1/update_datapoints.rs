@@ -520,8 +520,9 @@ mod tests {
     use crate::http::TensorzeroHttpClient;
     use crate::inference::types::storage::{StorageKind, StoragePath};
     use crate::inference::types::{
-        ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
-        JsonInferenceOutput, Role, StoredInputMessageContent, Text,
+        Base64File, ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
+        JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputMessage,
+        StoredInputMessageContent, Text, TextKind,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
@@ -550,11 +551,11 @@ mod tests {
                 path: ObjectStorePath::parse("test/path/image.png").unwrap(),
             };
 
-            let file = File::ObjectStorage {
+            let file = File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url: Some("https://example.com/original.png".parse().unwrap()),
                 mime_type: mime::IMAGE_PNG,
                 storage_path: storage_path.clone(),
-            };
+            });
 
             let input = Input {
                 system: None,
@@ -602,9 +603,9 @@ mod tests {
             match &stored_input.messages[0].content[0] {
                 StoredInputMessageContent::File(stored_file) => {
                     assert_eq!(stored_file.storage_path.path, storage_path.path);
-                    assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
+                    assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
                     assert_eq!(
-                        stored_file.file.url,
+                        stored_file.source_url,
                         Some("https://example.com/original.png".parse().unwrap())
                     );
                 }
@@ -622,10 +623,11 @@ mod tests {
             // - File::ObjectStorage: future is discarded, no async operations, just metadata passthrough
             // - File::Base64: goes through async resolve() -> write_file() -> storage write (or no-op if disabled)
 
-            let file = File::Base64 {
-            mime_type: mime::IMAGE_PNG,
-            data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
-        };
+            let file = File::Base64(Base64File {
+                source_url: None,
+                mime_type: mime::IMAGE_PNG,
+                data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
+            });
 
             let input = Input {
                 system: None,
@@ -676,11 +678,11 @@ mod tests {
             match &stored_input.messages[0].content[0] {
                 StoredInputMessageContent::File(stored_file) => {
                     // Should have been processed into a stored file
-                    assert_eq!(stored_file.file.mime_type, mime::IMAGE_PNG);
+                    assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
                     // With disabled storage, path should still be generated
                     assert!(!stored_file.storage_path.path.as_ref().is_empty());
                     // URL should be None since this came from Base64
-                    assert_eq!(stored_file.file.url, None);
+                    assert_eq!(stored_file.source_url, None);
                 }
                 _ => panic!("Expected File content"),
             }
@@ -768,7 +770,6 @@ mod tests {
     }
 
     mod prepare_update_tests {
-        use super::update_utils::*;
         use super::*;
 
         /// Helper to create a minimal AppStateData for testing
@@ -821,6 +822,82 @@ mod tests {
                 },
             );
             gateway_handle.app_state.clone()
+        }
+
+        /// Helper to create a sample ChatInferenceDatapoint
+        fn create_sample_chat_datapoint(dataset_name: &str) -> ChatInferenceDatapoint {
+            ChatInferenceDatapoint {
+                id: Uuid::now_v7(),
+                dataset_name: dataset_name.to_string(),
+                function_name: "test_chat_function".to_string(),
+                name: Some("test_datapoint".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "original input".to_string(),
+                        })],
+                    }],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "original output".to_string(),
+                })]),
+                tool_params: Some(ToolCallConfigDatabaseInsert {
+                    tools_available: vec![],
+                    tool_choice: ToolChoice::Auto,
+                    parallel_tool_calls: Some(true),
+                }),
+                tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
+                auxiliary: "{}".to_string(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: chrono::Utc::now()
+                    .format(CLICKHOUSE_DATETIME_FORMAT)
+                    .to_string(),
+            }
+        }
+
+        /// Helper to create a sample JsonInferenceDatapoint
+        fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
+            JsonInferenceDatapoint {
+                id: Uuid::now_v7(),
+                dataset_name: dataset_name.to_string(),
+                function_name: "test_json_function".to_string(),
+                name: Some("test_datapoint".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "original input".to_string(),
+                        })],
+                    }],
+                },
+                output: Some(JsonInferenceOutput {
+                    raw: Some(r#"{"value":"original"}"#.to_string()),
+                    parsed: Some(json!({"value": "original"})),
+                }),
+                output_schema: json!({
+                    "type": "object",
+                    "properties": {"value": {"type": "string"}},
+                    "required": ["value"],
+                    "additionalProperties": false
+                }),
+                tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
+                auxiliary: "{}".to_string(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: chrono::Utc::now()
+                    .format(CLICKHOUSE_DATETIME_FORMAT)
+                    .to_string(),
+            }
         }
 
         fn create_fetch_context(http_client: &'_ TensorzeroHttpClient) -> FetchContext<'_> {
@@ -895,11 +972,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new input text".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: "new input text".into(),
+                    })],
                 }],
             };
 
@@ -1271,11 +1346,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new input".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: "new input".into(),
+                    })],
                 }],
             };
             let new_output = vec![ContentBlockChatOutput::Text(Text {
@@ -1645,11 +1718,9 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(
-                        crate::inference::types::TextKind::Text {
-                            text: "new json input".into(),
-                        },
-                    )],
+                    content: vec![InputMessageContent::Text(TextKind::Text {
+                        text: "new json input".into(),
+                    })],
                 }],
             };
             let new_schema =

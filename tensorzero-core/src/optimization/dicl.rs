@@ -19,6 +19,7 @@ use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
+    inference::types::StoredInputMessageContent,
     model::CredentialLocationWithFallback,
     model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
@@ -486,7 +487,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
         for message in &example.stored_input.messages {
             for content in &message.content {
                 match content {
-                    crate::inference::types::StoredInputMessageContent::ToolCall(_) => {
+                    StoredInputMessageContent::ToolCall(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool call in message content.",
@@ -494,7 +495,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
                             ),
                         }));
                     }
-                    crate::inference::types::StoredInputMessageContent::ToolResult(_) => {
+                    StoredInputMessageContent::ToolResult(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool result in message content.",

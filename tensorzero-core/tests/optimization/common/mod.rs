@@ -20,13 +20,12 @@ use tensorzero_core::{
     endpoints::inference::InferenceClients,
     http::TensorzeroHttpClient,
     inference::types::{
-        file::Base64FileMetadata,
-        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
-        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
-        StoredInputMessage, StoredInputMessageContent, System, Text,
+        ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput,
+        ObjectStorageFile, ObjectStoragePointer, RequestMessage, ResolvedContentBlock,
+        ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, System,
+        Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
@@ -489,18 +488,18 @@ fn generate_image_example() -> RenderedSample {
                     ResolvedContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    ResolvedContentBlock::File(Box::new(FileWithPath {
-                        file: Base64File {
-                            url: None,
+                    ResolvedContentBlock::File(Box::new(ObjectStorageFile {
+                        file: ObjectStoragePointer {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
-                            data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
+                            storage_path: StoragePath {
+                                kind: StorageKind::Disabled,
+                                path: object_store::path::Path::parse(
+                                    "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                                ).unwrap(),
+                            },
                         },
-                        storage_path: StoragePath {
-                            kind: StorageKind::Disabled,
-                            path: object_store::path::Path::parse(
-                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
-                            ).unwrap(),
-                        },
+                        data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                     })),
                 ],
             }],
@@ -513,18 +512,18 @@ fn generate_image_example() -> RenderedSample {
                     StoredInputMessageContent::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    StoredInputMessageContent::File(Box::new(StoredFile {
-                        file: Base64FileMetadata {
-                            url: None,
+                    StoredInputMessageContent::File(Box::new(StoredFile(
+                        ObjectStoragePointer {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
+                            storage_path: StoragePath {
+                                kind: StorageKind::Disabled,
+                                path: object_store::path::Path::parse(
+                                    "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                                ).unwrap(),
+                            },
                         },
-                        storage_path: StoragePath {
-                            kind: StorageKind::Disabled,
-                            path: object_store::path::Path::parse(
-                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
-                            ).unwrap(),
-                        },
-                    })),
+                    ))),
                 ],
             }],
         },
