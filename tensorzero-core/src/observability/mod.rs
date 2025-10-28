@@ -410,7 +410,7 @@ async fn shutdown_otel(provider: SdkTracerProvider) -> Result<(), Error> {
 /// all emitted spans.
 ///
 /// If `override_exporter` is `None`, the default OTLP exporter will be used,
-/// which is configured via environment variables (e..g `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`):
+/// which is configured via environment variables (e.g. `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`):
 /// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#endpoint-urls-for-otlphttp
 fn build_opentelemetry_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
