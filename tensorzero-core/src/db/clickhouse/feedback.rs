@@ -576,13 +576,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                     QUALIFY row_number() OVER (PARTITION BY variant_name ORDER BY period_end DESC) = 1
                 ),
 
-                -- CTE 6: Get all variants that have any historical data
-                AllVariants AS (
-                    SELECT DISTINCT variant_name
-                    FROM AggregatedFilteredFeedbackByVariantStatistics
-                ),
-
-                -- CTE 7: Filter to only the most recent max_periods
+                -- CTE 6: Filter to only the most recent max_periods
                 FilteredCumulativeStats AS (
                     SELECT
                         period_end,
@@ -594,14 +588,8 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                     WHERE period_end >= (SELECT window_start_time FROM WindowStart)
                 ),
 
-                -- CTE 8: Get variants that have actual data at window start
-                VariantsAtWindowStart AS (
-                    SELECT DISTINCT variant_name
-                    FROM FilteredCumulativeStats
-                    WHERE period_end = (SELECT window_start_time FROM WindowStart)
-                ),
-
-                -- CTE 9: Create synthetic baseline entries at window start for variants with baseline data
+                -- CTE 7: Create synthetic baseline entries at window start for variants with baseline data
+                -- Only add synthetic entries for variants that DON'T already have data at window start
                 SyntheticBaselineEntries AS (
                     SELECT
                         (SELECT window_start_time FROM WindowStart) AS period_end,
@@ -610,32 +598,18 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                         b.variance,
                         b.count
                     FROM BaselineStats b
-                    LEFT JOIN VariantsAtWindowStart v ON b.variant_name = v.variant_name
-                    WHERE v.variant_name IS NULL  -- Only variants NOT in VariantsAtWindowStart
+                    WHERE b.variant_name NOT IN (
+                        SELECT variant_name
+                        FROM FilteredCumulativeStats
+                        WHERE period_end = (SELECT window_start_time FROM WindowStart)
+                    )
                 ),
 
-                -- CTE 10: Create zero-value baseline entries for variants with no baseline data
-                ZeroBaselineEntries AS (
-                    SELECT
-                        (SELECT window_start_time FROM WindowStart) AS period_end,
-                        av.variant_name,
-                        0.0 AS mean,
-                        0.0 AS variance,
-                        0 AS count
-                    FROM AllVariants av
-                    LEFT JOIN BaselineStats b ON av.variant_name = b.variant_name
-                    LEFT JOIN VariantsAtWindowStart v ON av.variant_name = v.variant_name
-                    WHERE b.variant_name IS NULL  -- No baseline data
-                    AND v.variant_name IS NULL    -- No actual data at window start
-                ),
-
-                -- CTE 11: Combine all data (baseline + window data)
+                -- CTE 8: Combine all data (baseline + window data)
                 CombinedStats AS (
                     SELECT * FROM FilteredCumulativeStats
                     UNION ALL
                     SELECT * FROM SyntheticBaselineEntries
-                    UNION ALL
-                    SELECT * FROM ZeroBaselineEntries
                 )
 
             -- Final SELECT: Format the DateTime to string
