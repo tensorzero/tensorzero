@@ -7,12 +7,7 @@ import {
   DialogTrigger,
 } from "~/components/ui/dialog";
 import { useReadOnly } from "~/context/read-only";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
+import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 interface HumanFeedbackModalProps {
   isOpen: boolean;
@@ -29,37 +24,21 @@ export function HumanFeedbackModal({
 }: HumanFeedbackModalProps) {
   const isReadOnly = useReadOnly();
 
-  const dialogContent = (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      {!!trigger && (
-        <DialogTrigger asChild disabled={isReadOnly}>
-          {trigger}
-        </DialogTrigger>
-      )}
-      <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
-        <DialogHeader>
-          <DialogTitle>Add Feedback</DialogTitle>
-        </DialogHeader>
-        <DialogBody>{children}</DialogBody>
-      </DialogContent>
-    </Dialog>
+  return (
+    <ReadOnlyGuard>
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        {!!trigger && (
+          <DialogTrigger asChild disabled={isReadOnly}>
+            {trigger}
+          </DialogTrigger>
+        )}
+        <DialogContent className="max-h-[90vh] sm:max-w-[1200px]">
+          <DialogHeader>
+            <DialogTitle>Add Feedback</DialogTitle>
+          </DialogHeader>
+          <DialogBody>{children}</DialogBody>
+        </DialogContent>
+      </Dialog>
+    </ReadOnlyGuard>
   );
-
-  // Wrap the trigger with tooltip when in read-only mode
-  if (isReadOnly && trigger) {
-    return (
-      <TooltipProvider>
-        <Tooltip delayDuration={100}>
-          <TooltipTrigger asChild>
-            <span className="inline-block">{dialogContent}</span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>This feature is not available in read-only mode</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    );
-  }
-
-  return dialogContent;
 }

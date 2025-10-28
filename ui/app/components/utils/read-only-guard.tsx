@@ -14,14 +14,14 @@ export interface ReadOnlyGuardProps
   asChild?: boolean;
   /**
    * Custom tooltip message to show when disabled due to read-only mode.
-   * Defaults to "This feature is not available in read-only mode"
+   * Defaults to "This feature is not available in read-only mode."
    */
   readOnlyTooltip?: string;
 }
 
 export function ReadOnlyGuard({
   asChild,
-  readOnlyTooltip = "This feature is not available in read-only mode",
+  readOnlyTooltip = "This feature is not available in read-only mode.",
   ...props
 }: ReadOnlyGuardProps) {
   const Component = asChild ? Slot.Root : "button";

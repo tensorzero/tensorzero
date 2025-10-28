@@ -14,12 +14,7 @@ import {
 import { useToast } from "~/hooks/use-toast";
 import { ToastAction } from "~/components/ui/toast";
 import { useReadOnly } from "~/context/read-only";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "~/components/ui/tooltip";
+import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 export interface AddToDatasetButtonProps {
   // Required fields for creating a datapoint
@@ -120,55 +115,45 @@ export function AddToDatasetButton({
     />
   );
 
+  const alertDialog = (
+    <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>
+      <AlertDialogContent className="min-w-[600px]">
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            What should be the datapoint's output?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Each datapoint includes an optional output field. The choice should
+            depend on your use case. For example, you might prefer
+            demonstrations for fine-tuning.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex justify-center gap-4">
+          <AlertDialogCancel onClick={() => setOutputDialogOpen(false)}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={() => handleOutputSelect("inherit")}>
+            Inference Output
+          </AlertDialogAction>
+          {hasDemonstration && (
+            <AlertDialogAction
+              onClick={() => handleOutputSelect("demonstration")}
+            >
+              Demonstration
+            </AlertDialogAction>
+          )}
+          <AlertDialogAction onClick={() => handleOutputSelect("none")}>
+            None
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   return (
     <>
-      {isReadOnly ? (
-        <TooltipProvider>
-          <Tooltip delayDuration={100}>
-            <TooltipTrigger asChild>
-              <span className="inline-block">{datasetSelector}</span>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>This feature is not available in read-only mode</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ) : (
-        datasetSelector
-      )}
-
-      <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>
-        <AlertDialogContent className="min-w-[600px]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              What should be the datapoint's output?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Each datapoint includes an optional output field. The choice
-              should depend on your use case. For example, you might prefer
-              demonstrations for fine-tuning.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex justify-center gap-4">
-            <AlertDialogCancel onClick={() => setOutputDialogOpen(false)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleOutputSelect("inherit")}>
-              Inference Output
-            </AlertDialogAction>
-            {hasDemonstration && (
-              <AlertDialogAction
-                onClick={() => handleOutputSelect("demonstration")}
-              >
-                Demonstration
-              </AlertDialogAction>
-            )}
-            <AlertDialogAction onClick={() => handleOutputSelect("none")}>
-              None
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ReadOnlyGuard>{datasetSelector}</ReadOnlyGuard>
+      {alertDialog}
     </>
   );
 }

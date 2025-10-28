@@ -1,5 +1,4 @@
 import { PageSubNav } from "./PageSubNav";
-import { ReadOnlyBanner } from "./ReadOnlyBanner";
 import { useBreadcrumbs } from "~/hooks/use-breadcrumbs";
 
 export function ContentLayout({ children }: React.PropsWithChildren) {
@@ -16,7 +15,6 @@ export function ContentLayout({ children }: React.PropsWithChildren) {
         <div className="h-[calc(100vh-16px)] w-full">
           <div className="border-border bg-bg-secondary h-full overflow-hidden rounded-md border max-md:rounded-none max-md:border-none">
             {!hideBreadcrumbs && <PageSubNav />}
-            <ReadOnlyBanner />
             <div className="h-full overflow-auto">{children}</div>
           </div>
         </div>
