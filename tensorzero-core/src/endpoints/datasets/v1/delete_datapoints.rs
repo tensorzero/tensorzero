@@ -79,7 +79,7 @@ async fn delete_datapoints(
     }
 
     let num_deleted_datapoints = clickhouse
-        .delete_datapoints(dataset_name, Some(&request.ids.as_slice()))
+        .delete_datapoints(dataset_name, Some(request.ids.as_slice()))
         .await?;
 
     Ok(DeleteDatapointsResponse {
