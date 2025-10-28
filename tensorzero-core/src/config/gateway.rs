@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::{ExportConfig, ObservabilityConfig, TemplateFilesystemAccess},
-    error::{Error, ErrorDetails},
+    error::Error,
     inference::types::storage::StorageKind,
 };
 
@@ -17,10 +17,6 @@ pub struct UninitializedGatewayConfig {
     pub observability: ObservabilityConfig,
     #[serde(default)]
     pub debug: bool,
-    /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
-    /// Defaults to `false`
-    #[serde(default)]
-    pub enable_template_filesystem_access: Option<bool>,
     #[serde(default)]
     pub template_filesystem_access: Option<TemplateFilesystemAccess>,
     #[serde(default)]
@@ -45,25 +41,6 @@ pub struct UninitializedGatewayConfig {
 
 impl UninitializedGatewayConfig {
     pub fn load(self, object_store_info: Option<&ObjectStoreInfo>) -> Result<GatewayConfig, Error> {
-        if self.enable_template_filesystem_access.is_some() {
-            tracing::warn!("Deprecation Warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access.enabled]` instead.");
-        }
-        let template_filesystem_access = match (
-            self.enable_template_filesystem_access,
-            self.template_filesystem_access,
-        ) {
-            (Some(enabled), None) => TemplateFilesystemAccess {
-                enabled,
-                base_path: None,
-            },
-            (None, Some(template_filesystem_access)) => template_filesystem_access,
-            (None, None) => Default::default(),
-            (Some(_), Some(_)) => {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: "`gateway.enable_template_filesystem_access` and `gateway.template_filesystem_access` cannot both be set".to_string(),
-                }));
-            }
-        };
         let fetch_and_encode_input_files_before_inference = if let Some(value) =
             self.fetch_and_encode_input_files_before_inference
         {
@@ -80,7 +57,7 @@ impl UninitializedGatewayConfig {
             bind_address: self.bind_address,
             observability: self.observability,
             debug: self.debug,
-            template_filesystem_access,
+            template_filesystem_access: self.template_filesystem_access.unwrap_or_default(),
             export: self.export,
             base_path: self.base_path,
             unstable_error_json: self.unstable_error_json,
