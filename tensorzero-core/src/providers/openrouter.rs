@@ -1054,7 +1054,6 @@ pub(super) struct OpenRouterUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
-    pub total_tokens: u32,
 }
 
 impl From<OpenRouterUsage> for Usage {
@@ -1781,7 +1780,6 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1879,7 +1877,6 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
-                total_tokens: 40,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1969,7 +1966,6 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
-                total_tokens: 5,
             },
         };
         let request_body = OpenRouterRequest {
@@ -2026,7 +2022,6 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
-                total_tokens: 20,
             },
         };
 
@@ -2354,7 +2349,6 @@ mod tests {
             usage: Some(OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             }),
         };
         let message = openrouter_to_tensorzero_chunk(
