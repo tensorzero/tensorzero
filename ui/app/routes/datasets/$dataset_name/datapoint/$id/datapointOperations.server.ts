@@ -171,7 +171,7 @@ export async function saveDatapoint(params: {
 }
 
 /**
- * Renames a datapoint using the metadata update API via HTTP.
+ * Renames a datapoint using the metadata update API via NAPI.
  * This does NOT create a new datapoint ID - it updates the name in-place.
  */
 export async function renameDatapoint(params: {
@@ -182,29 +182,19 @@ export async function renameDatapoint(params: {
 }): Promise<void> {
   const { datasetName, datapoint, newName } = params;
 
-  const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
-  const client = getTensorZeroClient();
+  const { getNativeDatabaseClient } = await import(
+    "~/utils/tensorzero/native_client.server"
+  );
+  const dbClient = await getNativeDatabaseClient();
 
-  // Call the PATCH /v1/datasets/{dataset_name}/datapoints/metadata endpoint
-  const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints/metadata`;
-  const response = await client.fetch(endpoint, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      datapoints: [
-        {
-          id: datapoint.id,
-          metadata: {
-            name: newName,
-          },
+  await dbClient.updateDatapointsMetadata(datasetName, {
+    datapoints: [
+      {
+        id: datapoint.id,
+        metadata: {
+          name: newName,
         },
-      ],
-    }),
+      },
+    ],
   });
-
-  if (!response.ok) {
-    throw new Error(`Failed to rename datapoint: ${response.statusText}`);
-  }
 }

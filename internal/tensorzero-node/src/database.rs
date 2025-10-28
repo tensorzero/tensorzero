@@ -3,6 +3,7 @@ use tensorzero::{
     setup_clickhouse_without_config, ClickHouseConnection, CountDatapointsForDatasetFunctionParams,
     DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
     GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams, TimeWindow,
+    UpdateDatapointsMetadataRequest,
 };
 use uuid::Uuid;
 
@@ -146,6 +147,33 @@ impl DatabaseClient {
     #[napi]
     pub async fn stale_datapoint(&self, params: String) -> Result<(), napi::Error> {
         napi_call_no_deserializing!(&self, stale_datapoint, params, StaleDatapointParams)
+    }
+
+    #[napi]
+    pub async fn update_datapoints_metadata(&self, params: String) -> Result<String, napi::Error> {
+        let parsed: serde_json::Value =
+            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        let dataset_name = parsed
+            .get("dataset_name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| napi::Error::from_reason("Missing dataset_name".to_string()))?;
+
+        let request: UpdateDatapointsMetadataRequest = serde_json::from_value(
+            parsed
+                .get("request")
+                .ok_or_else(|| napi::Error::from_reason("Missing request".to_string()))?
+                .clone(),
+        )
+        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        let result = self
+            .0
+            .update_datapoints_metadata(dataset_name, request)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
 
     #[napi]

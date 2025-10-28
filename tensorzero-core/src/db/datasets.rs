@@ -372,4 +372,12 @@ pub trait DatasetQueries {
         dataset_name: &str,
         datapoint_ids: Option<&[Uuid]>,
     ) -> Result<u64, Error>;
+
+    /// Updates metadata for one or more datapoints in a dataset
+    /// This updates datapoints in-place without creating new IDs
+    async fn update_datapoints_metadata(
+        &self,
+        dataset_name: &str,
+        request: crate::endpoints::datasets::v1::types::UpdateDatapointsMetadataRequest,
+    ) -> Result<crate::endpoints::datasets::v1::types::UpdateDatapointsResponse, Error>;
 }

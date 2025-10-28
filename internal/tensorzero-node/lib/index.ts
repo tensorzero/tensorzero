@@ -37,6 +37,8 @@ import type {
   GetDatapointParams,
   Datapoint,
   GetCumulativeFeedbackTimeseriesParams,
+  UpdateDatapointsMetadataRequest,
+  UpdateDatapointsResponse,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -58,7 +60,7 @@ const {
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
   estimateTrackAndStopOptimalProbabilities:
-    nativeEstimateTrackAndStopOptimalProbabilities,
+  nativeEstimateTrackAndStopOptimalProbabilities,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -403,6 +405,17 @@ export class DatabaseClient {
   async staleDatapoint(params: StaleDatapointParams): Promise<void> {
     const paramsString = safeStringify(params);
     await this.nativeDatabaseClient.staleDatapoint(paramsString);
+  }
+
+  async updateDatapointsMetadata(
+    dataset_name: string,
+    request: UpdateDatapointsMetadataRequest,
+  ): Promise<UpdateDatapointsResponse> {
+    const params = { dataset_name, request };
+    const paramsString = safeStringify(params);
+    const resultString =
+      await this.nativeDatabaseClient.updateDatapointsMetadata(paramsString);
+    return JSON.parse(resultString) as UpdateDatapointsResponse;
   }
 
   async countDatapointsForDatasetFunction(
