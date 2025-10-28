@@ -36,6 +36,7 @@ import { DatasetSelector } from "~/components/dataset/DatasetSelector";
 import { useFetcher } from "react-router";
 import { handleBulkAddToDataset } from "./bulkAddToDataset.server";
 import { useBulkAddToDatasetToast } from "./useBulkAddToDatasetToast";
+import { useReadOnly } from "~/context/read-only";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const config = await getConfig();
@@ -274,6 +275,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
     newJudgeDemonstrationId,
   } = loaderData;
   const navigate = useNavigate();
+  const isReadOnly = useReadOnly();
   const { toast } = useToast();
   const fetcher = useFetcher();
 
@@ -360,6 +362,7 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             selected={selectedDataset}
             onSelect={handleDatasetSelect}
             functionName={function_name}
+            disabled={isReadOnly || selectedRows.size === 0}
             placeholder={
               selectedRows.size > 0
                 ? `Add ${selectedRows.size} selected ${selectedRows.size === 1 ? "inference" : "inferences"} to dataset`
@@ -368,7 +371,6 @@ export default function EvaluationsPage({ loaderData }: Route.ComponentProps) {
             buttonProps={{
               size: "sm",
             }}
-            disabled={selectedRows.size === 0}
           />
         </ActionBar>
       </PageHeader>

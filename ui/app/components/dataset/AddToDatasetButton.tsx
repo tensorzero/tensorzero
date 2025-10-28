@@ -13,6 +13,8 @@ import {
 } from "~/components/ui/alert-dialog";
 import { useToast } from "~/hooks/use-toast";
 import { ToastAction } from "~/components/ui/toast";
+import { useReadOnly } from "~/context/read-only";
+import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 export interface AddToDatasetButtonProps {
   // Required fields for creating a datapoint
@@ -43,6 +45,7 @@ export function AddToDatasetButton({
   const [outputDialogOpen, setOutputDialogOpen] = useState(false);
   const fetcher = useFetcher();
   const { toast } = useToast();
+  const isReadOnly = useReadOnly();
 
   // Handle success/error states from the fetcher
   useEffect(() => {
@@ -93,56 +96,64 @@ export function AddToDatasetButton({
     setOutputDialogOpen(false);
   };
 
+  const datasetSelector = (
+    <DatasetSelector
+      selected={selectedDataset}
+      onSelect={(dataset) => {
+        setSelectedDataset(dataset);
+        if (alwaysUseInherit) {
+          handleDatasetAction(dataset, "inherit");
+        } else {
+          setOutputDialogOpen(true);
+        }
+      }}
+      placeholder="Add to dataset"
+      buttonProps={{
+        size: "sm",
+      }}
+      disabled={isReadOnly}
+    />
+  );
+
+  const alertDialog = (
+    <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>
+      <AlertDialogContent className="min-w-[600px]">
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            What should be the datapoint's output?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            Each datapoint includes an optional output field. The choice should
+            depend on your use case. For example, you might prefer
+            demonstrations for fine-tuning.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex justify-center gap-4">
+          <AlertDialogCancel onClick={() => setOutputDialogOpen(false)}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={() => handleOutputSelect("inherit")}>
+            Inference Output
+          </AlertDialogAction>
+          {hasDemonstration && (
+            <AlertDialogAction
+              onClick={() => handleOutputSelect("demonstration")}
+            >
+              Demonstration
+            </AlertDialogAction>
+          )}
+          <AlertDialogAction onClick={() => handleOutputSelect("none")}>
+            None
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
   return (
     <>
-      <DatasetSelector
-        selected={selectedDataset}
-        onSelect={(dataset) => {
-          setSelectedDataset(dataset);
-          if (alwaysUseInherit) {
-            handleDatasetAction(dataset, "inherit");
-          } else {
-            setOutputDialogOpen(true);
-          }
-        }}
-        placeholder="Add to dataset"
-        buttonProps={{
-          size: "sm",
-        }}
-      />
-
-      <AlertDialog open={outputDialogOpen} onOpenChange={setOutputDialogOpen}>
-        <AlertDialogContent className="min-w-[600px]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              What should be the datapoint's output?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Each datapoint includes an optional output field. The choice
-              should depend on your use case. For example, you might prefer
-              demonstrations for fine-tuning.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="flex justify-center gap-4">
-            <AlertDialogCancel onClick={() => setOutputDialogOpen(false)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleOutputSelect("inherit")}>
-              Inference Output
-            </AlertDialogAction>
-            {hasDemonstration && (
-              <AlertDialogAction
-                onClick={() => handleOutputSelect("demonstration")}
-              >
-                Demonstration
-              </AlertDialogAction>
-            )}
-            <AlertDialogAction onClick={() => handleOutputSelect("none")}>
-              None
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ReadOnlyGuard>{datasetSelector}</ReadOnlyGuard>
+      {alertDialog}
     </>
   );
 }
