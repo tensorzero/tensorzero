@@ -16,7 +16,7 @@ use tensorzero_core::db::datasets::{
     StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
-use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{
@@ -2152,16 +2152,14 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
     // Create a StoredFile with ObjectStorage
-    let stored_file = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/original.png".parse().unwrap()),
-            mime_type: mime::IMAGE_PNG,
-        },
+    let stored_file = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/original.png".parse().unwrap()),
+        mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image.png").unwrap(),
         },
-    };
+    });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2213,9 +2211,9 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
 
         match &chat_dp.input.messages[0].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/original.png".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file.storage_path.path);
@@ -2234,16 +2232,14 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
     // Create a StoredFile with ObjectStorage
-    let stored_file = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/data.json".parse().unwrap()),
-            mime_type: mime::APPLICATION_JSON,
-        },
+    let stored_file = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/data.json".parse().unwrap()),
+        mime_type: mime::APPLICATION_JSON,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/data.json").unwrap(),
         },
-    };
+    });
 
     let json_datapoint = DatapointInsert::Json(JsonInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2296,9 +2292,9 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
 
         match &json_dp.input.messages[0].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::APPLICATION_JSON);
+                assert_eq!(file.mime_type, mime::APPLICATION_JSON);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/data.json".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file.storage_path.path);
@@ -2317,27 +2313,23 @@ async fn test_datapoint_with_mixed_file_types() {
     let dataset_name = format!("test_mixed_files_{}", Uuid::now_v7());
 
     // Create multiple StoredFiles
-    let stored_file1 = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/image1.png".parse().unwrap()),
-            mime_type: mime::IMAGE_PNG,
-        },
+    let stored_file1 = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/image1.png".parse().unwrap()),
+        mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
         },
-    };
+    });
 
-    let stored_file2 = StoredFile {
-        file: Base64FileMetadata {
-            url: None, // No source URL
-            mime_type: mime::IMAGE_JPEG,
-        },
+    let stored_file2 = StoredFile(ObjectStoragePointer {
+        source_url: None, // No source URL
+        mime_type: mime::IMAGE_JPEG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
         },
-    };
+    });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2407,9 +2399,9 @@ async fn test_datapoint_with_mixed_file_types() {
         }
         match &chat_dp.input.messages[0].content[1] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/image1.png".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file1.storage_path.path);
@@ -2421,8 +2413,8 @@ async fn test_datapoint_with_mixed_file_types() {
         assert_eq!(chat_dp.input.messages[1].content.len(), 1);
         match &chat_dp.input.messages[1].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_JPEG);
-                assert_eq!(file.file.url, None);
+                assert_eq!(file.mime_type, mime::IMAGE_JPEG);
+                assert_eq!(file.source_url, None);
                 assert_eq!(file.storage_path.path, stored_file2.storage_path.path);
             }
             _ => panic!("Expected File content"),

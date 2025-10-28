@@ -28,7 +28,6 @@ import { MetricSelector } from "~/components/function/variant/MetricSelector";
 import { useMemo } from "react";
 import { VariantPerformance } from "~/components/function/variant/VariantPerformance";
 import { VariantThroughput } from "~/components/function/variant/VariantThroughput";
-import { FeedbackSamplesTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
 import FunctionVariantTable from "./FunctionVariantTable";
 import {
   PageHeader,
@@ -48,6 +47,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
   const url = new URL(request.url);
   const config = await getConfig();
+  const dbClient = await getNativeDatabaseClient();
   const beforeInference = url.searchParams.get("beforeInference");
   const afterInference = url.searchParams.get("afterInference");
   const pageSize = Number(url.searchParams.get("pageSize")) || 10;
@@ -58,7 +58,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     "throughput_time_granularity",
   ) || "week") as TimeWindow;
   const feedback_time_granularity = (url.searchParams.get(
-    "feedback_time_granularity",
+    "cumulative_feedback_time_granularity",
   ) || "week") as TimeWindow;
   if (pageSize > 100) {
     throw data("Page size cannot exceed 100", { status: 400 });
@@ -116,10 +116,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           variant_names: function_config.experimentation.candidate_variants,
         }
       : null;
-
   const feedbackTimeseriesPromise = feedbackParams
     ? (async () => {
-        const dbClient = await getNativeDatabaseClient();
         return dbClient.getCumulativeFeedbackTimeseries({
           function_name,
           ...feedbackParams,
@@ -308,32 +306,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     [metricsWithFeedback],
   );
 
-  const time_granularity = (searchParams.get("time_granularity") ||
-    "week") as TimeWindow;
-  const handleTimeGranularityChange = (granularity: TimeWindow) => {
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("time_granularity", granularity);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const throughput_time_granularity = (searchParams.get(
-    "throughput_time_granularity",
-  ) || "week") as TimeWindow;
-  const handleThroughputTimeGranularityChange = (granularity: TimeWindow) => {
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("throughput_time_granularity", granularity);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
-  const feedback_time_granularity = (searchParams.get(
-    "feedback_time_granularity",
-  ) || "week") as TimeWindow;
-  const handleFeedbackTimeGranularityChange = (granularity: TimeWindow) => {
-    const newSearchParams = new URLSearchParams(window.location.search);
-    newSearchParams.set("feedback_time_granularity", granularity);
-    navigate(`?${newSearchParams.toString()}`, { preventScrollReset: true });
-  };
-
   return (
     <PageLayout>
       <PageHeader
@@ -361,24 +333,14 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               functionConfig={function_config}
               functionName={function_name}
               trackAndStopState={track_and_stop_state}
+              feedbackTimeseries={feedback_timeseries}
             />
-            {feedback_timeseries && feedback_timeseries.length > 0 && (
-              <FeedbackSamplesTimeseries
-                feedbackTimeseries={feedback_timeseries}
-                time_granularity={feedback_time_granularity}
-                onTimeGranularityChange={handleFeedbackTimeGranularityChange}
-              />
-            )}
           </SectionLayout>
         )}
 
         <SectionLayout>
           <SectionHeader heading="Throughput" />
-          <VariantThroughput
-            variant_throughput={variant_throughput}
-            time_granularity={throughput_time_granularity}
-            onTimeGranularityChange={handleThroughputTimeGranularityChange}
-          />
+          <VariantThroughput variant_throughput={variant_throughput} />
         </SectionLayout>
 
         <SectionLayout>
@@ -392,8 +354,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             <VariantPerformance
               variant_performances={variant_performances}
               metric_name={metric_name}
-              time_granularity={time_granularity}
-              onTimeGranularityChange={handleTimeGranularityChange}
             />
           )}
         </SectionLayout>

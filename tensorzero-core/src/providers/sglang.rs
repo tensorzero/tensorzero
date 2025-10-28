@@ -850,7 +850,6 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -992,7 +991,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
 

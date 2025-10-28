@@ -19,6 +19,9 @@ spec:
         {{- include "tensorzero.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: gateway
     spec:
+      {{- if .Values.gateway.serviceAccountName }}
+      serviceAccountName: {{ .Values.gateway.serviceAccountName }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.gateway.image.repository }}:{{ .Values.gateway.image.tag | default .Chart.AppVersion }}"

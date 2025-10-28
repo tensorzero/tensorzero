@@ -1,15 +1,24 @@
-import type { FunctionConfig } from "tensorzero-node";
+import type {
+  CumulativeFeedbackTimeSeriesPoint,
+  FunctionConfig,
+} from "tensorzero-node";
 import {
   ExperimentationPieChart,
   type VariantWeight,
 } from "~/components/experimentation/PieChart";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { memo } from "react";
+import { FeedbackCountsTimeseries } from "~/components/function/variant/FeedbackCountsTimeseries";
+import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackMeansTimeseries";
+import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
+import { transformFeedbackTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
   functionName: string;
   trackAndStopState?: unknown;
+  feedbackTimeseries?: CumulativeFeedbackTimeSeriesPoint[];
 }
 
 function extractVariantWeights(
@@ -28,7 +37,8 @@ function extractVariantWeights(
       .map(([variant_name, weight]) => ({
         variant_name,
         weight: weight!,
-      }));
+      }))
+      .sort((a, b) => a.variant_name.localeCompare(b.variant_name));
   } else if (experimentationConfig.type === "uniform") {
     // Compute equal probabilities for all variants
     const variantNames = Object.keys(functionConfig.variants);
@@ -72,7 +82,13 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
   functionConfig,
   functionName,
   trackAndStopState,
+  feedbackTimeseries,
 }: FunctionExperimentationProps) {
+  const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
+    "cumulative_feedback_time_granularity",
+    "week",
+  );
+
   // Don't render experimentation section for the default function
   if (functionName === DEFAULT_FUNCTION) {
     return null;
@@ -88,5 +104,59 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     return null;
   }
 
-  return <ExperimentationPieChart variantWeights={variantWeights} />;
+  // Transform feedback timeseries data once for both charts
+  const shouldShowTimeseries =
+    functionConfig.experimentation.type === "track_and_stop" &&
+    feedbackTimeseries &&
+    feedbackTimeseries.length > 0;
+
+  const { countsData, meansData, variantNames } = shouldShowTimeseries
+    ? transformFeedbackTimeseries(feedbackTimeseries!, timeGranularity)
+    : { countsData: [], meansData: [], variantNames: [] };
+
+  // Extract metric name for track_and_stop experimentation
+  const metricName =
+    functionConfig.experimentation.type === "track_and_stop"
+      ? functionConfig.experimentation.metric
+      : "";
+
+  return (
+    <Tabs defaultValue="weights" className="w-full">
+      {shouldShowTimeseries && (
+        <TabsList>
+          <TabsTrigger value="weights">Variant Weights</TabsTrigger>
+          <TabsTrigger value="means">Estimated Performance</TabsTrigger>
+          <TabsTrigger value="counts">Feedback Count</TabsTrigger>
+        </TabsList>
+      )}
+      <TabsContent value="weights">
+        <ExperimentationPieChart variantWeights={variantWeights} />
+      </TabsContent>
+      {shouldShowTimeseries && (
+        <>
+          <TabsContent value="means">
+            <FeedbackMeansTimeseries
+              meansData={meansData}
+              countsData={countsData}
+              variantNames={variantNames}
+              timeGranularity={timeGranularity}
+              metricName={metricName}
+              time_granularity={timeGranularity}
+              onTimeGranularityChange={onTimeGranularityChange}
+            />
+          </TabsContent>
+          <TabsContent value="counts">
+            <FeedbackCountsTimeseries
+              countsData={countsData}
+              variantNames={variantNames}
+              timeGranularity={timeGranularity}
+              metricName={metricName}
+              time_granularity={timeGranularity}
+              onTimeGranularityChange={onTimeGranularityChange}
+            />
+          </TabsContent>
+        </>
+      )}
+    </Tabs>
+  );
 });

@@ -687,7 +687,7 @@ async fn wrap_provider_stream(
             {
                 tracing::error!("Failed to return rate limit tickets: {}", e);
             }
-        });
+        }.instrument(span));
 
 
         if write_to_cache && !errored {
@@ -1613,14 +1613,17 @@ impl ModelProvider {
         if let Ok(actual_resource_usage) = provider_inference_response.resource_usage() {
             let postgres_connection_info = clients.postgres_connection_info.clone();
             // Make sure that we finish updating rate-limiting tickets if the gateway shuts down
-            clients.deferred_tasks.spawn(async move {
-                if let Err(e) = ticket_borrow
-                    .return_tickets(&postgres_connection_info, actual_resource_usage)
-                    .await
-                {
-                    tracing::error!("Failed to return rate limit tickets: {}", e);
+            clients.deferred_tasks.spawn(
+                async move {
+                    if let Err(e) = ticket_borrow
+                        .return_tickets(&postgres_connection_info, actual_resource_usage)
+                        .await
+                    {
+                        tracing::error!("Failed to return rate limit tickets: {}", e);
+                    }
                 }
-            });
+                .instrument(span),
+            );
         }
         Ok(provider_inference_response)
     }
@@ -2454,7 +2457,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();
@@ -3101,7 +3104,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();
@@ -3229,7 +3232,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: crate::tool::AllowedTools::default(),
         };
         let api_keys = InferenceCredentials::default();
