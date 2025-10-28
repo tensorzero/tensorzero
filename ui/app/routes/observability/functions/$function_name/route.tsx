@@ -40,7 +40,7 @@ import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow, TrackAndStopResponse } from "tensorzero-node";
 import { computeTrackAndStopState } from "tensorzero-node";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
@@ -148,7 +148,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   ]);
 
   // Compute track-and-stop state if needed
-  let track_and_stop_state: unknown = undefined;
+  let track_and_stop_state: TrackAndStopResponse | undefined = undefined;
 
   if (function_config.experimentation.type === "track_and_stop") {
     try {

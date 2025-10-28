@@ -1,6 +1,7 @@
 import type {
   CumulativeFeedbackTimeSeriesPoint,
   FunctionConfig,
+  TrackAndStopResponse,
 } from "tensorzero-node";
 import {
   ExperimentationPieChart,
@@ -17,13 +18,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
   functionName: string;
-  trackAndStopState?: unknown;
+  trackAndStopState?: TrackAndStopResponse;
   feedbackTimeseries?: CumulativeFeedbackTimeSeriesPoint[];
 }
 
 function extractVariantWeights(
   functionConfig: FunctionConfig,
-  trackAndStopState?: unknown,
+  trackAndStopState?: TrackAndStopResponse,
 ): VariantWeight[] {
   const experimentationConfig = functionConfig.experimentation;
 
@@ -50,24 +51,16 @@ function extractVariantWeights(
   } else if (experimentationConfig.type === "track_and_stop") {
     // Extract display probabilities from track-and-stop response
     // Always use the probabilities from computeTrackAndStopState()
-    if (!trackAndStopState) {
+    if (!trackAndStopState?.display_probabilities) {
       return [];
     }
 
-    const response = trackAndStopState as {
-      display_probabilities?: Record<string, number>;
-    };
-
-    if (!response.display_probabilities) {
-      return [];
-    }
-
-    variantWeights = Object.entries(response.display_probabilities).map(
-      ([variant_name, weight]) => ({
-        variant_name,
-        weight,
-      }),
-    );
+    variantWeights = Object.entries(
+      trackAndStopState.display_probabilities,
+    ).map(([variant_name, weight]) => ({
+      variant_name,
+      weight,
+    }));
   } else {
     variantWeights = [];
   }

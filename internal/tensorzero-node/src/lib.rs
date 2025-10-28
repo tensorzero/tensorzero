@@ -397,6 +397,14 @@ pub struct ComputeTrackAndStopStateParams {
     pub metric_optimize: MetricConfigOptimize,
 }
 
+#[derive(serde::Serialize, ts_rs::TS)]
+#[ts(export)]
+struct TrackAndStopResponse {
+    state: tensorzero_core::experimentation::track_and_stop::TrackAndStopState,
+    #[ts(type = "Record<string, number>")]
+    display_probabilities: HashMap<String, f64>,
+}
+
 /// Computes the Track-and-Stop state (including sampling probabilities) from config and feedback.
 ///
 /// This function is the single source of truth for computing the experiment state in the UI.
@@ -427,13 +435,7 @@ pub fn compute_track_and_stop_state(params: String) -> Result<String, napi::Erro
     let display_probabilities = state.get_display_sampling_probabilities();
 
     // Return both state and display probabilities
-    #[derive(serde::Serialize)]
-    struct Response {
-        state: tensorzero_core::experimentation::track_and_stop::TrackAndStopState,
-        display_probabilities: HashMap<String, f64>,
-    }
-
-    let response = Response {
+    let response = TrackAndStopResponse {
         state,
         display_probabilities,
     };
