@@ -17,6 +17,7 @@ interface Env {
   TENSORZERO_UI_CONFIG_PATH: string | null;
   TENSORZERO_UI_DEFAULT_CONFIG: boolean;
   TENSORZERO_GATEWAY_URL: string;
+  TENSORZERO_GATEWAY_API_KEY: string | null;
   OPENAI_BASE_URL: string | null;
   FIREWORKS_BASE_URL: string | null;
   FIREWORKS_ACCOUNT_ID: string | null;
@@ -75,6 +76,7 @@ export function getEnv(): Env {
     FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL || null,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
     TOGETHER_BASE_URL: process.env.TOGETHER_BASE_URL || null,
+    TENSORZERO_GATEWAY_API_KEY: process.env.TENSORZERO_GATEWAY_API_KEY || null,
   };
 
   return _env;
