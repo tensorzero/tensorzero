@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{DefaultBodyLimit, Request, State},
+    extract::{DefaultBodyLimit, MatchedPath, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{delete, get, patch, post, put},
@@ -32,7 +32,7 @@ pub fn build_axum_router(
     app_state: AppStateData,
     metrics_handle: PrometheusHandle,
 ) -> (Router, InFlightRequestsCounter) {
-    let api_routes = build_api_routes(app_state.clone(), otel_tracer, metrics_handle);
+    let api_routes = build_api_routes(otel_tracer, metrics_handle);
     // The path was just `/` (or multiple slashes)
     let router = if base_path.is_empty() {
         Router::new().merge(api_routes)
@@ -42,13 +42,24 @@ pub fn build_axum_router(
 
     let (in_flight_requests_layer, in_flight_requests_counter) = InFlightRequestsLayer::pair();
 
-    let final_router = router
-        .fallback(endpoints::fallback::handle_404)
+    let mut final_router = router.fallback(endpoints::fallback::handle_404);
+
+    if app_state.config.gateway.auth.enabled {
+        final_router = router.layer(middleware::from_fn_with_state(
+            app_state.clone(),
+            tensorzero_auth_middleware,
+        ));
+    }
+    // Everything added from this point onwards does *NOT* have authentication applied - that is,
+    // it wraps the authentication middleware
+    // increase the default body limit from 2MB to 100MB
+    final_router = final_router
         .layer(axum::middleware::from_fn(add_version_header))
-        .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
+        .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .layer(axum::middleware::from_fn(
             crate::warn_early_drop::warn_on_early_connection_drop,
         ))
+        // We want tracing/status to run for all requests, regardless of whether or not authentication succeeds
         // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
         // This is only used to output request/response information to our logs
         // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
@@ -60,12 +71,27 @@ pub fn build_axum_router(
     (final_router, in_flight_requests_counter)
 }
 
+/// Routes that should not require authentication
+/// We apply authentication to all routes *except* these ones, to make it difficult
+/// to accidentally skip running authentication on a route, especially if we later refactor
+/// how we build up our router.
+const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health"];
+
 #[axum::debug_middleware]
 async fn tensorzero_auth_middleware(
     State(app_state): State<AppStateData>,
     request: Request,
     next: Next,
 ) -> Response {
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(MatchedPath::as_str);
+    if let Some(route) = route {
+        if UNAUTHENTICATED_ROUTES.contains(&route) {
+            return next.run(request).await;
+        }
+    }
     let headers = request.headers();
     // This block holds all of the actual authentication logic.
     // We use `.instrument` on this future, so that we don't include the '.next.run(request)' inside
@@ -156,25 +182,14 @@ async fn add_version_header(request: Request, next: Next) -> Response {
 }
 
 fn build_api_routes(
-    app_state: AppStateData,
     otel_tracer: Option<Arc<TracerWrapper>>,
     metrics_handle: PrometheusHandle,
 ) -> Router<AppStateData> {
     let (otel_enabled_routes, otel_enabled_router) = build_otel_enabled_routes();
-    let mut router = Router::new()
+    Router::new()
         .merge(otel_enabled_router)
         .merge(build_non_otel_enabled_routes(metrics_handle))
-        .apply_top_level_otel_http_trace_layer(otel_tracer, otel_enabled_routes);
-
-    if app_state.config.gateway.auth.enabled {
-        router = router.layer(middleware::from_fn_with_state(
-            app_state.clone(),
-            tensorzero_auth_middleware,
-        ));
-    }
-    // Apply these routes after we've (possibly) applied the auth middleware,
-    // so that these routes run outside of the auth middleware.
-    router.merge(build_non_otel_enabled_unauthenticated_routes())
+        .apply_top_level_otel_http_trace_layer(otel_tracer, otel_enabled_routes)
 }
 
 /// Defines routes that should have top-level OpenTelemetry HTTP spans created
@@ -210,13 +225,6 @@ fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
         },
         router,
     )
-}
-
-/// Define routes that have neither OTEL spans nor TensorZero API key authentication
-fn build_non_otel_enabled_unauthenticated_routes() -> Router<AppStateData> {
-    Router::new()
-        .route("/status", get(endpoints::status::status_handler))
-        .route("/health", get(endpoints::status::health_handler))
 }
 
 // Defines routes that should not have top-level OpenTelemetry HTTP spans created
@@ -307,4 +315,6 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
             "/experimental_optimization/{job_handle}",
             get(endpoints::optimization::poll_optimization_handler),
         )
+        .route("/status", get(endpoints::status::status_handler))
+        .route("/health", get(endpoints::status::health_handler))
 }
