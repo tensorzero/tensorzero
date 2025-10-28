@@ -171,9 +171,8 @@ export async function saveDatapoint(params: {
 }
 
 /**
- * Renames a datapoint by re-inserting the datapoint with the new name.
- *
- * TODO(#3765): remove this logic and use Rust logic instead, either via napi-rs or by calling an API server.
+ * Renames a datapoint using the metadata update API via HTTP.
+ * This does NOT create a new datapoint ID - it updates the name in-place.
  */
 export async function renameDatapoint(params: {
   functionType: "chat" | "json";
@@ -181,29 +180,31 @@ export async function renameDatapoint(params: {
   datapoint: ParsedDatasetRow;
   newName: string;
 }): Promise<void> {
-  const { functionType, datasetName, datapoint, newName } = params;
+  const { datasetName, datapoint, newName } = params;
 
-  let transformedDatapoint: Datapoint;
-  if (functionType === "json") {
-    if (!("output_schema" in datapoint)) {
-      throw new Error(`Json datapoint is missing output_schema`);
-    }
-    transformedDatapoint = transformJsonDatapointForUpdateRequest(
-      datapoint as ParsedJsonInferenceDatapointRow,
-    );
-  } else if (functionType === "chat") {
-    transformedDatapoint = transformChatDatapointForUpdateRequest(
-      datapoint as ParsedChatInferenceDatapointRow,
-    );
-  } else {
-    throw new Error(`Invalid function type: ${functionType}`);
+  const { getTensorZeroClient } = await import("~/utils/tensorzero.server");
+  const client = getTensorZeroClient();
+
+  // Call the PATCH /v1/datasets/{dataset_name}/datapoints/metadata endpoint
+  const endpoint = `/v1/datasets/${encodeURIComponent(datasetName)}/datapoints/metadata`;
+  const response = await client.fetch(endpoint, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      datapoints: [
+        {
+          id: datapoint.id,
+          metadata: {
+            name: newName,
+          },
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to rename datapoint: ${response.statusText}`);
   }
-
-  // Update name
-  transformedDatapoint.name = newName;
-
-  await getTensorZeroClient().updateDatapoint(
-    datasetName,
-    transformedDatapoint,
-  );
 }

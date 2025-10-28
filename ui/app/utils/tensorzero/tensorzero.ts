@@ -572,7 +572,7 @@ export class TensorZeroClient {
     return StatusResponseSchema.parse(await response.json());
   }
 
-  private async fetch(
+  public async fetch(
     path: string,
     init: {
       method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

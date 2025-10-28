@@ -65,6 +65,9 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
     TagComparisonOperator, TagFilter, TimeComparisonOperator, TimeFilter,
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
+pub use tensorzero_core::endpoints::datasets::v1::types::{
+    UpdateDatapointsMetadataRequest, UpdateDatapointsResponse,
+};
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
 };
@@ -991,6 +994,37 @@ impl Client {
                     .into(),
                 })?;
                 let builder = client.http_client.delete(url);
+                self.parse_http_response(builder.send().await).await
+            }
+        }
+    }
+
+    pub async fn update_datapoints_metadata(
+        &self,
+        dataset_name: String,
+        request: UpdateDatapointsMetadataRequest,
+    ) -> Result<UpdateDatapointsResponse, TensorZeroError> {
+        match &*self.mode {
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::datasets::v1::update_datapoints::update_datapoints_metadata(
+                        &gateway.handle.app_state.clickhouse_connection_info,
+                        &dataset_name,
+                        request,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await
+            }
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("v1/datasets/{dataset_name}/datapoints/metadata")).map_err(|e| TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /v1/datasets/{dataset_name}/datapoints/metadata endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.request(reqwest::Method::PATCH, url).json(&request);
                 self.parse_http_response(builder.send().await).await
             }
         }

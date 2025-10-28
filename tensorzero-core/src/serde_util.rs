@@ -261,6 +261,22 @@ where
     }
 }
 
+/// Serializes an `Option<Option<T>>` where `None` is omitted, `Some(None)` is serialized as `null`,
+/// and `Some(Some(T))` is serialized as the value.
+///
+/// This is the inverse of `deserialize_double_option`.
+pub fn serialize_double_option<S, T>(value: &Option<Option<T>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: Serialize,
+{
+    match value {
+        None => serializer.serialize_none(),
+        Some(None) => serializer.serialize_none(),
+        Some(Some(v)) => v.serialize(serializer),
+    }
+}
+
 /// Deserializes a defaulted "maybe-doubly-serialized" field of a struct.
 /// If you have a struct like this:
 /// ```ignore

@@ -411,7 +411,7 @@ pub async fn update_datapoints_metadata_handler(
 /// Business logic for updating datapoint metadata in a dataset.
 /// This function only updates metadata fields (like name) without creating new datapoint IDs.
 /// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
-async fn update_datapoints_metadata(
+pub async fn update_datapoints_metadata(
     clickhouse_handler: &impl DatasetQueries,
     dataset_name: &str,
     request: UpdateDatapointsMetadataRequest,
