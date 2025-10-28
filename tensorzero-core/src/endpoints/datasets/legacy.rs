@@ -1586,7 +1586,7 @@ pub async fn stale_dataset(
     clickhouse: &impl DatasetQueries,
     dataset_name: &str,
 ) -> Result<StaleDatasetResponse, Error> {
-    let num_staled_datapoints = clickhouse.delete_datapoints(dataset_name, &[]).await?;
+    let num_staled_datapoints = clickhouse.delete_datapoints(dataset_name, None).await?;
     Ok(StaleDatasetResponse {
         num_staled_datapoints,
     })

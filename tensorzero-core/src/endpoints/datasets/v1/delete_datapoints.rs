@@ -55,7 +55,7 @@ async fn delete_dataset(
 ) -> Result<DeleteDatapointsResponse, Error> {
     validate_dataset_name(dataset_name)?;
 
-    let num_deleted_datapoints = clickhouse.delete_datapoints(dataset_name, &[]).await?;
+    let num_deleted_datapoints = clickhouse.delete_datapoints(dataset_name, None).await?;
 
     Ok(DeleteDatapointsResponse {
         num_deleted_datapoints,
@@ -79,7 +79,7 @@ async fn delete_datapoints(
     }
 
     let num_deleted_datapoints = clickhouse
-        .delete_datapoints(dataset_name, &request.ids)
+        .delete_datapoints(dataset_name, Some(&request.ids.as_slice()))
         .await?;
 
     Ok(DeleteDatapointsResponse {
@@ -104,7 +104,9 @@ mod tests {
         // Set up expectation
         mock_clickhouse
             .expect_delete_datapoints()
-            .withf(move |name, input_ids| name == dataset_name && input_ids == ids.as_slice())
+            .withf(move |name, input_ids| {
+                name == dataset_name && input_ids.unwrap() == ids.as_slice()
+            })
             .times(1)
             .returning(|_, _| Box::pin(async { Ok(2) }));
 
@@ -118,14 +120,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_dataset_calls_clickhouse_with_empty_ids() {
+    async fn test_delete_dataset_calls_clickhouse_with_none_ids() {
         let mut mock_clickhouse = MockDatasetQueries::new();
         let dataset_name = "test_dataset";
 
-        // Set up expectation - delete_dataset should call with empty IDs array
+        // Set up expectation - delete_dataset should call with None
         mock_clickhouse
             .expect_delete_datapoints()
-            .withf(move |name, ids| name == dataset_name && ids.is_empty())
+            .withf(move |name, ids| name == dataset_name && ids.is_none())
             .times(1)
             .returning(|_, _| Box::pin(async { Ok(5) }));
 
