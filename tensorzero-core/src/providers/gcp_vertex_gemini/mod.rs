@@ -43,10 +43,9 @@ use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
@@ -2056,32 +2055,26 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
             }
             Cow::Borrowed(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
                         inline_data: GCPVertexInlineData {
                             mime_type: file.mime_type.to_string(),
-                            data: Cow::Owned(file.data()?.to_string()),
+                            data: Cow::Owned(data.to_string()),
                         },
                     },
                 ));
             }
             Cow::Owned(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
                         inline_data: GCPVertexInlineData {
                             mime_type: file.mime_type.to_string(),
-                            data: Cow::Owned(file.data()?.to_string()), // Convert to owned String
+                            data: Cow::Owned(data.to_string()), // Convert to owned String
                         },
                     },
                 ));

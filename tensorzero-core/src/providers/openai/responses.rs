@@ -697,7 +697,9 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                     }
                     _ => {
                         return Err(Error::new(ErrorDetails::InternalError {
-                            message: format!("`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}")
+                            message: format!(
+                                "`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}"
+                            ),
                         }));
                     }
                 }

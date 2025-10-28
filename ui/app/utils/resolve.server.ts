@@ -195,9 +195,9 @@ async function resolveModelInferenceContent(
 async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
   const object = await getTensorZeroClient().getObject(content.storage_path);
   const json = JSON.parse(object);
-  const dataURL = `data:${content.file.mime_type};base64,${json.data}`;
+  const data = `data:${content.file.mime_type};base64,${json.data}`;
   return {
-    dataUrl: dataURL,
+    data,
     mime_type: content.file.mime_type,
   };
 }
@@ -332,14 +332,32 @@ async function resolveStoredInputMessageContent(
       return content;
     case "file":
       try {
+        // Convert flattened ObjectStorageFile to nested FileContent structure
+        const fileContent: FileContent = {
+          type: "file",
+          file: {
+            url: content.source_url ?? null,
+            mime_type: content.mime_type,
+          },
+          storage_path: content.storage_path,
+        };
+        const resolvedFile = await resolveFile(fileContent);
         return {
-          ...content,
-          file: await resolveFile(content),
+          type: "file",
+          file: {
+            data: resolvedFile.data,
+            mime_type: resolvedFile.mime_type,
+          },
+          storage_path: content.storage_path,
         };
       } catch (error) {
         return {
-          ...content,
           type: "file_error",
+          file: {
+            url: content.source_url ?? null,
+            mime_type: content.mime_type,
+          },
+          storage_path: content.storage_path,
           error: error instanceof Error ? error.message : String(error),
         };
       }

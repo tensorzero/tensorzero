@@ -552,7 +552,6 @@ impl<'a> MistralRequest<'a> {
 struct MistralUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
-    total_tokens: u32,
 }
 
 impl From<MistralUsage> for Usage {
@@ -867,7 +866,6 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             },
         };
 
@@ -964,7 +962,6 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
-                total_tokens: 40,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1047,7 +1044,6 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
-                total_tokens: 5,
             },
         };
         let request_body = MistralRequest {
@@ -1100,7 +1096,6 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
-                total_tokens: 20,
             },
         };
         let request_body = MistralRequest {

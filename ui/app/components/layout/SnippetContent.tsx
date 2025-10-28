@@ -439,17 +439,17 @@ function FileMetadata({
 
 interface FileMessageProps {
   /** Base64-encoded "data:" URL containing the file data */
-  fileData: string;
+  data: string;
   filePath: string;
   mimeType: string;
 }
 
 export const AudioMessage: React.FC<FileMessageProps> = ({
-  fileData,
+  data,
   mimeType,
   filePath,
 }) => {
-  const url = useBase64UrlToBlobUrl(fileData, mimeType);
+  const url = useBase64UrlToBlobUrl(data, mimeType);
 
   return (
     <div className="flex flex-col gap-1">
@@ -467,12 +467,8 @@ export const AudioMessage: React.FC<FileMessageProps> = ({
   );
 };
 
-export function FileMessage({
-  fileData,
-  filePath,
-  mimeType,
-}: FileMessageProps) {
-  const url = useBase64UrlToBlobUrl(fileData, mimeType);
+export function FileMessage({ data, filePath, mimeType }: FileMessageProps) {
+  const url = useBase64UrlToBlobUrl(data, mimeType);
 
   return (
     <div className="flex flex-col gap-1">
@@ -483,7 +479,7 @@ export function FileMessage({
         </div>
 
         <Link
-          to={fileData}
+          to={data}
           download={`tensorzero_${filePath}`}
           aria-label={`Download ${filePath}`}
         >

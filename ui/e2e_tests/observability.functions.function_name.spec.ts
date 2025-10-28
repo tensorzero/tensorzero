@@ -132,9 +132,9 @@ test("should show experimentation section with pie chart for write_haiku functio
   ).toBeVisible();
 
   // Check that the pie chart card is visible
-  await expect(page.getByText("Active Variant Weights")).toBeVisible();
+  await expect(page.getByText("Variant Weights")).toBeVisible();
   await expect(
-    page.getByText("Distribution of sampling weights across variants"),
+    page.getByText("This chart displays the current sampling probabilities"),
   ).toBeVisible();
 
   // Check that all three variants are shown with 33.3% weight
@@ -150,6 +150,48 @@ test("should show experimentation section with pie chart for write_haiku functio
     page.getByText("initial_prompt_haiku_3_5").first(),
   ).toBeVisible();
   await expect(page.getByText("better_prompt_haiku_3_5").first()).toBeVisible();
+
+  // Assert that "error" is not in the page
+  await expect(page.getByText("error", { exact: false })).not.toBeVisible();
+});
+
+test("should display feedback timeseries charts for extract_entities function", async ({
+  page,
+}) => {
+  await page.goto("/observability/functions/extract_entities");
+
+  // Wait for the Experimentation section to be visible
+  await expect(
+    page.getByRole("heading", { name: "Experimentation" }),
+  ).toBeVisible();
+
+  // Check that the Mean Estimated Performance tab is visible and click it
+  await expect(
+    page.getByRole("tab", { name: "Estimated Performance" }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Estimated Performance" }).click();
+
+  // Verify the Estimated Performance chart is displayed
+  await expect(page.getByText(/Estimated Performance:/)).toBeVisible();
+
+  // Check that the metric name appears in the description
+  await expect(page.getByText(/jaro_winkler_similarity/)).toBeVisible();
+
+  // Verify the chart is rendered
+  const charts = page.locator("[data-chart]");
+  await expect(charts.first()).toBeVisible();
+
+  // Switch to Feedback Count tab
+  await page.getByRole("tab", { name: "Feedback Count" }).click();
+
+  // Verify the Feedback Count chart is displayed
+  await expect(page.getByText(/Cumulative Feedback Count:/)).toBeVisible();
+
+  // Check that the metric name appears in the description
+  await expect(page.getByText(/jaro_winkler_similarity/).first()).toBeVisible();
+
+  // Verify the chart is rendered (still checking for chart presence)
+  await expect(charts.first()).toBeVisible();
 
   // Assert that "error" is not in the page
   await expect(page.getByText("error", { exact: false })).not.toBeVisible();

@@ -6,7 +6,7 @@ use tensorzero::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
     StoredChatInference, StoredInference, StoredJsonInference, Tool,
 };
-use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
@@ -256,22 +256,22 @@ pub async fn test_render_samples_normal() {
                         StoredInputMessageContent::Text(Text {
                             text: "What is this a picture of?".to_string(),
                         }),
-                        StoredInputMessageContent::File(Box::new(StoredFile {
-                            file: Base64FileMetadata {
-                                url: None,
+                        StoredInputMessageContent::File(Box::new(StoredFile(
+                            ObjectStoragePointer {
+                                source_url: None,
                                 mime_type: mime::IMAGE_PNG,
-                            },
-                            storage_path: StoragePath {
-                                kind: StorageKind::S3Compatible {
-                                    bucket_name: Some("tensorzero-e2e-test-images".to_string()),
-                                    region: Some("us-east-1".to_string()),
-                                    prefix: String::new(),
-                                    endpoint: None,
-                                    allow_http: None,
+                                storage_path: StoragePath {
+                                    kind: StorageKind::S3Compatible {
+                                        bucket_name: Some("tensorzero-e2e-test-images".to_string()),
+                                        region: Some("us-east-1".to_string()),
+                                        prefix: String::new(),
+                                        endpoint: None,
+                                        allow_http: None,
+                                    },
+                                    path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                                 },
-                                path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                             },
-                        })),
+                        ))),
                     ],
                 }],
             },
@@ -427,7 +427,7 @@ pub async fn test_render_samples_normal() {
     };
 
     // Check that the base64 string is > 1000 chars
-    assert!(file.file.data.len() > 1000);
+    assert!(file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
@@ -806,22 +806,22 @@ pub async fn test_render_datapoints_normal() {
                         StoredInputMessageContent::Text(Text {
                             text: "What is this a picture of?".to_string(),
                         }),
-                        StoredInputMessageContent::File(Box::new(StoredFile {
-                            file: Base64FileMetadata {
-                                url: None,
+                        StoredInputMessageContent::File(Box::new(StoredFile(
+                            ObjectStoragePointer {
+                                source_url: None,
                                 mime_type: mime::IMAGE_PNG,
-                            },
-                            storage_path: StoragePath {
-                                kind: StorageKind::S3Compatible {
-                                    bucket_name: Some("tensorzero-e2e-test-images".to_string()),
-                                    region: Some("us-east-1".to_string()),
-                                    prefix: String::new(),
-                                    endpoint: None,
-                                    allow_http: None,
+                                storage_path: StoragePath {
+                                    kind: StorageKind::S3Compatible {
+                                        bucket_name: Some("tensorzero-e2e-test-images".to_string()),
+                                        region: Some("us-east-1".to_string()),
+                                        prefix: String::new(),
+                                        endpoint: None,
+                                        allow_http: None,
+                                    },
+                                    path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                                 },
-                                path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                             },
-                        })),
+                        ))),
                     ],
                 }],
             },
@@ -965,7 +965,7 @@ pub async fn test_render_datapoints_normal() {
     };
 
     // Check that the base64 string is > 1000 chars
-    assert!(file.file.data.len() > 1000);
+    assert!(file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_sample.output.as_ref().unwrap().len(), 0);

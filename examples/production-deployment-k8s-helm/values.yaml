@@ -21,6 +21,9 @@ gateway:
   args:
     - --config-file=/app/config/tensorzero.toml
 
+  # Optional service account name for the gateway deployment
+  serviceAccountName: ""
+
   image:
     repository: tensorzero/gateway
     tag: "" # If empty, uses Chart.appVersion
@@ -71,14 +74,14 @@ gateway:
     #    hosts:
     #      - tensorzero-gateway.local
 
-    # Create legacy ingress with old naming pattern for zero-downtime upgrades
-    # Set to false after migrating DNS/load balancers to the new ingress name
-    createLegacyIngress: true
-
 # UI Configuration
 ui:
   deploy: true # TODO: change this to false if you don't want to deploy the UI
   replicaCount: 1
+
+  # Optional service account name for the UI deployment
+  serviceAccountName: ""
+
   image:
     repository: tensorzero/ui
     tag: "" # If empty, uses Chart.appVersion

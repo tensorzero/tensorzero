@@ -18,10 +18,10 @@ use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, E
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::resolved_input::{FileUrl, FileWithPath, LazyFile};
+use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
-    FunctionType, Latency, ModelInferenceRequestJsonMode, Role, Text,
+    FunctionType, Latency, ModelInferenceRequestJsonMode, ObjectStorageFile, Role, Text,
 };
 use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
@@ -595,14 +595,11 @@ impl<'a> AnthropicMessageContent<'a> {
                         PROVIDER_TYPE,
                     );
                     // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
-                    let file = file.resolve().await?;
-                    let FileWithPath {
-                        file,
-                        storage_path: _,
-                    } = &*file;
+                    let resolved_file = file.resolve().await?;
+                    let ObjectStorageFile { file, data } = &*resolved_file;
                     let document = AnthropicDocumentSource::Base64 {
                         media_type: file.mime_type.clone(),
-                        data: file.data()?.clone(),
+                        data: data.clone(),
                     };
                     if file.mime_type.type_() == mime::IMAGE {
                         Ok(Some(FlattenUnknown::Normal(
@@ -808,7 +805,9 @@ fn get_default_max_tokens(model_name: &str) -> Result<u32, Error> {
         Ok(32_000)
     } else {
         Err(Error::new(ErrorDetails::InferenceClient {
-            message: format!("The TensorZero Gateway doesn't know the output token limit for `{model_name}` and Anthropic requires you to provide a `max_tokens` value. Please set `max_tokens` in your configuration or inference request."),
+            message: format!(
+                "The TensorZero Gateway doesn't know the output token limit for `{model_name}` and Anthropic requires you to provide a `max_tokens` value. Please set `max_tokens` in your configuration or inference request."
+            ),
             status_code: None,
             provider_type: PROVIDER_TYPE.into(),
             raw_request: None,

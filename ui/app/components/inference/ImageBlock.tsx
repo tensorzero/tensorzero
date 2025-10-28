@@ -5,12 +5,12 @@ export default function ImageBlock({ image }: { image: ResolvedFileContent }) {
     <div className="w-60 rounded bg-slate-100 p-2 text-xs text-slate-300">
       <div className="mb-2">Image</div>
       <a
-        href={image.file.dataUrl}
+        href={image.file.data}
         target="_blank"
         rel="noopener noreferrer"
         download={"tensorzero_" + image.storage_path.path}
       >
-        <img src={image.file.dataUrl} alt="Image" />
+        <img src={image.file.data} alt="Image" />
       </a>
     </div>
   );
