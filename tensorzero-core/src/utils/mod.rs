@@ -1,5 +1,8 @@
 use std::future::Future;
 
+use tracing::Span;
+use tracing_futures::Instrument;
+
 use crate::error::Error;
 use crate::error::ErrorDetails;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
@@ -29,9 +32,12 @@ pub async fn unbounded_recursion_wrapper<R: Send + 'static>(
 ) -> Result<R, Error> {
     // We await this immediately
     #[expect(clippy::disallowed_methods)]
-    tokio::spawn(fut).await.map_err(|e| {
-        Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to join task: {e:?}. {IMPOSSIBLE_ERROR_MESSAGE}"),
-        })
-    })?
+    tokio::spawn(fut)
+        .instrument(Span::current())
+        .await
+        .map_err(|e| {
+            Error::new(ErrorDetails::InternalError {
+                message: format!("Failed to join task: {e:?}. {IMPOSSIBLE_ERROR_MESSAGE}"),
+            })
+        })?
 }
