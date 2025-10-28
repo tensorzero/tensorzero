@@ -15,6 +15,7 @@ use tensorzero_core::{
     cache::CacheEnabledMode,
     config::{Config, ConfigFileGlob, MetricConfigOptimize},
     db::{clickhouse::ClickHouseConnectionInfo, feedback::FeedbackByVariant},
+    experimentation::track_and_stop,
 };
 use uuid::Uuid;
 
@@ -408,12 +409,10 @@ pub struct ComputeTrackAndStopStateParams {
 /// Returns a JSON string with both the state information and display probabilities.
 #[napi]
 pub fn compute_track_and_stop_state(params: String) -> Result<String, napi::Error> {
-    use std::collections::HashMap;
-
     let params: ComputeTrackAndStopStateParams =
         serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
-    let state = tensorzero_core::experimentation::track_and_stop::compute_track_and_stop_state(
+    let state = track_and_stop::compute_track_and_stop_state(
         &params.candidate_variants,
         params.feedback,
         params.min_samples_per_variant,
