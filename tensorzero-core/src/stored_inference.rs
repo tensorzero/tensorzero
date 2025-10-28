@@ -6,11 +6,12 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
+use crate::tool::DynamicToolParams;
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, ModelInput, ResolvedInput},
-    tool::{ToolCallConfigDatabaseInsert, ToolCallConfigWire},
+    tool::ToolCallConfigDatabaseInsert,
     variant::{chat_completion::prepare_model_input, VariantConfig},
 };
 use chrono::{DateTime, Utc};
@@ -258,7 +259,7 @@ pub struct StoredChatInferenceWire {
     pub episode_id: Uuid,
     pub inference_id: Uuid,
     #[serde(default)]
-    pub tool_params: ToolCallConfigWire,
+    pub tool_params: DynamicToolParams,
     #[serde(default)]
     pub tags: HashMap<String, String>,
 }
@@ -454,7 +455,7 @@ pub struct RenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_params: Option<ToolCallConfigWire>,
+    pub tool_params: Option<DynamicToolParams>,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -559,7 +560,7 @@ impl RenderedSample {
     }
 
     #[getter]
-    pub fn get_tool_params(&self) -> Option<ToolCallConfigWire> {
+    pub fn get_tool_params(&self) -> Option<DynamicToolParams> {
         self.tool_params.clone()
     }
 

@@ -393,64 +393,6 @@ pub struct ToolCallConfigDatabaseInsert {
     pub parallel_tool_calls: Option<bool>,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct ToolCallConfigWire {
-    pub tools_available: Vec<Tool>,
-    pub tool_choice: ToolChoice,
-    // TODO: decide what we want the Python interface to be for ToolChoice
-    // This is complicated because ToolChoice is an enum with some simple arms and some
-    // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
-    pub parallel_tool_calls: Option<bool>,
-}
-
-impl std::fmt::Display for ToolCallConfigWire {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
-        write!(f, "{json}")
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl ToolCallConfigWire {
-    #[getter]
-    pub fn get_tools_available(&self) -> Vec<Tool> {
-        self.tools_available.clone()
-    }
-
-    #[getter]
-    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
-        self.parallel_tool_calls
-    }
-
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-}
-
-impl From<ToolCallConfigDatabaseInsert> for ToolCallConfigWire {
-    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
-        Self {
-            tools_available: db_insert.tools_available,
-            tool_choice: db_insert.tool_choice,
-            parallel_tool_calls: db_insert.parallel_tool_calls,
-        }
-    }
-}
-
-impl From<ToolCallConfigWire> for ToolCallConfigDatabaseInsert {
-    fn from(wire: ToolCallConfigWire) -> Self {
-        Self {
-            tools_available: wire.tools_available,
-            tool_choice: wire.tool_choice,
-            parallel_tool_calls: wire.parallel_tool_calls,
-        }
-    }
-}
-
 /// A struct to hold the dynamic tool parameters passed at inference time.
 /// These should override the function-level tool parameters.
 /// `allowed_tools` should be a subset of the configured tools for the function.
@@ -460,12 +402,20 @@ impl From<ToolCallConfigWire> for ToolCallConfigDatabaseInsert {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DynamicToolParams {
     pub allowed_tools: Option<Vec<String>>,
     pub additional_tools: Option<Vec<Tool>>,
     pub tool_choice: Option<ToolChoice>,
     pub parallel_tool_calls: Option<bool>,
     pub provider_tools: Option<Vec<ProviderTool>>,
+}
+
+impl std::fmt::Display for DynamicToolParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]

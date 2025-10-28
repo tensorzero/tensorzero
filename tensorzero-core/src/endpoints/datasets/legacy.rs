@@ -32,7 +32,7 @@ use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
-    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert, ToolCallConfigWire},
+    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
 };
@@ -1152,7 +1152,7 @@ impl DatapointWire {
         }
     }
 
-    pub fn tool_call_config(&self) -> Option<&ToolCallConfigWire> {
+    pub fn tool_call_config(&self) -> Option<&DynamicToolParams> {
         match self {
             DatapointWire::Chat(datapoint) => datapoint.tool_params.as_ref(),
             DatapointWire::Json(_) => None,
@@ -1364,7 +1364,7 @@ pub struct ChatInferenceDatapointWire {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
-    pub tool_params: Option<ToolCallConfigWire>,
+    pub tool_params: Option<DynamicToolParams>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
