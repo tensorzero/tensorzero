@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -8,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import type { WorkflowEvaluationProject } from "~/utils/clickhouse/workflow_evaluations";
 import { toWorkflowEvaluationProjectUrl } from "~/utils/urls";
 
@@ -34,14 +33,10 @@ export default function WorkflowEvaluationProjectsTable({
             workflowEvaluationProjects.map((project) => (
               <TableRow key={project.name}>
                 <TableCell className="max-w-[200px]">
-                  <Link
-                    to={toWorkflowEvaluationProjectUrl(project.name)}
-                    className="block no-underline"
-                  >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {project.name}
-                    </code>
-                  </Link>
+                  <TableItemShortUuid
+                    id={project.name}
+                    link={toWorkflowEvaluationProjectUrl(project.name)}
+                  />
                 </TableCell>
                 <TableCell>
                   <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
@@ -49,7 +44,7 @@ export default function WorkflowEvaluationProjectsTable({
                   </code>
                 </TableCell>
                 <TableCell>
-                  {formatDate(new Date(project.last_updated))}
+                  <TableItemTime timestamp={project.last_updated} />
                 </TableCell>
               </TableRow>
             ))

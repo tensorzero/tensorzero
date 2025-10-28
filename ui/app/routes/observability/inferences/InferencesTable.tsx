@@ -63,9 +63,7 @@ export default function InferencesTable({
                     variantName={inference.variant_name}
                     functionName={inference.function_name}
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {inference.variant_name}
-                    </code>
+                    <TableItemShortUuid id={inference.variant_name} />
                   </VariantLink>
                 </TableCell>
                 <TableCell>

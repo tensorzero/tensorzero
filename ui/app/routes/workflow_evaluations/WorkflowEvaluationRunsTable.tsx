@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -8,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import { formatDate } from "~/utils/date";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import type { WorkflowEvaluationRunWithEpisodeCount } from "~/utils/clickhouse/workflow_evaluations";
 import {
   toWorkflowEvaluationRunUrl,
@@ -39,41 +38,31 @@ export default function WorkflowEvaluationRunsTable({
             workflowEvaluationRuns.map((run) => (
               <TableRow key={run.id}>
                 <TableCell className="max-w-[200px]">
-                  <Link
-                    to={toWorkflowEvaluationRunUrl(run.id)}
-                    className="block no-underline"
-                  >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {run.name}
-                    </code>
-                  </Link>
+                  <TableItemShortUuid
+                    id={run.name}
+                    link={toWorkflowEvaluationRunUrl(run.id)}
+                  />
                 </TableCell>
                 <TableCell className="max-w-[200px]">
-                  <Link
-                    to={toWorkflowEvaluationRunUrl(run.id)}
-                    className="block no-underline"
-                  >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {run.id}
-                    </code>
-                  </Link>
+                  <TableItemShortUuid
+                    id={run.id}
+                    link={toWorkflowEvaluationRunUrl(run.id)}
+                  />
                 </TableCell>
                 <TableCell>
                   {run.project_name ? (
-                    <Link
-                      to={`${toWorkflowEvaluationProjectUrl(run.project_name)}?run_ids=${run.id}`}
-                      className="block no-underline"
-                    >
-                      <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                        {run.project_name}
-                      </code>
-                    </Link>
+                    <TableItemShortUuid
+                      id={run.project_name}
+                      link={`${toWorkflowEvaluationProjectUrl(run.project_name)}?run_ids=${run.id}`}
+                    />
                   ) : (
                     <span className="text-gray-400">-</span>
                   )}
                 </TableCell>
                 <TableCell>{run.num_episodes}</TableCell>
-                <TableCell>{formatDate(new Date(run.timestamp))}</TableCell>
+                <TableCell>
+                  <TableItemTime timestamp={run.timestamp} />
+                </TableCell>
               </TableRow>
             ))
           )}

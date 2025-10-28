@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import {
   Table,
   TableBody,
@@ -40,24 +39,16 @@ function EvaluationRunRow({
         />
       </TableCell>
       <TableCell className="max-w-[200px]">
-        <Link
-          to={toEvaluationUrl(evaluationRun.evaluation_name)}
-          className="block no-underline"
-        >
-          <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-            {evaluationRun.evaluation_name}
-          </code>
-        </Link>
+        <TableItemShortUuid
+          id={evaluationRun.evaluation_name}
+          link={toEvaluationUrl(evaluationRun.evaluation_name)}
+        />
       </TableCell>
       <TableCell>
-        <Link
-          to={toDatasetUrl(evaluationRun.dataset_name)}
-          className="block no-underline"
-        >
-          <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-            {evaluationRun.dataset_name}
-          </code>
-        </Link>
+        <TableItemShortUuid
+          id={evaluationRun.dataset_name}
+          link={toDatasetUrl(evaluationRun.dataset_name)}
+        />
       </TableCell>
       <TableCell>
         <TableItemFunction
@@ -71,9 +62,7 @@ function EvaluationRunRow({
           variantName={evaluationRun.variant_name}
           functionName={evaluationRun.function_name}
         >
-          <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-            {evaluationRun.variant_name}
-          </code>
+          <TableItemShortUuid id={evaluationRun.variant_name} />
         </VariantLink>
       </TableCell>
       <TableCell>

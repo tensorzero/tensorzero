@@ -10,7 +10,7 @@ import {
 } from "~/components/ui/table";
 import type { VariantCounts } from "~/utils/clickhouse/function";
 import { VariantLink } from "~/components/function/variant/VariantLink";
-import { TableItemTime } from "~/components/ui/TableItems";
+import { TableItemShortUuid, TableItemTime } from "~/components/ui/TableItems";
 import {
   useReactTable,
   getCoreRowModel,
@@ -48,9 +48,7 @@ export default function FunctionVariantTable({
             variantName={info.getValue()}
             functionName={function_name}
           >
-            <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-              {info.getValue()}
-            </code>
+            <TableItemShortUuid id={info.getValue()} />
           </VariantLink>
         ),
       }),
