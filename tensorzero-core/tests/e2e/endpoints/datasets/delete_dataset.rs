@@ -54,7 +54,7 @@ async fn test_delete_dataset_with_single_datapoint() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(std::slice::from_ref(&datapoint_insert))
         .await
         .unwrap();
 
@@ -345,7 +345,7 @@ async fn test_delete_dataset_twice() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(std::slice::from_ref(&datapoint_insert))
         .await
         .unwrap();
 

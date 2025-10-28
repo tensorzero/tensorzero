@@ -55,7 +55,7 @@ async fn test_delete_datapoints_single_chat() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -327,7 +327,7 @@ async fn test_delete_datapoints_non_existent_id() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -449,7 +449,7 @@ async fn test_delete_datapoints_already_stale() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
