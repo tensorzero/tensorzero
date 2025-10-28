@@ -4,7 +4,7 @@ use tracing_subscriber::Layer;
 
 /// A tracing layer that tracks active spans, which can be used to detect leaked spans.
 /// Currently, we only use this in e2e tests, since we haven't evaluated the performance impact.
-// This can be `Clone` since cloning a moka `Cache` just creating a reference to the same cache
+// This can be `Clone` since cloning a moka `Cache` just creates a reference to the same cache
 #[derive(Clone, Debug)]
 pub struct SpanLeakDetector {
     spans: moka::sync::Cache<tracing::span::Id, CapturedSpanData>,
