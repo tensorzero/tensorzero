@@ -11,7 +11,7 @@ import type { ToolConfig } from "./ToolConfig";
  */
 export type ToolCallConfig = {
   tools_available: Array<ToolConfig>;
-  provider_tools: Array<ProviderTool> | null;
+  provider_tools: Array<ProviderTool>;
   tool_choice: ToolChoice;
   parallel_tool_calls: boolean | null;
   allowed_tools: AllowedTools;

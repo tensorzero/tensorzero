@@ -3,18 +3,62 @@ import type { ContentBlockChatOutput } from "./ContentBlockChatOutput";
 import type { StoredInput } from "./StoredInput";
 import type { ToolCallConfigDatabaseInsert } from "./ToolCallConfigDatabaseInsert";
 
+/**
+ * Type that gets serialized directly to be written to ClickHouse. Serialization should match
+ * the structure of the ChatInferenceDatapoint table in ClickHouse.
+ * Theis should be an internal-only type, but it's exposed to tensorzero-node.
+ */
 export type ChatInferenceDatapointInsert = {
+  /**
+   * Name of the dataset to write to. Required.
+   */
   dataset_name: string;
+  /**
+   * Name of the function that generated this datapoint. Required.
+   */
   function_name: string;
+  /**
+   * Human-readable name of the datapoint. Optional.
+   */
   name?: string;
+  /**
+   * Unique identifier for the datapoint. Required.
+   */
   id: string;
+  /**
+   * Episode ID that the datapoint belongs to. Optional.
+   */
   episode_id?: string;
+  /**
+   * Input to the function that generated this datapoint. Required.
+   */
   input: StoredInput;
+  /**
+   * Output of the function that generated this datapoint. Optional.
+   */
   output?: Array<ContentBlockChatOutput>;
+  /**
+   * Tool parameters used to generate this datapoint. Optional.
+   */
   tool_params?: ToolCallConfigDatabaseInsert;
+  /**
+   * Tags associated with this datapoint. Optional.
+   */
   tags?: { [key in string]?: string };
+  /**
+   * Deprecated, do not use.
+   */
   auxiliary: string;
+  /**
+   * Timestamp when the datapoint was marked as stale. Optional.
+   */
   staled_at?: string;
+  /**
+   * Source inference ID that generated this datapoint. Optional.
+   */
   source_inference_id?: string;
+  /**
+   * If true, this datapoint was manually created or edited by the user.
+   */
   is_custom: boolean;
 };

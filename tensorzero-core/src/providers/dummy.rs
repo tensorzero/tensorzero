@@ -729,7 +729,7 @@ impl InferenceProvider for DummyProvider {
                             raw_arguments: chunk.to_string(),
                         })
                     } else {
-                        ContentBlockChunk::Text(crate::inference::types::TextChunk {
+                        ContentBlockChunk::Text(TextChunk {
                             text: chunk.to_string(),
                             id: "0".to_string(),
                         })

@@ -122,11 +122,11 @@ pub fn resolved_content_block_to_python(
             let text_content_block = import_text_content_block(py)?;
             text_content_block.call1(py, (text.text.clone(),))
         }
-        ResolvedContentBlock::File(file) => {
+        ResolvedContentBlock::File(resolved) => {
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(
                 py,
-                (file.file.data.clone(), file.file.mime_type.to_string()),
+                (resolved.data.clone(), resolved.file.mime_type.to_string()),
             )
         }
         ResolvedContentBlock::ToolCall(tool_call) => {
@@ -257,7 +257,7 @@ pub fn stored_input_message_content_to_python(
         }
         StoredInputMessageContent::File(file) => {
             let file_content_block = import_file_content_block(py)?;
-            file_content_block.call1(py, (PyNone::get(py), file.file.mime_type.to_string()))
+            file_content_block.call1(py, (PyNone::get(py), file.mime_type.to_string()))
         }
         StoredInputMessageContent::Unknown {
             data,
@@ -320,11 +320,11 @@ pub fn resolved_input_message_content_to_python(
             let raw_text_content_block = import_raw_text_content_block(py)?;
             raw_text_content_block.call1(py, (value,))
         }
-        ResolvedInputMessageContent::File(file) => {
+        ResolvedInputMessageContent::File(resolved) => {
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(
                 py,
-                (file.file.data.clone(), file.file.mime_type.to_string()),
+                (resolved.data.clone(), resolved.file.mime_type.to_string()),
             )
         }
         ResolvedInputMessageContent::Unknown {

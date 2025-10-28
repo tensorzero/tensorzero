@@ -26,7 +26,7 @@ use python_helpers::{
 };
 use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass},
-    db::clickhouse::{query_builder::OrderBy, ClickhouseFormat},
+    db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         pyo3_helpers::{
@@ -1181,7 +1181,6 @@ impl TensorZeroGateway {
     /// * `output_source` - The source of the output to query. "inference" or "demonstration"
     /// * `limit` - The maximum number of inferences to return. Optional
     /// * `offset` - The offset to start from. Optional
-    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
     #[pyo3(signature = (*,
                         function_name,
                         variant_name=None,
@@ -1223,14 +1222,14 @@ impl TensorZeroGateway {
             .map(|x| deserialize_from_pyobj(this.py(), x))
             .transpose()?;
         let params = ListInferencesParams {
-            function_name: &function_name,
+            function_name: Some(&function_name),
             variant_name: variant_name.as_deref(),
             filters: filters.as_ref(),
             output_source,
             order_by: order_by.as_deref(),
             limit,
             offset,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -2035,7 +2034,6 @@ impl AsyncTensorZeroGateway {
     /// * `output_source` - The source of the output to query. "inference" or "demonstration"
     /// * `limit` - The maximum number of inferences to return. Optional
     /// * `offset` - The offset to start from. Optional
-    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
     #[pyo3(signature = (*,
         function_name,
         variant_name=None,
@@ -2078,14 +2076,14 @@ impl AsyncTensorZeroGateway {
                 })?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let params = ListInferencesParams {
-                function_name: &function_name,
+                function_name: Some(&function_name),
                 variant_name: variant_name.as_deref(),
                 filters: filters.as_ref(),
                 output_source,
                 order_by: order_by.as_deref(),
                 limit,
                 offset,
-                format: ClickhouseFormat::JsonEachRow,
+                ..Default::default()
             };
             let res = client.experimental_list_inferences(params).await;
             Python::attach(|py| match res {
