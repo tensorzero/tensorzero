@@ -3,13 +3,14 @@ import type { ContentBlockChatOutput } from "./ContentBlockChatOutput";
 import type { ModelInput } from "./ModelInput";
 import type { StoredInput } from "./StoredInput";
 import type { StoredOutput } from "./StoredOutput";
-import type { ToolCallConfigDatabaseInsert } from "./ToolCallConfigDatabaseInsert";
+import type { ToolCallConfigWire } from "./ToolCallConfigWire";
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
  * Represents an inference that has been prepared for fine-tuning.
  * This is constructed by rendering a StoredInference with a variant for messages
  * and by resolving all network resources (e.g. images).
+ * This is a wire type - it uses ToolCallConfigWire and has Python/TypeScript bindings.
  */
 export type RenderedSample = {
   function_name: string;
@@ -20,7 +21,7 @@ export type RenderedSample = {
   dispreferred_outputs: Array<Array<ContentBlockChatOutput>>;
   episode_id: string | null;
   inference_id: string | null;
-  tool_params: ToolCallConfigDatabaseInsert | null;
+  tool_params: ToolCallConfigWire | null;
   output_schema: JsonValue | null;
   tags: { [key in string]?: string };
 };

@@ -2,7 +2,7 @@
 import type { ContentBlockChatOutput } from "./ContentBlockChatOutput";
 import type { DatapointMetadataUpdate } from "./DatapointMetadataUpdate";
 import type { Input } from "./Input";
-import type { ToolCallConfigDatabaseInsert } from "./ToolCallConfigDatabaseInsert";
+import type { ToolCallConfigWire } from "./ToolCallConfigWire";
 
 /**
  * An update request for a chat datapoint.
@@ -30,7 +30,7 @@ export type UpdateChatDatapointRequest = {
   /**
    * Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
    */
-  tool_params?: ToolCallConfigDatabaseInsert | null;
+  tool_params?: ToolCallConfigWire | null;
   /**
    * Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
    * it will be overwrite the existing tags.
