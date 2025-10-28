@@ -2118,6 +2118,7 @@ mod tests {
         conn.stale_datapoint(&params).await.unwrap();
     }
 
+    // TODO (Viraj, this PR): add a case for inserting with tool info
     #[tokio::test]
     async fn test_insert_chat_datapoint_executes_successfully() {
         let mut mock_clickhouse_client = MockClickHouseClient::new();
@@ -2147,7 +2148,6 @@ mod tests {
                         "messages": [],
                     },
                     "output": [{"type": "text", "text": "response"}],
-                    "tool_params": "",
                     "tags": {"test_tag": "test_value"},
                     "auxiliary": "",
                     "source_inference_id": null,
