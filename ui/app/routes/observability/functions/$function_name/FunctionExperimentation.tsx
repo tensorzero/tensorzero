@@ -38,21 +38,21 @@ function extractVariantWeights(
       weight: equalWeight,
     }));
   } else if (experimentationConfig.type === "track_and_stop") {
-    // Extract sampling probabilities from track-and-stop state
+    // Extract display probabilities from track-and-stop response
     // Always use the probabilities from computeTrackAndStopState()
     if (!trackAndStopState) {
       return [];
     }
 
-    const state = trackAndStopState as {
-      sampling_probabilities?: Record<string, number>;
+    const response = trackAndStopState as {
+      display_probabilities?: Record<string, number>;
     };
 
-    if (!state.sampling_probabilities) {
+    if (!response.display_probabilities) {
       return [];
     }
 
-    variantWeights = Object.entries(state.sampling_probabilities).map(
+    variantWeights = Object.entries(response.display_probabilities).map(
       ([variant_name, weight]) => ({
         variant_name,
         weight,
