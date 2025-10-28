@@ -7,6 +7,7 @@ use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult,
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::config::Config;
 use crate::endpoints::datasets::{Datapoint, DatapointWire};
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::ResolvedContentBlock;
@@ -364,15 +365,35 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
 pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
+    config: &Config,
 ) -> PyResult<StoredSampleItem> {
     if obj.is_instance_of::<StoredInferenceWire>() {
         // Extract wire type and convert to storage type
         let wire: StoredInferenceWire = obj.extract()?;
-        Ok(StoredSampleItem::StoredInference(wire.into()))
+        let storage = match wire.to_storage(config) {
+            Ok(s) => s,
+            Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+        };
+        Ok(StoredSampleItem::StoredInference(storage))
     } else if obj.is_instance_of::<DatapointWire>() {
         // Extract wire type and convert to storage type
         let wire: DatapointWire = obj.extract()?;
-        Ok(StoredSampleItem::Datapoint(wire.into()))
+        match wire {
+            DatapointWire::Chat(chat_wire) => {
+                let function_config = match config.get_function(&chat_wire.function_name) {
+                    Ok(f) => f,
+                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                };
+                let datapoint = match chat_wire.to_storage(&function_config, &config.tools) {
+                    Ok(d) => d,
+                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                };
+                Ok(StoredSampleItem::Datapoint(Datapoint::Chat(datapoint)))
+            }
+            DatapointWire::Json(json_wire) => {
+                Ok(StoredSampleItem::Datapoint(Datapoint::Json(json_wire)))
+            }
+        }
     } else {
         deserialize_from_pyobj(py, obj)
     }

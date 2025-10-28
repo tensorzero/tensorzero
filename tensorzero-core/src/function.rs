@@ -33,7 +33,9 @@ use crate::inference::types::{
 use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
+use crate::tool::{
+    DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolCallConfigDatabaseInsert, ToolChoice,
+};
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug, Serialize)]
@@ -355,6 +357,52 @@ impl FunctionConfig {
                 }
                 Ok(None)
             }
+        }
+    }
+
+    /// Convert DynamicToolParams to ToolCallConfigDatabaseInsert using prepare_tool_config
+    /// This properly merges static and dynamic tools according to function configuration
+    pub fn dynamic_tool_params_to_database_insert(
+        &self,
+        dynamic_params: DynamicToolParams,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
+        let tool_config = self.prepare_tool_config(dynamic_params, static_tools)?;
+        Ok(tool_config.map(|config| config.into()))
+    }
+
+    /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams by subtracting static tools
+    /// Static tools (from function config) become allowed_tools, additional tools remain as additional_tools
+    pub fn database_insert_to_dynamic_tool_params(
+        &self,
+        db_insert: ToolCallConfigDatabaseInsert,
+    ) -> DynamicToolParams {
+        // Get static tool names from function config
+        let static_tool_names: HashSet<&str> = match self {
+            FunctionConfig::Chat(c) => c.tools.iter().map(std::string::String::as_str).collect(),
+            FunctionConfig::Json(_) => HashSet::new(),
+        };
+
+        // Partition tools into static (allowed) and dynamic (additional)
+        let (static_tools, additional_tools): (Vec<_>, Vec<_>) = db_insert
+            .tools_available
+            .into_iter()
+            .partition(|tool| static_tool_names.contains(tool.name.as_str()));
+
+        DynamicToolParams {
+            allowed_tools: if static_tools.is_empty() {
+                None
+            } else {
+                Some(static_tools.into_iter().map(|t| t.name).collect())
+            },
+            additional_tools: if additional_tools.is_empty() {
+                None
+            } else {
+                Some(additional_tools)
+            },
+            tool_choice: Some(db_insert.tool_choice),
+            parallel_tool_calls: db_insert.parallel_tool_calls,
+            provider_tools: None,
         }
     }
 

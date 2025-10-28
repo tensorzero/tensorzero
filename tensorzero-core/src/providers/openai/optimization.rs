@@ -340,7 +340,11 @@ impl<'a> OpenAISupervisedRow<'a> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => (
                 tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params.tools_available.iter().map(Into::into).collect(),
+                tool_params
+                    .additional_tools
+                    .as_ref()
+                    .map(|tools| tools.iter().map(Into::into).collect())
+                    .unwrap_or_default(),
             ),
             None => (false, vec![]),
         };
@@ -414,7 +418,11 @@ impl<'a> OpenAIReinforcementRow<'a> {
         let (parallel_tool_calls, tools) = match &inference.tool_params {
             Some(tool_params) => (
                 tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params.tools_available.iter().map(Into::into).collect(),
+                tool_params
+                    .additional_tools
+                    .as_ref()
+                    .map(|tools| tools.iter().map(Into::into).collect())
+                    .unwrap_or_default(),
             ),
             None => (false, vec![]),
         };

@@ -97,7 +97,11 @@ impl<'a> FireworksSupervisedRow<'a> {
                         message: "Parallel tool calls are not supported for Fireworks".to_string(),
                     }));
                 }
-                tool_params.tools_available.iter().map(Into::into).collect()
+                tool_params
+                    .additional_tools
+                    .as_ref()
+                    .map(|tools| tools.iter().map(Into::into).collect())
+                    .unwrap_or_default()
             }
             None => vec![],
         };

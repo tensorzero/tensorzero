@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -32,7 +32,7 @@ use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
-    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
+    tool::{DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert},
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
 };
@@ -874,16 +874,23 @@ pub async fn list_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<ListDatapointsPathParams>,
     Query(query_params): Query<ListDatapointsQueryParams>,
-) -> Result<Json<Vec<Datapoint>>, Error> {
-    list_datapoints(
+) -> Result<Json<Vec<DatapointWire>>, Error> {
+    let datapoints = list_datapoints(
         path_params.dataset_name,
         &app_state.clickhouse_connection_info,
         query_params.function_name,
         query_params.limit,
         query_params.offset,
     )
-    .await
-    .map(Json)
+    .await?;
+
+    // Convert all storage types to wire types
+    let wires: Vec<DatapointWire> = datapoints
+        .into_iter()
+        .map(|dp| dp.to_wire(&app_state.config))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(Json(wires))
 }
 
 #[tracing::instrument(name = "list_datapoints", skip(clickhouse))]
@@ -1043,16 +1050,19 @@ pub struct GetDatapointPathParams {
 pub async fn get_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<GetDatapointPathParams>,
-) -> Result<Json<Datapoint>, Error> {
-    app_state
+) -> Result<Json<DatapointWire>, Error> {
+    let datapoint = app_state
         .clickhouse_connection_info
         .get_datapoint(&GetDatapointParams {
             dataset_name: path_params.dataset_name,
             datapoint_id: path_params.datapoint_id,
             allow_stale: None,
         })
-        .await
-        .map(Json)
+        .await?;
+
+    // Convert storage type to wire type
+    let wire = datapoint.to_wire(&app_state.config)?;
+    Ok(Json(wire))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1160,43 +1170,49 @@ impl DatapointWire {
     }
 }
 
-impl From<Datapoint> for DatapointWire {
-    fn from(storage: Datapoint) -> Self {
-        match storage {
-            Datapoint::Chat(chat) => DatapointWire::Chat(chat.into()),
-            Datapoint::Json(json) => DatapointWire::Json(json),
+impl Datapoint {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn to_wire(self, config: &Config) -> Result<DatapointWire, Error> {
+        match self {
+            Datapoint::Chat(chat) => {
+                let function_config = config.get_function(&chat.function_name)?;
+                Ok(DatapointWire::Chat(chat.to_wire(&function_config)))
+            }
+            Datapoint::Json(json) => Ok(DatapointWire::Json(json)),
         }
     }
 }
 
-impl From<DatapointWire> for Datapoint {
-    fn from(wire: DatapointWire) -> Self {
-        match wire {
-            DatapointWire::Chat(chat) => Datapoint::Chat(chat.into()),
-            DatapointWire::Json(json) => Datapoint::Json(json),
-        }
-    }
-}
+impl ChatInferenceDatapointWire {
+    /// Convert to storage type, properly handling tool params with function config
+    pub fn to_storage(
+        self,
+        function_config: &FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<ChatInferenceDatapoint, Error> {
+        let tool_params = match self.tool_params {
+            Some(dynamic_params) => function_config
+                .dynamic_tool_params_to_database_insert(dynamic_params, static_tools)?,
+            None => None,
+        };
 
-impl From<ChatInferenceDatapointWire> for ChatInferenceDatapoint {
-    fn from(wire: ChatInferenceDatapointWire) -> Self {
-        Self {
-            dataset_name: wire.dataset_name,
-            function_name: wire.function_name,
-            id: wire.id,
-            episode_id: wire.episode_id,
-            input: wire.input,
-            output: wire.output,
-            tool_params: wire.tool_params.map(Into::into),
-            tags: wire.tags,
-            auxiliary: wire.auxiliary,
-            is_deleted: wire.is_deleted,
-            is_custom: wire.is_custom,
-            source_inference_id: wire.source_inference_id,
-            staled_at: wire.staled_at,
-            updated_at: wire.updated_at,
-            name: wire.name,
-        }
+        Ok(ChatInferenceDatapoint {
+            dataset_name: self.dataset_name,
+            function_name: self.function_name,
+            id: self.id,
+            episode_id: self.episode_id,
+            input: self.input,
+            output: self.output,
+            tool_params,
+            tags: self.tags,
+            auxiliary: self.auxiliary,
+            is_deleted: self.is_deleted,
+            is_custom: self.is_custom,
+            source_inference_id: self.source_inference_id,
+            staled_at: self.staled_at,
+            updated_at: self.updated_at,
+            name: self.name,
+        })
     }
 }
 
@@ -1396,24 +1412,29 @@ impl std::fmt::Display for ChatInferenceDatapointWire {
     }
 }
 
-impl From<ChatInferenceDatapoint> for ChatInferenceDatapointWire {
-    fn from(storage: ChatInferenceDatapoint) -> Self {
-        Self {
-            dataset_name: storage.dataset_name,
-            function_name: storage.function_name,
-            id: storage.id,
-            episode_id: storage.episode_id,
-            input: storage.input,
-            output: storage.output,
-            tool_params: storage.tool_params.map(Into::into),
-            tags: storage.tags,
-            auxiliary: storage.auxiliary,
-            is_deleted: storage.is_deleted,
-            is_custom: storage.is_custom,
-            source_inference_id: storage.source_inference_id,
-            staled_at: storage.staled_at,
-            updated_at: storage.updated_at,
-            name: storage.name,
+impl ChatInferenceDatapoint {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn to_wire(self, function_config: &FunctionConfig) -> ChatInferenceDatapointWire {
+        let tool_params = self
+            .tool_params
+            .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp));
+
+        ChatInferenceDatapointWire {
+            dataset_name: self.dataset_name,
+            function_name: self.function_name,
+            id: self.id,
+            episode_id: self.episode_id,
+            input: self.input,
+            output: self.output,
+            tool_params,
+            tags: self.tags,
+            auxiliary: self.auxiliary,
+            is_deleted: self.is_deleted,
+            is_custom: self.is_custom,
+            source_inference_id: self.source_inference_id,
+            staled_at: self.staled_at,
+            updated_at: self.updated_at,
+            name: self.name,
         }
     }
 }

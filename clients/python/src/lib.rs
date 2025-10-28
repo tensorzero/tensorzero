@@ -50,10 +50,7 @@ use tensorzero_core::{
         DiclConfigPyClass, MixtureOfNConfigPyClass,
     },
 };
-use tensorzero_core::{
-    endpoints::datasets::{Datapoint, DatapointWire},
-    stored_inference::{StoredInference, StoredInferenceWire},
-};
+use tensorzero_core::{endpoints::datasets::DatapointWire, stored_inference::StoredInferenceWire};
 use tensorzero_core::{
     endpoints::{
         datasets::InsertDatapointParams,
@@ -1071,9 +1068,8 @@ impl TensorZeroGateway {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-        let storage: Datapoint =
+        let wire: DatapointWire =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let wire: DatapointWire = storage.into();
         wire.into_pyobject(this.py())
     }
 
@@ -1093,8 +1089,7 @@ impl TensorZeroGateway {
         let fut = client.list_datapoints(dataset_name, function_name, limit, offset);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
-            Ok(resp) => {
-                let datapoints: Vec<DatapointWire> = resp.into_iter().map(Into::into).collect();
+            Ok(datapoints) => {
                 let py_datapoints = datapoints
                     .into_iter()
                     .map(|x| x.into_pyobject(this.py()))
@@ -1238,9 +1233,9 @@ impl TensorZeroGateway {
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
-        let storage: Vec<StoredInference> =
+        let wires: Vec<StoredInferenceWire> =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        Ok(storage.into_iter().map(Into::into).collect())
+        Ok(wires)
     }
 
     /// DEPRECATED: use `experimental_render_samples` instead.
@@ -1265,9 +1260,14 @@ impl TensorZeroGateway {
     ) -> PyResult<Vec<RenderedSample>> {
         tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
+        let config = client.config().ok_or_else(|| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -1293,9 +1293,14 @@ impl TensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Vec<RenderedSample>> {
         let client = this.as_super().client.clone();
+        let config = client.config().ok_or_else(|| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -1920,15 +1925,12 @@ impl AsyncTensorZeroGateway {
         dataset_name: String,
         datapoint_id: Bound<'_, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
-                Ok(resp) => {
-                    let wire: DatapointWire = resp.into();
-                    Ok(wire.into_py_any(py)?)
-                }
+                Ok(wire) => Ok(wire.into_py_any(py)?),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1952,11 +1954,7 @@ impl AsyncTensorZeroGateway {
                 .list_datapoints(dataset_name, function_name, limit, offset)
                 .await;
             Python::attach(|py| match res {
-                Ok(datapoints) => {
-                    let wire_datapoints: Vec<DatapointWire> =
-                        datapoints.into_iter().map(Into::into).collect();
-                    Ok(PyList::new(py, wire_datapoints)?.unbind())
-                }
+                Ok(wire_datapoints) => Ok(PyList::new(py, wire_datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2102,11 +2100,7 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.experimental_list_inferences(params).await;
             Python::attach(|py| match res {
-                Ok(stored_inferences) => {
-                    let wire_inferences: Vec<StoredInferenceWire> =
-                        stored_inferences.into_iter().map(Into::into).collect();
-                    Ok(PyList::new(py, wire_inferences)?.unbind())
-                }
+                Ok(wire_inferences) => Ok(PyList::new(py, wire_inferences)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2145,9 +2139,14 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'a, PyAny>> {
         tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
+        let config = client.config().ok_or_else(|| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
@@ -2181,9 +2180,14 @@ impl AsyncTensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
+        let config = client.config().ok_or_else(|| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client

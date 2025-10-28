@@ -1,5 +1,4 @@
 nextest-version = { recommended = "0.9.87" }
-experimental = ["wrapper-scripts"]
 
 [profile.default]
 retries = { backoff = "fixed", count = 2, delay = "5s", jitter = true }
@@ -29,13 +28,6 @@ slow-timeout = { period = "20s", terminate-after = 3 }
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse) | test(db::))"
 junit.path = "junit.xml"
-
-[scripts.wrapper.gdb]
-command = ["gdb", "--batch", "-ex=run", "-ex=bt", "-ex=quit", "--args"]
-
-[[profile.default.scripts]]
-filter = "all()"
-run-wrapper = "gdb"
 
 
 [profile.batch]

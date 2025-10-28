@@ -53,7 +53,7 @@ mod git;
 #[cfg(feature = "e2e_tests")]
 pub mod test_helpers;
 pub use tensorzero_core::stored_inference::{
-    RenderedSample, StoredChatInference, StoredInference, StoredJsonInference,
+    RenderedSample, StoredChatInference, StoredInference, StoredInferenceWire, StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
@@ -66,7 +66,8 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::endpoints::datasets::{
-    ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
+    ChatInferenceDatapoint, ChatInferenceDatapointWire, Datapoint, DatapointKind, DatapointWire,
+    JsonInferenceDatapoint,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
@@ -502,6 +503,15 @@ impl Client {
         }
     }
 
+    /// Gets the config from the embedded gateway
+    /// Returns None for HTTP gateway mode
+    pub fn config(&self) -> Option<&Config> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(_) => None,
+            ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state.config),
+        }
+    }
+
     /// Assigns feedback for a TensorZero inference.
     /// See https://www.tensorzero.com/docs/gateway/api-reference#post-feedback
     pub async fn feedback(
@@ -893,7 +903,7 @@ impl Client {
         function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
-    ) -> Result<Vec<Datapoint>, TensorZeroError> {
+    ) -> Result<Vec<DatapointWire>, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
@@ -912,7 +922,7 @@ impl Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                let datapoints = with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
                         &gateway.handle.app_state.clickhouse_connection_info,
@@ -923,7 +933,15 @@ impl Client {
                     .await
                     .map_err(err_to_http)
                 })
-                .await?)
+                .await?;
+
+                // Convert storage types to wire types
+                let wire_datapoints: Result<Vec<DatapointWire>, _> = datapoints
+                    .into_iter()
+                    .map(|dp| dp.to_wire(&gateway.handle.app_state.config))
+                    .collect();
+
+                wire_datapoints.map_err(|e| TensorZeroError::Other { source: e.into() })
             }
         }
     }
@@ -932,7 +950,7 @@ impl Client {
         &self,
         dataset_name: String,
         datapoint_id: Uuid,
-    ) -> Result<Datapoint, TensorZeroError> {
+    ) -> Result<DatapointWire, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
@@ -945,7 +963,7 @@ impl Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                let datapoint = with_embedded_timeout(*timeout, async {
                     gateway
                         .handle
                         .app_state
@@ -959,7 +977,12 @@ impl Client {
                         .await
                         .map_err(err_to_http)
                 })
-                .await?)
+                .await?;
+
+                // Convert storage type to wire type
+                datapoint
+                    .to_wire(&gateway.handle.app_state.config)
+                    .map_err(|e| TensorZeroError::Other { source: e.into() })
             }
         }
     }
@@ -1012,7 +1035,7 @@ impl Client {
     pub async fn experimental_list_inferences(
         &self,
         params: ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, TensorZeroError> {
+    ) -> Result<Vec<StoredInferenceWire>, TensorZeroError> {
         // TODO: consider adding a flag that returns the generated sql query
         let ClientMode::EmbeddedGateway { gateway, .. } = &*self.mode else {
             return Err(TensorZeroError::Other {
@@ -1030,7 +1053,14 @@ impl Client {
             .list_inferences(&gateway.handle.app_state.config, &params)
             .await
             .map_err(err_to_http)?;
-        Ok(inferences)
+
+        // Convert storage types to wire types
+        let wire_inferences: Result<Vec<StoredInferenceWire>, _> = inferences
+            .into_iter()
+            .map(|inf| inf.to_wire(&gateway.handle.app_state.config))
+            .collect();
+
+        wire_inferences.map_err(|e| TensorZeroError::Other { source: e.into() })
     }
 
     /// There are two things that need to happen in this function:

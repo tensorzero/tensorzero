@@ -1,12 +1,13 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
+use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
     content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
-use crate::tool::DynamicToolParams;
+use crate::tool::{DynamicToolParams, StaticToolConfig};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -193,38 +194,57 @@ impl StoredInferenceWire {
     }
 }
 
-impl From<StoredInference> for StoredInferenceWire {
-    fn from(storage: StoredInference) -> Self {
-        match storage {
-            StoredInference::Chat(chat) => StoredInferenceWire::Chat(chat.into()),
-            StoredInference::Json(json) => StoredInferenceWire::Json(json),
+impl StoredInference {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn to_wire(self, config: &Config) -> Result<StoredInferenceWire, Error> {
+        match self {
+            StoredInference::Chat(chat) => {
+                let function_config = config.get_function(&chat.function_name)?;
+                Ok(StoredInferenceWire::Chat(chat.to_wire(&function_config)))
+            }
+            StoredInference::Json(json) => Ok(StoredInferenceWire::Json(json)),
         }
     }
 }
 
-impl From<StoredInferenceWire> for StoredInference {
-    fn from(wire: StoredInferenceWire) -> Self {
-        match wire {
-            StoredInferenceWire::Chat(chat) => StoredInference::Chat(chat.into()),
-            StoredInferenceWire::Json(json) => StoredInference::Json(json),
+impl StoredInferenceWire {
+    /// Convert to storage type, properly handling tool params with function config
+    pub fn to_storage(self, config: &Config) -> Result<StoredInference, Error> {
+        match self {
+            StoredInferenceWire::Chat(chat) => {
+                let function_config = config.get_function(&chat.function_name)?;
+                Ok(StoredInference::Chat(
+                    chat.to_storage(&function_config, &config.tools)?,
+                ))
+            }
+            StoredInferenceWire::Json(json) => Ok(StoredInference::Json(json)),
         }
     }
 }
 
-impl From<StoredChatInferenceWire> for StoredChatInference {
-    fn from(wire: StoredChatInferenceWire) -> Self {
-        Self {
-            function_name: wire.function_name,
-            variant_name: wire.variant_name,
-            input: wire.input,
-            output: wire.output,
-            dispreferred_outputs: wire.dispreferred_outputs,
-            timestamp: wire.timestamp,
-            episode_id: wire.episode_id,
-            inference_id: wire.inference_id,
-            tool_params: wire.tool_params.into(),
-            tags: wire.tags,
-        }
+impl StoredChatInferenceWire {
+    /// Convert to storage type, properly handling tool params with function config
+    pub fn to_storage(
+        self,
+        function_config: &FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<StoredChatInference, Error> {
+        let tool_params = function_config
+            .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?
+            .unwrap_or_default();
+
+        Ok(StoredChatInference {
+            function_name: self.function_name,
+            variant_name: self.variant_name,
+            input: self.input,
+            output: self.output,
+            dispreferred_outputs: self.dispreferred_outputs,
+            timestamp: self.timestamp,
+            episode_id: self.episode_id,
+            inference_id: self.inference_id,
+            tool_params,
+            tags: self.tags,
+        })
     }
 }
 
@@ -279,19 +299,22 @@ impl StoredChatInferenceWire {
     }
 }
 
-impl From<StoredChatInference> for StoredChatInferenceWire {
-    fn from(storage: StoredChatInference) -> Self {
-        Self {
-            function_name: storage.function_name,
-            variant_name: storage.variant_name,
-            input: storage.input,
-            output: storage.output,
-            dispreferred_outputs: storage.dispreferred_outputs,
-            timestamp: storage.timestamp,
-            episode_id: storage.episode_id,
-            inference_id: storage.inference_id,
-            tool_params: storage.tool_params.into(),
-            tags: storage.tags,
+impl StoredChatInference {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn to_wire(self, function_config: &FunctionConfig) -> StoredChatInferenceWire {
+        let tool_params = function_config.database_insert_to_dynamic_tool_params(self.tool_params);
+
+        StoredChatInferenceWire {
+            function_name: self.function_name,
+            variant_name: self.variant_name,
+            input: self.input,
+            output: self.output,
+            dispreferred_outputs: self.dispreferred_outputs,
+            timestamp: self.timestamp,
+            episode_id: self.episode_id,
+            inference_id: self.inference_id,
+            tool_params,
+            tags: self.tags,
         }
     }
 }
@@ -477,7 +500,7 @@ impl RenderedSample {
             dispreferred_outputs: self.dispreferred_outputs,
             episode_id: self.episode_id,
             inference_id: self.inference_id,
-            tool_params: self.tool_params.map(Into::into),
+            tool_params: self.tool_params,
             output_schema: self.output_schema,
             tags: self.tags,
         }
@@ -496,7 +519,7 @@ pub struct LazyRenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_params: Option<DynamicToolParams>,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -671,6 +694,12 @@ pub async fn render_stored_sample<T: StoredSample>(
         tags,
     } = stored_sample.owned_simple_info();
     let model_input = render_model_input(&resolved_input, &function_name, config, variants).await?;
+
+    // Convert tool_params from storage format to wire format, subtracting static tools
+    let function_config = config.get_function(&function_name)?;
+    let dynamic_tool_params =
+        tool_params.map(|tp| function_config.database_insert_to_dynamic_tool_params(tp));
+
     Ok(RenderedSample {
         function_name,
         episode_id,
@@ -680,7 +709,7 @@ pub async fn render_stored_sample<T: StoredSample>(
         output,
         stored_output,
         dispreferred_outputs,
-        tool_params: tool_params.map(Into::into),
+        tool_params: dynamic_tool_params,
         output_schema,
         tags,
     })

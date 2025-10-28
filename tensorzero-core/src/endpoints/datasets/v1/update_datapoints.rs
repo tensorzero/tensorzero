@@ -234,7 +234,13 @@ async fn prepare_chat_update(
         updated_datapoint.output = Some(new_output);
     }
     if let Some(new_tool_params) = update.tool_params {
-        updated_datapoint.tool_params = new_tool_params.map(Into::into);
+        updated_datapoint.tool_params = match new_tool_params {
+            Some(dynamic_params) => function_config.dynamic_tool_params_to_database_insert(
+                dynamic_params,
+                &app_state.config.tools,
+            )?,
+            None => None,
+        };
     }
     if let Some(new_tags) = update.tags {
         updated_datapoint.tags = Some(new_tags);
@@ -525,7 +531,7 @@ mod tests {
         StoredInputMessageContent, Text, TextKind,
     };
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+    use crate::tool::{DynamicToolParams, ToolCallConfigDatabaseInsert, ToolChoice};
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
@@ -1133,17 +1139,22 @@ mod tests {
             let dataset_name = "test_dataset";
             let existing = create_sample_chat_datapoint(dataset_name);
 
-            let new_tool_params = ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
+            // Create DynamicToolParams directly instead of round-tripping through database_insert_to_dynamic_tool_params
+            // This represents a user setting allowed_tools to an empty list with tool_choice None
+            // When there are no tools available, the result should be None (tools disabled)
+            let dynamic_tool_params = DynamicToolParams {
+                allowed_tools: Some(vec![]),
+                additional_tools: None,
+                tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
+                provider_tools: None,
             };
 
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Some(Some(new_tool_params.clone().into())),
+                tool_params: Some(Some(dynamic_tool_params)),
                 tags: None,
                 metadata: None,
             };
@@ -1163,7 +1174,8 @@ mod tests {
                 panic!("Expected Chat insert");
             };
 
-            assert_eq!(updated.tool_params, Some(new_tool_params));
+            // When tools are disabled (empty allowed_tools), tool_params should be None
+            assert_eq!(updated.tool_params, None);
         }
 
         #[tokio::test]
@@ -1354,18 +1366,23 @@ mod tests {
             let new_output = vec![ContentBlockChatOutput::Text(Text {
                 text: "new output".to_string(),
             })];
-            let new_tool_params = ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            };
             let new_tags = HashMap::from([("new".to_string(), "tag".to_string())]);
+
+            // Create DynamicToolParams directly instead of round-tripping
+            // Setting allowed_tools to empty list means "no tools" which results in None
+            let dynamic_tool_params = DynamicToolParams {
+                allowed_tools: Some(vec![]),
+                additional_tools: None,
+                tool_choice: Some(ToolChoice::None),
+                parallel_tool_calls: Some(false),
+                provider_tools: None,
+            };
 
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: Some(new_input),
                 output: Some(new_output.clone()),
-                tool_params: Some(Some(new_tool_params.clone().into())),
+                tool_params: Some(Some(dynamic_tool_params)),
                 tags: Some(new_tags.clone()),
                 metadata: Some(DatapointMetadataUpdate {
                     name: Some(Some("updated_name".to_string())),
@@ -1389,7 +1406,7 @@ mod tests {
 
             // Verify all fields were updated
             assert_eq!(updated.output, Some(new_output));
-            assert_eq!(updated.tool_params, Some(new_tool_params));
+            assert_eq!(updated.tool_params, None); // Empty allowed_tools results in None
             assert_eq!(updated.tags, Some(new_tags));
             assert_eq!(updated.name, Some("updated_name".to_string()));
         }
