@@ -513,7 +513,7 @@ fn generate_image_example() -> RenderedSample {
                         text: "What is the main color of this image?".to_string(),
                     }),
                     StoredInputMessageContent::File(Box::new(StoredFile(
-                        tensorzero_core::inference::types::file::ObjectStoragePointer {
+                        ObjectStoragePointer {
                             source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             storage_path: StoragePath {

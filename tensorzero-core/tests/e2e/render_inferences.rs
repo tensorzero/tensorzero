@@ -6,6 +6,7 @@ use tensorzero::{
     ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
     StoredChatInference, StoredInference, StoredJsonInference, Tool,
 };
+use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
@@ -256,7 +257,7 @@ pub async fn test_render_samples_normal() {
                             text: "What is this a picture of?".to_string(),
                         }),
                         StoredInputMessageContent::File(Box::new(StoredFile(
-                            tensorzero_core::inference::types::file::ObjectStoragePointer {
+                            ObjectStoragePointer {
                                 source_url: None,
                                 mime_type: mime::IMAGE_PNG,
                                 storage_path: StoragePath {
@@ -806,7 +807,7 @@ pub async fn test_render_datapoints_normal() {
                             text: "What is this a picture of?".to_string(),
                         }),
                         StoredInputMessageContent::File(Box::new(StoredFile(
-                            tensorzero_core::inference::types::file::ObjectStoragePointer {
+                            ObjectStoragePointer {
                                 source_url: None,
                                 mime_type: mime::IMAGE_PNG,
                                 storage_path: StoragePath {
