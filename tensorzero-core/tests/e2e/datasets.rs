@@ -2989,7 +2989,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(initial_datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(initial_datapoint)])
         .await
         .unwrap();
 

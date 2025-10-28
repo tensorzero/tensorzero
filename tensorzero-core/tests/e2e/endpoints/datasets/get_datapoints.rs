@@ -67,7 +67,7 @@ mod get_datapoints_tests {
         });
 
         clickhouse
-            .insert_datapoint(&datapoint_insert)
+            .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
 
@@ -152,7 +152,7 @@ mod get_datapoints_tests {
         });
 
         clickhouse
-            .insert_datapoint(&datapoint_insert)
+            .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
 
@@ -352,7 +352,7 @@ mod get_datapoints_tests {
         });
 
         clickhouse
-            .insert_datapoint(&datapoint_insert)
+            .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
 
@@ -418,7 +418,7 @@ mod get_datapoints_tests {
         });
 
         clickhouse
-            .insert_datapoint(&datapoint_insert)
+            .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
 
@@ -878,7 +878,7 @@ mod list_datapoints_tests {
             is_custom: true,
         });
 
-        clickhouse.insert_datapoint(&datapoint).await.unwrap();
+        clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Filter with time before (should not return the datapoint)
@@ -1168,7 +1168,7 @@ mod list_datapoints_tests {
             is_custom: true,
         });
 
-        clickhouse.insert_datapoint(&datapoint).await.unwrap();
+        clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Verify it's returned before staling

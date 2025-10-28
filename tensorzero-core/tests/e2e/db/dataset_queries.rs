@@ -625,11 +625,11 @@ async fn test_count_datasets() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint1))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint1)])
         .await
         .unwrap();
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint2))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint2)])
         .await
         .unwrap();
 
@@ -686,7 +686,7 @@ async fn test_count_datapoints_for_dataset_function_chat() {
         };
 
         clickhouse
-            .insert_datapoint(&DatapointInsert::Chat(datapoint))
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
             .await
             .unwrap();
     }
@@ -755,7 +755,7 @@ async fn test_count_datapoints_for_dataset_function_json() {
         };
 
         clickhouse
-            .insert_datapoint(&DatapointInsert::Json(datapoint))
+            .insert_datapoints(&[DatapointInsert::Json(datapoint)])
             .await
             .unwrap();
     }
@@ -809,7 +809,7 @@ async fn test_insert_datapoint_chat() {
 
     // Insert the datapoint
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -864,7 +864,7 @@ async fn test_insert_datapoint_json() {
 
     // Insert the datapoint
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -913,7 +913,7 @@ async fn test_insert_datapoint_validates_dataset_name_builder() {
     };
 
     let result = clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await;
     assert!(result.is_err());
 }
@@ -945,7 +945,7 @@ async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix() {
     };
 
     let result = clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await;
     assert!(result.is_err());
 }
@@ -1108,7 +1108,10 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
     });
 
     // Test insertion
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[chat_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1211,7 +1214,10 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
     });
 
     // Test insertion
-    clickhouse.insert_datapoint(&json_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[json_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1332,12 +1338,19 @@ async fn test_handles_duplicate_insertions_gracefully() {
         source_inference_id: Some(source_inference_id),
         is_custom: false,
     });
+    let datapoint_slice = [chat_datapoint];
 
     // First insertion
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&datapoint_slice)
+        .await
+        .unwrap();
 
     // Second insertion with same ID should not throw
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&datapoint_slice)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -1480,7 +1493,7 @@ async fn test_insert_datapoint_handles_invalid_dataset_names() {
         is_custom: true,
     });
 
-    let result = clickhouse.insert_datapoint(&chat_datapoint).await;
+    let result = clickhouse.insert_datapoints(&[chat_datapoint]).await;
     assert!(
         result.is_err(),
         "Should reject reserved dataset name 'builder'"
@@ -1521,7 +1534,7 @@ async fn test_get_adjacent_datapoint_ids() {
         };
 
         clickhouse
-            .insert_datapoint(&DatapointInsert::Chat(datapoint))
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
             .await
             .unwrap();
     }
@@ -1634,7 +1647,7 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -1696,7 +1709,7 @@ async fn test_get_datapoints_with_single_json_datapoint() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Json(datapoint))
+        .insert_datapoints(&[DatapointInsert::Json(datapoint)])
         .await
         .unwrap();
 
@@ -1761,7 +1774,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(chat_dp1))
+        .insert_datapoints(&[DatapointInsert::Chat(chat_dp1)])
         .await
         .unwrap();
 
@@ -1789,7 +1802,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Json(json_dp))
+        .insert_datapoints(&[DatapointInsert::Json(json_dp)])
         .await
         .unwrap();
 
@@ -1816,7 +1829,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(chat_dp2))
+        .insert_datapoints(&[DatapointInsert::Chat(chat_dp2)])
         .await
         .unwrap();
 
@@ -1892,7 +1905,7 @@ async fn test_get_datapoints_with_non_existent_ids() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -1952,7 +1965,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -2037,7 +2050,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -2116,7 +2129,7 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -2190,7 +2203,10 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     });
 
     // Insert the datapoint
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[chat_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -2273,7 +2289,10 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     });
 
     // Insert the datapoint
-    clickhouse.insert_datapoint(&json_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[json_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -2377,7 +2396,10 @@ async fn test_datapoint_with_mixed_file_types() {
     });
 
     // Insert the datapoint
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[chat_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;

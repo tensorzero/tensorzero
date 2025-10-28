@@ -458,7 +458,7 @@ async fn test_update_datapoint_type_mismatch() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -525,7 +525,7 @@ async fn test_update_datapoint_with_metadata() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -661,7 +661,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -751,7 +751,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -840,7 +840,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -926,7 +926,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -1021,7 +1021,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -1118,7 +1118,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
