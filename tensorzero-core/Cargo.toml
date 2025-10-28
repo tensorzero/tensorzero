@@ -121,13 +121,13 @@ tracing-opentelemetry-instrumentation-sdk = { workspace = true, features = [
 tower-http = { workspace = true }
 tower-layer = "0.3.3"
 pyo3 = { workspace = true, optional = true }
-google-cloud-auth = "1.0.1"
+google-cloud-auth = "1.1.0"
 mime = { workspace = true }
 mime_guess = "2.0.5"
 indexmap = "2.12.0"
 base64 = "0.22.1"
 thiserror = "2.0.16"
-globset = "0.4.17"
+globset = "0.4.18"
 walkdir = "2.5.0"
 enum-map = "2.7.3"
 tokio-util = { version = "0.7.15", features = ["rt"] }
