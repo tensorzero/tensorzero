@@ -170,38 +170,6 @@ impl ExperimentationConfig {
             }
         })
     }
-
-    /// Returns display probabilities for all variants for UI visualization.
-    pub fn get_display_sampling_probabilities(
-        &self,
-        variants: &HashMap<String, Arc<VariantInfo>>,
-    ) -> HashMap<String, f64> {
-        match self {
-            Self::StaticWeights(config) => config.get_display_sampling_probabilities(variants),
-            Self::Uniform => {
-                // Uniform distribution over all variants
-                let num_variants = variants.len();
-                if num_variants == 0 {
-                    HashMap::new()
-                } else {
-                    let prob = 1.0 / (num_variants as f64);
-                    variants.keys().map(|name| (name.clone(), prob)).collect()
-                }
-            }
-            Self::TrackAndStop(config) => config.get_display_sampling_probabilities(),
-            #[cfg(test)]
-            Self::AlwaysFails(_config) => {
-                // For test purposes, just return uniform distribution
-                let num_variants = variants.len();
-                if num_variants == 0 {
-                    HashMap::new()
-                } else {
-                    let prob = 1.0 / (num_variants as f64);
-                    variants.keys().map(|name| (name.clone(), prob)).collect()
-                }
-            }
-        }
-    }
 }
 
 fn sample_uniform(

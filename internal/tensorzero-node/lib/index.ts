@@ -58,7 +58,6 @@ const {
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
   computeTrackAndStopState,
-  computeDisplayProbabilities,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -138,7 +137,7 @@ export async function getConfig(configPath: string | null): Promise<Config> {
 export { getQuantiles };
 
 // Export experimentation computation functions
-export { computeTrackAndStopState, computeDisplayProbabilities };
+export { computeTrackAndStopState };
 
 interface RunEvaluationStreamingParams {
   gatewayUrl: string;

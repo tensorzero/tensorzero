@@ -120,48 +120,6 @@ impl StaticWeightsConfig {
             fallback_variants,
         }
     }
-
-    /// Returns display probabilities for UI visualization.
-    /// Shows weighted probabilities for candidate variants or uniform for fallbacks.
-    pub fn get_display_sampling_probabilities(
-        &self,
-        variants: &HashMap<String, Arc<VariantInfo>>,
-    ) -> HashMap<String, f64> {
-        let mut probabilities = HashMap::new();
-
-        // Calculate total weight of candidate variants that exist in the variants map
-        let total_weight: f64 = self
-            .candidate_variants
-            .iter()
-            .filter(|(name, _)| variants.contains_key(*name))
-            .map(|(_, weight)| weight)
-            .sum();
-
-        if total_weight > 0.0 {
-            // Use weighted probabilities for candidate variants
-            for (name, weight) in &self.candidate_variants {
-                if variants.contains_key(name) {
-                    probabilities.insert(name.clone(), weight / total_weight);
-                }
-            }
-        } else {
-            // Use uniform distribution over fallback variants
-            let active_fallbacks: Vec<&String> = self
-                .fallback_variants
-                .iter()
-                .filter(|name| variants.contains_key(*name))
-                .collect();
-
-            if !active_fallbacks.is_empty() {
-                let uniform_prob = 1.0 / (active_fallbacks.len() as f64);
-                for name in active_fallbacks {
-                    probabilities.insert(name.clone(), uniform_prob);
-                }
-            }
-        }
-
-        probabilities
-    }
 }
 
 impl VariantSampler for StaticWeightsConfig {

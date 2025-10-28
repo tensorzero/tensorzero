@@ -393,15 +393,6 @@ impl UninitializedTrackAndStopConfig {
     }
 }
 
-impl TrackAndStopConfig {
-    /// Returns display probabilities for all variants for UI visualization.
-    /// This method reads the current state and computes display probabilities.
-    pub fn get_display_sampling_probabilities(&self) -> HashMap<String, f64> {
-        let state = self.state.load();
-        state.get_display_sampling_probabilities()
-    }
-}
-
 impl VariantSampler for TrackAndStopConfig {
     async fn setup(
         &self,

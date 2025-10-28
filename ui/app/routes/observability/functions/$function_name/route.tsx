@@ -42,11 +42,7 @@ import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
 import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { TimeWindow } from "tensorzero-node";
-import {
-  computeTrackAndStopState,
-  computeDisplayProbabilities,
-} from "tensorzero-node";
-import { getConfigPath } from "~/utils/config/index.server";
+import { computeTrackAndStopState } from "tensorzero-node";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -153,8 +149,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     feedbackTimeseriesPromise,
   ]);
 
-  // Compute display probabilities for all experimentation types
-  let display_probabilities: Record<string, number> = {};
+  // Compute track-and-stop state if needed
   let track_and_stop_state: unknown = undefined;
 
   if (function_config.experimentation.type === "track_and_stop") {
@@ -170,7 +165,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           variant_names: experimentationConfig.candidate_variants,
         });
 
-        // Compute the track-and-stop state (includes display probabilities)
+        // Compute the track-and-stop state (includes sampling probabilities)
         const stateJson = computeTrackAndStopState(
           JSON.stringify({
             candidate_variants: experimentationConfig.candidate_variants,
@@ -185,29 +180,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         );
 
         track_and_stop_state = JSON.parse(stateJson);
-        // Extract display probabilities from track-and-stop state
-        display_probabilities = (
-          track_and_stop_state as {
-            display_probabilities: Record<string, number>;
-          }
-        ).display_probabilities;
       }
     } catch (error) {
       logger.error("Failed to compute track-and-stop state:", error);
-    }
-  } else {
-    // For uniform and static_weights, compute display probabilities from config
-    try {
-      const configPath = getConfigPath();
-      const probabilitiesJson = await computeDisplayProbabilities(
-        JSON.stringify({
-          function_name,
-          config_path: configPath,
-        }),
-      );
-      display_probabilities = JSON.parse(probabilitiesJson);
-    } catch (error) {
-      logger.error("Failed to compute display probabilities:", error);
     }
   }
 
@@ -265,7 +240,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_counts: variant_counts_with_metadata,
     track_and_stop_state,
     feedback_timeseries,
-    display_probabilities,
   };
 }
 
@@ -281,7 +255,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_counts,
     track_and_stop_state,
     feedback_timeseries,
-    display_probabilities,
   } = loaderData;
 
   const navigate = useNavigate();
@@ -388,7 +361,6 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
               functionConfig={function_config}
               functionName={function_name}
               trackAndStopState={track_and_stop_state}
-              displayProbabilities={display_probabilities}
             />
             {feedback_timeseries && feedback_timeseries.length > 0 && (
               <FeedbackSamplesTimeseries

@@ -10,23 +10,57 @@ interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
   functionName: string;
   trackAndStopState?: unknown;
-  displayProbabilities?: Record<string, number>;
 }
 
 function extractVariantWeights(
-  displayProbabilities?: Record<string, number>,
+  functionConfig: FunctionConfig,
+  trackAndStopState?: unknown,
 ): VariantWeight[] {
-  // All probability computation is done in Rust via get_display_sampling_probabilities()
-  if (!displayProbabilities) {
-    return [];
-  }
+  const experimentationConfig = functionConfig.experimentation;
 
-  const variantWeights = Object.entries(displayProbabilities).map(
-    ([variant_name, weight]) => ({
+  let variantWeights: VariantWeight[];
+
+  if (experimentationConfig.type === "static_weights") {
+    // Extract weights from config and normalize to probabilities
+    const candidateVariants = experimentationConfig.candidate_variants;
+    variantWeights = Object.entries(candidateVariants)
+      .filter(([, weight]) => weight !== undefined)
+      .map(([variant_name, weight]) => ({
+        variant_name,
+        weight: weight!,
+      }));
+  } else if (experimentationConfig.type === "uniform") {
+    // Compute equal probabilities for all variants
+    const variantNames = Object.keys(functionConfig.variants);
+    const equalWeight = 1.0 / variantNames.length;
+    variantWeights = variantNames.map((variant_name) => ({
       variant_name,
-      weight,
-    }),
-  );
+      weight: equalWeight,
+    }));
+  } else if (experimentationConfig.type === "track_and_stop") {
+    // Extract sampling probabilities from track-and-stop state
+    // Always use the probabilities from computeTrackAndStopState()
+    if (!trackAndStopState) {
+      return [];
+    }
+
+    const state = trackAndStopState as {
+      sampling_probabilities?: Record<string, number>;
+    };
+
+    if (!state.sampling_probabilities) {
+      return [];
+    }
+
+    variantWeights = Object.entries(state.sampling_probabilities).map(
+      ([variant_name, weight]) => ({
+        variant_name,
+        weight,
+      }),
+    );
+  } else {
+    variantWeights = [];
+  }
 
   // Sort alphabetically for consistent display order (affects pie chart segment order and reload stability)
   return variantWeights.sort((a, b) =>
@@ -35,15 +69,19 @@ function extractVariantWeights(
 }
 
 export const FunctionExperimentation = memo(function FunctionExperimentation({
+  functionConfig,
   functionName,
-  displayProbabilities,
+  trackAndStopState,
 }: FunctionExperimentationProps) {
   // Don't render experimentation section for the default function
   if (functionName === DEFAULT_FUNCTION) {
     return null;
   }
 
-  const variantWeights = extractVariantWeights(displayProbabilities);
+  const variantWeights = extractVariantWeights(
+    functionConfig,
+    trackAndStopState,
+  );
 
   // Don't render if there are no variant weights
   if (variantWeights.length === 0) {
