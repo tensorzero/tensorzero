@@ -2008,10 +2008,8 @@ pub async fn test_start_batch_inference_write_file() {
                     {"type": "text", "text": "Tell me about this image"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                            "mime_type": "image/png",
-                        },
+                        "source_url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": {"type": "filesystem", "path": temp_dir.path().to_string_lossy()},
                             "path": file_path
