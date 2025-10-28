@@ -164,12 +164,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         });
 
         // Compute the track-and-stop state (includes sampling probabilities)
+        // Convert BigInt fields to numbers before JSON serialization
         const stateJson = computeTrackAndStopState(
           JSON.stringify({
             candidate_variants: experimentationConfig.candidate_variants,
-            feedback,
-            min_samples_per_variant:
+            feedback: feedback.map((f) => ({
+              ...f,
+              count: Number(f.count),
+            })),
+            min_samples_per_variant: Number(
               experimentationConfig.min_samples_per_variant,
+            ),
             delta: experimentationConfig.delta,
             epsilon: experimentationConfig.epsilon,
             min_prob: experimentationConfig.min_prob,
