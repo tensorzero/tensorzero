@@ -660,16 +660,24 @@ impl DatasetQueries for ClickHouseConnectionInfo {
     async fn delete_datapoints(
         &self,
         dataset_name: &str,
-        datapoint_ids: &[Uuid],
+        datapoint_ids: Option<&[Uuid]>,
     ) -> Result<u64, Error> {
-        let datapoint_ids_filter_clause = if datapoint_ids.is_empty() {
-            String::new()
-        } else {
-            format!(
-                "AND id IN [{}]",
-                datapoint_ids.iter().map(|id| format!("'{id}'")).join(",")
-            )
-        };
+        let datapoint_ids_filter_clause = match datapoint_ids {
+            None => Ok(String::new()),
+            Some(datapoint_ids) => {
+                if datapoint_ids.is_empty() {
+                    Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: "If datapoint_ids are provided as a vector, it must be non-empty"
+                            .to_string(),
+                    }))
+                } else {
+                    Ok(format!(
+                        "AND id IN [{}]",
+                        datapoint_ids.iter().map(|id| format!("'{id}'")).join(",")
+                    ))
+                }
+            }
+        }?;
 
         // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
         let chat_query = format!(
@@ -3825,7 +3833,9 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let result = conn.delete_datapoints("test_dataset", &[id1, id2]).await;
+        let result = conn
+            .delete_datapoints("test_dataset", Some(&[id1, id2]))
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 4); // 2 from chat + 2 from json
@@ -3867,7 +3877,7 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let result = conn.delete_datapoints("test_dataset", &[]).await;
+        let result = conn.delete_datapoints("test_dataset", None).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10); // 5 from chat + 5 from json
@@ -3911,7 +3921,7 @@ mod tests {
 
         let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
 
-        let result = conn.delete_datapoints("my_dataset", &[id1]).await;
+        let result = conn.delete_datapoints("my_dataset", Some(&[id1])).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 3); // 1 from chat + 2 from json
