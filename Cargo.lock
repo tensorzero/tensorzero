@@ -2165,6 +2165,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tensorzero",
+ "tensorzero-auth",
  "tensorzero-core",
  "tokio",
  "tokio-stream",

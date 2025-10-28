@@ -1,18 +1,22 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{DefaultBodyLimit, Request},
+    extract::{DefaultBodyLimit, Request, State},
     middleware::Next,
     response::Response,
     routing::{delete, get, patch, post, put},
     Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
-use tensorzero_core::observability::OtelEnabledRoutes;
+use tensorzero_auth::{key::TensorZeroApiKey, postgres::AuthResult};
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
 use tensorzero_core::{
     endpoints::openai_compatible::build_openai_compatible_routes,
     observability::{RouterExt as _, TracerWrapper},
+};
+use tensorzero_core::{
+    error::{Error, ErrorDetails},
+    observability::OtelEnabledRoutes,
 };
 use tower_http::{
     metrics::{in_flight_requests::InFlightRequestsCounter, InFlightRequestsLayer},
@@ -56,6 +60,74 @@ pub fn build_axum_router(
     (final_router, in_flight_requests_counter)
 }
 
+#[instrument(skip_all, fields(otel.name = "tensorzero_auth"))]
+async fn tensorzero_auth_middleware(
+    State(app_state): State<AppStateData>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let Some(auth_header) = request.headers().get(http::header::AUTHORIZATION) else {
+        return Error::new(ErrorDetails::TensorZeroAuth {
+            message: "Authorization header is required".to_string(),
+        })
+        .into_response();
+    };
+    let auth_header_value = auth_header.to_str().map_err(|e| {
+        return Error::new(ErrorDetails::TensorZeroAuth {
+            message: format!("Invalid authorization header: {e}"),
+        })
+        .into_response();
+    })?;
+    let raw_api_key = auth_header_value.strip_prefix("Bearer ").ok_or_else(|| {
+        return Error::new(ErrorDetails::TensorZeroAuth {
+            message: "Authorization header must start with 'Bearer '".to_string(),
+        })
+        .into_response();
+    })?;
+
+    let parsed_key = match TensorZeroApiKey::parse(raw_api_key) {
+        Ok(key) => key,
+        Err(e) => {
+            return Error::new(ErrorDetails::TensorZeroAuth {
+                message: format!("Invalid API key: {e}"),
+            })
+            .into_response();
+        }
+    };
+    let Some(pool) = app_state.postgres_connection_info.get_pool() else {
+        return Error::new(ErrorDetails::TensorZeroAuth {
+            message: "PostgreSQL connection is disabled".to_string(),
+        })
+        .into_response();
+    };
+    let postgres_key = match tensorzero_auth::postgres::check_key(&parsed_key, pool).await {
+        Ok(key) => key,
+        Err(e) => {
+            return Error::new(ErrorDetails::TensorZeroAuth {
+                message: format!("Failed to check API key: {e}"),
+            })
+            .into_response();
+        }
+    };
+    match postgres_key {
+        AuthResult::Success(key) => {
+            next.run(request).await;
+        }
+        AuthResult::Disabled(disabled_at) => {
+            return Error::new(ErrorDetails::TensorZeroAuth {
+                message: format!("API key was disabled at: {disabled_at}"),
+            })
+            .into_response();
+        }
+        AuthResult::MissingKey => {
+            return Error::new(ErrorDetails::TensorZeroAuth {
+                message: "Provided API key does not exist in the database".to_string(),
+            })
+            .into_response();
+        }
+    }
+}
+
 async fn add_version_header(request: Request, next: Next) -> Response {
     #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
     let mut version = axum::http::HeaderValue::from_static(endpoints::status::TENSORZERO_VERSION);
@@ -83,14 +155,22 @@ async fn add_version_header(request: Request, next: Next) -> Response {
 }
 
 fn build_api_routes(
+    app_state: AppStateData,
     otel_tracer: Option<Arc<TracerWrapper>>,
     metrics_handle: PrometheusHandle,
 ) -> Router<AppStateData> {
     let (otel_enabled_routes, otel_enabled_router) = build_otel_enabled_routes();
-    Router::new()
+    let mut router = Router::new()
         .merge(otel_enabled_router)
         .merge(build_non_otel_enabled_routes(metrics_handle))
-        .apply_top_level_otel_http_trace_layer(otel_tracer, otel_enabled_routes)
+        .apply_top_level_otel_http_trace_layer(otel_tracer, otel_enabled_routes);
+
+    if app_state.config.gateway.auth.enabled {
+        router = router.layer(tensorzero_auth_middleware);
+    }
+    // Apply these routes after we've (possibly) applied the auth middleware,
+    // so that these routes run outside of the auth middleware.
+    router.merge(build_non_otel_enabled_unauthenticated_routes())
 }
 
 /// Defines routes that should have top-level OpenTelemetry HTTP spans created
@@ -128,13 +208,18 @@ fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
     )
 }
 
+/// Define routes that have neither OTEL spans nor TensorZero API key authentication
+fn build_non_otel_enabled_unauthenticated_routes() -> Router<AppStateData> {
+    Router::new()
+        .route("/status", get(endpoints::status::status_handler))
+        .route("/health", get(endpoints::status::health_handler))
+}
+
 // Defines routes that should not have top-level OpenTelemetry HTTP spans created
 // We use this for internal routes which we don't want to expose to users,
 // or uninteresting routes like /health
 fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
     Router::new()
-        .route("/status", get(endpoints::status::status_handler))
-        .route("/health", get(endpoints::status::health_handler))
         .route(
             "/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::create_datapoints_handler),

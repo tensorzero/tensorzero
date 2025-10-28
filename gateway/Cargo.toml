@@ -27,6 +27,7 @@ http-body = "1.0.1"
 pin-project = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }
+tensorzero-auth = { path = "../internal/tensorzero-auth" }
 
 [lints]
 workspace = true

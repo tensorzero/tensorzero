@@ -10,6 +10,12 @@ use super::ObjectStoreInfo;
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+pub struct AuthConfig {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedGatewayConfig {
     #[serde(serialize_with = "serialize_optional_socket_addr")]
     pub bind_address: Option<std::net::SocketAddr>,
@@ -41,6 +47,8 @@ pub struct UninitializedGatewayConfig {
     #[serde(default)]
     pub disable_pseudonymous_usage_analytics: bool,
     pub fetch_and_encode_input_files_before_inference: Option<bool>,
+    #[serde(default)]
+    pub auth: AuthConfig,
 }
 
 impl UninitializedGatewayConfig {
@@ -88,6 +96,7 @@ impl UninitializedGatewayConfig {
                 .unstable_disable_feedback_target_validation,
             disable_pseudonymous_usage_analytics: self.disable_pseudonymous_usage_analytics,
             fetch_and_encode_input_files_before_inference,
+            auth: self.auth,
         })
     }
 }
@@ -110,6 +119,7 @@ pub struct GatewayConfig {
     pub disable_pseudonymous_usage_analytics: bool,
     #[serde(default = "default_fetch_and_encode_input_files_before_inference")]
     pub fetch_and_encode_input_files_before_inference: bool,
+    pub auth: AuthConfig,
 }
 
 impl Default for GatewayConfig {

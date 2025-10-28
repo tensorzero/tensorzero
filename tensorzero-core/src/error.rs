@@ -195,6 +195,9 @@ pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
     },
+    TensorZeroAuth {
+        message: String,
+    },
     InvalidInferenceTarget {
         message: String,
     },
