@@ -974,7 +974,11 @@ impl TrackAndStopState {
     }
 
     /// Computes display probabilities for all variants for UI visualization.
-    /// The probabilities always sum to 1.0 and reflect the actual sampling behavior.
+    /// The sampling behavior for nursery variants is actually round-robin, meaning
+    /// it's deterministic rather than probabilistic. For states that include nursery
+    /// variants, we display probabilities that are uniform over the nursery variants.
+    /// In that sense, these probabilities are for visual reference only, since they do
+    /// not strictly represent the sampling behavior.
     pub fn get_display_sampling_probabilities(&self) -> HashMap<String, f64> {
         match self {
             TrackAndStopState::Stopped {
@@ -2210,6 +2214,264 @@ mod tests {
                 }
             }
             _ => panic!("Expected NurseryAndBandits state, got {state:?}"),
+        }
+    }
+
+    // Tests for get_display_sampling_probabilities()
+    #[test]
+    fn test_get_display_sampling_probabilities_stopped() {
+        let state = TrackAndStopState::Stopped {
+            winner_variant_name: "A".to_string(),
+        };
+
+        let probs = state.get_display_sampling_probabilities();
+
+        assert_eq!(probs.len(), 1);
+        assert_eq!(probs.get("A"), Some(&1.0));
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9, "Probabilities should sum to 1.0");
+    }
+
+    #[test]
+    fn test_get_display_sampling_probabilities_nursery_only() {
+        let state = TrackAndStopState::NurseryOnly(Nursery::new(vec![
+            "A".to_string(),
+            "B".to_string(),
+            "C".to_string(),
+        ]));
+
+        let probs = state.get_display_sampling_probabilities();
+
+        assert_eq!(probs.len(), 3);
+
+        // Each variant should have 1/3 probability
+        assert!((probs.get("A").unwrap() - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs.get("B").unwrap() - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs.get("C").unwrap() - 1.0 / 3.0).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9, "Probabilities should sum to 1.0");
+    }
+
+    #[test]
+    fn test_get_display_sampling_probabilities_nursery_only_single_variant() {
+        let state = TrackAndStopState::NurseryOnly(Nursery::new(vec!["A".to_string()]));
+
+        let probs = state.get_display_sampling_probabilities();
+
+        assert_eq!(probs.len(), 1);
+        assert_eq!(probs.get("A"), Some(&1.0));
+
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_display_sampling_probabilities_bandits_only() {
+        let mut sampling_probs = HashMap::new();
+        sampling_probs.insert("A".to_string(), 0.3);
+        sampling_probs.insert("B".to_string(), 0.7);
+
+        let state = TrackAndStopState::BanditsOnly {
+            sampling_probabilities: sampling_probs.clone(),
+        };
+
+        let probs = state.get_display_sampling_probabilities();
+
+        assert_eq!(probs.len(), 2);
+        assert_eq!(probs.get("A"), Some(&0.3));
+        assert_eq!(probs.get("B"), Some(&0.7));
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9, "Probabilities should sum to 1.0");
+    }
+
+    #[test]
+    fn test_get_display_sampling_probabilities_nursery_and_bandits() {
+        let mut sampling_probs = HashMap::new();
+        sampling_probs.insert("A".to_string(), 0.3);
+        sampling_probs.insert("B".to_string(), 0.7);
+
+        let state = TrackAndStopState::NurseryAndBandits {
+            nursery: Nursery::new(vec!["C".to_string()]),
+            sampling_probabilities: sampling_probs,
+        };
+
+        let probs = state.get_display_sampling_probabilities();
+
+        assert_eq!(probs.len(), 3);
+
+        // Total: 2 bandits + 1 nursery = 3 variants
+        // Nursery gets 1/3 of probability mass
+        // Bandits get 2/3 of probability mass
+        let nursery_mass = 1.0 / 3.0;
+        let bandit_mass = 2.0 / 3.0;
+
+        // C gets all nursery mass (1 nursery variant)
+        assert!(
+            (probs.get("C").unwrap() - nursery_mass).abs() < 1e-9,
+            "C should get {} but got {}",
+            nursery_mass,
+            probs.get("C").unwrap()
+        );
+
+        // A gets 0.3 * bandit_mass
+        assert!(
+            (probs.get("A").unwrap() - 0.3 * bandit_mass).abs() < 1e-9,
+            "A should get {} but got {}",
+            0.3 * bandit_mass,
+            probs.get("A").unwrap()
+        );
+
+        // B gets 0.7 * bandit_mass
+        assert!(
+            (probs.get("B").unwrap() - 0.7 * bandit_mass).abs() < 1e-9,
+            "B should get {} but got {}",
+            0.7 * bandit_mass,
+            probs.get("B").unwrap()
+        );
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!(
+            (sum - 1.0).abs() < 1e-9,
+            "Probabilities should sum to 1.0, got {sum}"
+        );
+    }
+
+    #[test]
+    fn test_get_display_sampling_probabilities_nursery_and_bandits_multiple_nursery() {
+        let mut sampling_probs = HashMap::new();
+        sampling_probs.insert("A".to_string(), 0.4);
+        sampling_probs.insert("B".to_string(), 0.6);
+
+        let state = TrackAndStopState::NurseryAndBandits {
+            nursery: Nursery::new(vec!["C".to_string(), "D".to_string()]),
+            sampling_probabilities: sampling_probs,
+        };
+
+        let probs = state.get_display_sampling_probabilities();
+
+        assert_eq!(probs.len(), 4);
+
+        // Total: 2 bandits + 2 nursery = 4 variants
+        // Nursery gets 2/4 = 0.5 of probability mass
+        // Bandits get 2/4 = 0.5 of probability mass
+        let nursery_mass = 0.5;
+        let bandit_mass = 0.5;
+
+        // Each nursery variant gets nursery_mass / 2
+        let nursery_per_variant = nursery_mass / 2.0;
+        assert!((probs.get("C").unwrap() - nursery_per_variant).abs() < 1e-9);
+        assert!((probs.get("D").unwrap() - nursery_per_variant).abs() < 1e-9);
+
+        // Bandit probabilities are scaled by bandit_mass
+        assert!((probs.get("A").unwrap() - 0.4 * bandit_mass).abs() < 1e-9);
+        assert!((probs.get("B").unwrap() - 0.6 * bandit_mass).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_display_sampling_probabilities_nursery_and_stopped() {
+        let state = TrackAndStopState::NurseryAndStopped {
+            nursery: Nursery::new(vec!["C".to_string()]),
+            stopped_variant_name: "A".to_string(),
+        };
+
+        let probs = state.get_display_sampling_probabilities();
+
+        assert_eq!(probs.len(), 2);
+
+        // Total: 1 stopped + 1 nursery = 2 variants
+        // Nursery gets 1/2 of probability mass
+        // Stopped gets 1/2 of probability mass
+        let nursery_mass = 0.5;
+        let stopped_mass = 0.5;
+
+        assert!((probs.get("C").unwrap() - nursery_mass).abs() < 1e-9);
+        assert!((probs.get("A").unwrap() - stopped_mass).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_display_sampling_probabilities_nursery_and_stopped_multiple_nursery() {
+        let state = TrackAndStopState::NurseryAndStopped {
+            nursery: Nursery::new(vec!["C".to_string(), "D".to_string(), "E".to_string()]),
+            stopped_variant_name: "A".to_string(),
+        };
+
+        let probs = state.get_display_sampling_probabilities();
+
+        assert_eq!(probs.len(), 4);
+
+        // Total: 1 stopped + 3 nursery = 4 variants
+        // Nursery gets 3/4 of probability mass
+        // Stopped gets 1/4 of probability mass
+        let nursery_mass = 0.75;
+        let stopped_mass = 0.25;
+
+        // Each nursery variant gets nursery_mass / 3
+        let nursery_per_variant = nursery_mass / 3.0;
+        assert!((probs.get("C").unwrap() - nursery_per_variant).abs() < 1e-9);
+        assert!((probs.get("D").unwrap() - nursery_per_variant).abs() < 1e-9);
+        assert!((probs.get("E").unwrap() - nursery_per_variant).abs() < 1e-9);
+
+        assert!((probs.get("A").unwrap() - stopped_mass).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_display_sampling_probabilities_always_sums_to_one() {
+        // Test a variety of states to ensure probabilities always sum to 1.0
+        let test_cases = vec![
+            TrackAndStopState::Stopped {
+                winner_variant_name: "winner".to_string(),
+            },
+            TrackAndStopState::NurseryOnly(Nursery::new(vec!["A".to_string(), "B".to_string()])),
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities: {
+                    let mut probs = HashMap::new();
+                    probs.insert("A".to_string(), 0.25);
+                    probs.insert("B".to_string(), 0.25);
+                    probs.insert("C".to_string(), 0.5);
+                    probs
+                },
+            },
+            TrackAndStopState::NurseryAndBandits {
+                nursery: Nursery::new(vec!["D".to_string()]),
+                sampling_probabilities: {
+                    let mut probs = HashMap::new();
+                    probs.insert("A".to_string(), 0.3);
+                    probs.insert("B".to_string(), 0.7);
+                    probs
+                },
+            },
+            TrackAndStopState::NurseryAndStopped {
+                nursery: Nursery::new(vec!["C".to_string(), "D".to_string()]),
+                stopped_variant_name: "winner".to_string(),
+            },
+        ];
+
+        for (i, state) in test_cases.iter().enumerate() {
+            let probs = state.get_display_sampling_probabilities();
+            let sum: f64 = probs.values().sum();
+            assert!(
+                (sum - 1.0).abs() < 1e-9,
+                "Test case {i}: probabilities should sum to 1.0, got {sum}"
+            );
         }
     }
 }
