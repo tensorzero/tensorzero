@@ -35,7 +35,6 @@ describe("native sft", () => {
       limit: BigInt(100),
       offset: BigInt(0),
       val_fraction: 0.1,
-      format: "JsonEachRow",
       optimizer_config: {
         type: "openai_sft",
         model: "gpt-4o-mini",

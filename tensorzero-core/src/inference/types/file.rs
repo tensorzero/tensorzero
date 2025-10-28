@@ -1,3 +1,49 @@
+//! File Handling for TensorZero Inference Inputs
+//!
+//! This module defines file types for different stages of the file lifecycle:
+//! from client requests through async processing to database storage and retrieval.
+//!
+//! # File Type Categories
+//!
+//! ## 1. `File` - Input from Client Requests
+//! The primary enum representing files as they arrive from API requests.
+//! Four variants handle different input formats:
+//! - **`Url`**: A file URL that needs to be fetched
+//! - **`Base64`**: A base64-encoded file with data already present
+//! - **`ObjectStoragePointer`**: A pointer to an object storage location (metadata only, no data)
+//! - **`ObjectStorage`**: A complete object storage file (metadata + data)
+//!
+//! ## 2. `LazyFile` - Async Processing
+//! An intermediate type used during inference processing. Enables lazy evaluation
+//! of file operations using shared futures for concurrent access.
+//! Four variants mirror the `File` variants:
+//! - **`Url`**: Contains a `FileFuture` that will fetch and store the file
+//! - **`Base64`**: Contains a `PendingObjectStoreFile` (base64 data + pending object storage path)
+//! - **`ObjectStoragePointer`**: Contains a `FileFuture` that will fetch from object storage
+//! - **`ObjectStorage`**: Contains resolved `ObjectStorageFile` (no async work needed)
+//!
+//! The shared futures allow multiple model providers to await the same file resolution
+//! without redundant fetches or computations.
+//!
+//! ## 3. `StoredFile` - Database Persistence
+//! A newtype wrapper around `ObjectStoragePointer` used for ClickHouse storage.
+//! Only stores metadata (source URL, mime type, storage path) without the actual file data.
+//! The storage path is content-addressed, allowing files to be re-fetched when needed.
+//!
+//! # Flow Between Types
+//!
+//! ```text
+//! Client Request → File
+//!                   ↓
+//!              LazyFile (with futures for async operations)
+//!                   ↓ .resolve()
+//!           ObjectStorageFile (metadata + data)
+//!                   ↓ .into_stored_file()
+//!              StoredFile (metadata only, persisted to ClickHouse)
+//!                   ↓ .reresolve() (fetch data from storage)
+//!           ObjectStorageFile (metadata + data)
+//! ```
+
 use std::borrow::Cow;
 
 use futures::FutureExt;
@@ -11,7 +57,7 @@ use super::{ContentBlock, RequestMessage};
 use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     http::TensorzeroHttpClient,
-    inference::types::{resolved_input::LazyFile, storage::StoragePath},
+    inference::types::{resolved_input::LazyFile, storage::StoragePath, stored_input::StoredFile},
 };
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
@@ -36,28 +82,100 @@ pub fn require_image(mime_type: &MediaType, provider_type: &str) -> Result<(), E
     Ok(())
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
+/// A file already encoded as base64
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[cfg_attr(feature = "pyo3", pyclass)]
+#[ts(export)]
 pub struct Base64File {
     // The original url we used to download the file
-    pub url: Option<Url>,
-    #[cfg_attr(test, ts(type = "string"))]
+    #[serde(alias = "url")] // DEPRECATED
+    #[ts(optional)]
+    pub source_url: Option<Url>,
+    #[ts(type = "string")]
     pub mime_type: MediaType,
-    // TODO - should we add a wrapper type to enforce base64?
+    // TODO: should we add a wrapper type to enforce base64?
     pub data: String,
 }
 
+/// Implement a custom deserializer for Base64File to show a deprecation warning for the `url` field
+impl<'de> Deserialize<'de> for Base64File {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Base64FileHelper {
+            #[serde(alias = "url")]
+            source_url: Option<Url>,
+            mime_type: MediaType,
+            data: String,
+        }
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        // Check if the deprecated "url" field is present
+        if value.get("url").is_some() && value.get("source_url").is_none() {
+            tracing::warn!(
+                "Deprecation Warning: `url` is deprecated for `Base64File`. \
+                Please use `source_url` instead."
+            );
+        }
+
+        let helper: Base64FileHelper =
+            serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+
+        Ok(Base64File {
+            source_url: helper.source_url,
+            mime_type: helper.mime_type,
+            data: helper.data,
+        })
+    }
+}
+
 /// Like `Base64File`, but without the data field.
-#[derive(ts_rs::TS, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(ts_rs::TS, Clone, Debug, Serialize, PartialEq)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass)]
 pub struct Base64FileMetadata {
     // The original url we used to download the file
-    pub url: Option<Url>,
+    #[serde(alias = "url")] // DEPRECATED
+    #[ts(optional)]
+    pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
+}
+
+/// Implement a custom deserializer for Base64FileMetadata to show a deprecation warning for the `url` field
+impl<'de> Deserialize<'de> for Base64FileMetadata {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Base64FileMetadataHelper {
+            #[serde(alias = "url")]
+            source_url: Option<Url>,
+            mime_type: MediaType,
+        }
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        // Check if the deprecated "url" field is present
+        if value.get("url").is_some() && value.get("source_url").is_none() {
+            tracing::warn!(
+                "Deprecation Warning: `url` is deprecated for `Base64FileMetadata`. \
+                Please use `source_url` instead."
+            );
+        }
+
+        let helper: Base64FileMetadataHelper =
+            serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+
+        Ok(Base64FileMetadata {
+            source_url: helper.source_url,
+            mime_type: helper.mime_type,
+        })
+    }
 }
 
 impl std::fmt::Display for Base64File {
@@ -77,7 +195,7 @@ impl Base64File {
 impl Base64File {
     #[getter(url)]
     pub fn url_string(&self) -> Option<String> {
-        self.url.as_ref().map(Url::to_string)
+        self.source_url.as_ref().map(Url::to_string)
     }
 
     #[getter(mime_type)]
@@ -100,8 +218,96 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
     })
 }
 
+/// A file that can be located at a URL
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct UrlFile {
+    pub url: Url,
+    #[ts(type = "string | null")]
+    pub mime_type: Option<MediaType>,
+}
+
+/// A file stored in an object storage backend, without data.
+/// This struct can be stored in the database. It's used by `StoredFile` (`StoredInput`).
+/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ObjectStoragePointer {
+    #[serde(alias = "url")] // DEPRECATED (SEE IMPORTANT NOTE BELOW)
+    #[ts(optional)]
+    pub source_url: Option<Url>,
+    #[ts(type = "string")]
+    pub mime_type: MediaType,
+    pub storage_path: StoragePath,
+}
+
+/// A file stored in an object storage backend, with data.
+/// This struct can NOT be stored in the database.
+/// Note: `File` supports both `ObjectStorageFilePointer` and `ObjectStorageFile`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ObjectStorageFile {
+    #[serde(flatten)]
+    pub file: ObjectStoragePointer,
+    // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
+    // TODO: should we add a wrapper type to enforce base64?
+    pub data: String,
+}
+
+/// A newtype wrapper around `ObjectStorageFile` that represents file data
+/// from a base64 input that needs to be written to object storage.
+/// The `storage_path` inside is content-addressed (computed from data) and represents
+/// where the file WILL be written, not where it currently exists.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct PendingObjectStoreFile(pub ObjectStorageFile);
+
+impl std::ops::Deref for PendingObjectStoreFile {
+    type Target = ObjectStorageFile;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// Implement a custom deserializer for ObjectStorageFile to show a deprecation warning for the `url` field
+///
+/// IMPORTANT: This deserializer can't be fully removed. Eventually, we'll want to move it from `ObjectStoragePointer`
+/// to `StoredFile`, but ClickHouse will still have legacy data with `url`.
+impl<'de> Deserialize<'de> for ObjectStoragePointer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct ObjectStorageFileHelper {
+            #[serde(alias = "url")]
+            source_url: Option<Url>,
+            mime_type: MediaType,
+            storage_path: StoragePath,
+        }
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        // Check if the deprecated "url" field is present
+        if value.get("url").is_some() && value.get("source_url").is_none() {
+            tracing::warn!(
+                "Deprecation Warning: `url` is deprecated for `ObjectStorageFile`. \
+                Please use `source_url` instead."
+            );
+        }
+
+        let helper: ObjectStorageFileHelper =
+            serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+
+        Ok(ObjectStoragePointer {
+            source_url: helper.source_url,
+            mime_type: helper.mime_type,
+            storage_path: helper.storage_path,
+        })
+    }
+}
+
 /// A file for an inference or a datapoint.
-#[derive(Clone, Debug, PartialEq, ts_rs::TS, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, ts_rs::TS)]
 #[serde(tag = "file_type", rename_all = "snake_case")]
 #[ts(export)]
 // NOTE(shuyangli, 2025-10-21): we're manually implementing Serialize and Deserialize for a while until we're confident
@@ -109,25 +315,10 @@ pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error>
 // deserialization accepts both tagged and untagged formats for backwards compatibility.
 // TODO(#4107): Remove this once we're confident that clients are sending us the tagged version.
 pub enum File {
-    /// A file that can be located at a URL.
-    Url {
-        url: Url,
-        #[ts(type = "string | null")]
-        mime_type: Option<MediaType>,
-    },
-    /// A file already encoded as base64.
-    Base64 {
-        #[ts(type = "string")]
-        mime_type: MediaType,
-        data: String,
-    },
-    /// A file stored in an object storage backend.
-    ObjectStorage {
-        source_url: Option<Url>,
-        #[ts(type = "string")]
-        mime_type: MediaType,
-        storage_path: StoragePath,
-    },
+    Url(UrlFile),                               // a file URL
+    Base64(Base64File),                         // a base64-encoded file
+    ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (metadata only)
+    ObjectStorage(ObjectStorageFile),           // a file from object storage (metadata + data)
 }
 
 // Allow deserializing File as either tagged or untagged format.
@@ -150,10 +341,15 @@ impl<'de> Deserialize<'de> for File {
                 mime_type: MediaType,
                 data: String,
             },
-            ObjectStorage {
+            ObjectStoragePointer {
                 source_url: Option<Url>,
                 mime_type: MediaType,
                 storage_path: StoragePath,
+            },
+            ObjectStorage {
+                #[serde(flatten)]
+                file: ObjectStoragePointer,
+                data: String,
             },
         }
 
@@ -169,10 +365,15 @@ impl<'de> Deserialize<'de> for File {
                 mime_type: MediaType,
                 data: String,
             },
-            ObjectStorage {
+            ObjectStoragePointer {
                 source_url: Option<Url>,
                 mime_type: MediaType,
                 storage_path: StoragePath,
+            },
+            ObjectStorage {
+                #[serde(flatten)]
+                file: ObjectStoragePointer,
+                data: String,
             },
         }
 
@@ -186,35 +387,49 @@ impl<'de> Deserialize<'de> for File {
 
         match FileTaggedOrUntagged::deserialize(deserializer)? {
             FileTaggedOrUntagged::Tagged(TaggedFile::Url { url, mime_type }) => {
-                Ok(File::Url { url, mime_type })
+                Ok(File::Url(UrlFile { url, mime_type }))
             }
             FileTaggedOrUntagged::Tagged(TaggedFile::Base64 { mime_type, data }) => {
-                Ok(File::Base64 { mime_type, data })
+                Ok(File::Base64(Base64File {
+                    mime_type,
+                    data,
+                    source_url: None,
+                }))
             }
-            FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStorage {
+            FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
-            }) => Ok(File::ObjectStorage {
+            }) => Ok(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
-            }),
+            })),
+            FileTaggedOrUntagged::Tagged(TaggedFile::ObjectStorage { file, data }) => {
+                Ok(File::ObjectStorage(ObjectStorageFile { file, data }))
+            }
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Url { url, mime_type }) => {
-                Ok(File::Url { url, mime_type })
+                Ok(File::Url(UrlFile { url, mime_type }))
             }
             FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::Base64 { mime_type, data }) => {
-                Ok(File::Base64 { mime_type, data })
+                Ok(File::Base64(Base64File {
+                    mime_type,
+                    data,
+                    source_url: None,
+                }))
             }
-            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStorage {
+            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
-            }) => Ok(File::ObjectStorage {
+            }) => Ok(File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url,
                 mime_type,
                 storage_path,
-            }),
+            })),
+            FileTaggedOrUntagged::Untagged(LegacyUntaggedFile::ObjectStorage { file, data }) => {
+                Ok(File::ObjectStorage(ObjectStorageFile { file, data }))
+            }
         }
     }
 }
@@ -222,7 +437,8 @@ impl<'de> Deserialize<'de> for File {
 impl File {
     pub async fn take_or_fetch(self, client: &TensorzeroHttpClient) -> Result<Base64File, Error> {
         match self {
-            File::Url { url, mime_type } => {
+            File::Url(url_file) => {
+                let UrlFile { url, mime_type } = url_file;
                 let response = client.get(url.clone()).send().await.map_err(|e| {
                     Error::new(ErrorDetails::BadFileFetch {
                         url: url.clone(),
@@ -322,21 +538,39 @@ impl File {
 
                 let data = base64::encode(bytes);
                 Ok(Base64File {
-                    url: Some(url.clone()),
+                    source_url: Some(url.clone()),
                     mime_type,
                     data,
                 })
             }
-            File::Base64 { mime_type, data } => Ok(Base64File {
-                url: None,
-                mime_type,
-                data,
-            }),
-            File::ObjectStorage { .. } => Err(Error::new(ErrorDetails::InternalError {
+            File::Base64(base64_file) => {
+                Ok(Base64File { source_url: None, ..base64_file })
+            }
+            File::ObjectStoragePointer(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
                 message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
             })),
+            File::ObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
+                // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
+                // the base File::Url type calls this method.
+                message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+            })),
+        }
+    }
+
+    pub fn into_stored_file(self) -> Result<StoredFile, Error> {
+        match self {
+            File::ObjectStorage(ObjectStorageFile { file, data: _ }) => {
+                Ok(StoredFile(file))
+            }
+            File::Url(_) | File::Base64(_) | File::ObjectStoragePointer(_) => {
+                Err(Error::new(ErrorDetails::InternalError {
+                    message: format!(
+                        "File::into_stored_file should only be called on ObjectStorage! {IMPOSSIBLE_ERROR_MESSAGE}"
+                    ),
+                }))
+            }
         }
     }
 }
@@ -360,14 +594,19 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                         // there's nothing to strip from the message.
                         // We ignore errors here, since an error during file resolution means that
                         // we cannot have included the file bytes in `raw_request`.
-                        if let Some(Ok(file)) = future.clone().now_or_never() {
-                            Some(Cow::Owned(file))
+                        if let Some(Ok(resolved)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(File::ObjectStorage(resolved)))
                         } else {
                             None
                         }
                     }
-                    LazyFile::FileWithPath(file) => Some(Cow::Borrowed(file)),
-                    LazyFile::ObjectStorage { future, .. } => {
+                    LazyFile::Base64(pending) => {
+                        Some(Cow::Owned(File::ObjectStorage(pending.0.clone())))
+                    }
+                    LazyFile::ObjectStorage(resolved) => {
+                        Some(Cow::Owned(File::ObjectStorage(resolved.clone())))
+                    }
+                    LazyFile::ObjectStoragePointer { future, .. } => {
                         // If we actually sent the file bytes to some model provider, then the
                         // Shared future must be ready, so we'll get a file from `now_or_never`.
                         // Otherwise, the file cannot have been sent to a model provider (since the
@@ -375,16 +614,23 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                         // there's nothing to strip from the message.
                         // We ignore errors here, since an error during file resolution means that
                         // we cannot have included the file bytes in `raw_request`.
-                        if let Some(Ok(file)) = future.clone().now_or_never() {
-                            Some(Cow::Owned(file))
+                        if let Some(Ok(resolved)) = future.clone().now_or_never() {
+                            Some(Cow::Owned(File::ObjectStorage(resolved)))
                         } else {
                             None
                         }
                     }
                 };
                 if let Some(file) = file_with_path {
-                    raw_request =
-                        raw_request.replace(&file.file.data, &format!("<TENSORZERO_FILE_{i}>"));
+                    let data = match &*file {
+                        File::ObjectStorage(resolved) => &resolved.data,
+                        File::Base64(base64) => &base64.data,
+                        File::Url(_) | File::ObjectStoragePointer(_) => {
+                            // These variants should not occur in resolved files
+                            continue;
+                        }
+                    };
+                    raw_request = raw_request.replace(data, &format!("<TENSORZERO_FILE_{i}>"));
                     i += 1;
                 }
             }
@@ -461,10 +707,12 @@ mod tests {
     use tracing_test::traced_test;
 
     use crate::inference::types::{
-        file::{filename_to_mime_type, sanitize_raw_request},
-        resolved_input::{FileWithPath, LazyFile},
+        file::{
+            filename_to_mime_type, sanitize_raw_request, ObjectStorageFile, ObjectStoragePointer,
+        },
+        resolved_input::LazyFile,
         storage::{StorageKind, StoragePath},
-        Base64File, ContentBlock, RequestMessage, Role,
+        ContentBlock, RequestMessage, Role,
     };
 
     #[test]
@@ -480,71 +728,91 @@ mod tests {
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
-                                file: Base64File {
-                                    url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-1-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-1-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path")
-                                        .unwrap(),
-                                },
-                            }))),
-                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
-                                file: Base64File {
-                                    url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                                }
+                            ))),
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-2-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-2-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-2-path")
-                                        .unwrap(),
-                                },
-                            }))),
-                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
-                                file: Base64File {
-                                    url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                                }
+                            ))),
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-1-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-1-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path")
-                                        .unwrap(),
-                                },
-                            }))),
+                                }
+                            ))),
                         ],
                     },
                     RequestMessage {
                         role: Role::User,
                         content: vec![
-                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
-                                file: Base64File {
-                                    url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-3-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-3-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-3-path")
-                                        .unwrap(),
-                                },
-                            }))),
-                            ContentBlock::File(Box::new(LazyFile::FileWithPath(FileWithPath {
-                                file: Base64File {
-                                    url: None,
-                                    mime_type: mime::IMAGE_JPEG,
+                                }
+                            ))),
+                            ContentBlock::File(Box::new(LazyFile::ObjectStorage(
+                                ObjectStorageFile {
+                                    file: ObjectStoragePointer {
+                                        source_url: None,
+                                        mime_type: mime::IMAGE_JPEG,
+                                        storage_path: StoragePath {
+                                            kind: StorageKind::Disabled,
+                                            path: object_store::path::Path::parse(
+                                                "my-image-1-path"
+                                            )
+                                            .unwrap(),
+                                        },
+                                    },
                                     data: "my-image-1-data".to_string(),
-                                },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: object_store::path::Path::parse("my-image-1-path")
-                                        .unwrap(),
-                                },
-                            })))
+                                }
+                            )))
                         ],
                     }
                 ],
@@ -623,6 +891,7 @@ mod tests {
 
     mod file_serde_tests {
         use crate::inference::types::{
+            file::{Base64File, ObjectStoragePointer, UrlFile},
             storage::{StorageKind, StoragePath},
             File,
         };
@@ -630,10 +899,10 @@ mod tests {
         #[test]
         fn test_file_url_serialize_always_tagged() {
             // Serialization should always produce tagged format
-            let file = File::Url {
+            let file = File::Url(UrlFile {
                 url: "https://example.com/image.png".parse().unwrap(),
                 mime_type: Some(mime::IMAGE_PNG),
-            };
+            });
 
             let serialized = serde_json::to_value(&file).unwrap();
             assert_eq!(serialized["file_type"], "url");
@@ -643,10 +912,10 @@ mod tests {
 
         #[test]
         fn test_file_url_serialize_tagged_without_mime_type() {
-            let file = File::Url {
+            let file = File::Url(UrlFile {
                 url: "https://example.com/image.png".parse().unwrap(),
                 mime_type: None,
-            };
+            });
 
             let serialized = serde_json::to_value(&file).unwrap();
             assert_eq!(serialized["file_type"], "url");
@@ -656,10 +925,11 @@ mod tests {
 
         #[test]
         fn test_file_base64_serialize_always_tagged() {
-            let file = File::Base64 {
+            let file = File::Base64(Base64File {
+                source_url: None,
                 mime_type: mime::IMAGE_PNG,
                 data: "iVBORw0KGgo=".to_string(),
-            };
+            });
 
             let serialized = serde_json::to_value(&file).unwrap();
             assert_eq!(serialized["file_type"], "base64");
@@ -669,17 +939,18 @@ mod tests {
 
         #[test]
         fn test_file_object_storage_serialize_always_tagged() {
-            let file = File::ObjectStorage {
+            let file = File::ObjectStoragePointer(ObjectStoragePointer {
                 source_url: Some("https://example.com/image.png".parse().unwrap()),
                 mime_type: mime::IMAGE_PNG,
                 storage_path: StoragePath {
                     kind: StorageKind::Disabled,
                     path: object_store::path::Path::parse("test/path.png").unwrap(),
                 },
-            };
+            });
 
             let serialized = serde_json::to_value(&file).unwrap();
-            assert_eq!(serialized["file_type"], "object_storage");
+            let file_type = serialized["file_type"].as_str().unwrap();
+            assert_eq!(file_type, "object_storage_pointer");
             assert!(serialized.get("source_url").is_some());
             assert!(serialized.get("mime_type").is_some());
             assert!(serialized.get("storage_path").is_some());
@@ -695,8 +966,8 @@ mod tests {
             });
 
             let file: File = serde_json::from_value(json).unwrap();
-            assert!(matches!(file, File::Url { .. }));
-            if let File::Url { url, mime_type } = file {
+            assert!(matches!(file, File::Url(_)));
+            if let File::Url(UrlFile { url, mime_type }) = file {
                 assert_eq!(url.as_str(), "https://example.com/image.png");
                 assert_eq!(mime_type, Some(mime::IMAGE_PNG));
             }
@@ -711,8 +982,8 @@ mod tests {
             });
 
             let file: File = serde_json::from_value(json).unwrap();
-            assert!(matches!(file, File::Url { .. }));
-            if let File::Url { url, mime_type } = file {
+            assert!(matches!(file, File::Url(_)));
+            if let File::Url(UrlFile { url, mime_type }) = file {
                 assert_eq!(url.as_str(), "https://example.com/image.png");
                 assert_eq!(mime_type, Some(mime::IMAGE_PNG));
             }
@@ -727,8 +998,13 @@ mod tests {
             });
 
             let file: File = serde_json::from_value(json).unwrap();
-            assert!(matches!(file, File::Base64 { .. }));
-            if let File::Base64 { mime_type, data } = file {
+            assert!(matches!(file, File::Base64(_)));
+            if let File::Base64(base64_file) = file {
+                let Base64File {
+                    source_url: _,
+                    mime_type,
+                    data,
+                } = base64_file;
                 assert_eq!(mime_type, mime::IMAGE_PNG);
                 assert_eq!(data, "iVBORw0KGgo=");
             }
@@ -742,8 +1018,13 @@ mod tests {
             });
 
             let file: File = serde_json::from_value(json).unwrap();
-            assert!(matches!(file, File::Base64 { .. }));
-            if let File::Base64 { mime_type, data } = file {
+            assert!(matches!(file, File::Base64(_)));
+            if let File::Base64(base64_file) = file {
+                let Base64File {
+                    source_url: _,
+                    mime_type,
+                    data,
+                } = base64_file;
                 assert_eq!(mime_type, mime::IMAGE_PNG);
                 assert_eq!(data, "iVBORw0KGgo=");
             }
@@ -752,7 +1033,7 @@ mod tests {
         #[test]
         fn test_file_object_storage_deserialize_tagged() {
             let json = serde_json::json!({
-                "file_type": "object_storage",
+                "file_type": "object_storage_pointer",
                 "source_url": "https://example.com/image.png",
                 "mime_type": "image/png",
                 "storage_path": {
@@ -764,7 +1045,7 @@ mod tests {
             });
 
             let file: File = serde_json::from_value(json).unwrap();
-            assert!(matches!(file, File::ObjectStorage { .. }));
+            assert!(matches!(file, File::ObjectStoragePointer(_)));
         }
 
         #[test]
@@ -781,16 +1062,17 @@ mod tests {
             });
 
             let file: File = serde_json::from_value(json).unwrap();
-            assert!(matches!(file, File::ObjectStorage { .. }));
+            assert!(matches!(file, File::ObjectStoragePointer(_)));
         }
 
         #[test]
         fn test_roundtrip_serialization() {
             // Test that serialize -> deserialize maintains data integrity
-            let original = File::Base64 {
+            let original = File::Base64(Base64File {
+                source_url: None,
                 mime_type: mime::IMAGE_JPEG,
                 data: "base64data".to_string(),
-            };
+            });
 
             let serialized = serde_json::to_string(&original).unwrap();
             let deserialized: File = serde_json::from_str(&serialized).unwrap();

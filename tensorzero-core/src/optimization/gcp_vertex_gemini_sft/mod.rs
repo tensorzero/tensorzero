@@ -470,6 +470,11 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                 })
             })?;
 
-        convert_to_optimizer_status(job, self.region.clone(), self.project_id.clone())
+        convert_to_optimizer_status(
+            job,
+            self.region.clone(),
+            self.project_id.clone(),
+            self.credential_location.clone(),
+        )
     }
 }

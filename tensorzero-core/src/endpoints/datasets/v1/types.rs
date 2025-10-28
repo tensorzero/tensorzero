@@ -126,6 +126,29 @@ pub struct UpdateDatapointsResponse {
     pub ids: Vec<Uuid>,
 }
 
+/// Request to update metadata for one or more datapoints in a dataset.
+/// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct UpdateDatapointsMetadataRequest {
+    /// The datapoints to update metadata for.
+    pub datapoints: Vec<UpdateDatapointMetadataRequest>,
+}
+
+/// A request to update the metadata of a single datapoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
+pub struct UpdateDatapointMetadataRequest {
+    /// The ID of the datapoint to update. Required.
+    pub id: Uuid,
+
+    /// Metadata fields to update. If omitted, no metadata changes will be made.
+    #[serde(default)]
+    pub metadata: Option<DatapointMetadataUpdate>,
+}
+
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
 #[derive(Debug, Deserialize)]

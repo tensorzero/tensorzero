@@ -1,5 +1,6 @@
 import { ActionBar } from "~/components/layout/ActionBar";
 import { NewRunButton } from "./NewRunButton";
+import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 interface EvaluationsActionsProps {
   onNewRun: () => void;
@@ -8,7 +9,9 @@ interface EvaluationsActionsProps {
 export function EvaluationsActions({ onNewRun }: EvaluationsActionsProps) {
   return (
     <ActionBar>
-      <NewRunButton onClick={onNewRun} />
+      <ReadOnlyGuard asChild>
+        <NewRunButton onClick={onNewRun} />
+      </ReadOnlyGuard>
     </ActionBar>
   );
 }

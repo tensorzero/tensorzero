@@ -9,7 +9,7 @@ use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
-    InputMessage, InputMessageContent, Role,
+    InputMessage, InputMessageContent, Role, UrlFile,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
@@ -512,7 +512,7 @@ async fn test_default_function_model_name_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -626,7 +626,7 @@ async fn test_default_function_model_name_non_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -862,7 +862,7 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan (possibly as JSON)?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan (possibly as JSON)?"}]
             }
         ]
     });
@@ -1001,7 +1001,7 @@ async fn test_o4_mini_inference() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -1119,7 +1119,7 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -1588,7 +1588,7 @@ async fn test_content_block_text_field() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -1944,10 +1944,10 @@ pub async fn test_start_batch_inference_write_file() {
                 messages: vec![InputMessage {
                     role: Role::User,
                     content: vec![InputMessageContent::Text(TextKind::Text { text: "Tell me about this image".to_string() }),
-                    InputMessageContent::File(File::Url {
+                    InputMessageContent::File(File::Url(UrlFile {
                         url: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png".parse().unwrap(),
                         mime_type: None,
-                    })],
+                    }))],
                 }],
             }],
             tags: Some(vec![Some([("foo".to_string(), "bar".to_string()), ("test_type".to_string(), "batch_image_object_store".to_string())].into_iter().collect() )]),
@@ -2005,13 +2005,11 @@ pub async fn test_start_batch_inference_write_file() {
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Tell me about this image"},
+                    {"type": "text", "text": "Tell me about this image"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                            "mime_type": "image/png",
-                        },
+                        "source_url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": {"type": "filesystem", "path": temp_dir.path().to_string_lossy()},
                             "path": file_path
@@ -2051,10 +2049,10 @@ async fn test_forward_image_url() {
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
-                ClientInputMessageContent::File(File::Url {
+                ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG)
-                }),
+                })),
                 ],
             }],
             ..Default::default()
@@ -2128,10 +2126,10 @@ async fn test_forward_file_url() {
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
-                ClientInputMessageContent::File(File::Url {
+                ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF)
-                }),
+                })),
                 ],
             }],
             ..Default::default()
@@ -2619,6 +2617,7 @@ model = "test-model"
     let mut chunks = vec![];
     let mut inference_id: Option<Uuid> = None;
     let mut full_text = String::new();
+    let mut unknown_chunks = vec![];
 
     while let Some(chunk_result) = stream.next().await {
         let chunk = chunk_result.unwrap();
@@ -2630,11 +2629,17 @@ model = "test-model"
             }
         }
 
-        // Concatenate text from chunks
+        // Collect text and unknown chunks
         if let InferenceResponseChunk::Chat(chat_chunk) = &chunk {
             for content_block in &chat_chunk.content {
-                if let ContentBlockChunk::Text(text_chunk) = content_block {
-                    full_text.push_str(&text_chunk.text);
+                match content_block {
+                    ContentBlockChunk::Text(text_chunk) => {
+                        full_text.push_str(&text_chunk.text);
+                    }
+                    ContentBlockChunk::Unknown { id, data, .. } => {
+                        unknown_chunks.push((id.clone(), data.clone()));
+                    }
+                    _ => {}
                 }
             }
         }
@@ -2674,6 +2679,24 @@ model = "test-model"
             "Expected the last chunk to have a finish_reason, but it was None"
         );
     }
+
+    // Assert that we received Unknown chunks for web_search_call
+    assert!(
+        !unknown_chunks.is_empty(),
+        "Expected at least one Unknown chunk during streaming, but found none"
+    );
+
+    // Verify that at least one Unknown chunk contains web_search_call type
+    let has_web_search_chunk = unknown_chunks.iter().any(|(_, data)| {
+        data.get("type")
+            .and_then(|t| t.as_str())
+            .map(|t| t == "web_search_call")
+            .unwrap_or(false)
+    });
+    assert!(
+        has_web_search_chunk,
+        "Expected at least one Unknown chunk with type 'web_search_call', but found none. Unknown chunks: {unknown_chunks:#?}",
+    );
 
     // Assert that the concatenated text contains citations (markdown links)
     assert!(
@@ -3010,7 +3033,7 @@ async fn test_responses_api_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of France?"}]
+                "content": [{"type": "text", "text": "What is the capital of France?"}]
             }
         ]
     });

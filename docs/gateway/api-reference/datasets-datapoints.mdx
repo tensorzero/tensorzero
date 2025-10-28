@@ -83,11 +83,6 @@ The response returns the newly created IDs.
 
 - **Gateway Endpoint:** `PATCH /v1/datasets/{dataset_name}/datapoints`
 - **Client Method:** `update_datapoints`
-- **Parameters:**
-  - `dataset_name` (string)
-  - `datapoints` (list of objects, see below)
-
-The `datapoints` field must contain a list of objects.
 
 Each object must have the fields `id` (string, UUIDv7) and `type` (`"chat"` or `"json"`).
 
@@ -114,7 +109,38 @@ For `json` functions, you can update the following fields:
 - `metadata` (object) - updates metadata fields:
   - `name` (string or null) - replaces the name (can be set to `null` to clear)
 
+<Tip>
+
+If you're only updating datapoint metadata (e.g. `name`), the `update_datapoint_metadata` method below is an alternative that does not affect the datapoint ID.
+
+</Tip>
+
 The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the updated datapoints.
+
+### Update datapoint metadata
+
+This endpoint updates metadata fields for one or more datapoints in a dataset.
+Unlike updating the full datapoint, this operation updates the datapoint in-place without creating a new version.
+
+- **Gateway Endpoint:** `PATCH /v1/datasets/{dataset_name}/datapoints/metadata`
+- **Client Method:** `update_datapoints_metadata`
+- **Parameters:**
+  - `dataset_name` (string)
+  - `datapoints` (list of objects, see below)
+
+The `datapoints` field must contain a list of objects.
+
+Each object must have the field `id` (string, UUIDv7).
+
+The following field is optional:
+
+- `metadata` (object) - updates metadata fields:
+  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+
+If the `metadata` field is omitted or `null`, no changes will be made to the datapoint.
+
+The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the updated datapoints.
+These IDs are the same as the input IDs since the datapoints are updated in-place.
 
 ### Delete a datapoint
 

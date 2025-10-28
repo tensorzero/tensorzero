@@ -1330,7 +1330,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         });
         let parsed_value = serde_json::to_string(
@@ -1356,7 +1356,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         });
         let parsed_value = serde_json::to_string(
@@ -1390,7 +1390,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         });
         let err = validate_parse_demonstration(
@@ -1415,7 +1415,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         });
         let err = validate_parse_demonstration(
@@ -1515,7 +1515,7 @@ mod tests {
             tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         });
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)

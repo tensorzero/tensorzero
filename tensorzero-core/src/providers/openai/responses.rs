@@ -8,7 +8,7 @@ use futures::StreamExt;
 use futures::{future::try_join_all, Stream};
 use reqwest_eventsource::Event;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::time::Instant;
 use url::Url;
 
@@ -698,7 +698,9 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                     }
                     _ => {
                         return Err(Error::new(ErrorDetails::InternalError {
-                            message: format!("`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}")
+                            message: format!(
+                                "`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}"
+                            ),
                         }));
                     }
                 }
@@ -929,6 +931,7 @@ pub fn stream_openai_responses(
     provider_type: String,
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
+    discard_unknown_chunks: bool,
 ) -> ProviderInferenceResponseStreamInner {
     let mut current_tool_id: Option<String> = None;
     let mut current_tool_name: Option<String> = None;
@@ -983,6 +986,7 @@ pub fn stream_openai_responses(
                             latency,
                             &mut current_tool_id,
                             &mut current_tool_name,
+                            discard_unknown_chunks,
                         );
 
                         match stream_message {
@@ -1016,6 +1020,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
+    discard_unknown_chunks: bool,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match event {
         // Text delta - the main content streaming event
@@ -1097,7 +1102,7 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
         // Output item added - captures tool metadata when it's a function_call
         // This is where we emit the tool name to the client
-        OpenAIResponsesStreamEvent::ResponseOutputItemAdded { item, .. } => {
+        OpenAIResponsesStreamEvent::ResponseOutputItemAdded { item, output_index } => {
             // Check if this is a function_call item
             if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
                 if item_type == "function_call" {
@@ -1122,9 +1127,25 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                             None,
                         )));
                     }
+                } else if item_type == "message" {
+                    // Skip message items - these are handled by other events
+                    return Ok(None);
+                } else {
+                    // Unknown item type - return as unknown chunk
+                    return Ok(Some(ProviderInferenceResponseChunk::new(
+                        vec![ContentBlockChunk::Unknown {
+                            id: output_index.to_string(),
+                            data: item,
+                            provider_type: Some(PROVIDER_TYPE.to_string()),
+                        }],
+                        None,
+                        raw_message,
+                        message_latency,
+                        None,
+                    )));
                 }
             }
-            // Don't emit a chunk for this event if it's not a function_call
+            // Don't emit a chunk if there's no type field
             Ok(None)
         }
 
@@ -1220,13 +1241,31 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
         | OpenAIResponsesStreamEvent::ResponseOutputTextDone { .. }
         | OpenAIResponsesStreamEvent::ResponseReasoningSummaryTextDone { .. } => Ok(None),
 
-        // Unknown event type - log and skip
+        // Unknown event type
         OpenAIResponsesStreamEvent::Unknown => {
-            tracing::warn!(
-                "Received unknown event type in OpenAI Responses stream, skipping. Raw message: {}",
-                raw_message
-            );
-            Ok(None)
+            if discard_unknown_chunks {
+                tracing::warn!(
+                    "Received unknown event type in OpenAI Responses stream, skipping. Raw message: {}",
+                    raw_message
+                );
+                return Ok(None);
+            }
+            // Parse the raw message as JSON to extract the data
+            let data: Value = serde_json::from_str(&raw_message).unwrap_or_else(|_| {
+                // If we can't parse the raw message, wrap it in a JSON object
+                json!({ "raw": raw_message.clone() })
+            });
+            Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Unknown {
+                    id: "unknown".to_string(),
+                    data,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                }],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            )))
         }
     }
 }
@@ -1473,6 +1512,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1505,6 +1545,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1548,6 +1589,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1586,6 +1628,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1621,6 +1664,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1663,6 +1707,7 @@ mod tests {
             Duration::from_millis(10),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1693,6 +1738,7 @@ mod tests {
             Duration::from_millis(20),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1720,6 +1766,7 @@ mod tests {
             Duration::from_millis(30),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1745,6 +1792,7 @@ mod tests {
             Duration::from_millis(40),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1780,6 +1828,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         );
 
         assert!(result.is_err());
@@ -1809,6 +1858,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1851,6 +1901,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         )
         .unwrap()
         .unwrap();
@@ -1889,6 +1940,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         );
 
         assert!(result.is_err());
@@ -1912,6 +1964,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         );
 
         assert!(result.is_err());
@@ -1935,6 +1988,7 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
         );
 
         assert!(result.is_err());
@@ -1971,6 +2025,7 @@ mod tests {
                 Duration::from_millis(100),
                 &mut tool_id,
                 &mut tool_name,
+                false,
             )
             .unwrap();
 
@@ -1979,8 +2034,8 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown_event_type() {
-        // Test that unknown event types are handled gracefully
+    fn test_unknown_event_type_with_discard_false() {
+        // Test that unknown event types return Unknown chunks when discard_unknown_chunks=false
         let json = r#"{"type": "response.some_new_event", "data": "foo"}"#;
 
         let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
@@ -1995,11 +2050,52 @@ mod tests {
             Duration::from_millis(100),
             &mut tool_id,
             &mut tool_name,
+            false,
+        )
+        .unwrap()
+        .unwrap();
+
+        // Unknown events should return an Unknown chunk
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::Unknown { id, data, .. } => {
+                assert_eq!(id, "unknown");
+                assert_eq!(
+                    data.get("type").and_then(|v| v.as_str()),
+                    Some("response.some_new_event")
+                );
+                assert_eq!(data.get("data").and_then(|v| v.as_str()), Some("foo"));
+            }
+            _ => panic!("Expected Unknown chunk"),
+        }
+    }
+
+    #[test]
+    fn test_unknown_event_type_with_discard_true() {
+        // Test that unknown event types are skipped when discard_unknown_chunks=true
+        let json = r#"{"type": "response.some_new_event", "data": "foo"}"#;
+
+        let event: OpenAIResponsesStreamEvent = serde_json::from_str(json).unwrap();
+        assert!(matches!(event, OpenAIResponsesStreamEvent::Unknown));
+
+        let mut tool_id = None;
+        let mut tool_name = None;
+
+        let result = openai_responses_to_tensorzero_chunk(
+            json.to_string(),
+            event,
+            Duration::from_millis(100),
+            &mut tool_id,
+            &mut tool_name,
+            true,
         )
         .unwrap();
 
-        // Unknown events should return None (skip them)
-        assert!(result.is_none(), "Unknown events should return None");
+        // Unknown events should return None when discarding
+        assert!(
+            result.is_none(),
+            "Unknown events should be discarded when discard_unknown_chunks=true"
+        );
     }
 
     #[test]

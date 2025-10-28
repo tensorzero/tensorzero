@@ -20,7 +20,7 @@ use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
-    ModelInferenceRequest, RequestMessage, Role,
+    ModelInferenceRequest, RequestMessage, Role, System,
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -237,7 +237,7 @@ impl ChatCompletionConfig {
     pub fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
-        system: Option<&Value>,
+        system: Option<&System>,
     ) -> Result<Option<String>, Error> {
         prepare_system_message(
             system,
@@ -311,7 +311,7 @@ impl ChatCompletionConfig {
 /// Prepare a ModelInput using the same machinery as is used by core TensorZero to prepare
 /// chat completions requests.
 pub async fn prepare_model_input(
-    system: Option<&Value>,
+    system: Option<&System>,
     messages: &[ResolvedInputMessage],
     templates_config: &TemplateConfig<'_>,
     chat_templates: &ChatTemplates,
@@ -325,14 +325,9 @@ pub async fn prepare_model_input(
     )?;
     let mut templated_messages = Vec::with_capacity(messages.len());
     for message in messages {
-        templated_messages.push(
-            prepare_request_message(
-                &message.clone().into_lazy_resolved_input_message(),
-                templates_config,
-                chat_templates,
-            )
-            .await?,
-        );
+        let lazy_message = message.clone().into_lazy_resolved_input_message()?;
+        templated_messages
+            .push(prepare_request_message(&lazy_message, templates_config, chat_templates).await?);
     }
     Ok(ModelInput {
         system,
@@ -346,7 +341,7 @@ pub async fn prepare_model_input(
 }
 
 pub fn prepare_system_message(
-    system: Option<&Value>,
+    system: Option<&System>,
     templates: &TemplateConfig,
     template: Option<&TemplateWithSchema>,
 ) -> Result<Option<String>, Error> {
@@ -357,38 +352,43 @@ pub fn prepare_system_message(
             // a `system_text` variable.
             let context = if template.schema.is_none() && template.legacy_definition {
                 match system {
-                    Some(Value::String(_)) | None => {}
-                    Some(other) => {
+                    Some(System::Text(_)) | None => {}
+                    Some(System::Template(_)) => {
                         return Err(Error::new(ErrorDetails::InvalidMessage {
-                            message: format!("System message content {other} is not a string but `input_wrappers.system` is set in the variant config")
+                            message: "System message content is a template but `input_wrappers.system` is set in the variant config".to_string()
                         }));
                     }
                 }
-                 Cow::Owned(serde_json::json!({
-                    SYSTEM_TEXT_TEMPLATE_VAR: system.unwrap_or(&Value::Null)
+                let system_text = match system {
+                    Some(System::Text(text)) => Value::String(text.clone()),
+                    _ => Value::Null,
+                };
+                Cow::<Value>::Owned(serde_json::json!({
+                    SYSTEM_TEXT_TEMPLATE_VAR: system_text
                 }))
             } else {
                 // Otherwise, we use the system message as-is.
-                Cow::Borrowed(system.unwrap_or(&Value::Null))
+                let system_value = match system {
+                    Some(System::Text(text)) => Cow::Owned(Value::String(text.clone())),
+                    Some(System::Template(map)) => Cow::Owned(Value::Object(map.clone())),
+                    None => Cow::Owned(Value::Null),
+                };
+                system_value
             };
-            Some(templates.template_message(
-            &template.template.path.get_template_key(),
-            &context)?)
+            Some(templates.template_message(&template.template.path.get_template_key(), &context)?)
         }
-        None => {
-            match system {
-                None => None,
-                Some(system) =>
-            Some(system
-            .as_str()
-            .ok_or_else(|| Error::new(ErrorDetails::InvalidMessage {
-                message:
-                    format!("System message content {system} is not a string but there is no variant template")
-                        .to_string(),
-            }))?
-            .to_string()),
-        }
-    }})
+        None => match system {
+            None => None,
+            Some(System::Text(text)) => Some(text.clone()),
+            Some(System::Template(_)) => {
+                return Err(Error::new(ErrorDetails::InvalidMessage {
+                    message:
+                        "System message content is a template but there is no variant template"
+                            .to_string(),
+                }));
+            }
+        },
+    })
 }
 
 pub async fn prepare_request_message(
@@ -770,7 +770,7 @@ mod tests {
 
     use futures::StreamExt;
 
-    use serde_json::{json, Value};
+    use serde_json::json;
     use uuid::Uuid;
 
     use crate::cache::{CacheEnabledMode, CacheOptions};
@@ -1056,7 +1056,7 @@ mod tests {
             weight: Some(1.0),
             ..Default::default()
         };
-        let input_message = Value::String("You are a helpful assistant.".to_string());
+        let input_message = System::Text("You are a helpful assistant.".to_string());
         let result =
             chat_completion_config.prepare_system_message(&templates, Some(&input_message));
         assert!(result.is_ok());
@@ -1072,14 +1072,23 @@ mod tests {
             weight: Some(1.0),
             ..Default::default()
         };
-        let input_message = json!({"message": "You are a helpful assistant."});
+        let input_message = System::Template(
+            json!({"message": "You are a helpful assistant."})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
         let result =
             chat_completion_config.prepare_system_message(&templates, Some(&input_message));
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
             prepared_message,
-            ErrorDetails::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }.into()
+            ErrorDetails::InvalidMessage {
+                message: "System message content is a template but there is no variant template"
+                    .to_string()
+            }
+            .into()
         );
 
         // Test without templates, no message
@@ -1121,7 +1130,12 @@ mod tests {
         )
         .unwrap();
 
-        let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
+        let input_message = System::Template(
+            serde_json::json!({"assistant_name": "ChatGPT"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        );
         let prepared_message = chat_completion_config
             .prepare_system_message(&templates, Some(&input_message))
             .unwrap();
@@ -1307,7 +1321,7 @@ mod tests {
             content: vec!["Hello".to_string().into()],
         }];
         let input = LazyResolvedInput {
-            system: Some(Value::String("Hello".to_string())),
+            system: Some(System::Text("Hello".to_string())),
             messages,
         };
         let inference_params = InferenceParams::default();
@@ -1357,7 +1371,12 @@ mod tests {
             content: vec![],
         }];
         let input = LazyResolvedInput {
-            system: Some(json!({"assistant_name": "R2-D2"})),
+            system: Some(System::Template(
+                json!({"assistant_name": "R2-D2"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages,
         };
         let provider_types = ProviderTypesConfig::default();
@@ -1781,7 +1800,12 @@ mod tests {
             })],
         }];
         let input = LazyResolvedInput {
-            system: Some(json!({"assistant_name": "R2-D2"})),
+            system: Some(System::Template(
+                json!({"assistant_name": "R2-D2"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages,
         };
         // Test case 6: JSON output was supposed to happen and it did
@@ -2241,7 +2265,12 @@ mod tests {
             })],
         }];
         let input = LazyResolvedInput {
-            system: Some(json!({"assistant_name": "R2-D2"})),
+            system: Some(System::Template(
+                json!({"assistant_name": "R2-D2"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            )),
             messages,
         };
         let chat_completion_config = Box::leak(Box::new(
@@ -2584,7 +2613,7 @@ mod tests {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
-                provider_tools: None,
+                provider_tools: vec![],
                 allowed_tools: AllowedTools::default(),
             },
             description: None,

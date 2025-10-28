@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role};
+use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, System};
 use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{
@@ -91,7 +91,7 @@ async fn test_datapoint_insert_synthetic_chat() {
       "function_name": "basic_test",
       "id": id.to_string(),
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"My synthetic output\"}]",
       "tool_params": "",
       "tags": {},
@@ -267,45 +267,33 @@ async fn test_create_delete_datapoint_chat() {
         let mut is_tool = false;
         // Verify input structure
         let input = &datapoint.input;
-        assert!(input
-            .system
-            .as_ref()
-            .unwrap()
-            .get("assistant_name")
-            .is_some());
+        assert!(match input.system.as_ref().unwrap() {
+            System::Template(map) => map.get("assistant_name"),
+            System::Text(_) => panic!("Expected System::Template"),
+        }
+        .is_some());
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(
-            first_content,
-            StoredInputMessageContent::Text { .. }
-        ));
-        assert!(matches!(
-            first_content,
-            StoredInputMessageContent::Text { value: _, .. }
-        ));
+        assert!(matches!(first_content, StoredInputMessageContent::Text(_)));
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
-        assert!(input
-            .system
-            .as_ref()
-            .unwrap()
-            .get("assistant_name")
-            .is_some());
+        assert!(match input.system.as_ref().unwrap() {
+            System::Template(map) => map.get("assistant_name"),
+            System::Text(_) => panic!("Expected System::Template"),
+        }
+        .is_some());
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
         let content = first_message.content;
         assert!(!content.is_empty());
         let first_content = content[0].clone();
-        assert!(matches!(
-            first_content,
-            StoredInputMessageContent::Text { .. }
-        ));
+        assert!(matches!(first_content, StoredInputMessageContent::Text(_)));
 
         // Verify output if present
         if let Some(output) = &datapoint.output {
@@ -647,7 +635,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "function_name": "basic_test",
       "id": id.to_string(),
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": "[{\"type\":\"tool_call\",\"arguments\":{\"location\":\"New York\",\"units\":\"fahrenheit\"},\"id\":\"call_123\",\"name\":\"get_temperature\",\"raw_arguments\":\"{\\\"location\\\":\\\"New York\\\",\\\"units\\\":\\\"fahrenheit\\\"}\",\"raw_name\":\"get_temperature\"}]",
       "tool_params": "{\"tools_available\":[{\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}",
       "tags": {},
@@ -675,7 +663,7 @@ async fn test_datapoint_insert_synthetic_json() {
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
             "output": {"answer": "Hello"},
             "output_schema": {},
             "source_inference_id": source_inference_id,
@@ -751,7 +739,7 @@ async fn test_datapoint_insert_synthetic_json() {
     )))
     .json(&json!({
         "function_name": "json_success",
-        "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+        "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
         "output": {"answer": "New answer"},
         "output_schema": {"type": "object", "properties": {"confidence": {"type": "number"}}, "required": ["confidence"]},
         "is_custom": true,
@@ -783,7 +771,7 @@ async fn test_datapoint_insert_synthetic_json() {
     )))
     .json(&json!({
         "function_name": "json_success",
-        "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+        "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
         "output": {"answer": "New answer"},
         "output_schema": {
             "type": "object",
@@ -866,7 +854,7 @@ async fn test_datapoint_insert_synthetic_json() {
     )))
     .json(&json!({
         "function_name": "json_success",
-        "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+        "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
         "output": {"answer": "New answer"},
         "output_schema": {
             "type": "object",
@@ -905,7 +893,7 @@ async fn test_datapoint_insert_synthetic_json() {
        )))
        .json(&json!({
            "function_name": "json_success",
-           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+           "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
            "output": {"answer": "New answer"},
            "output_schema": {
                "type": "object",
@@ -990,12 +978,12 @@ async fn test_create_delete_datapoint_json() {
             "datapoints": [
                 {
                     "function_name": "json_success",
-                    "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+                    "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
                     "output": {"answer": "Hello"},
                 },
                 {
                     "function_name": "json_success",
-                    "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+                    "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
                     "output": {"response": "Hello"},
                     "output_schema": alternate_output_schema
                 }
@@ -1074,12 +1062,11 @@ async fn test_create_delete_datapoint_json() {
 
         // Verify input structure
         let input = &datapoint.input;
-        assert!(input
-            .system
-            .as_ref()
-            .unwrap()
-            .get("assistant_name")
-            .is_some());
+        assert!(match input.system.as_ref().unwrap() {
+            System::Template(map) => map.get("assistant_name"),
+            System::Text(_) => panic!("Expected System::Template"),
+        }
+        .is_some());
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1093,12 +1080,11 @@ async fn test_create_delete_datapoint_json() {
 
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
-        assert!(input
-            .system
-            .as_ref()
-            .unwrap()
-            .get("assistant_name")
-            .is_some());
+        assert!(match input.system.as_ref().unwrap() {
+            System::Template(map) => map.get("assistant_name"),
+            System::Text(_) => panic!("Expected System::Template"),
+        }
+        .is_some());
         assert!(!input.messages.is_empty());
         let first_message = input.messages[0].clone();
         assert_eq!(first_message.role, Role::User);
@@ -1232,7 +1218,7 @@ async fn test_datapoint_insert_bad_name() {
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
             "output": {"answer": "Hello"},
             "output_schema": {},
         }))
@@ -1334,7 +1320,7 @@ async fn test_datapoint_insert_invalid_output_synthetic_json() {
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "input": {"system": {"assistant_name": "Ferris"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
             "output": "Not a json object",
             "output_schema": {"type": "object", "properties": {"answer": {"type": "string"}}, "required": ["answer"]},
             "is_custom": false,
@@ -1512,7 +1498,7 @@ async fn test_datapoint_insert_output_inherit_chat() {
       "function_name": "basic_test",
       "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
-      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"Megumin gleefully chanted her spell, unleashing a thunderous explosion that lit up the sky and left a massive crater in its wake.\"}]",
       "tool_params": "",
       "tags": {},
@@ -1629,7 +1615,7 @@ async fn test_datapoint_insert_output_none_chat() {
       "function_name": "basic_test",
       "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
-      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Hello, world!\"}]}]}",
       "output": null,
       "tool_params": "",
       "tags": {},
@@ -1802,7 +1788,7 @@ async fn test_datapoint_insert_output_demonstration_chat() {
       "function_name": "basic_test",
       "id": datapoint_id.to_string(),
       "episode_id": episode_id.to_string(),
-      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"Hello, world!\"}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Alfred Pennyworth\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Hello, world!\"}]}]}",
       "output": "[{\"type\":\"text\",\"text\":\"My demonstration chat answer\"}]",
       "tool_params": "",
       "tags": {},
@@ -1826,7 +1812,7 @@ async fn test_datapoint_insert_output_inherit_json() {
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
             "messages": [{"role": "user", "content": [
-                {"type": "text", "arguments": {"country": "Japan"}}
+                {"type": "template", "name": "user", "arguments": {"country": "Japan"}}
             ]}],
         },
         "stream": false,
@@ -1943,7 +1929,7 @@ async fn test_datapoint_insert_output_none_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -2040,7 +2026,7 @@ async fn test_datapoint_insert_output_demonstration_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -2186,7 +2172,7 @@ async fn test_datapoint_missing_demonstration() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -2285,7 +2271,7 @@ async fn test_datapoint_insert_missing_output_chat() {
       "function_name": "basic_test",
       "id": id.to_string(),
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": null,
       "tool_params": "",
       "tags": {},
@@ -2351,7 +2337,7 @@ async fn test_datapoint_insert_null_output_chat() {
       "function_name": "basic_test",
       "id": id.to_string(),
       "episode_id": null,
-      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"value\":\"My synthetic input\"}]}]}",
+      "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
       "output": null,
       "tool_params": "",
       "tags": {},
@@ -2378,7 +2364,7 @@ async fn test_datapoint_insert_missing_output_json() {
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
             "output_schema": {},
             "is_custom": false,
             // output field is deliberately omitted
@@ -2445,7 +2431,7 @@ async fn test_datapoint_insert_null_output_json() {
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "US"}}]}]},
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
             "output": null, // explicitly null output
             "output_schema": {},
             "is_custom": true,
@@ -2706,7 +2692,7 @@ async fn test_stale_dataset_with_datapoints() {
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Brazil"}}]}]},
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Brazil"}}]}]},
             "output": {"answer": "Result 1"},
             "output_schema": {},
             "is_custom": false,
@@ -2722,7 +2708,7 @@ async fn test_stale_dataset_with_datapoints() {
         )))
         .json(&json!({
             "function_name": "json_success",
-            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "France"}}]}]},
+            "input": {"system": {"assistant_name": "Test"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "France"}}]}]},
             "output": {"answer": "Result 2"},
             "output_schema": {},
             "is_custom": false,
@@ -3003,7 +2989,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(initial_datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(initial_datapoint)])
         .await
         .unwrap();
 

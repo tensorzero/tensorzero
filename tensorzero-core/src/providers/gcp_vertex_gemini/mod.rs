@@ -43,10 +43,9 @@ use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
-use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
@@ -2051,32 +2050,26 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
             }
             Cow::Borrowed(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
                         inline_data: GCPVertexInlineData {
                             mime_type: file.mime_type.to_string(),
-                            data: Cow::Owned(file.data()?.to_string()),
+                            data: Cow::Owned(data.to_string()),
                         },
                     },
                 ));
             }
             Cow::Owned(ContentBlock::File(file)) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
 
                 model_content_blocks.push(FlattenUnknown::Normal(
                     GCPVertexGeminiContentPart::InlineData {
                         inline_data: GCPVertexInlineData {
                             mime_type: file.mime_type.to_string(),
-                            data: Cow::Owned(file.data()?.to_string()), // Convert to owned String
+                            data: Cow::Owned(data.to_string()), // Convert to owned String
                         },
                     },
                 ));
@@ -2255,11 +2248,10 @@ fn content_part_to_tensorzero_chunk(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
                 return Ok(None);
             }
-            Err(Error::new(ErrorDetails::InferenceServer {
-                message: "Unknown content part in GCP Vertex Gemini response".to_string(),
-                provider_type: PROVIDER_TYPE.to_string(),
-                raw_request: None,
-                raw_response: Some(part.to_string()),
+            Ok(Some(ContentBlockChunk::Unknown {
+                id: "0".to_string(),
+                data: part.into_owned(),
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
     }
@@ -2776,7 +2768,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
         let inference_request = ModelInferenceRequest {
@@ -3877,10 +3869,10 @@ mod tests {
     }
 
     #[test]
-    fn test_convert_unknown_content_block_error() {
+    fn test_convert_unknown_content_block_returns_chunk() {
         use std::time::Duration;
 
-        // Test with text content
+        // Test with unknown content part
         let text_part = GCPVertexGeminiResponseContentPart {
             thought: false,
             thought_signature: None,
@@ -3904,7 +3896,7 @@ mod tests {
         let mut last_tool_name = None;
 
         let mut last_tool_idx = None;
-        let err = convert_stream_response_with_metadata_to_chunk(
+        let result = convert_stream_response_with_metadata_to_chunk(
             "raw_response".to_string(),
             response,
             latency,
@@ -3912,16 +3904,25 @@ mod tests {
             &mut last_tool_idx,
             false,
         )
-        .unwrap_err();
-        assert_eq!(
-            *err.get_details(),
-            ErrorDetails::InferenceServer {
-                message: "Unknown content part in GCP Vertex Gemini response".to_string(),
-                provider_type: "gcp_vertex_gemini".to_string(),
-                raw_request: None,
-                raw_response: Some(json!({"unknown_field": "unknown_value"}).to_string()),
+        .unwrap();
+
+        assert_eq!(result.content.len(), 1);
+        match &result.content[0] {
+            ContentBlockChunk::Unknown { id, data, .. } => {
+                assert_eq!(id, "0");
+                assert_eq!(
+                    data.get("unknown_field").and_then(|v| v.as_str()),
+                    Some("unknown_value")
+                );
             }
-        );
+            _ => panic!("Expected Unknown chunk"),
+        };
+
+        // Check that usage was captured
+        assert!(result.usage.is_some());
+        let usage = result.usage.unwrap();
+        assert_eq!(usage.input_tokens, 10);
+        assert_eq!(usage.output_tokens, 5);
     }
 
     #[test]
@@ -4544,7 +4545,7 @@ mod tests {
             _ => panic!("Expected InferenceServer error"),
         }
 
-        // Test unknown content part (should return error)
+        // Test unknown content part (should return Unknown chunk)
         let unknown_part = GCPVertexGeminiResponseContentPart {
             thought: false,
             thought_signature: None,
@@ -4559,17 +4560,17 @@ mod tests {
             &mut last_tool_idx,
             false,
         );
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        let details = error.get_details();
-        match details {
-            ErrorDetails::InferenceServer { message, .. } => {
+        assert!(result.is_ok());
+        let chunk = result.unwrap();
+        match chunk {
+            Some(ContentBlockChunk::Unknown { id, data, .. }) => {
+                assert_eq!(id, "0");
                 assert_eq!(
-                    message,
-                    "Unknown content part in GCP Vertex Gemini response"
+                    data.get("unknown_field").and_then(|v| v.as_str()),
+                    Some("unknown_value")
                 );
             }
-            _ => panic!("Expected InferenceServer error"),
+            _ => panic!("Expected Unknown chunk"),
         }
         // Verify tool call tracking state - should remain None for error cases
         assert_eq!(last_tool_idx, None);

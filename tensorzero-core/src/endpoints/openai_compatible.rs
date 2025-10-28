@@ -38,8 +38,9 @@ use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
-    current_timestamp, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason, Input,
-    InputMessage, InputMessageContent, Role, TemplateInput, TextKind, Usage,
+    current_timestamp, Base64File, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason,
+    Input, InputMessage, InputMessageContent, Role, System, TemplateInput, TextKind, UrlFile,
+    Usage,
 };
 use crate::tool::{
     DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
@@ -857,10 +858,20 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             if system_messages.len() == 1 && !first_system {
                 tracing::warn!("Moving system message to the start of the conversation");
             }
-            Ok(Input {
-                system: system_messages.pop(),
-                messages,
-            })
+
+            let system = system_messages
+                .pop()
+                .map(|v| match v {
+                    Value::String(s) => Ok::<System, Error>(System::Text(s)),
+                    Value::Object(map) => Ok::<System, Error>(System::Template(map)),
+                    _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                        message: "System message content must be a string or an object".to_string(),
+                    }
+                    .into()),
+                })
+                .transpose()?;
+
+            Ok(Input { system, messages })
         } else {
             let mut output = String::new();
             for (i, system_message) in system_messages.iter().enumerate() {
@@ -879,7 +890,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             }
             tracing::warn!("Multiple system messages provided - they will be concatenated and moved to the start of the conversation");
             Ok(Input {
-                system: Some(Value::String(output)),
+                system: Some(System::Text(output)),
                 messages,
             })
         }
@@ -1001,13 +1012,13 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                         if image_url.url.scheme() == "data" {
                             let url_str = image_url.url.to_string();
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
-                            InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
+                            InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type, data: data.to_string() }))
                         } else {
-                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: image_url.mime_type })
+                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type }))
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
-                        InputMessageContent::File(File::Base64 { mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data })
+                        InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data }))
                     }
                     Err(e) => {
                         if let Some(obj) = val.as_object() {
@@ -1310,6 +1321,13 @@ fn process_chat_content_chunk(
                     "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
                 );
             }
+            ContentBlockChunk::Unknown { .. } => {
+                // OpenAI compatible endpoint does not support unknown blocks
+                // Users of this endpoint will need to check observability to see them
+                tracing::warn!(
+                    "Ignoring 'unknown' content block chunk when constructing OpenAI-compatible response"
+                );
+            }
         }
     }
     (content_str, tool_calls)
@@ -1426,7 +1444,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use crate::cache::CacheEnabledMode;
-    use crate::inference::types::{Text, TextChunk};
+    use crate::inference::types::{System, Text, TextChunk};
     use crate::tool::ToolCallChunk;
 
     #[test]
@@ -1515,7 +1533,7 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::User);
         assert_eq!(
             input.system,
-            Some(Value::String("You are a helpful assistant".to_string()))
+            Some(System::Text("You are a helpful assistant".to_string()))
         );
         // Now try some messages with structured content
         let messages = vec![
@@ -1551,7 +1569,9 @@ mod tests {
         let input: Input = messages.try_into().unwrap();
         assert_eq!(
             input.system,
-            Some("You are a helpful assistant 1.\nYou are a helpful assistant 2.".into())
+            Some(System::Text(
+                "You are a helpful assistant 1.\nYou are a helpful assistant 2.".to_string()
+            ))
         );
         assert_eq!(input.messages.len(), 0);
 
@@ -1630,7 +1650,10 @@ mod tests {
             }),
         ];
         let result: Input = out_of_order_messages.try_into().unwrap();
-        assert_eq!(result.system, Some("System message".into()));
+        assert_eq!(
+            result.system,
+            Some(System::Text("System message".to_string()))
+        );
         assert_eq!(
             result.messages,
             vec![InputMessage {

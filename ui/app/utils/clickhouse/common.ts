@@ -30,7 +30,9 @@ export type Role = z.infer<typeof roleSchema>;
 
 export const textInputSchema = z.object({
   type: z.literal("text"),
-  value: z.any(), // Value type from Rust maps to any in TS
+  // TODO: get rid of this type completely, we should not run queries in the UI...
+  value: JsonValueSchema.optional(),
+  text: z.string().optional(),
 });
 export type TextInput = z.infer<typeof textInputSchema>;
 
@@ -60,7 +62,7 @@ export type DisplayTemplate = z.infer<typeof displayTemplateSchema>;
 // 3) is missing from the config so we don't know
 export const displayMissingFunctionTextInputSchema = z.object({
   type: z.literal("missing_function_text"),
-  value: z.any(),
+  value: z.string(),
 });
 export type DisplayMissingFunctionTextInput = z.infer<
   typeof displayMissingFunctionTextInputSchema
@@ -136,7 +138,7 @@ export const base64FileSchema = z.object({
 export type Base64File = z.infer<typeof base64FileSchema>;
 
 export const resolvedBase64FileSchema = z.object({
-  dataUrl: z
+  data: z
     .string()
     .url()
     .refine((url) => url.startsWith("data:"), {
@@ -470,25 +472,20 @@ function displayInputMessageContentToStoredInputMessageContent(
 ): StoredInputMessageContent {
   switch (content.type) {
     case "text":
-      return { type: "text", value: content.text };
+      return { type: "text", text: content.text };
     case "missing_function_text":
-      return { type: "text", value: content.value };
+      return { type: "text", text: content.value };
     case "file":
       return {
         type: "file",
-        file: {
-          url: content.file.dataUrl,
-          mime_type: content.file.mime_type,
-        },
+        mime_type: content.file.mime_type,
         storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
     case "file_error":
       return {
         type: "file",
-        file: {
-          url: content.file.url ?? null,
-          mime_type: content.file.mime_type,
-        },
+        source_url: content.file.url ?? undefined,
+        mime_type: content.file.mime_type,
         storage_path: storagePathToBackendStoragePath(content.storage_path),
       };
     case "template":
@@ -514,9 +511,8 @@ function displayInputMessageToStoredInputMessage(
 }
 /**
  * Converts DisplayInput to StoredInput before we save the datapoints. This is mostly to handle:
- * 1. DisplayInput has { type: "text", "text": "..." } https://github.com/tensorzero/tensorzero/blob/b018a80797912fef0a86ec0115d9973378fde186/ui/app/utils/clickhouse/common.ts#L41-L44
- *    but StoredInput has { type: "text", "value": "..." } https://github.com/tensorzero/tensorzero/blob/b018a80797912fef0a86ec0115d9973378fde186/tensorzero-core/src/inference/types/stored_input.rs#L107-L109
- * 2. missing_function_text and file_error are Fronend-only types, and we convert them back to text and file types for storage.
+ * 1. DisplayInput has { type: "text", "text": "..." } which matches StoredInput's { type: "text", "text": "..." } format
+ * 2. missing_function_text and file_error are frontend-only types, and we convert them back to text and file types for storage.
  * 3. StorageKind currently has a null / undefined mismatch, so we convert everything to undefined before going to the backend.
  */
 export function displayInputToStoredInput(
