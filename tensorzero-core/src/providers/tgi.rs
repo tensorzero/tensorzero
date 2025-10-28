@@ -595,7 +595,6 @@ struct TGIUsage {
     prompt_tokens: u32,
     #[serde(default)]
     completion_tokens: u32,
-    total_tokens: u32,
 }
 
 impl From<TGIUsage> for Usage {
@@ -1001,7 +1000,6 @@ mod tests {
             usage: TGIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             },
         };
         let generic_request = ModelInferenceRequest {

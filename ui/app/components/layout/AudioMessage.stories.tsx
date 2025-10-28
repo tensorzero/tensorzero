@@ -28,7 +28,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   args: {
-    fileData: await getBase64File(mp3Url),
+    data: await getBase64File(mp3Url),
     filePath: "audio.mp3",
     mimeType: "audio/mp3",
   },
@@ -36,7 +36,7 @@ export const Default: Story = {
 
 export const LongFilename: Story = {
   args: {
-    fileData: await getBase64File(mp3Url),
+    data: await getBase64File(mp3Url),
     filePath:
       "very_long_audio_filename_that_should_be_truncated_properly_in_the_display.mp3",
     mimeType: "audio/mp3",

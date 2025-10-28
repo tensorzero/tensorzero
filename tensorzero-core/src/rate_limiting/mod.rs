@@ -3,6 +3,8 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize, Serializer};
 use sqlx::postgres::types::PgInterval;
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::db::{
     ConsumeTicketsReceipt, ConsumeTicketsRequest, RateLimitQueries, ReturnTicketsRequest,
@@ -94,6 +96,16 @@ pub struct ScopeInfo {
     pub tags: Arc<HashMap<String, String>>,
 }
 
+impl ScopeInfo {
+    // Expose relevant information from this `ScopeInfo` as OpenTelemetry span attributes
+    fn apply_otel_span_attributes(&self, span: &Span) {
+        let ScopeInfo { tags } = self;
+        for (key, value) in tags.iter() {
+            span.set_attribute(format!("scope_info.tags.{key}"), value.clone());
+        }
+    }
+}
+
 impl RateLimitingConfig {
     pub fn rules(&self) -> &Vec<RateLimitingConfigRule> {
         &self.rules
@@ -116,12 +128,34 @@ impl RateLimitingConfig {
             .collect::<Vec<_>>()
     }
 
+    #[tracing::instrument(skip_all, fields(otel.name = "rate_limiting_consume_tickets", estimated_usage.tokens, estimated_usage.model_inferences))]
     pub async fn consume_tickets<'a>(
         &'a self,
         client: &impl RateLimitQueries,
         scope_info: &'a ScopeInfo,
         rate_limited_request: &impl RateLimitedRequest,
     ) -> Result<TicketBorrows, Error> {
+        let res = self
+            .consume_tickets_inner(client, scope_info, rate_limited_request)
+            .await;
+        if let Err(e) = &res {
+            // We want rate-limiting errors to show up as errors in OpenTelemetry,
+            // even though they only get logged as warnings to the console.
+            e.ensure_otel_span_errored(&Span::current());
+        }
+        res
+    }
+
+    // The actual implementation of `consume_tickets`. This is a separate function so that we can
+    // handle `Result::Err` inside `consume_tickets`
+    async fn consume_tickets_inner<'a>(
+        &'a self,
+        client: &impl RateLimitQueries,
+        scope_info: &'a ScopeInfo,
+        rate_limited_request: &impl RateLimitedRequest,
+    ) -> Result<TicketBorrows, Error> {
+        let span = Span::current();
+        scope_info.apply_otel_span_attributes(&span);
         let limits = self.get_active_limits(scope_info);
         if limits.is_empty() {
             return Ok(TicketBorrows::empty());
@@ -130,6 +164,13 @@ impl RateLimitingConfig {
         let rate_limited_resources = self.get_rate_limited_resources(scope_info);
         let rate_limit_resource_requests =
             rate_limited_request.estimated_resource_usage(&rate_limited_resources)?;
+
+        if let Some(tokens) = rate_limit_resource_requests.tokens {
+            span.record("estimated_usage.tokens", tokens as i64);
+        }
+        if let Some(model_inferences) = rate_limit_resource_requests.model_inferences {
+            span.record("estimated_usage.model_inferences", model_inferences as i64);
+        }
         let ticket_requests: Result<Vec<ConsumeTicketsRequest>, Error> = limits
             .iter()
             .map(|limit| limit.get_consume_tickets_request(&rate_limit_resource_requests))
@@ -658,11 +699,48 @@ impl TicketBorrows {
         Ok(Self { borrows })
     }
 
+    #[tracing::instrument(err, skip_all, fields(otel.name = "rate_limiting_return_tickets", actual_usage.tokens, actual_usage.model_inferences, underestimate))]
     pub async fn return_tickets(
         self,
         client: &impl RateLimitQueries,
         actual_usage: RateLimitResourceUsage,
     ) -> Result<(), Error> {
+        let res = self.return_tickets_inner(client, actual_usage).await;
+        if let Err(e) = &res {
+            // We want rate-limiting errors to show up as errors in OpenTelemetry,
+            // even though they only get logged as warnings to the console.
+            e.ensure_otel_span_errored(&Span::current());
+        }
+        res
+    }
+
+    // The actual implementation of `return_tickets`. This is a separate function so that we can
+    // handle `Result::Err` inside `return_tickets`
+    async fn return_tickets_inner(
+        self,
+        client: &impl RateLimitQueries,
+        actual_usage: RateLimitResourceUsage,
+    ) -> Result<(), Error> {
+        let span = Span::current();
+        // We cast the usage values to i64 so that they are reported as integers in OpenTelemetry (rather than strings)
+        match actual_usage {
+            RateLimitResourceUsage::Exact {
+                tokens,
+                model_inferences,
+            } => {
+                span.record("actual_usage.tokens", tokens as i64);
+                span.record("actual_usage.model_inferences", model_inferences as i64);
+                span.record("underestimate", false);
+            }
+            RateLimitResourceUsage::UnderEstimate {
+                tokens,
+                model_inferences,
+            } => {
+                span.record("actual_usage.tokens", tokens as i64);
+                span.record("actual_usage.model_inferences", model_inferences as i64);
+                span.record("underestimate", true);
+            }
+        }
         let mut requests = Vec::new();
         let mut returns = Vec::new();
         for borrow in &self.borrows {

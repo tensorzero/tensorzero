@@ -330,7 +330,7 @@ fn serialize_content_for_messages_input(
         match content_block {
             ClientInputMessageContent::File(image) => {
                 // The image was already converted from a ResolvedImage to a Base64Image before this.
-                if let File::Url { .. } = image {
+                if let File::Url(..) = image {
                     bail!("URL images not supported for LLM judge evaluations. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.")
                 }
                 serialized_content.push(ClientInputMessageContent::File(image.clone()));
@@ -425,8 +425,8 @@ mod tests {
     use super::*;
 
     use serde_json::json;
-    use tensorzero::File;
     use tensorzero::Role;
+    use tensorzero::{File, UrlFile};
     use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
     use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
     use tensorzero_core::endpoints::inference::ChatInferenceResponse;
@@ -488,10 +488,10 @@ mod tests {
             system: None,
             messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::File(File::Url {
+                content: vec![ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://example.com/image.png").unwrap(),
                     mime_type: None,
-                })],
+                }))],
             }],
         };
         let error = prepare_serialized_input(&input).unwrap_err();

@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Separator } from "~/components/ui/separator";
 import type { ParsedInferenceRow } from "~/utils/clickhouse/inference";
@@ -24,7 +24,8 @@ interface ResponseColumnProps {
   errorMessage?: string | null;
   inferenceId?: string | null;
   onClose?: () => void;
-  children?: React.ReactNode;
+  actions?: React.ReactNode;
+  refreshButton?: React.ReactNode;
 }
 
 function ResponseColumn({
@@ -33,11 +34,13 @@ function ResponseColumn({
   errorMessage,
   inferenceId,
   onClose,
-  children,
+  actions,
+  refreshButton,
 }: ResponseColumnProps) {
   return (
-    <div className="flex flex-1 flex-col">
-      <div className="mb-2 flex items-center justify-between">
+    <div className="relative flex flex-1 flex-col">
+      {refreshButton}
+      <div className="mb-2">
         <h3 className="text-sm font-semibold">{title}</h3>
       </div>
       {errorMessage ? (
@@ -73,6 +76,8 @@ function ResponseColumn({
               </div>
             )}
 
+            <div className="mt-4">{actions}</div>
+
             <div className="mt-4 grid grid-cols-2 justify-end gap-4">
               {response.usage && (
                 <div>
@@ -85,7 +90,6 @@ function ResponseColumn({
                   </p>
                 </div>
               )}
-              <div className="flex justify-end">{children}</div>
             </div>
           </>
         )
@@ -109,6 +113,7 @@ interface VariantResponseModalProps {
   variantResponse: VariantResponseInfo | null;
   rawResponse: InferenceResponse | null;
   children?: React.ReactNode;
+  onRefresh?: (() => void) | null;
 }
 
 export function VariantResponseModal({
@@ -123,6 +128,7 @@ export function VariantResponseModal({
   variantResponse,
   rawResponse,
   children,
+  onRefresh,
 }: VariantResponseModalProps) {
   const [showRawResponse, setShowRawResponse] = useState(false);
 
@@ -137,6 +143,19 @@ export function VariantResponseModal({
     source === "inference"
       ? (item as ParsedInferenceRow).variant_name
       : undefined;
+
+  const refreshButton = onRefresh && (
+    <Button
+      aria-label="Refresh variant response"
+      variant="ghost"
+      size="iconSm"
+      className="absolute top-1 right-1 z-5 h-6 w-6 cursor-pointer text-xs opacity-25 transition-opacity hover:opacity-100"
+      onClick={onRefresh}
+      disabled={isLoading}
+    >
+      {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw />}
+    </Button>
+  );
 
   useEffect(() => {
     // reset when modal opens or closes
@@ -198,9 +217,9 @@ export function VariantResponseModal({
                   errorMessage={error}
                   inferenceId={rawResponse?.inference_id}
                   onClose={onClose}
-                >
-                  {children}
-                </ResponseColumn>
+                  refreshButton={refreshButton}
+                  actions={children}
+                />
               </div>
 
               <Separator className="my-4" />

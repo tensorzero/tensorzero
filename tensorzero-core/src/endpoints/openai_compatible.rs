@@ -38,8 +38,9 @@ use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
-    current_timestamp, Arguments, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason,
-    Input, InputMessage, InputMessageContent, RawText, Role, System, Template, Text, Usage,
+    current_timestamp, Arguments, Base64File, ContentBlockChatOutput, ContentBlockChunk, File,
+    FinishReason, Input, InputMessage, InputMessageContent, RawText, Role, System, Template, Text,
+    UrlFile, Usage,
 };
 
 use crate::tool::{
@@ -1005,13 +1006,13 @@ fn convert_openai_message_content(
                         if image_url.url.scheme() == "data" {
                             let url_str = image_url.url.to_string();
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
-                            InputMessageContent::File(File::Base64 { mime_type, data: data.to_string() })
+                            InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type, data: data.to_string() }))
                         } else {
-                            InputMessageContent::File(File::Url { url: image_url.url, mime_type: image_url.mime_type })
+                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type }))
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
-                        InputMessageContent::File(File::Base64 { mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data })
+                        InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data }))
                     }
                     Err(e) => {
                         if let Some(obj) = val.as_object() {

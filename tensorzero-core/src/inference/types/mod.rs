@@ -66,7 +66,9 @@ use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
 use file::sanitize_raw_request;
-pub use file::{Base64File, File};
+pub use file::{
+    Base64File, File, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
+};
 use futures::future::{join_all, try_join_all};
 use futures::FutureExt;
 use itertools::Itertools;
@@ -76,7 +78,6 @@ use pyo3::prelude::*;
 use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
-use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
@@ -292,14 +293,22 @@ impl InputMessageContent {
             }
             InputMessageContent::File(file) => {
                 match &file {
-                    File::Url { url, mime_type } => {
+                    // User provided a file URL.
+                    // We create a lazy future that will fetch the file when needed.
+                    // The future is not executed immediately - it only runs when awaited.
+                    // This allows model providers that support URL forwarding to skip the fetch entirely.
+                    // When the future does run, it:
+                    // 1. Fetches the file from the URL
+                    // 2. Computes a content-addressed `storage_path`
+                    // 3. Returns a `ObjectStorageFile` with the data
+                    File::Url(UrlFile { url, mime_type }) => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
                         let storage_kind = get_storage_kind(&context)?;
                         let client = context.client.clone();
                         // Construct a future that will actually fetch the file URL from the network.
-                        // Important - we do *not* use `tokio::spawn` here. As a result, the future
+                        // Important: we do *not* use `tokio::spawn` here. As a result, the future
                         // will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
                         // This ensures that if we never actually need to download the file
@@ -308,11 +317,15 @@ impl InputMessageContent {
                         let url = url.clone();
                         let mime_type = mime_type.clone();
                         let delayed_file_future = async move {
-                            let file = file.take_or_fetch(&client).await?;
-                            let path = storage_kind.file_path(&file)?;
-                            Ok(FileWithPath {
-                                file,
-                                storage_path: path,
+                            let base64_file = file.take_or_fetch(&client).await?;
+                            let path = storage_kind.file_path(&base64_file)?;
+                            Ok(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: base64_file.source_url,
+                                    mime_type: base64_file.mime_type,
+                                    storage_path: path,
+                                },
+                                data: base64_file.data,
                             })
                         };
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
@@ -320,57 +333,84 @@ impl InputMessageContent {
                             future: delayed_file_future.boxed().shared(),
                         }))
                     }
-                    File::Base64 { mime_type, data } => {
-                        let file = Base64File {
-                            url: None,
+                    // User provided base64-encoded file data.
+                    // We immediately:
+                    // 1. Compute a content-addressed `storage_path` from the data
+                    // 2. Wrap the data in `PendingObjectStoreFile` to signal it needs writing
+                    // The data is ready to use but not yet persisted to object storage.
+                    // The write will happen later in `into_stored_input_message_content`.
+                    File::Base64(Base64File {
+                        source_url,
+                        mime_type,
+                        data,
+                    }) => {
+                        let storage_kind = get_storage_kind(&context)?;
+                        let base64_file = Base64File {
+                            source_url: source_url.clone(),
                             mime_type: mime_type.clone(),
                             data: data.clone(),
                         };
-                        let storage_kind = get_storage_kind(&context)?;
-                        let path = storage_kind.file_path(&file)?;
+                        let path = storage_kind.file_path(&base64_file)?;
 
-                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(
-                            FileWithPath {
-                                file,
-                                storage_path: path,
-                            },
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::Base64(
+                            PendingObjectStoreFile(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: source_url.clone(),
+                                    mime_type: mime_type.clone(),
+                                    storage_path: path,
+                                },
+                                data: data.clone(),
+                            }),
                         )))
                     }
-                    File::ObjectStorage {
+                    // User provided a reference to a file already in object storage.
+                    // We create a lazy future that will fetch the file data when needed.
+                    // The future is not executed immediately - it only runs when awaited.
+                    // This allows us to skip fetching if the file data isn't needed (e.g., just storing metadata).
+                    // When the future does run, it fetches the file from object storage.
+                    File::ObjectStoragePointer(ObjectStoragePointer {
                         source_url,
                         mime_type,
                         storage_path,
-                    } => {
-                        let source_url = source_url.clone();
+                    }) => {
+                        let source_url_for_future = source_url.clone();
                         let object_store_info = context.object_store_info.clone();
                         let owned_storage_path = storage_path.clone();
                         let mime_type_for_closure = mime_type.clone();
                         // Construct a future that will fetch the file from the object store.
-                        // Important - the future will not actually begin executing (including opening the network connection)
+                        // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
                         let delayed_file_future = async move {
                             let object_response =
                                 get_object(object_store_info.as_ref(), owned_storage_path.clone())
                                     .await?;
-                            let file = Base64File {
-                                url: None,
-                                mime_type: mime_type_for_closure,
+                            Ok(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: source_url_for_future,
+                                    mime_type: mime_type_for_closure,
+                                    storage_path: owned_storage_path,
+                                },
                                 data: object_response.data,
-                            };
-                            Ok(FileWithPath {
-                                file,
-                                storage_path: owned_storage_path,
                             })
                         };
-                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::ObjectStorage {
-                            metadata: Base64FileMetadata {
-                                url: source_url,
-                                mime_type: mime_type.clone(),
+                        LazyResolvedInputMessageContent::File(Box::new(
+                            LazyFile::ObjectStoragePointer {
+                                metadata: Base64FileMetadata {
+                                    source_url: source_url.clone(),
+                                    mime_type: mime_type.clone(),
+                                },
+                                storage_path: storage_path.clone(),
+                                future: delayed_file_future.boxed().shared(),
                             },
-                            storage_path: storage_path.clone(),
-                            future: delayed_file_future.boxed().shared(),
-                        }))
+                        ))
                     }
+                    // User provided a file reference with data already in memory.
+                    // This typically comes from roundtripping (e.g., `get_datapoints` → `update_datapoints`).
+                    // The file is already persisted at `storage_path`, and we have the data available.
+                    // No fetch or write is needed - we can use it directly.
+                    File::ObjectStorage(resolved_file) => LazyResolvedInputMessageContent::File(
+                        Box::new(LazyFile::ObjectStorage(resolved_file.clone())),
+                    ),
                 }
             }
             InputMessageContent::Unknown(unknown) => {
@@ -381,6 +421,10 @@ impl InputMessageContent {
 }
 
 impl LazyResolvedInputMessageContent {
+    /// Converts lazy content into fully resolved content by executing any pending operations.
+    /// For files, this means fetching data if needed (from URLs or object storage).
+    /// This is used when we need the actual file data (e.g., for inference with providers
+    /// that don't support URL forwarding, or for observability).
     pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
             LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
@@ -400,13 +444,23 @@ impl LazyResolvedInputMessageContent {
                 ResolvedInputMessageContent::Thought(thought)
             }
             LazyResolvedInputMessageContent::File(file) => match *file {
+                // File from URL: await the fetch future to get the data.
+                // This performs the network request and returns the file data.
                 LazyFile::Url {
                     future,
                     file_url: _,
                 } => ResolvedInputMessageContent::File(Box::new(future.await?)),
-                LazyFile::FileWithPath(file) => ResolvedInputMessageContent::File(Box::new(file)),
-                LazyFile::ObjectStorage { future, .. } => {
+                // Base64 file: unwrap from `PendingObjectStoreFile`.
+                // The data is already in memory, just needs type conversion.
+                LazyFile::Base64(pending) => ResolvedInputMessageContent::File(Box::new(pending.0)),
+                // File from object storage: await the fetch future to get the data.
+                // This fetches the file from object storage and returns the file data.
+                LazyFile::ObjectStoragePointer { future, .. } => {
                     ResolvedInputMessageContent::File(Box::new(future.await?))
+                }
+                // Already resolved file: data is in memory, return it directly.
+                LazyFile::ObjectStorage(resolved) => {
+                    ResolvedInputMessageContent::File(Box::new(resolved))
                 }
             },
             LazyResolvedInputMessageContent::Unknown(unknown) => {
@@ -415,42 +469,82 @@ impl LazyResolvedInputMessageContent {
         })
     }
 
-    /// Converts the message content into a StoredInputMessageContent,
-    /// bypassing fetching files / resolving network resources if possible.
+    /// Converts the message content into a StoredInputMessageContent for database storage.
+    /// This method optimizes file handling by:
+    /// - Skipping fetches when the file is already in object storage (`ObjectStoragePointer`, `ObjectStorageFile`)
+    /// - Only writing files that aren't already persisted (`Url`, `Base64`)
+    /// This enables efficient roundtripping: data from the database can be passed back
+    /// to new requests without re-fetching or re-writing files.
     pub async fn into_stored_input_message_content(
         self,
         object_store_info: &Option<ObjectStoreInfo>,
     ) -> Result<StoredInputMessageContent, Error> {
         Ok(match self {
-            // When the input file already contains the ObjectStorage path, we discard the future without awaiting
-            // (which doesn't trigger the pending network request), and directly convert the metadata and
-            // storage_path into a StoredFile.
             LazyResolvedInputMessageContent::File(file) => match *file {
-                LazyFile::ObjectStorage {
+                // File reference to object storage without data in memory.
+                // Origin: User provided File::ObjectStorage (e.g., from list_datapoints)
+                // The file is already persisted at storage_path, so we skip both fetch and write.
+                // We discard the future without awaiting (avoiding the pending fetch operation)
+                // and directly convert the metadata and storage_path into a StoredFile.
+                LazyFile::ObjectStoragePointer {
                     metadata,
                     storage_path,
                     future: _,
-                } => StoredInputMessageContent::File(Box::new(StoredFile {
-                    file: metadata,
+                } => StoredInputMessageContent::File(Box::new(StoredFile(ObjectStoragePointer {
+                    source_url: metadata.source_url,
+                    mime_type: metadata.mime_type,
                     storage_path,
-                })),
-                // All other file types need to be resolved first.
-                other => {
-                    let file = other.resolve().await?.into_owned();
-                    // Because this may trigger during a datapoint update,
-                    // we need to try and write the file to object storage first.
+                }))),
+                // File reference to object storage with data in memory.
+                // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)
+                //         User provided File::ObjectStorageFile with file data attached
+                // The file is already persisted at storage_path, so we skip the write.
+                // We drop the in-memory data and keep only the metadata for storage.
+                LazyFile::ObjectStorage(resolved) => {
+                    StoredInputMessageContent::File(Box::new(StoredFile(resolved.file)))
+                }
+                // File from a URL that needs to be fetched and stored.
+                // Origin: User provided File::Url
+                // We fetch the file from the URL, then write it to object storage.
+                LazyFile::Url {
+                    future,
+                    file_url: _,
+                } => {
+                    let resolved_file = future.await?;
                     write_file(
                         object_store_info,
-                        file.file.clone(),
-                        file.storage_path.clone(),
+                        Base64File {
+                            source_url: resolved_file.file.source_url.clone(),
+                            mime_type: resolved_file.file.mime_type.clone(),
+                            data: resolved_file.data.clone(),
+                        },
+                        resolved_file.file.storage_path.clone(),
                     )
                     .await?;
 
-                    StoredInputMessageContent::File(Box::new(file.into_stored_file()))
+                    StoredInputMessageContent::File(Box::new(StoredFile(resolved_file.file)))
+                }
+                // Base64-encoded file data that needs to be written to storage.
+                // Origin: User provided File::Base64 (fresh file data)
+                // We write the base64 data to object storage.
+                // The PendingObjectStoreFile wrapper type signals this write requirement.
+                LazyFile::Base64(pending) => {
+                    write_file(
+                        object_store_info,
+                        Base64File {
+                            source_url: pending.0.file.source_url.clone(),
+                            mime_type: pending.0.file.mime_type.clone(),
+                            data: pending.0.data.clone(),
+                        },
+                        pending.0.file.storage_path.clone(),
+                    )
+                    .await?;
+
+                    StoredInputMessageContent::File(Box::new(StoredFile(pending.0.file)))
                 }
             },
             // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
-            other => other.resolve().await?.into_stored_input_message_content(),
+            other => other.resolve().await?.into_stored_input_message_content()?,
         })
     }
 }
@@ -784,13 +878,12 @@ impl ContentBlock {
             ContentBlock::ToolResult(tool_result) => {
                 Ok(StoredContentBlock::ToolResult(tool_result))
             }
-            ContentBlock::File(file) => Ok(StoredContentBlock::File(Box::new(
-                file.resolve()
-                    .await?
-                    .clone()
-                    .into_owned()
-                    .into_stored_file(),
-            ))),
+            ContentBlock::File(file) => {
+                let resolved_file = file.resolve().await?.clone().into_owned();
+                Ok(StoredContentBlock::File(Box::new(
+                    File::ObjectStorage(resolved_file).into_stored_file()?,
+                )))
+            }
             ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
             ContentBlock::Unknown {
                 data,
@@ -875,7 +968,7 @@ pub enum StoredContentBlock {
     },
 }
 
-/// Like `ContentBlock`, but stores an in-memory `FileWithPath` instead of a `LazyFile`
+/// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -885,7 +978,7 @@ pub enum ResolvedContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    File(Box<FileWithPath>),
+    File(Box<ObjectStorageFile>),
     Thought(Thought),
     Unknown {
         data: Value,
@@ -894,13 +987,14 @@ pub enum ResolvedContentBlock {
 }
 
 impl ResolvedContentBlock {
+    /// Converts a `ResolvedContentBlock` into a `ContentBlock`.
     pub fn into_content_block(self) -> ContentBlock {
         match self {
             ResolvedContentBlock::Text(text) => ContentBlock::Text(text),
             ResolvedContentBlock::ToolCall(tool_call) => ContentBlock::ToolCall(tool_call),
             ResolvedContentBlock::ToolResult(tool_result) => ContentBlock::ToolResult(tool_result),
-            ResolvedContentBlock::File(file) => {
-                ContentBlock::File(Box::new(LazyFile::FileWithPath(*file)))
+            ResolvedContentBlock::File(resolved) => {
+                ContentBlock::File(Box::new(LazyFile::ObjectStorage(*resolved)))
             }
             ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
             ResolvedContentBlock::Unknown {
@@ -2495,7 +2589,7 @@ mod tests {
             })],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
 
@@ -2619,7 +2713,7 @@ mod tests {
             })],
             tool_choice: ToolChoice::None,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
 

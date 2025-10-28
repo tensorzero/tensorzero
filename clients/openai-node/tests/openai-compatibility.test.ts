@@ -1267,7 +1267,7 @@ describe("OpenAI Compatibility", () => {
 
     expect(result.choices[0].message.content).not.toBeNull();
     const jsonContent = JSON.parse(result.choices[0].message.content!);
-    expect(jsonContent[0].FileWithPath.storage_path).toEqual({
+    expect(jsonContent[0].Base64.storage_path).toEqual({
       kind: { type: "disabled" },
       path: "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
     });

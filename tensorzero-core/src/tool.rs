@@ -193,7 +193,7 @@ pub enum AllowedToolsChoice {
 #[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
     pub tools_available: Vec<ToolConfig>,
-    pub provider_tools: Option<Vec<ProviderTool>>,
+    pub provider_tools: Vec<ProviderTool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub allowed_tools: AllowedTools,
@@ -311,18 +311,18 @@ impl ToolCallConfig {
             .parallel_tool_calls
             .or(function_parallel_tool_calls);
 
-        let tool_call_config_option =
-            if tools_available.is_empty() && dynamic_tool_params.provider_tools.is_none() {
-                None
-            } else {
-                Some(Self {
-                    tools_available,
-                    tool_choice,
-                    provider_tools: dynamic_tool_params.provider_tools,
-                    parallel_tool_calls,
-                    allowed_tools,
-                })
-            };
+        let provider_tools = dynamic_tool_params.provider_tools.unwrap_or_default();
+        let tool_call_config_option = if tools_available.is_empty() && provider_tools.is_empty() {
+            None
+        } else {
+            Some(Self {
+                tools_available,
+                provider_tools,
+                tool_choice,
+                parallel_tool_calls,
+                allowed_tools,
+            })
+        };
 
         Ok(tool_call_config_option)
     }
@@ -342,14 +342,9 @@ impl ToolCallConfig {
         model_provider_name: &str,
     ) -> Vec<&ProviderTool> {
         self.provider_tools
-            .as_ref()
-            .map(|tools| {
-                tools
-                    .iter()
-                    .filter(|t| t.scope.matches(model_name, model_provider_name))
-                    .collect()
-            })
-            .unwrap_or_default()
+            .iter()
+            .filter(|t| t.scope.matches(model_name, model_provider_name))
+            .collect()
     }
 }
 /// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
@@ -588,7 +583,7 @@ impl ToolCallConfig {
             tools_available: vec![implicit_tool_config],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         }
     }
@@ -754,7 +749,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: None,
+        provider_tools: vec![],
         allowed_tools: AllowedTools::default(),
     }
 }
@@ -896,7 +891,7 @@ impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
             tool_choice: db_insert.tool_choice,
             parallel_tool_calls: db_insert.parallel_tool_calls,
             // TODO(Viraj): address this once we start storing provider tools
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         }
     }
@@ -910,7 +905,7 @@ pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallCon
         tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: None,
+        provider_tools: vec![],
         allowed_tools: AllowedTools::default(),
     }
 }
@@ -1432,7 +1427,7 @@ mod tests {
 
         let config = ToolCallConfig {
             tools_available: vec![],
-            provider_tools: Some(provider_tools),
+            provider_tools,
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
@@ -1460,10 +1455,10 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
 
-        // Test with None provider_tools
+        // Test with empty provider_tools
         let config_no_tools = ToolCallConfig {
             tools_available: vec![],
-            provider_tools: None,
+            provider_tools: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
             allowed_tools: AllowedTools::default(),
