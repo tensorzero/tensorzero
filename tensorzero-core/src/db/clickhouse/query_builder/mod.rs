@@ -2075,6 +2075,7 @@ FORMAT JSONEachRow";
 
     #[test]
     fn test_stored_inference_deserialization_chat() {
+        // TODO(Viraj, this PR): add test cases for the new tool format too.
         // Test the ClickHouse version (doubly serialized)
         let json = r#"
             {
