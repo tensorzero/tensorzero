@@ -1,18 +1,18 @@
-import InputSnippet from "./InputSnippet";
+import Input from "./Input";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import pdfUrl from "./InputSnippet.stories.fixture.tensorzero.pdf?url";
-import mp3Url from "./InputSnippet.stories.fixture.tensorzero.mp3?url";
+import pdfUrl from "./Input.stories.fixture.tensorzero.pdf?url";
+import mp3Url from "./Input.stories.fixture.tensorzero.mp3?url";
 import type { JsonValue } from "tensorzero-node";
 
 const meta = {
-  title: "InputSnippet",
-  component: InputSnippet,
+  title: "Input",
+  component: Input,
   render: (args) => (
     <div className="w-[80vw] p-4">
-      <InputSnippet {...args} />
+      <Input {...args} />
     </div>
   ),
-} satisfies Meta<typeof InputSnippet>;
+} satisfies Meta<typeof Input>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -347,7 +347,7 @@ export const ImageInput: Story = {
           {
             type: "file",
             file: {
-              dataUrl: await getBase64File(
+              data: await getBase64File(
                 "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
               ),
               mime_type: "image/png",
@@ -367,8 +367,7 @@ export const ImageInput: Story = {
             type: "file",
             file: {
               // This is a one pixel by one pixel orange image
-              dataUrl:
-                "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII=",
+              data: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdj+O/P8B8ABe0CTsv8mHgAAAAASUVORK5CYII=",
               mime_type: "image/png",
             },
             storage_path: {
@@ -450,7 +449,7 @@ export const PDFInput: Story = {
           {
             type: "file",
             file: {
-              dataUrl: await getBase64File(pdfUrl),
+              data: await getBase64File(pdfUrl),
               mime_type: "application/pdf",
             },
             storage_path: {
@@ -483,7 +482,7 @@ export const AudioInput: Story = {
           {
             type: "file",
             file: {
-              dataUrl: await getBase64File(mp3Url),
+              data: await getBase64File(mp3Url),
               mime_type: "audio/mp3",
             },
             storage_path: {

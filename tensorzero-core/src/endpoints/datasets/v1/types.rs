@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::db::clickhouse::query_builder::DatapointFilter;
+use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
 use crate::tool::ToolCallConfigDatabaseInsert;
@@ -122,4 +124,69 @@ pub struct UpdateDatapointsResponse {
     /// The IDs of the datapoints that were updated.
     /// These are newly generated IDs for UpdateDatapoint requests, and they are the same IDs for UpdateDatapointMetadata requests.
     pub ids: Vec<Uuid>,
+}
+
+/// Request to update metadata for one or more datapoints in a dataset.
+/// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct UpdateDatapointsMetadataRequest {
+    /// The datapoints to update metadata for.
+    pub datapoints: Vec<UpdateDatapointMetadataRequest>,
+}
+
+/// A request to update the metadata of a single datapoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
+pub struct UpdateDatapointMetadataRequest {
+    /// The ID of the datapoint to update. Required.
+    pub id: Uuid,
+
+    /// Metadata fields to update. If omitted, no metadata changes will be made.
+    #[serde(default)]
+    pub metadata: Option<DatapointMetadataUpdate>,
+}
+
+/// Request to list datapoints from a dataset with pagination and filters.
+/// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct ListDatapointsRequest {
+    /// Optional function name to filter datapoints by.
+    /// If provided, only datapoints from this function will be returned.
+    pub function_name: Option<String>,
+
+    /// The maximum number of datapoints to return.
+    /// Defaults to 20.
+    pub page_size: Option<u32>,
+
+    /// The number of datapoints to skip before starting to return results.
+    /// Defaults to 0.
+    pub offset: Option<u32>,
+
+    /// Optional filter to apply when querying datapoints.
+    /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
+    pub filter: Option<DatapointFilter>,
+}
+
+/// Request to get specific datapoints by their IDs.
+/// Used by the `POST /v1/datasets/get_datapoints` endpoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct GetDatapointsRequest {
+    /// The IDs of the datapoints to retrieve. Required.
+    pub ids: Vec<Uuid>,
+}
+
+/// Response containing the requested datapoints.
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct GetDatapointsResponse {
+    /// The retrieved datapoints.
+    pub datapoints: Vec<Datapoint>,
 }

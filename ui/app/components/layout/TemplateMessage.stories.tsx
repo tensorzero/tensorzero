@@ -15,7 +15,7 @@ type Story = StoryObj<typeof meta>;
 export const Simple: Story = {
   args: {
     templateName: "greeting",
-    arguments: {
+    templateArguments: {
       name: "Alice",
       language: "English",
     },
@@ -25,14 +25,14 @@ export const Simple: Story = {
 export const EmptyArguments: Story = {
   args: {
     templateName: "empty_template",
-    arguments: {},
+    templateArguments: {},
   },
 };
 
 export const NestedObject: Story = {
   args: {
     templateName: "user_profile",
-    arguments: {
+    templateArguments: {
       user: {
         name: "John Doe",
         preferences: {
@@ -51,7 +51,7 @@ export const NestedObject: Story = {
 export const WithArrays: Story = {
   args: {
     templateName: "content_generator",
-    arguments: {
+    templateArguments: {
       topics: ["Machine Learning", "Neural Networks", "Deep Learning"],
       config: {
         models: ["GPT-4", "Claude", "Gemini"],
@@ -64,7 +64,7 @@ export const WithArrays: Story = {
 export const ComplexStructure: Story = {
   args: {
     templateName: "query_builder",
-    arguments: {
+    templateArguments: {
       query: "SELECT * FROM users WHERE active = true",
       filters: {
         department: "engineering",
@@ -86,7 +86,7 @@ export const ComplexStructure: Story = {
 export const WithNullAndUndefined: Story = {
   args: {
     templateName: "conditional_template",
-    arguments: {
+    templateArguments: {
       requiredField: "value",
       optionalField: null,
       missingField: undefined,
@@ -100,7 +100,7 @@ export const LongTemplateName: Story = {
   args: {
     templateName:
       "very_long_template_name_that_describes_what_the_template_does",
-    arguments: {
+    templateArguments: {
       key: "value",
     },
   },

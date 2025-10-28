@@ -12,7 +12,13 @@ import type {
   Role,
   TextInput,
 } from "./clickhouse/common";
-import type { FunctionConfig } from "tensorzero-node";
+import type {
+  FunctionConfig,
+  JsonValue,
+  StoredInput,
+  StoredInputMessage,
+  StoredInputMessageContent,
+} from "tensorzero-node";
 import { getTensorZeroClient } from "./tensorzero.server";
 
 export async function resolveInput(
@@ -119,7 +125,7 @@ async function resolveContent(
       try {
         return {
           ...content,
-          file: await resolveFile(content as FileContent),
+          file: await resolveFile(content),
         };
       } catch (error) {
         return {
@@ -175,7 +181,7 @@ async function resolveModelInferenceContent(
       try {
         return {
           ...content,
-          file: await resolveFile(content as FileContent),
+          file: await resolveFile(content),
         };
       } catch (error) {
         return {
@@ -189,9 +195,9 @@ async function resolveModelInferenceContent(
 async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
   const object = await getTensorZeroClient().getObject(content.storage_path);
   const json = JSON.parse(object);
-  const dataURL = `data:${content.file.mime_type};base64,${json.data}`;
+  const data = `data:${content.file.mime_type};base64,${json.data}`;
   return {
-    dataUrl: dataURL,
+    data,
     mime_type: content.file.mime_type,
   };
 }
@@ -199,6 +205,7 @@ async function resolveFile(content: FileContent): Promise<ResolvedBase64File> {
 // In the current data model we can't distinguish between a message being a structured one from a schema
 // or an unstructured one without a schema without knowing the function config.
 // So as we prepare the input for display, we check this and return an unambiguous type of structured or unstructured text.
+// TODO (Gabriel): this function uses legacy types and should be deprecated ASAP. It won't handle sad paths very well.
 function prepareDisplayText(
   textBlock: TextInput,
   role: Role,
@@ -208,7 +215,17 @@ function prepareDisplayText(
   if (!functionConfig) {
     return {
       type: "missing_function_text",
-      value: textBlock.value,
+      value:
+        typeof textBlock.value === "string"
+          ? textBlock.value
+          : JSON.stringify(textBlock.value),
+    };
+  }
+
+  if (textBlock.text !== undefined) {
+    return {
+      type: "text",
+      text: textBlock.text,
     };
   }
 
@@ -217,7 +234,18 @@ function prepareDisplayText(
     return {
       type: "template",
       name: "user",
-      arguments: textBlock.value,
+      arguments: (() => {
+        if (
+          typeof textBlock.value === "object" &&
+          textBlock.value !== null &&
+          !Array.isArray(textBlock.value)
+        ) {
+          return textBlock.value as Record<string, JsonValue>;
+        }
+        throw new Error(
+          `Invalid arguments for user template: expected object, got ${typeof textBlock.value}`,
+        );
+      })(),
     };
   }
 
@@ -228,13 +256,110 @@ function prepareDisplayText(
     return {
       type: "template",
       name: "assistant",
-      arguments: textBlock.value,
+      arguments: (() => {
+        if (
+          typeof textBlock.value === "object" &&
+          textBlock.value !== null &&
+          !Array.isArray(textBlock.value)
+        ) {
+          return textBlock.value as Record<string, JsonValue>;
+        }
+        throw new Error(
+          `Invalid arguments for assistant template: expected object, got ${typeof textBlock.value}`,
+        );
+      })(),
     };
   }
 
   // Otherwise it's just unstructured text
   return {
     type: "text",
-    text: textBlock.value,
+    text:
+      typeof textBlock.value === "string"
+        ? textBlock.value
+        : JSON.stringify(textBlock.value),
   };
+}
+
+// ===== StoredInput =====
+// TODO: These functions should be deprecated as we clean up the types...
+
+export async function resolveStoredInput(
+  input: StoredInput,
+): Promise<DisplayInput> {
+  const resolvedMessages = await resolveStoredInputMessages(input.messages);
+  return {
+    ...input,
+    messages: resolvedMessages,
+  };
+}
+
+export async function resolveStoredInputMessages(
+  messages: StoredInputMessage[],
+): Promise<DisplayInputMessage[]> {
+  return Promise.all(
+    messages.map(async (message) => {
+      return resolveStoredInputMessage(message);
+    }),
+  );
+}
+
+async function resolveStoredInputMessage(
+  message: StoredInputMessage,
+): Promise<DisplayInputMessage> {
+  const resolvedContent = await Promise.all(
+    message.content.map(async (content) => {
+      return resolveStoredInputMessageContent(content);
+    }),
+  );
+  return {
+    ...message,
+    content: resolvedContent,
+  };
+}
+
+async function resolveStoredInputMessageContent(
+  content: StoredInputMessageContent,
+): Promise<DisplayInputMessageContent> {
+  switch (content.type) {
+    case "tool_call":
+    case "tool_result":
+    case "raw_text":
+    case "thought":
+    case "unknown":
+    case "template":
+    case "text":
+      return content;
+    case "file":
+      try {
+        // Convert flattened ObjectStorageFile to nested FileContent structure
+        const fileContent: FileContent = {
+          type: "file",
+          file: {
+            url: content.source_url ?? null,
+            mime_type: content.mime_type,
+          },
+          storage_path: content.storage_path,
+        };
+        const resolvedFile = await resolveFile(fileContent);
+        return {
+          type: "file",
+          file: {
+            data: resolvedFile.data,
+            mime_type: resolvedFile.mime_type,
+          },
+          storage_path: content.storage_path,
+        };
+      } catch (error) {
+        return {
+          type: "file_error",
+          file: {
+            url: content.source_url ?? null,
+            mime_type: content.mime_type,
+          },
+          storage_path: content.storage_path,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+  }
 }

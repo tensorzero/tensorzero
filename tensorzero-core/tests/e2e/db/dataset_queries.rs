@@ -12,10 +12,11 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
-    GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter, StaleDatapointParams,
+    GetDatapointsParams, GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
+    StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
-use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{
@@ -977,9 +978,9 @@ async fn test_get_datapoint_returns_correct_json_datapoint_with_specific_id() {
         let input_messages = datapoint.input.messages;
         assert!(input_messages.contains(&StoredInputMessage {
             role: Role::User,
-            content: vec![StoredInputMessageContent::Text {
-                value: "Is it a living thing?".to_string().into(),
-            }],
+            content: vec![StoredInputMessageContent::Text(Text {
+                text: "Is it a living thing?".to_string(),
+            })],
         }));
 
         assert_eq!(
@@ -1589,7 +1590,15 @@ async fn test_get_datapoints_with_empty_ids() {
     let clickhouse = get_clickhouse().await;
 
     let result = clickhouse
-        .get_datapoints("test_dataset", &[], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some("test_dataset".to_string()),
+            function_name: None,
+            ids: None,
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1634,7 +1643,15 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
 
     // Retrieve using get_datapoints
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1688,7 +1705,15 @@ async fn test_get_datapoints_with_single_json_datapoint() {
 
     // Retrieve using get_datapoints
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1800,7 +1825,15 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
 
     // Retrieve all three datapoints
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[chat_id1, json_id, chat_id2], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![chat_id1, json_id, chat_id2]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1870,11 +1903,15 @@ async fn test_get_datapoints_with_non_existent_ids() {
     let non_existent_id = Uuid::now_v7();
     let another_non_existent_id = Uuid::now_v7();
     let result = clickhouse
-        .get_datapoints(
-            &dataset_name,
-            &[datapoint_id, non_existent_id, another_non_existent_id],
-            false,
-        )
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id, non_existent_id, another_non_existent_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -1924,7 +1961,15 @@ async fn test_get_datapoints_respects_allow_stale_false() {
 
     // Verify we can retrieve it before staling
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
     assert_eq!(result.len(), 1, "Should retrieve datapoint before staling");
@@ -1944,7 +1989,15 @@ async fn test_get_datapoints_respects_allow_stale_false() {
 
     // Try to retrieve with allow_stale=false
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -2006,7 +2059,15 @@ async fn test_get_datapoints_respects_allow_stale_true() {
 
     // Try to retrieve with allow_stale=true
     let result = clickhouse
-        .get_datapoints(&dataset_name, &[datapoint_id], true)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.clone()),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: true,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -2065,7 +2126,15 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
     // Try to retrieve with different dataset name
     let wrong_dataset = format!("wrong_{dataset_name}");
     let result = clickhouse
-        .get_datapoints(&wrong_dataset, &[datapoint_id], false)
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(wrong_dataset),
+            function_name: None,
+            ids: Some(vec![datapoint_id]),
+            page_size: 20,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
         .await
         .unwrap();
 
@@ -2083,16 +2152,14 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
     // Create a StoredFile with ObjectStorage
-    let stored_file = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/original.png".parse().unwrap()),
-            mime_type: mime::IMAGE_PNG,
-        },
+    let stored_file = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/original.png".parse().unwrap()),
+        mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image.png").unwrap(),
         },
-    };
+    });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2144,9 +2211,9 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
 
         match &chat_dp.input.messages[0].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/original.png".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file.storage_path.path);
@@ -2165,16 +2232,14 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
     // Create a StoredFile with ObjectStorage
-    let stored_file = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/data.json".parse().unwrap()),
-            mime_type: mime::APPLICATION_JSON,
-        },
+    let stored_file = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/data.json".parse().unwrap()),
+        mime_type: mime::APPLICATION_JSON,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/data.json").unwrap(),
         },
-    };
+    });
 
     let json_datapoint = DatapointInsert::Json(JsonInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2227,9 +2292,9 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
 
         match &json_dp.input.messages[0].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::APPLICATION_JSON);
+                assert_eq!(file.mime_type, mime::APPLICATION_JSON);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/data.json".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file.storage_path.path);
@@ -2248,27 +2313,23 @@ async fn test_datapoint_with_mixed_file_types() {
     let dataset_name = format!("test_mixed_files_{}", Uuid::now_v7());
 
     // Create multiple StoredFiles
-    let stored_file1 = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/image1.png".parse().unwrap()),
-            mime_type: mime::IMAGE_PNG,
-        },
+    let stored_file1 = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/image1.png".parse().unwrap()),
+        mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
         },
-    };
+    });
 
-    let stored_file2 = StoredFile {
-        file: Base64FileMetadata {
-            url: None, // No source URL
-            mime_type: mime::IMAGE_JPEG,
-        },
+    let stored_file2 = StoredFile(ObjectStoragePointer {
+        source_url: None, // No source URL
+        mime_type: mime::IMAGE_JPEG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
         },
-    };
+    });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2282,9 +2343,9 @@ async fn test_datapoint_with_mixed_file_types() {
                 StoredInputMessage {
                     role: Role::User,
                     content: vec![
-                        StoredInputMessageContent::Text {
-                            value: "Here are some files".into(),
-                        },
+                        StoredInputMessageContent::Text(Text {
+                            text: "Here are some files".to_string(),
+                        }),
                         StoredInputMessageContent::File(Box::new(stored_file1.clone())),
                     ],
                 },
@@ -2331,18 +2392,16 @@ async fn test_datapoint_with_mixed_file_types() {
         // Check first message with text and file
         assert_eq!(chat_dp.input.messages[0].content.len(), 2);
         match &chat_dp.input.messages[0].content[0] {
-            StoredInputMessageContent::Text { value } => {
-                // value is a JSON string, so we need to deserialize it
-                let text: String = serde_json::from_value(value.clone()).unwrap();
-                assert_eq!(text, "Here are some files");
+            StoredInputMessageContent::Text(text) => {
+                assert_eq!(text.text, "Here are some files");
             }
             _ => panic!("Expected Text content"),
         }
         match &chat_dp.input.messages[0].content[1] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/image1.png".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file1.storage_path.path);
@@ -2354,8 +2413,8 @@ async fn test_datapoint_with_mixed_file_types() {
         assert_eq!(chat_dp.input.messages[1].content.len(), 1);
         match &chat_dp.input.messages[1].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_JPEG);
-                assert_eq!(file.file.url, None);
+                assert_eq!(file.mime_type, mime::IMAGE_JPEG);
+                assert_eq!(file.source_url, None);
                 assert_eq!(file.storage_path.path, stored_file2.storage_path.path);
             }
             _ => panic!("Expected File content"),

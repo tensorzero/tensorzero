@@ -7,16 +7,19 @@ use uuid::Uuid;
 use mockall::automock;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
-use crate::db::clickhouse::query_builder::FloatComparisonOperator;
+use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
 use crate::endpoints::datasets::{Datapoint, DatapointKind};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
 use crate::serde_util::{
     deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json,
+    serialize_none_as_empty_map, serialize_none_as_empty_string,
 };
 use crate::tool::ToolCallConfigDatabaseInsert;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Datapoint types that are directly serialized and inserted into ClickHouse.
+/// These should be internal-only types but are exposed to tensorzero-node.
+#[derive(Debug, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
@@ -27,52 +30,133 @@ pub enum DatapointInsert {
     Json(JsonInferenceDatapointInsert),
 }
 
+#[cfg(any(test, feature = "e2e_tests"))]
+impl DatapointInsert {
+    pub fn id(&self) -> Uuid {
+        match self {
+            DatapointInsert::Chat(datapoint) => datapoint.id,
+            DatapointInsert::Json(datapoint) => datapoint.id,
+        }
+    }
+}
+
+/// Type that gets serialized directly to be written to ClickHouse. Serialization should match
+/// the structure of the ChatInferenceDatapoint table in ClickHouse.
+/// Theis should be an internal-only type, but it's exposed to tensorzero-node.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct ChatInferenceDatapointInsert {
+    /// Name of the dataset to write to. Required.
     pub dataset_name: String,
+
+    /// Name of the function that generated this datapoint. Required.
     pub function_name: String,
+
+    /// Human-readable name of the datapoint. Optional.
+    #[serde(default)]
     pub name: Option<String>,
+
+    /// Unique identifier for the datapoint. Required.
     pub id: Uuid,
+
+    /// Episode ID that the datapoint belongs to. Optional.
+    #[serde(default)]
     pub episode_id: Option<Uuid>,
+
+    /// Input to the function that generated this datapoint. Required.
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: StoredInput,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+
+    /// Output of the function that generated this datapoint. Optional.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_string_or_parsed_json"
+    )]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+
+    /// Tool parameters used to generate this datapoint. Optional.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_string_or_parsed_json",
+        serialize_with = "serialize_none_as_empty_string"
+    )]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+
+    /// Tags associated with this datapoint. Optional.
+    #[serde(default, serialize_with = "serialize_none_as_empty_map")]
     pub tags: Option<HashMap<String, String>>,
+
+    /// Deprecated, do not use.
     pub auxiliary: String,
+
+    /// Timestamp when the datapoint was marked as stale. Optional.
+    #[serde(default)]
     pub staled_at: Option<String>,
+
+    /// Source inference ID that generated this datapoint. Optional.
+    #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+
+    /// If true, this datapoint was manually created or edited by the user.
     pub is_custom: bool,
 }
 
+/// Type that gets serialized directly to be written to ClickHouse. Serialization should match
+/// the structure of the JsonInferenceDatapoint table in ClickHouse.
+/// Theis should be an internal-only type, but it's exposed to tensorzero-node.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapointInsert {
+    /// Name of the dataset to write to. Required.
     pub dataset_name: String,
+
+    /// Name of the function that generated this datapoint. Required.
     pub function_name: String,
+
+    /// Human-readable name of the datapoint. Optional.
+    #[serde(default)]
     pub name: Option<String>,
+
+    /// Unique identifier for the datapoint. Required.
     pub id: Uuid,
+
+    /// Episode ID that the datapoint belongs to. Optional.
+    #[serde(default)]
     pub episode_id: Option<Uuid>,
+
+    /// Input to the function that generated this datapoint. Required.
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub input: StoredInput,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+
+    /// Output of the function that generated this datapoint. Optional.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_optional_string_or_parsed_json"
+    )]
     pub output: Option<JsonInferenceOutput>,
+
+    /// Schema of the output of the function that generated this datapoint. Required.
     #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
     pub output_schema: serde_json::Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
+
+    /// Tags associated with this datapoint. Optional.
+    #[serde(default, serialize_with = "serialize_none_as_empty_map")]
     pub tags: Option<HashMap<String, String>>,
+
+    /// Deprecated, do not use.
     pub auxiliary: String,
+
+    /// Timestamp when the datapoint was marked as stale. Optional.
+    #[serde(default)]
     pub staled_at: Option<String>,
+
+    /// Source inference ID that generated this datapoint. Optional.
+    #[serde(default)]
     pub source_inference_id: Option<Uuid>,
+
+    /// If true, this datapoint was manually created or edited by the user.
     pub is_custom: bool,
 }
 
@@ -194,11 +278,44 @@ pub struct GetAdjacentDatapointIdsParams {
 #[derive(Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+/// Legacy struct for old get_datapoint clickhouse query. To be deprecated.
 pub struct GetDatapointParams {
     pub dataset_name: String,
     pub datapoint_id: Uuid,
     /// Whether to include stale datapoints in the query; false by default.
     pub allow_stale: Option<bool>,
+}
+
+#[derive(Deserialize)]
+/// A struct representing query params for a SELECT datapoints query.
+pub struct GetDatapointsParams {
+    /// Dataset name to query. If not provided, all datasets will be queried.
+    /// At least one of `dataset_name` or `ids` must be provided.
+    #[serde(default)]
+    pub dataset_name: Option<String>,
+
+    /// Function name to filter by. If provided, only datapoints from this function will be returned.
+    #[serde(default)]
+    pub function_name: Option<String>,
+
+    /// IDs of the datapoints to query. If not provided, all datapoints will be queried.
+    /// At least one of `dataset_name` or `ids` must be provided.
+    #[serde(default)]
+    pub ids: Option<Vec<Uuid>>,
+
+    /// Maximum number of datapoints to return.
+    pub page_size: u32,
+
+    /// Number of datapoints to skip before starting to return results.
+    pub offset: u32,
+
+    /// Whether to include stale datapoints in the query.
+    pub allow_stale: bool,
+
+    /// Optional filter to apply when querying datapoints.
+    /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
+    #[serde(default)]
+    pub filter: Option<DatapointFilter>,
 }
 
 #[async_trait]
@@ -254,11 +371,6 @@ pub trait DatasetQueries {
     /// TODO(shuyangli): To deprecate in favor of `get_datapoints`
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error>;
 
-    /// Gets multiple datapoints by dataset name and IDs
-    async fn get_datapoints(
-        &self,
-        dataset_name: &str,
-        datapoint_ids: &[Uuid],
-        allow_stale: bool,
-    ) -> Result<Vec<Datapoint>, Error>;
+    /// Gets multiple datapoints with various filters and pagination
+    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error>;
 }

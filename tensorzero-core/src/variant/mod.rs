@@ -29,6 +29,8 @@ use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
 };
 use crate::inference::types::resolved_input::LazyResolvedInput;
+#[cfg(feature = "pyo3")]
+use crate::inference::types::Role;
 use crate::inference::types::{
     FunctionType, InferenceResultChunk, InferenceResultStream, ModelInferenceRequest,
     ModelInferenceResponseWithMetadata, RequestMessage,
@@ -839,7 +841,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates()
-            .get_implicit_template(crate::inference::types::Role::User)
+            .get_implicit_template(Role::User)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -849,7 +851,7 @@ impl ChatCompletionConfigPyClass {
         let config = Self::extract_chat_completion_config(&self.inner)?;
         Ok(config
             .templates()
-            .get_implicit_template(crate::inference::types::Role::Assistant)
+            .get_implicit_template(Role::Assistant)
             .as_ref()
             .map(|t| t.template.contents.clone()))
     }
@@ -900,7 +902,8 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Auto,
             parallel_tool_calls: None,
-            provider_tools: None,
+            provider_tools: vec![],
+            allowed_tools: crate::tool::AllowedTools::default(),
         };
         let tool_config_arc = Arc::new(tool_config.clone());
 
@@ -1287,7 +1290,8 @@ mod tests {
                 tools_available: vec![],
                 tool_choice: ToolChoice::Auto,
                 parallel_tool_calls: None,
-                provider_tools: None,
+                provider_tools: vec![],
+                allowed_tools: crate::tool::AllowedTools::default(),
             },
             description: None,
             all_explicit_template_names: HashSet::new(),

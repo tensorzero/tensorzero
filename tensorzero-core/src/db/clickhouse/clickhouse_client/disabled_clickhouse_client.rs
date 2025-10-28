@@ -3,17 +3,13 @@ use lazy_static::lazy_static;
 use secrecy::SecretString;
 use std::collections::HashMap;
 
-use crate::config::Config;
-use crate::error::Error;
-use crate::stored_inference::StoredInference;
-
 use crate::db::clickhouse::batching::BatchWriterHandle;
 use crate::db::clickhouse::clickhouse_client::ClickHouseClientType;
-use crate::db::clickhouse::query_builder::ListInferencesParams;
 use crate::db::clickhouse::{
     ClickHouseClient, ClickHouseResponse, ClickHouseResponseMetadata, ExternalDataInfo,
     GetMaybeReplicatedTableEngineNameArgs, HealthCheckable, TableName,
 };
+use crate::error::Error;
 
 lazy_static! {
     static ref DISABLED_DATABASE_URL: SecretString = SecretString::from("disabled");
@@ -113,14 +109,6 @@ impl ClickHouseClient for DisabledClickHouseClient {
 
     async fn create_database_and_migrations_table(&self) -> Result<(), Error> {
         Ok(())
-    }
-
-    async fn list_inferences(
-        &self,
-        _config: &Config,
-        _opts: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error> {
-        Ok(Vec::new())
     }
 
     fn is_cluster_configured(&self) -> bool {

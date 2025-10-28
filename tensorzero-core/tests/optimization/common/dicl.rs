@@ -10,15 +10,13 @@ use super::use_mock_inference_provider;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
+    System,
 };
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
-    db::clickhouse::{
-        test_helpers::{
-            get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
-            select_model_inferences_clickhouse, CLICKHOUSE_URL,
-        },
-        ClickhouseFormat,
+    db::clickhouse::test_helpers::{
+        get_clickhouse, select_chat_inference_clickhouse, select_json_inference_clickhouse,
+        select_model_inferences_clickhouse, CLICKHOUSE_URL,
     },
     http::TensorzeroHttpClient,
     inference::types::{
@@ -204,7 +202,12 @@ pub async fn test_dicl_optimization_chat() {
 
     // Test inference with the DICL variant using Pinocchio pattern
     let input = ClientInput {
-        system: Some(serde_json::json!({"assistant_name": "Pinocchio"})),
+        system: Some(System::Template(
+            serde_json::json!({"assistant_name": "Pinocchio"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ClientInputMessage {
             role: Role::User,
             content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -482,7 +485,12 @@ pub async fn test_dicl_optimization_json() {
 
     // Test inference with the DICL variant using Pinocchio pattern
     let input = ClientInput {
-        system: Some(serde_json::json!({"assistant_name": "Pinocchio"})),
+        system: Some(System::Template(
+            serde_json::json!({"assistant_name": "Pinocchio"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        )),
         messages: vec![ClientInputMessage {
             role: Role::User,
             content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -817,7 +825,7 @@ async fn validate_inference_clickhouse(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "Who was the author of the Harry Potter series?"}]
+                "content": [{"type": "text", "text": "Who was the author of the Harry Potter series?"}]
             }
         ]
     });
@@ -1067,7 +1075,6 @@ pub async fn run_dicl_workflow_with_client(client: &tensorzero::Client) {
         limit: Some(10),
         offset: None,
         val_fraction: None,
-        format: ClickhouseFormat::JsonEachRow,
         // We always mock the client tests since this is tested above
         optimizer_config: UninitializedOptimizerInfo {
             inner: UninitializedOptimizerConfig::Dicl(UninitializedDiclOptimizationConfig {
@@ -1186,12 +1193,14 @@ fn create_pinocchio_example(
             }],
         },
         stored_input: StoredInput {
-            system: system.clone(),
+            system: system
+                .as_ref()
+                .map(|s| System::Template(s.as_object().unwrap().clone())),
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!(question),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: question.to_string(),
+                })],
             }],
         },
         output: Some(output),

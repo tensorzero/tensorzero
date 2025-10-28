@@ -2,8 +2,8 @@
 #![expect(clippy::unwrap_used, clippy::missing_panics_doc)]
 use serde_json::json;
 use tensorzero::{
-    input_handling::resolved_input_to_client_input, ClientBuilder, ClientBuilderMode,
-    ClientInferenceParams, ClientInput, ClientInputMessageContent, File,
+    input_handling::resolved_input_to_client_input, Base64File, ClientBuilder, ClientBuilderMode,
+    ClientInferenceParams, ClientInput, ClientInputMessageContent, File, System,
 };
 
 use reqwest::Url;
@@ -47,7 +47,12 @@ async fn test_versioning() {
             function_name: Some("basic_test".to_string()),
             episode_id: None,
             input: ClientInput {
-                system: Some(json!({"assistant_name": "John"})),
+                system: Some(System::Template(
+                    json!({"assistant_name": "John"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                )),
                 messages: vec![],
             },
             ..Default::default()
@@ -76,8 +81,9 @@ async fn test_conversion() {
         client_input.messages[0].content[0],
         ClientInputMessageContent::Text(_)
     ));
-    let ClientInputMessageContent::File(File::Base64 { mime_type, data }) =
-        &client_input.messages[0].content[1]
+    let ClientInputMessageContent::File(File::Base64(Base64File {
+        mime_type, data, ..
+    })) = &client_input.messages[0].content[1]
     else {
         panic!("Expected file");
     };
