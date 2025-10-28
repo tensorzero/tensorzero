@@ -1911,7 +1911,7 @@ mod tests {
             tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            provider_tools: None,
+            provider_tools: vec![],
             allowed_tools: AllowedTools::default(),
         };
 

@@ -133,7 +133,6 @@ export async function launch_sft_job(
     limit: data.maxSamples ? BigInt(data.maxSamples) : BigInt(0),
     offset: BigInt(0),
     val_fraction: data.validationSplitPercent / 100,
-    format: "JsonEachRow",
     optimizer_config: optimizerConfig,
     order_by: null,
   });

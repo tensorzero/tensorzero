@@ -2,6 +2,10 @@
 import type { ChatInferenceDatapointInsert } from "./ChatInferenceDatapointInsert";
 import type { JsonInferenceDatapointInsert } from "./JsonInferenceDatapointInsert";
 
+/**
+ * Datapoint types that are directly serialized and inserted into ClickHouse.
+ * These should be internal-only types but are exposed to tensorzero-node.
+ */
 export type DatapointInsert =
   | ({ type: "chat" } & ChatInferenceDatapointInsert)
   | ({ type: "json" } & JsonInferenceDatapointInsert);
