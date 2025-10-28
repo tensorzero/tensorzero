@@ -165,10 +165,11 @@ test("should display feedback timeseries charts for extract_entities function", 
     page.getByRole("heading", { name: "Experimentation" }),
   ).toBeVisible();
 
-  // Check that the Mean Estimated Performance tab is visible and selected by default
+  // Check that the Mean Estimated Performance tab is visible and click it
   await expect(
     page.getByRole("tab", { name: "Estimated Performance" }),
   ).toBeVisible();
+  await page.getByRole("tab", { name: "Estimated Performance" }).click();
 
   // Verify the Estimated Performance chart is displayed
   await expect(page.getByText(/Estimated Performance:/)).toBeVisible();
@@ -187,7 +188,7 @@ test("should display feedback timeseries charts for extract_entities function", 
   await expect(page.getByText(/Cumulative Feedback Count:/)).toBeVisible();
 
   // Check that the metric name appears in the description
-  await expect(page.getByText(/jaro_winkler_similarity/)).toBeVisible();
+  await expect(page.getByText(/jaro_winkler_similarity/).first()).toBeVisible();
 
   // Verify the chart is rendered (still checking for chart presence)
   await expect(charts.first()).toBeVisible();
