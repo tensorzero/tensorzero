@@ -4,6 +4,7 @@
     clippy::print_stdout,
     clippy::unwrap_used
 )]
+mod auth;
 mod batch;
 mod best_of_n;
 mod cache;

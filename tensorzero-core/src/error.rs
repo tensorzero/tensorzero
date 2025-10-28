@@ -587,6 +587,7 @@ impl ErrorDetails {
     fn level(&self) -> tracing::Level {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::TensorZeroAuth { .. } => tracing::Level::WARN,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
@@ -710,7 +711,8 @@ impl ErrorDetails {
     fn status_code(&self) -> StatusCode {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
-            ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::TensorZeroAuth { .. } => StatusCode::BAD_REQUEST,
+            ErrorDetails::ApiKeyMissing { .. } => StatusCode::UNAUTHORIZED,
             ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::AppState { .. } => StatusCode::INTERNAL_SERVER_ERROR,
@@ -875,6 +877,9 @@ impl std::fmt::Display for ErrorDetails {
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
+            }
+            ErrorDetails::TensorZeroAuth { message } => {
+                write!(f, "TensorZero authentication error: {message}")
             }
             ErrorDetails::ModelProviderTimeout {
                 provider_name,

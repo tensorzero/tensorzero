@@ -9,6 +9,8 @@ use crate::{
 use super::ObjectStoreInfo;
 
 #[derive(Debug, Default, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
     pub enabled: bool,
@@ -136,6 +138,7 @@ impl Default for GatewayConfig {
             disable_pseudonymous_usage_analytics: Default::default(),
             fetch_and_encode_input_files_before_inference:
                 default_fetch_and_encode_input_files_before_inference(),
+            auth: Default::default(),
         }
     }
 }
