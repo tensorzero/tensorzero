@@ -1,6 +1,6 @@
 name: UI E2E Tests
 permissions:
-  actions: read
+  actions: write
   contents: read
 
 on:
