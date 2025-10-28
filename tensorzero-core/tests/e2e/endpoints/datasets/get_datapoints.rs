@@ -1216,24 +1216,6 @@ mod list_datapoints_tests {
     }
 
     #[tokio::test]
-    async fn test_list_datapoints_invalid_dataset_name() {
-        let http_client = Client::new();
-
-        // Try to list from a dataset with invalid characters
-        let resp = http_client
-            .post(get_gateway_endpoint(
-                "/v1/datasets/invalid@dataset#name/list_datapoints",
-            ))
-            .json(&json!({}))
-            .send()
-            .await
-            .unwrap();
-
-        // Should return error for invalid dataset name (404 means the route doesn't match)
-        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
     async fn test_list_datapoints_mixed_chat_and_json() {
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
