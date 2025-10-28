@@ -165,6 +165,10 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
             patch(endpoints::datasets::v1::update_datapoints_handler),
         )
         .route(
+            "/v1/datasets/{dataset_name}/datapoints/metadata",
+            patch(endpoints::datasets::v1::update_datapoints_metadata_handler),
+        )
+        .route(
             "/v1/datasets/{dataset_name}/list_datapoints",
             post(endpoints::datasets::v1::list_datapoints_handler),
         )

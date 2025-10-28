@@ -24,8 +24,8 @@ use crate::jsonschema_util::StaticJSONSchema;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
-    UpdateChatDatapointRequest, UpdateDatapointRequest, UpdateDatapointsRequest,
-    UpdateDatapointsResponse, UpdateJsonDatapointRequest,
+    UpdateChatDatapointRequest, UpdateDatapointRequest, UpdateDatapointsMetadataRequest,
+    UpdateDatapointsRequest, UpdateDatapointsResponse, UpdateJsonDatapointRequest,
 };
 
 impl UpdateDatapointRequest {
@@ -380,6 +380,134 @@ async fn convert_input_to_stored_input(
     }
 }
 
+// ============================================================================
+// Update Datapoint Metadata Endpoint
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateDatapointsMetadataPathParams {
+    pub dataset_name: String,
+}
+
+#[axum::debug_handler(state = AppStateData)]
+#[instrument(
+    name = "datasets.v1.update_datapoints_metadata",
+    skip(app_state, request)
+)]
+pub async fn update_datapoints_metadata_handler(
+    State(app_state): AppState,
+    Path(path_params): Path<UpdateDatapointsMetadataPathParams>,
+    StructuredJson(request): StructuredJson<UpdateDatapointsMetadataRequest>,
+) -> Result<Json<UpdateDatapointsResponse>, Error> {
+    let response = update_datapoints_metadata(
+        &app_state.clickhouse_connection_info,
+        &path_params.dataset_name,
+        request,
+    )
+    .await?;
+    Ok(Json(response))
+}
+
+/// Business logic for updating datapoint metadata in a dataset.
+/// This function only updates metadata fields (like name) without creating new datapoint IDs.
+/// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
+async fn update_datapoints_metadata(
+    clickhouse_handler: &impl DatasetQueries,
+    dataset_name: &str,
+    request: UpdateDatapointsMetadataRequest,
+) -> Result<UpdateDatapointsResponse, Error> {
+    validate_dataset_name(dataset_name)?;
+
+    if request.datapoints.is_empty() {
+        return Err(Error::new(ErrorDetails::InvalidRequest {
+            message: "At least one datapoint must be provided".to_string(),
+        }));
+    }
+
+    let mut seen_ids = HashSet::new();
+    for datapoint in &request.datapoints {
+        if !seen_ids.insert(datapoint.id) {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: format!("Duplicate datapoint id provided: {}", datapoint.id),
+            }));
+        }
+    }
+
+    // Fetch all datapoints in a single batch query
+    let datapoint_ids: Vec<Uuid> = request.datapoints.iter().map(|d| d.id).collect();
+    let datapoints_vec = clickhouse_handler
+        .get_datapoints(&GetDatapointsParams {
+            dataset_name: Some(dataset_name.to_string()),
+            function_name: None,
+            ids: Some(datapoint_ids.clone()),
+            page_size: u32::MAX,
+            offset: 0,
+            allow_stale: false,
+            filter: None,
+        })
+        .await?;
+
+    // Build a HashMap for quick lookup
+    let mut datapoints_map: HashMap<Uuid, Datapoint> =
+        datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
+
+    let mut datapoints: Vec<DatapointInsert> = Vec::with_capacity(request.datapoints.len());
+
+    for update in request.datapoints {
+        let datapoint_id = update.id;
+        let existing = datapoints_map.remove(&datapoint_id).ok_or_else(|| {
+            Error::new(ErrorDetails::DatapointNotFound {
+                dataset_name: dataset_name.to_string(),
+                datapoint_id,
+            })
+        })?;
+
+        match existing {
+            Datapoint::Chat(mut existing_datapoint) => {
+                if existing_datapoint.dataset_name != dataset_name {
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "Datapoint {datapoint_id} belongs to dataset '{}' instead of '{dataset_name}'",
+                            existing_datapoint.dataset_name
+                        ),
+                    }));
+                }
+
+                if let Some(metadata) = update.metadata {
+                    if let Some(new_name) = metadata.name {
+                        existing_datapoint.name = new_name;
+                    }
+                }
+
+                datapoints.push(DatapointInsert::Chat(existing_datapoint.into()));
+            }
+            Datapoint::Json(mut existing_datapoint) => {
+                if existing_datapoint.dataset_name != dataset_name {
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: format!(
+                            "Datapoint {datapoint_id} belongs to dataset '{}' instead of '{dataset_name}'",
+                            existing_datapoint.dataset_name
+                        ),
+                    }));
+                }
+
+                if let Some(metadata) = update.metadata {
+                    if let Some(new_name) = metadata.name {
+                        existing_datapoint.name = new_name;
+                    }
+                }
+
+                datapoints.push(DatapointInsert::Json(existing_datapoint.into()));
+            }
+        }
+    }
+
+    clickhouse_handler.insert_datapoints(&datapoints).await?;
+
+    // Return the same IDs (not new ones, since we didn't create new datapoints)
+    Ok(UpdateDatapointsResponse { ids: datapoint_ids })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -558,11 +686,89 @@ mod tests {
             }
         }
     }
-    // ============================================================================
-    // Test helpers for prepare_chat_update and prepare_json_update
-    // ============================================================================
+
+    mod update_utils {
+        use super::*;
+
+        /// Helper to create a sample ChatInferenceDatapoint
+        pub fn create_sample_chat_datapoint(dataset_name: &str) -> ChatInferenceDatapoint {
+            ChatInferenceDatapoint {
+                id: Uuid::now_v7(),
+                dataset_name: dataset_name.to_string(),
+                function_name: "test_chat_function".to_string(),
+                name: Some("test_datapoint".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![crate::inference::types::StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "original input".to_string(),
+                        })],
+                    }],
+                },
+                output: Some(vec![ContentBlockChatOutput::Text(Text {
+                    text: "original output".to_string(),
+                })]),
+                tool_params: Some(ToolCallConfigDatabaseInsert {
+                    tools_available: vec![],
+                    tool_choice: ToolChoice::Auto,
+                    parallel_tool_calls: Some(true),
+                }),
+                tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
+                auxiliary: "{}".to_string(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: chrono::Utc::now()
+                    .format(CLICKHOUSE_DATETIME_FORMAT)
+                    .to_string(),
+            }
+        }
+
+        /// Helper to create a sample JsonInferenceDatapoint
+        pub fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
+            JsonInferenceDatapoint {
+                id: Uuid::now_v7(),
+                dataset_name: dataset_name.to_string(),
+                function_name: "test_json_function".to_string(),
+                name: Some("test_datapoint".to_string()),
+                episode_id: Some(Uuid::now_v7()),
+                input: StoredInput {
+                    system: None,
+                    messages: vec![crate::inference::types::StoredInputMessage {
+                        role: Role::User,
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: "original input".to_string(),
+                        })],
+                    }],
+                },
+                output: Some(JsonInferenceOutput {
+                    raw: Some(r#"{"value":"original"}"#.to_string()),
+                    parsed: Some(json!({"value": "original"})),
+                }),
+                output_schema: json!({
+                    "type": "object",
+                    "properties": {"value": {"type": "string"}},
+                    "required": ["value"],
+                    "additionalProperties": false
+                }),
+                tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
+                auxiliary: "{}".to_string(),
+                staled_at: None,
+                source_inference_id: None,
+                is_custom: true,
+                is_deleted: false,
+                updated_at: chrono::Utc::now()
+                    .format(CLICKHOUSE_DATETIME_FORMAT)
+                    .to_string(),
+            }
+        }
+    }
 
     mod prepare_update_tests {
+        use super::update_utils::*;
         use super::*;
 
         /// Helper to create a minimal AppStateData for testing
@@ -615,82 +821,6 @@ mod tests {
                 },
             );
             gateway_handle.app_state.clone()
-        }
-
-        /// Helper to create a sample ChatInferenceDatapoint
-        fn create_sample_chat_datapoint(dataset_name: &str) -> ChatInferenceDatapoint {
-            ChatInferenceDatapoint {
-                id: Uuid::now_v7(),
-                dataset_name: dataset_name.to_string(),
-                function_name: "test_chat_function".to_string(),
-                name: Some("test_datapoint".to_string()),
-                episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
-                    system: None,
-                    messages: vec![crate::inference::types::StoredInputMessage {
-                        role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
-                            text: "original input".to_string(),
-                        })],
-                    }],
-                },
-                output: Some(vec![ContentBlockChatOutput::Text(Text {
-                    text: "original output".to_string(),
-                })]),
-                tool_params: Some(ToolCallConfigDatabaseInsert {
-                    tools_available: vec![],
-                    tool_choice: ToolChoice::Auto,
-                    parallel_tool_calls: Some(true),
-                }),
-                tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
-                auxiliary: "{}".to_string(),
-                staled_at: None,
-                source_inference_id: None,
-                is_custom: true,
-                is_deleted: false,
-                updated_at: chrono::Utc::now()
-                    .format(CLICKHOUSE_DATETIME_FORMAT)
-                    .to_string(),
-            }
-        }
-
-        /// Helper to create a sample JsonInferenceDatapoint
-        fn create_sample_json_datapoint(dataset_name: &str) -> JsonInferenceDatapoint {
-            JsonInferenceDatapoint {
-                id: Uuid::now_v7(),
-                dataset_name: dataset_name.to_string(),
-                function_name: "test_json_function".to_string(),
-                name: Some("test_datapoint".to_string()),
-                episode_id: Some(Uuid::now_v7()),
-                input: StoredInput {
-                    system: None,
-                    messages: vec![crate::inference::types::StoredInputMessage {
-                        role: Role::User,
-                        content: vec![StoredInputMessageContent::Text(Text {
-                            text: "original input".to_string(),
-                        })],
-                    }],
-                },
-                output: Some(JsonInferenceOutput {
-                    raw: Some(r#"{"value":"original"}"#.to_string()),
-                    parsed: Some(json!({"value": "original"})),
-                }),
-                output_schema: json!({
-                    "type": "object",
-                    "properties": {"value": {"type": "string"}},
-                    "required": ["value"],
-                    "additionalProperties": false
-                }),
-                tags: Some(HashMap::from([("key".to_string(), "value".to_string())])),
-                auxiliary: "{}".to_string(),
-                staled_at: None,
-                source_inference_id: None,
-                is_custom: true,
-                is_deleted: false,
-                updated_at: chrono::Utc::now()
-                    .format(CLICKHOUSE_DATETIME_FORMAT)
-                    .to_string(),
-            }
         }
 
         fn create_fetch_context(http_client: &'_ TensorzeroHttpClient) -> FetchContext<'_> {
@@ -1557,6 +1687,309 @@ mod tests {
             assert_eq!(updated.output.as_ref().unwrap().parsed, Some(new_output));
             assert_eq!(updated.tags, Some(new_tags));
             assert_eq!(updated.name, Some("json_updated".to_string()));
+        }
+    }
+
+    mod update_datapoints_metadata_tests {
+        use super::update_utils::*;
+        use super::*;
+        use crate::db::datasets::MockDatasetQueries;
+        use crate::endpoints::datasets::v1::types::UpdateDatapointMetadataRequest;
+
+        #[tokio::test]
+        async fn test_update_metadata_chat_datapoint() {
+            let dataset_name = "test_dataset";
+            let existing_datapoint = create_sample_chat_datapoint(dataset_name);
+            let datapoint_id = existing_datapoint.id;
+
+            let mut mock_db = MockDatasetQueries::new();
+            let existing_datapoint_clone = existing_datapoint.clone();
+            mock_db.expect_get_datapoints().returning(move |_| {
+                let cloned_datapoint = existing_datapoint_clone.clone();
+                Box::pin(async move { Ok(vec![Datapoint::Chat(cloned_datapoint)]) })
+            });
+            mock_db
+                .expect_insert_datapoints()
+                .withf(move |datapoints_inserts| {
+                    assert_eq!(datapoints_inserts.len(), 1, "Expected 1 datapoint insert");
+                    let datapoint_insert = &datapoints_inserts[0];
+                    // ID should stay the same.
+                    assert_eq!(datapoint_insert.id(), datapoint_id);
+                    let DatapointInsert::Chat(dp) = datapoint_insert else {
+                        panic!("Expected Chat insert");
+                    };
+                    // Name should be updated.
+                    assert_eq!(dp.name, Some("new_name".to_string()));
+                    // The other fields should stay the same.
+                    assert_eq!(dp.input, existing_datapoint.input);
+                    assert_eq!(dp.output, existing_datapoint.output);
+                    assert_eq!(dp.tool_params, existing_datapoint.tool_params);
+                    assert_eq!(dp.tags, existing_datapoint.tags);
+                    assert_eq!(dp.staled_at, existing_datapoint.staled_at);
+                    assert_eq!(
+                        dp.source_inference_id,
+                        existing_datapoint.source_inference_id
+                    );
+                    true
+                })
+                .returning(|_| Box::pin(async move { Ok(1) }));
+
+            let request = UpdateDatapointsMetadataRequest {
+                datapoints: vec![UpdateDatapointMetadataRequest {
+                    id: datapoint_id,
+                    metadata: Some(DatapointMetadataUpdate {
+                        name: Some(Some("new_name".to_string())),
+                    }),
+                }],
+            };
+
+            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            assert!(result.is_ok());
+            let response = result.unwrap();
+            assert_eq!(response.ids.len(), 1);
+            assert_eq!(response.ids[0], datapoint_id);
+        }
+
+        #[tokio::test]
+        async fn test_update_metadata_json_datapoint() {
+            let dataset_name = "test_dataset";
+            let existing_datapoint = create_sample_json_datapoint(dataset_name);
+            let datapoint_id = existing_datapoint.id;
+
+            let mut mock_db = MockDatasetQueries::new();
+            let existing_datapoint_clone = existing_datapoint.clone();
+            mock_db.expect_get_datapoints().returning(move |_| {
+                let dp = existing_datapoint_clone.clone();
+                Box::pin(async move { Ok(vec![Datapoint::Json(dp)]) })
+            });
+            mock_db
+                .expect_insert_datapoints()
+                .withf(move |datapoints_inserts| {
+                    assert_eq!(datapoints_inserts.len(), 1, "Expected 1 datapoint insert");
+                    let datapoint_insert = &datapoints_inserts[0];
+                    // ID should stay the same.
+                    assert_eq!(datapoint_insert.id(), datapoint_id);
+                    let DatapointInsert::Json(dp) = datapoint_insert else {
+                        panic!("Expected Json insert");
+                    };
+                    // Name should be updated.
+                    assert_eq!(dp.name, Some("updated_json_name".to_string()));
+                    // The other fields should stay the same.
+                    assert_eq!(dp.input, existing_datapoint.input);
+                    assert_eq!(dp.output, existing_datapoint.output);
+                    assert_eq!(dp.output_schema, existing_datapoint.output_schema);
+                    assert_eq!(dp.tags, existing_datapoint.tags);
+                    assert_eq!(dp.staled_at, existing_datapoint.staled_at);
+                    assert_eq!(
+                        dp.source_inference_id,
+                        existing_datapoint.source_inference_id
+                    );
+                    true
+                })
+                .returning(|_| Box::pin(async move { Ok(1) }));
+
+            let request = UpdateDatapointsMetadataRequest {
+                datapoints: vec![UpdateDatapointMetadataRequest {
+                    id: datapoint_id,
+                    metadata: Some(DatapointMetadataUpdate {
+                        name: Some(Some("updated_json_name".to_string())),
+                    }),
+                }],
+            };
+
+            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            assert!(result.is_ok());
+            let response = result.unwrap();
+            assert_eq!(response.ids.len(), 1);
+            assert_eq!(response.ids[0], datapoint_id);
+        }
+
+        #[tokio::test]
+        async fn test_update_metadata_set_name_to_null() {
+            let dataset_name = "test_dataset";
+            let existing_datapoint = create_sample_chat_datapoint(dataset_name);
+            let datapoint_id = existing_datapoint.id;
+
+            let mut mock_db = MockDatasetQueries::new();
+            let existing_datapoint_clone = existing_datapoint.clone();
+            mock_db.expect_get_datapoints().returning(move |_| {
+                let dp = existing_datapoint_clone.clone();
+                Box::pin(async move { Ok(vec![Datapoint::Chat(dp)]) })
+            });
+            mock_db
+                .expect_insert_datapoints()
+                .withf(|datapoints| {
+                    datapoints.len() == 1
+                        && matches!(&datapoints[0], DatapointInsert::Chat(dp) if dp.name.is_none())
+                })
+                .returning(|_| Box::pin(async move { Ok(1) }));
+
+            let request = UpdateDatapointsMetadataRequest {
+                datapoints: vec![UpdateDatapointMetadataRequest {
+                    id: datapoint_id,
+                    metadata: Some(DatapointMetadataUpdate { name: Some(None) }),
+                }],
+            };
+
+            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            assert!(result.is_ok());
+        }
+
+        #[tokio::test]
+        async fn test_update_metadata_no_metadata_provided() {
+            let dataset_name = "test_dataset";
+            let existing_datapoint = create_sample_chat_datapoint(dataset_name);
+            let datapoint_id = existing_datapoint.id;
+            let original_name = existing_datapoint.name.clone();
+
+            let mut mock_db = MockDatasetQueries::new();
+            let existing_datapoint_clone = existing_datapoint.clone();
+            mock_db.expect_get_datapoints().returning(move |_| {
+                let dp = existing_datapoint_clone.clone();
+                Box::pin(async move { Ok(vec![Datapoint::Chat(dp)]) })
+            });
+            mock_db
+                .expect_insert_datapoints()
+                .withf(move |datapoints| {
+                    datapoints.len() == 1
+                        && matches!(&datapoints[0], DatapointInsert::Chat(dp) if dp.name == original_name)
+                })
+                .returning(|_| Box::pin(async move { Ok(1) }));
+
+            let request = UpdateDatapointsMetadataRequest {
+                datapoints: vec![UpdateDatapointMetadataRequest {
+                    id: datapoint_id,
+                    metadata: None,
+                }],
+            };
+
+            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            assert!(result.is_ok());
+        }
+
+        #[tokio::test]
+        async fn test_update_metadata_datapoint_not_found() {
+            let dataset_name = "test_dataset";
+            let non_existent_id = Uuid::now_v7();
+
+            let mut mock_db = MockDatasetQueries::new();
+            mock_db
+                .expect_get_datapoints()
+                .returning(|_| Box::pin(async move { Ok(vec![]) }));
+
+            let request = UpdateDatapointsMetadataRequest {
+                datapoints: vec![UpdateDatapointMetadataRequest {
+                    id: non_existent_id,
+                    metadata: Some(DatapointMetadataUpdate {
+                        name: Some(Some("new_name".to_string())),
+                    }),
+                }],
+            };
+
+            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err().get_details(),
+                ErrorDetails::DatapointNotFound { .. }
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_update_metadata_duplicate_ids() {
+            let dataset_name = "test_dataset";
+            let duplicate_id = Uuid::now_v7();
+
+            let mock_db = MockDatasetQueries::new();
+
+            let request = UpdateDatapointsMetadataRequest {
+                datapoints: vec![
+                    UpdateDatapointMetadataRequest {
+                        id: duplicate_id,
+                        metadata: Some(DatapointMetadataUpdate {
+                            name: Some(Some("name1".to_string())),
+                        }),
+                    },
+                    UpdateDatapointMetadataRequest {
+                        id: duplicate_id,
+                        metadata: Some(DatapointMetadataUpdate {
+                            name: Some(Some("name2".to_string())),
+                        }),
+                    },
+                ],
+            };
+
+            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err().get_details(),
+                ErrorDetails::InvalidRequest { .. }
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_update_metadata_empty_datapoints() {
+            let dataset_name = "test_dataset";
+            let mock_db = MockDatasetQueries::new();
+
+            let request = UpdateDatapointsMetadataRequest { datapoints: vec![] };
+
+            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err().get_details(),
+                ErrorDetails::InvalidRequest { .. }
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_update_metadata_batch() {
+            let dataset_name = "test_dataset";
+            let datapoint1 = create_sample_chat_datapoint(dataset_name);
+            let datapoint2 = create_sample_json_datapoint(dataset_name);
+            let id1 = datapoint1.id;
+            let id2 = datapoint2.id;
+
+            let datapoint1_clone = datapoint1.clone();
+            let datapoint2_clone = datapoint2.clone();
+
+            let mut mock_db = MockDatasetQueries::new();
+            mock_db.expect_get_datapoints().returning(move |_| {
+                let dp1 = datapoint1_clone.clone();
+                let dp2 = datapoint2_clone.clone();
+                Box::pin(async move { Ok(vec![Datapoint::Chat(dp1), Datapoint::Json(dp2)]) })
+            });
+            mock_db
+                .expect_insert_datapoints()
+                .withf(|datapoints| {
+                    datapoints.len() == 2
+                        && matches!(&datapoints[0], DatapointInsert::Chat(dp) if dp.name == Some("updated_name1".to_string()))
+                        && matches!(&datapoints[1], DatapointInsert::Json(dp) if dp.name == Some("updated_name2".to_string()))
+                })
+                .returning(|_| Box::pin(async move { Ok(2) }));
+
+            let request = UpdateDatapointsMetadataRequest {
+                datapoints: vec![
+                    UpdateDatapointMetadataRequest {
+                        id: id1,
+                        metadata: Some(DatapointMetadataUpdate {
+                            name: Some(Some("updated_name1".to_string())),
+                        }),
+                    },
+                    UpdateDatapointMetadataRequest {
+                        id: id2,
+                        metadata: Some(DatapointMetadataUpdate {
+                            name: Some(Some("updated_name2".to_string())),
+                        }),
+                    },
+                ],
+            };
+
+            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            assert!(result.is_ok());
+            let response = result.unwrap();
+            assert_eq!(response.ids.len(), 2);
+            assert_eq!(response.ids[0], id1);
+            assert_eq!(response.ids[1], id2);
         }
     }
 }
