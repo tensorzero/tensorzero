@@ -539,12 +539,17 @@ pub struct InsertDatapointPathParams {
 
 // The handler for the POST `/datasets/{dataset_name}/datapoints` endpoint.
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
+/// DEPRECATED: Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead.
 #[tracing::instrument(name = "create_datapoints_handler", skip(app_state, params))]
 pub async fn create_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
+    tracing::warn!(
+        dataset_name = %path_params.dataset_name,
+        "DEPRECATION WARNING: The legacy `/datasets/<dataset_name>/datapoints` endpoint is deprecated. Please use `/v1/datasets/<dataset_name>/datapoints` instead."
+    );
     let datapoint_ids = insert_datapoint(
         path_params.dataset_name,
         params,
@@ -556,7 +561,7 @@ pub async fn create_datapoints_handler(
     Ok(Json(datapoint_ids))
 }
 
-/// DEPRECATED: Use the POST `/datasets/{dataset_name}/datapoints` endpoint instead.
+/// DEPRECATED: Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead.
 #[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
 pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
@@ -564,8 +569,8 @@ pub async fn bulk_insert_datapoints_handler(
     StructuredJson(params): StructuredJson<InsertDatapointParams>,
 ) -> Result<Json<Vec<Uuid>>, Error> {
     tracing::warn!(
-        "DEPRECATION WARNING: The `/datasets/{dataset_name}/datapoints/bulk` endpoint is deprecated. Please use `/datasets/{dataset_name}/datapoints` instead.",
-        dataset_name = path_params.dataset_name
+        dataset_name = %path_params.dataset_name,
+        "DEPRECATION WARNING: The legacy `/datasets/<dataset_name>/datapoints/bulk` endpoint is deprecated. Please use `/v1/datasets/<dataset_name>/datapoints` instead."
     );
     create_datapoints_handler(State(app_state), Path(path_params), StructuredJson(params)).await
 }
