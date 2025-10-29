@@ -16,6 +16,7 @@ use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointParams,
     JsonInferenceDatapointInsert,
 };
+use crate::endpoints::datasets::v1::create_datapoints;
 use crate::endpoints::datasets::v1::types::{
     CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
     CreateJsonDatapointRequest,
@@ -646,14 +647,8 @@ pub async fn insert_datapoint(
         datapoints: v1_datapoints,
     };
 
-    let response = crate::endpoints::datasets::v1::create_datapoints_impl(
-        config,
-        http_client,
-        clickhouse,
-        &dataset_name,
-        v1_request,
-    )
-    .await?;
+    let response =
+        create_datapoints(config, http_client, clickhouse, &dataset_name, v1_request).await?;
 
     Ok(response.ids)
 }

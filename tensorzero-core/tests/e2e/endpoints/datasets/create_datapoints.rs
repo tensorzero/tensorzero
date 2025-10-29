@@ -52,16 +52,25 @@ async fn test_create_chat_datapoint_basic() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_chat_basic/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_chat_basic/datapoints",
+        ))
         .json(&request)
         .send()
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 200, "Response: {:?}", response.text().await);
+    assert_eq!(
+        response.status(),
+        200,
+        "Response: {:?}",
+        response.text().await
+    );
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_chat_basic/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_chat_basic/datapoints",
+        ))
         .json(&request)
         .send()
         .await
@@ -119,16 +128,25 @@ async fn test_create_json_datapoint_basic() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_json_basic/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_json_basic/datapoints",
+        ))
         .json(&request)
         .send()
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 200, "Response: {:?}", response.text().await);
+    assert_eq!(
+        response.status(),
+        200,
+        "Response: {:?}",
+        response.text().await
+    );
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_json_basic/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_json_basic/datapoints",
+        ))
         .json(&request)
         .send()
         .await
@@ -217,7 +235,9 @@ async fn test_create_multiple_datapoints() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_multiple/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_multiple/datapoints",
+        ))
         .json(&request)
         .send()
         .await
@@ -367,7 +387,9 @@ async fn test_create_datapoint_wrong_function_type() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_wrong_type/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_wrong_type/datapoints",
+        ))
         .json(&request)
         .send()
         .await
@@ -427,7 +449,9 @@ async fn test_create_json_datapoint_invalid_schema() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_invalid_schema/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_invalid_schema/datapoints",
+        ))
         .json(&request)
         .send()
         .await
@@ -496,7 +520,9 @@ async fn test_create_chat_datapoint_string_output() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_string_output/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_string_output/datapoints",
+        ))
         .json(&request)
         .send()
         .await
@@ -527,7 +553,9 @@ async fn test_create_datapoint_without_output() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_no_output/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_no_output/datapoints",
+        ))
         .json(&request)
         .send()
         .await
@@ -563,7 +591,9 @@ async fn test_create_json_datapoint_default_schema() {
     });
 
     let response = client
-        .post(get_gateway_endpoint("/v1/datasets/test_default_schema/datapoints"))
+        .post(get_gateway_endpoint(
+            "/v1/datasets/test_default_schema/datapoints",
+        ))
         .json(&request)
         .send()
         .await

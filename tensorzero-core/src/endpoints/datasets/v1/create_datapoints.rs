@@ -2,18 +2,17 @@ use axum::extract::{Path, State};
 use axum::Json;
 use futures::future::try_join_all;
 use tracing::instrument;
-use uuid::Uuid;
 
 use crate::config::Config;
+use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::datasets::{DatapointInsert, DatasetQueries};
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::FetchContext;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
-use super::types::{
-    CreateDatapointRequest, CreateDatapointsRequest, CreateDatapointsResponse,
-};
+use super::types::{CreateDatapointRequest, CreateDatapointsRequest, CreateDatapointsResponse};
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/datapoints` endpoint.
 /// Creates manual datapoints in a dataset.
@@ -24,7 +23,14 @@ pub async fn create_datapoints_handler(
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<CreateDatapointsRequest>,
 ) -> Result<Json<CreateDatapointsResponse>, Error> {
-    let response = create_datapoints(&app_state, &dataset_name, request).await?;
+    let response = create_datapoints(
+        &app_state.config,
+        &app_state.http_client,
+        &app_state.clickhouse_connection_info,
+        &dataset_name,
+        request,
+    )
+    .await?;
     Ok(Json(response))
 }
 
@@ -34,25 +40,9 @@ pub async fn create_datapoints_handler(
 ///
 /// Returns an error if there are no datapoints, or if validation fails.
 pub async fn create_datapoints(
-    app_state: &AppStateData,
-    dataset_name: &str,
-    request: CreateDatapointsRequest,
-) -> Result<CreateDatapointsResponse, Error> {
-    create_datapoints_impl(
-        &app_state.config,
-        &app_state.http_client,
-        &app_state.clickhouse_connection_info,
-        dataset_name,
-        request,
-    )
-    .await
-}
-
-/// Internal implementation that can be called from legacy code.
-pub async fn create_datapoints_impl(
     config: &Config,
-    http_client: &crate::http::TensorzeroHttpClient,
-    clickhouse: &crate::db::clickhouse::ClickHouseConnectionInfo,
+    http_client: &TensorzeroHttpClient,
+    clickhouse: &ClickHouseConnectionInfo,
     dataset_name: &str,
     request: CreateDatapointsRequest,
 ) -> Result<CreateDatapointsResponse, Error> {
@@ -69,25 +59,33 @@ pub async fn create_datapoints_impl(
         object_store_info: &config.object_store_info,
     };
 
-    // Prepare all datapoints in parallel
-    let prepare_futures = request.datapoints.into_iter().map(|datapoint_request| async {
-        let result: Result<(DatapointInsert, Uuid), Error> = match datapoint_request {
-            CreateDatapointRequest::Chat(chat_request) => {
-                let (insert, id) = chat_request.prepare(config, &fetch_context, dataset_name).await?;
-                Ok((DatapointInsert::Chat(insert), id))
-            }
-            CreateDatapointRequest::Json(json_request) => {
-                let (insert, id) = json_request.prepare(config, &fetch_context, dataset_name).await?;
-                Ok((DatapointInsert::Json(insert), id))
-            }
-        };
-        result
-    });
+    // Convert all datapoints to inserts in parallel (because we may need to store inputs)
+    let datapoint_insert_futures = request
+        .datapoints
+        .into_iter()
+        .map(|datapoint_request| async {
+            let result: Result<DatapointInsert, Error> = match datapoint_request {
+                CreateDatapointRequest::Chat(chat_request) => {
+                    let datpaoint_insert = chat_request
+                        .into_database_insert(config, &fetch_context, dataset_name)
+                        .await?;
+                    Ok(DatapointInsert::Chat(datpaoint_insert))
+                }
+                CreateDatapointRequest::Json(json_request) => {
+                    let datpaoint_insert = json_request
+                        .into_database_insert(config, &fetch_context, dataset_name)
+                        .await?;
+                    Ok(DatapointInsert::Json(datpaoint_insert))
+                }
+            };
+            result
+        });
 
-    let results: Vec<(DatapointInsert, Uuid)> = try_join_all(prepare_futures).await?;
-
-    // Separate inserts and IDs
-    let (datapoints_to_insert, ids): (Vec<DatapointInsert>, Vec<Uuid>) = results.into_iter().unzip();
+    let datapoints_to_insert: Vec<DatapointInsert> = try_join_all(datapoint_insert_futures).await?;
+    let ids = datapoints_to_insert
+        .iter()
+        .map(DatapointInsert::id)
+        .collect::<Vec<_>>();
 
     // Insert all datapoints
     clickhouse.insert_datapoints(&datapoints_to_insert).await?;
