@@ -2337,7 +2337,7 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                         .as_str()
                         .unwrap()
                         .to_lowercase()
-                        .contains("No cookie auth"),
+                        .contains("no cookie auth"),
                 "Unexpected error: {res}"
             );
         }
