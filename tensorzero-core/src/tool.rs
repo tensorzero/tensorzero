@@ -464,7 +464,7 @@ pub struct ToolCallConfigDatabaseInsert {
 /// // API request with dynamic tool params
 /// let params = DynamicToolParams {
 ///     allowed_tools: Some(vec!["calculator".to_string()]),  // Use only the calculator tool from config
-///     additional_tools: Some(vec![Tool { /* runtime tool */ }]),  // Add a new tool
+///     additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
 ///     tool_choice: Some(ToolChoice::Required),
 ///     parallel_tool_calls: Some(true),
 ///     provider_tools: None,
