@@ -84,15 +84,13 @@ pub async fn create_datapoints_impl(
         match datapoint_request {
             CreateDatapointRequest::Chat(chat_request) => {
                 let (insert, id) =
-                    prepare_chat_create(config, &fetch_context, dataset_name, chat_request)
-                        .await?;
+                    prepare_chat_create(config, &fetch_context, dataset_name, chat_request).await?;
                 datapoints_to_insert.push(DatapointInsert::Chat(insert));
                 ids.push(id);
             }
             CreateDatapointRequest::Json(json_request) => {
                 let (insert, id) =
-                    prepare_json_create(config, &fetch_context, dataset_name, json_request)
-                        .await?;
+                    prepare_json_create(config, &fetch_context, dataset_name, json_request).await?;
                 datapoints_to_insert.push(DatapointInsert::Json(insert));
                 ids.push(id);
             }
@@ -124,19 +122,21 @@ async fn prepare_chat_create(
 
     // Validate and convert input
     function_config.validate_input(&request.input)?;
-    let resolved_input = request
+    let stored_input = request
         .input
         .into_lazy_resolved_input(FetchContext {
             client: fetch_context.client,
             object_store_info: fetch_context.object_store_info,
         })?
-        .resolve()
+        // This call may trigger requests to write newly-provided files to object storage.
+        .into_stored_input(fetch_context.object_store_info)
         .await?;
-    let stored_input = resolved_input.into_stored_input()?;
 
     // Prepare the tool config
-    let tool_config = function_config.prepare_tool_config(request.dynamic_tool_params, &config.tools)?;
-    let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(tool_config.clone().unwrap_or_default());
+    let tool_config =
+        function_config.prepare_tool_config(request.dynamic_tool_params, &config.tools)?;
+    let dynamic_demonstration_info =
+        DynamicDemonstrationInfo::Chat(tool_config.clone().unwrap_or_default());
 
     // Validate and parse output if provided
     let output = if let Some(output_value) = request.output {
@@ -198,15 +198,15 @@ async fn prepare_json_create(
 
     // Validate and convert input
     function_config.validate_input(&request.input)?;
-    let resolved_input = request
+    let stored_input = request
         .input
         .into_lazy_resolved_input(FetchContext {
             client: fetch_context.client,
             object_store_info: fetch_context.object_store_info,
         })?
-        .resolve()
+        // This call may trigger requests to write newly-provided files to object storage.
+        .into_stored_input(fetch_context.object_store_info)
         .await?;
-    let stored_input = resolved_input.into_stored_input()?;
 
     // Determine the output schema (use provided or default to function's schema)
     let output_schema = request
@@ -239,7 +239,7 @@ async fn prepare_json_create(
         None
     };
 
-    let id = Uuid::now_v7();
+    let id: Uuid = Uuid::now_v7();
 
     let insert = JsonInferenceDatapointInsert {
         dataset_name: dataset_name.to_string(),

@@ -387,20 +387,29 @@ impl ToolCallConfigDatabaseInsert {
     }
 }
 
-/// A struct to hold the dynamic tool parameters passed at inference time.
-/// These should override the function-level tool parameters.
-/// `allowed_tools` should be a subset of the configured tools for the function.
-/// if `allowed_tools` is not provided, all tools are allowed.
-/// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
-/// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
+/// Dynamic tool parameters passed at inference time, that override the function-level tool parameters.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
+#[ts(optional_fields)]
 pub struct DynamicToolParams {
+    /// A subset of tools configured for the function that the inference is allowed to use. Optional.
+    /// If not provided, all tools are allowed.
     pub allowed_tools: Option<Vec<String>>,
+
+    /// Tools that the user provided at inference time, in addition to the function-configured tools, that are also allowed.
+    /// We compile these tools on the fly.
     pub additional_tools: Option<Vec<Tool>>,
+
+    /// User-specified tool choice to force tools or a specific tool to be used in the inference.
+    /// Optional. If provided during inference, it will override the function-configured tool choice.
     pub tool_choice: Option<ToolChoice>,
+
+    /// Whether to use parallel tool calls in the inference. Optional.
+    /// If provided during inference, it will override the function-configured parallel tool calls.
     pub parallel_tool_calls: Option<bool>,
+
+    /// Built-in tools that are supported by the model provider.
     pub provider_tools: Option<Vec<ProviderTool>>,
 }
 
