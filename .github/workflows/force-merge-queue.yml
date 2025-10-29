@@ -1,0 +1,24 @@
+name: Force add to merge queue
+
+# This workflow allows us to add PRs to the merge queue without waiting on PR checks to pass.
+# It's activated by adding the special 'force-add-to-merge-queue' label to a PR.
+# It *DOES NOT* skip running checks in the merge queue, so it's always safe to use - in the worst
+# case, we just waste time (+ API spending) in the merge queue for a PR that would have failed earlier.
+
+# Important: *DO NOT* add 'merge_group' (or any other trigger) to the workflow.
+# We need to ensure that this *never* runs for PRs that are inside the merge queue, so
+# that actually merging a PR requires the real 'check-all-general-jobs-passed' job to pass.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  check-all-general-jobs-passed:
+    runs-on: ubuntu-latest
+    # Only run this job if the force-add-to-merge-queue label is present
+    if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue')
+    steps:
+      - name: Force pass check
+        run: |
+          echo "Force merge queue label detected - marking check as passed"
+          echo "This allows the PR to be added to the merge queue even if other checks have not completed"
