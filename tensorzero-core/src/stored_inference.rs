@@ -196,11 +196,13 @@ impl StoredInference {
 
 impl StoredInferenceDatabase {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn to_wire(self, config: &Config) -> Result<StoredInference, Error> {
+    pub fn into_stored_inference(self, config: &Config) -> Result<StoredInference, Error> {
         match self {
             StoredInferenceDatabase::Chat(chat) => {
                 let function_config = config.get_function(&chat.function_name)?;
-                Ok(StoredInference::Chat(chat.to_wire(&function_config)))
+                Ok(StoredInference::Chat(
+                    chat.into_stored_inference(&function_config),
+                ))
             }
             StoredInferenceDatabase::Json(json) => Ok(StoredInference::Json(json)),
         }
@@ -301,7 +303,7 @@ impl StoredChatInference {
 
 impl StoredChatInferenceDatabase {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn to_wire(self, function_config: &FunctionConfig) -> StoredChatInference {
+    pub fn into_stored_inference(self, function_config: &FunctionConfig) -> StoredChatInference {
         let tool_params = function_config.database_insert_to_dynamic_tool_params(self.tool_params);
 
         StoredChatInference {

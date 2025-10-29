@@ -73,7 +73,7 @@ async fn list_datapoints(
     let datapoints = clickhouse.get_datapoints(&params).await?;
     let datapoints = datapoints
         .into_iter()
-        .map(|dp| dp.to_wire(config))
+        .map(|dp| dp.into_datapoint(config))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(GetDatapointsResponse { datapoints })
@@ -104,7 +104,7 @@ async fn get_datapoints(
     let datapoints = clickhouse.get_datapoints(&params).await?;
     let datapoints = datapoints
         .into_iter()
-        .map(|dp| dp.to_wire(config))
+        .map(|dp| dp.into_datapoint(config))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(GetDatapointsResponse { datapoints })

@@ -939,7 +939,7 @@ impl Client {
                 // Convert storage types to wire types
                 let wire_datapoints: Result<Vec<Datapoint>, _> = datapoints
                     .into_iter()
-                    .map(|dp| dp.to_wire(&gateway.handle.app_state.config))
+                    .map(|dp| dp.into_datapoint(&gateway.handle.app_state.config))
                     .collect();
 
                 wire_datapoints.map_err(|e| TensorZeroError::Other { source: e.into() })
@@ -982,7 +982,7 @@ impl Client {
 
                 // Convert storage type to wire type
                 datapoint
-                    .to_wire(&gateway.handle.app_state.config)
+                    .into_datapoint(&gateway.handle.app_state.config)
                     .map_err(|e| TensorZeroError::Other { source: e.into() })
             }
         }
@@ -1058,7 +1058,7 @@ impl Client {
         // Convert storage types to wire types
         let wire_inferences: Result<Vec<StoredInference>, _> = inferences
             .into_iter()
-            .map(|inf| inf.to_wire(&gateway.handle.app_state.config))
+            .map(|inf| inf.into_stored_inference(&gateway.handle.app_state.config))
             .collect();
 
         wire_inferences.map_err(|e| TensorZeroError::Other { source: e.into() })

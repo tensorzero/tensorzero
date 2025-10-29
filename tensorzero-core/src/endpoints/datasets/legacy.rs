@@ -886,7 +886,7 @@ pub async fn list_datapoints_handler(
     // Convert all storage types to wire types
     let wires: Vec<Datapoint> = datapoints
         .into_iter()
-        .map(|dp| dp.to_wire(&app_state.config))
+        .map(|dp| dp.into_datapoint(&app_state.config))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(Json(wires))
@@ -1060,7 +1060,7 @@ pub async fn get_datapoint_handler(
         .await?;
 
     // Convert storage type to wire type
-    let wire = datapoint.to_wire(&app_state.config)?;
+    let wire = datapoint.into_datapoint(&app_state.config)?;
     Ok(Json(wire))
 }
 
@@ -1171,11 +1171,11 @@ impl Datapoint {
 
 impl StoredDatapoint {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn to_wire(self, config: &Config) -> Result<Datapoint, Error> {
+    pub fn into_datapoint(self, config: &Config) -> Result<Datapoint, Error> {
         match self {
             StoredDatapoint::Chat(chat) => {
                 let function_config = config.get_function(&chat.function_name)?;
-                Ok(Datapoint::Chat(chat.to_wire(&function_config)))
+                Ok(Datapoint::Chat(chat.into_datapoint(&function_config)))
             }
             StoredDatapoint::Json(json) => Ok(Datapoint::Json(json)),
         }
@@ -1413,7 +1413,7 @@ impl std::fmt::Display for ChatInferenceDatapoint {
 
 impl StoredChatInferenceDatapoint {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn to_wire(self, function_config: &FunctionConfig) -> ChatInferenceDatapoint {
+    pub fn into_datapoint(self, function_config: &FunctionConfig) -> ChatInferenceDatapoint {
         let tool_params = self
             .tool_params
             .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp));
