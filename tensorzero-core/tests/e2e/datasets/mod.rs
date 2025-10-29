@@ -2740,6 +2740,7 @@ async fn test_stale_dataset_with_datapoints() {
     assert_eq!(datapoints.len(), 4);
 
     // Now stale the entire dataset using the Rust client
+    #[expect(deprecated)]
     let stale_result = client.stale_dataset(dataset_name.clone()).await.unwrap();
     assert_eq!(stale_result.num_staled_datapoints, 4);
 
@@ -2779,6 +2780,7 @@ async fn test_stale_dataset_empty() {
     let dataset_name = format!("test-empty-stale-dataset-{}", Uuid::now_v7());
 
     // Stale an empty dataset (no datapoints exist)
+    #[expect(deprecated)]
     let stale_result = client.stale_dataset(dataset_name.clone()).await.unwrap();
     assert_eq!(stale_result.num_staled_datapoints, 0);
 }
@@ -2814,6 +2816,7 @@ async fn test_stale_dataset_already_staled() {
 
     println!("staling dataset");
     // Stale the dataset once
+    #[expect(deprecated)]
     let stale_result1 = client.stale_dataset(dataset_name.clone()).await.unwrap();
     assert_eq!(stale_result1.num_staled_datapoints, 1);
 
