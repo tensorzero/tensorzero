@@ -4,7 +4,7 @@ import type {
   DisplayTextInput,
   ToolCallContent,
   ToolResultContent,
-  TemplateInput,
+  Template,
   ThoughtContent,
 } from "~/utils/clickhouse/common";
 import {
@@ -127,7 +127,7 @@ export default function Input({
   };
 
   const onAppendTemplateContentBlock = (messageIndex: number) => {
-    const contentBlock: TemplateInput = {
+    const contentBlock: Template = {
       type: "template",
       name: "",
       arguments: JSON.parse("{}"),

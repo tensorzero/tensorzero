@@ -5,7 +5,9 @@ use tensorzero_core::{
         select_feedback_clickhouse, select_feedback_tags_clickhouse,
         select_inference_evaluation_human_feedback_clickhouse,
     },
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind},
+    inference::types::{
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+    },
 };
 use tokio::time::{sleep, Duration};
 use tracing_test::traced_test;
@@ -1218,7 +1220,12 @@ async fn test_fast_inference_then_feedback() {
                     variant_name: None,
                     episode_id: None,
                     input: tensorzero::ClientInput {
-                        system: Some(System::Template(json!({"assistant_name": "Alfred Pennyworth"}).as_object().unwrap().clone())),
+                        system: Some(System::Template(Arguments(
+                            json!({"assistant_name": "Alfred Pennyworth"})
+                                .as_object()
+                                .unwrap()
+                                .clone(),
+                        ))),
                         messages: vec![tensorzero::ClientInputMessage {
                             role: Role::User,
                             content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {

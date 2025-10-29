@@ -76,7 +76,7 @@ mod tests {
         },
         inference::types::{
             ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
-            StoredInputMessageContent, TemplateInput, Text, Usage,
+            StoredInputMessageContent, Template, Text, Usage,
         },
     };
     use uuid::Uuid;
@@ -185,7 +185,7 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(TemplateInput {
+                    content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
                         arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
                     })],
@@ -259,7 +259,7 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(TemplateInput {
+                    content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
                         arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
                     })],
@@ -296,7 +296,7 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(TemplateInput {
+                    content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
                         arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
                     })],
