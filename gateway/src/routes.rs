@@ -162,7 +162,8 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         )
         .route(
             "/v1/datasets/{dataset_name}/datapoints",
-            patch(endpoints::datasets::v1::update_datapoints_handler)
+            post(endpoints::datasets::v1::create_datapoints_handler)
+                .patch(endpoints::datasets::v1::update_datapoints_handler)
                 .delete(endpoints::datasets::v1::delete_datapoints_handler),
         )
         .route(

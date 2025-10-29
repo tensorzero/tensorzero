@@ -250,13 +250,99 @@ pub enum CreateDatapointsFromInferenceRequestParams {
     },
 }
 
-/// Response from creating datapoints from inferences.
+/// Response from creating datapoints (either manually or from inferences).
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct CreateDatapointsFromInferenceResponse {
+pub struct CreateDatapointsResponse {
     /// The IDs of the newly-generated datapoints.
     pub ids: Vec<Uuid>,
+}
+
+/// Request to create datapoints manually.
+/// Used by the `POST /v1/datasets/{dataset_id}/datapoints` endpoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct CreateDatapointsRequest {
+    /// The datapoints to create.
+    pub datapoints: Vec<CreateDatapointRequest>,
+}
+
+/// A tagged request to create a single datapoint.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
+pub enum CreateDatapointRequest {
+    /// Request to create a chat datapoint.
+    Chat(CreateChatDatapointRequest),
+    /// Request to create a JSON datapoint.
+    Json(CreateJsonDatapointRequest),
+}
+
+/// A request to create a chat datapoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
+pub struct CreateChatDatapointRequest {
+    /// The function name for this datapoint. Required.
+    pub function_name: String,
+
+    /// Episode ID that the datapoint belongs to. Optional.
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
+    pub episode_id: Option<Uuid>,
+
+    /// Input to the function. Required.
+    pub input: Input,
+
+    /// Chat datapoint output. Optional.
+    #[serde(default)]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+
+    /// Tool parameters for the datapoint. Optional.
+    #[serde(default)]
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+
+    /// Tags associated with this datapoint. Optional.
+    #[serde(default)]
+    pub tags: Option<HashMap<String, String>>,
+
+    /// Metadata fields. Optional.
+    #[serde(default)]
+    pub metadata: Option<DatapointMetadataUpdate>,
+}
+
+/// A request to create a JSON datapoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
+pub struct CreateJsonDatapointRequest {
+    /// The function name for this datapoint. Required.
+    pub function_name: String,
+
+    /// Episode ID that the datapoint belongs to. Optional.
+    #[serde(default)]
+    pub episode_id: Option<Uuid>,
+
+    /// Input to the function. Required.
+    pub input: Input,
+
+    /// JSON datapoint output. Optional.
+    #[serde(default)]
+    pub output: Option<Value>,
+
+    /// The output schema of the JSON datapoint. Required.
+    pub output_schema: Value,
+
+    /// Tags associated with this datapoint. Optional.
+    #[serde(default)]
+    pub tags: Option<HashMap<String, String>>,
+
+    /// Metadata fields. Optional.
+    #[serde(default)]
+    pub metadata: Option<DatapointMetadataUpdate>,
 }
 
 /// Request to delete datapoints from a dataset.
