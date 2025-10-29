@@ -13,8 +13,8 @@ use tensorzero::{
 };
 use tensorzero_core::{
     cache::CacheEnabledMode,
-    config::{Config, ConfigFileGlob, MetricConfigOptimize},
-    db::{clickhouse::ClickHouseConnectionInfo, feedback::FeedbackByVariant},
+    config::{Config, ConfigFileGlob},
+    db::clickhouse::ClickHouseConnectionInfo,
 };
 use uuid::Uuid;
 
@@ -363,6 +363,24 @@ impl TensorZeroClient {
         })?;
         Ok(result_str)
     }
+
+    #[napi]
+    pub async fn get_variant_sampling_probabilities(
+        &self,
+        function_name: String,
+    ) -> Result<String, napi::Error> {
+        let probabilities = self
+            .client
+            .get_variant_sampling_probabilities(&function_name)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let probabilities_str = serde_json::to_string(&probabilities).map_err(|e| {
+            napi::Error::from_reason(format!(
+                "Failed to serialize variant sampling probabilities: {e}"
+            ))
+        })?;
+        Ok(probabilities_str)
+    }
 }
 
 #[napi]
@@ -382,16 +400,4 @@ pub async fn get_config(config_path: Option<String>) -> Result<String, napi::Err
 #[napi]
 pub fn get_quantiles() -> Vec<f64> {
     QUANTILES.to_vec()
-}
-
-#[derive(serde::Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
-pub struct ComputeTrackAndStopStateParams {
-    pub candidate_variants: Vec<String>,
-    pub feedback: Vec<FeedbackByVariant>,
-    pub min_samples_per_variant: u64,
-    pub delta: f64,
-    pub epsilon: f64,
-    pub min_prob: Option<f64>,
-    pub metric_optimize: MetricConfigOptimize,
 }
