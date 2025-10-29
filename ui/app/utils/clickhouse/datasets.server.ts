@@ -55,7 +55,8 @@ export async function countRowsForDataset(
   params: DatasetQueryParams,
 ): Promise<number> {
   const dbClient = await getNativeDatabaseClient();
-  return await dbClient.countRowsForDataset(params);
+  const count = await dbClient.countRowsForDataset(params);
+  return Number(count);
 }
 
 /*
