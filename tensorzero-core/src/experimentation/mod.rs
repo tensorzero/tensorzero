@@ -81,7 +81,6 @@ pub trait VariantSampler {
     fn get_current_display_probabilities<'a>(
         &self,
         function_name: &str,
-        episode_id: Uuid,
         active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
         postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error>;
@@ -182,17 +181,13 @@ impl ExperimentationConfig {
     pub fn get_current_display_probabilities<'a>(
         &self,
         function_name: &str,
-        episode_id: Uuid,
         active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
         postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         match self {
-            Self::StaticWeights(config) => config.get_current_display_probabilities(
-                function_name,
-                episode_id,
-                active_variants,
-                postgres,
-            ),
+            Self::StaticWeights(config) => {
+                config.get_current_display_probabilities(function_name, active_variants, postgres)
+            }
             Self::Uniform => {
                 // Uniform distribution over all active variants
                 let num_variants = active_variants.len();
@@ -206,18 +201,12 @@ impl ExperimentationConfig {
                     .collect())
             }
             #[cfg(test)]
-            Self::AlwaysFails(config) => config.get_current_display_probabilities(
-                function_name,
-                episode_id,
-                active_variants,
-                postgres,
-            ),
-            Self::TrackAndStop(config) => config.get_current_display_probabilities(
-                function_name,
-                episode_id,
-                active_variants,
-                postgres,
-            ),
+            Self::AlwaysFails(config) => {
+                config.get_current_display_probabilities(function_name, active_variants, postgres)
+            }
+            Self::TrackAndStop(config) => {
+                config.get_current_display_probabilities(function_name, active_variants, postgres)
+            }
         }
     }
 }
@@ -329,7 +318,6 @@ impl VariantSampler for AlwaysFailsConfig {
     fn get_current_display_probabilities<'a>(
         &self,
         _function_name: &str,
-        _episode_id: Uuid,
         active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
@@ -564,12 +552,7 @@ mod tests {
         let config = ExperimentationConfig::Uniform;
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities(
-                "test",
-                Uuid::now_v7(),
-                &mut active_variants,
-                &postgres,
-            )
+            .get_current_display_probabilities("test", &mut active_variants, &postgres)
             .unwrap();
 
         // Should have uniform probabilities
@@ -590,12 +573,7 @@ mod tests {
         let config = ExperimentationConfig::Uniform;
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities(
-                "test",
-                Uuid::now_v7(),
-                &mut active_variants,
-                &postgres,
-            )
+            .get_current_display_probabilities("test", &mut active_variants, &postgres)
             .unwrap();
 
         // Should return empty map

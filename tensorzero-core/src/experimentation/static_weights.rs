@@ -181,7 +181,6 @@ impl VariantSampler for StaticWeightsConfig {
     fn get_current_display_probabilities<'a>(
         &self,
         _function_name: &str,
-        _episode_id: Uuid,
         active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
@@ -803,12 +802,7 @@ mod tests {
 
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities(
-                "test",
-                Uuid::now_v7(),
-                &mut active_variants,
-                &postgres,
-            )
+            .get_current_display_probabilities("test", &mut active_variants, &postgres)
             .unwrap();
 
         // Total weight = 6.0
@@ -835,12 +829,7 @@ mod tests {
 
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities(
-                "test",
-                Uuid::now_v7(),
-                &mut active_variants,
-                &postgres,
-            )
+            .get_current_display_probabilities("test", &mut active_variants, &postgres)
             .unwrap();
 
         // Should have uniform probabilities
@@ -870,12 +859,7 @@ mod tests {
 
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities(
-                "test",
-                Uuid::now_v7(),
-                &mut active_variants,
-                &postgres,
-            )
+            .get_current_display_probabilities("test", &mut active_variants, &postgres)
             .unwrap();
 
         // Only A and C should appear, with normalized weights
@@ -901,12 +885,7 @@ mod tests {
 
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities(
-                "test",
-                Uuid::now_v7(),
-                &mut active_variants,
-                &postgres,
-            )
+            .get_current_display_probabilities("test", &mut active_variants, &postgres)
             .unwrap();
 
         // Only B and C are active and in fallback
@@ -930,12 +909,8 @@ mod tests {
         };
 
         let postgres = PostgresConnectionInfo::new_disabled();
-        let result = config.get_current_display_probabilities(
-            "test",
-            Uuid::now_v7(),
-            &mut active_variants,
-            &postgres,
-        );
+        let result =
+            config.get_current_display_probabilities("test", &mut active_variants, &postgres);
 
         assert!(result.is_err());
     }
