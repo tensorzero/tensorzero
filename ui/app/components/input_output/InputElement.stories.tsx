@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { ResolvedInputElement } from "./ResolvedInputElement";
+import { InputElement } from "./InputElement";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { ResolvedInput, Role } from "~/types/tensorzero";
+import type { Input, Role } from "~/types/tensorzero";
 import { StoryDebugWrapper } from "~/components/.storybook/StoryDebugWrapper";
+import { getBase64File } from "./content_blocks/FileContentBlock.stories";
 
 const meta = {
-  title: "Input Output/ResolvedInputElement",
-  component: ResolvedInputElement,
-} satisfies Meta<typeof ResolvedInputElement>;
+  title: "Input Output/InputElement",
+  component: InputElement,
+} satisfies Meta<typeof InputElement>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -22,7 +23,7 @@ export const Empty: Story = {
   render: function EmptyStory(args) {
     return (
       <StoryDebugWrapper debugLabel="input" debugData={args.input}>
-        <ResolvedInputElement {...args} />
+        <InputElement {...args} />
       </StoryDebugWrapper>
     );
   },
@@ -39,12 +40,12 @@ export const EmptyEditing: Story = {
     onMessagesChange: () => {},
   },
   render: function EmptyEditingStory() {
-    const [input, setInput] = useState<ResolvedInput>({
+    const [input, setInput] = useState<Input>({
       messages: [],
     });
     return (
       <StoryDebugWrapper debugLabel="input" debugData={input}>
-        <ResolvedInputElement
+        <InputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
@@ -67,7 +68,7 @@ export const SystemText: Story = {
   render: function SystemTextStory(args) {
     return (
       <StoryDebugWrapper debugLabel="input" debugData={args.input}>
-        <ResolvedInputElement {...args} />
+        <InputElement {...args} />
       </StoryDebugWrapper>
     );
   },
@@ -85,13 +86,13 @@ export const SystemTextEditing: Story = {
     onMessagesChange: () => {},
   },
   render: function SystemTextEditingStory() {
-    const [input, setInput] = useState<ResolvedInput>({
+    const [input, setInput] = useState<Input>({
       system: "You are a helpful assistant that answers questions concisely.",
       messages: [],
     });
     return (
       <StoryDebugWrapper debugLabel="input" debugData={input}>
-        <ResolvedInputElement
+        <InputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
@@ -121,7 +122,7 @@ export const SystemTemplate: Story = {
   render: function SystemTemplateStory(args) {
     return (
       <StoryDebugWrapper debugLabel="input" debugData={args.input}>
-        <ResolvedInputElement {...args} />
+        <InputElement {...args} />
       </StoryDebugWrapper>
     );
   },
@@ -146,7 +147,7 @@ export const SystemTemplateEditing: Story = {
     onMessagesChange: () => {},
   },
   render: function SystemTemplateEditingStory() {
-    const [input, setInput] = useState<ResolvedInput>({
+    const [input, setInput] = useState<Input>({
       system: {
         template_name: "customer_support_system",
         parameters: {
@@ -159,7 +160,7 @@ export const SystemTemplateEditing: Story = {
     });
     return (
       <StoryDebugWrapper debugLabel="input" debugData={input}>
-        <ResolvedInputElement
+        <InputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
@@ -185,7 +186,7 @@ export const UserMessage: Story = {
   render: function UserMessageStory(args) {
     return (
       <StoryDebugWrapper debugLabel="input" debugData={args.input}>
-        <ResolvedInputElement {...args} />
+        <InputElement {...args} />
       </StoryDebugWrapper>
     );
   },
@@ -207,7 +208,7 @@ export const UserMessageEditing: Story = {
     onMessagesChange: () => {},
   },
   render: function UserMessageEditingStory() {
-    const [input, setInput] = useState<ResolvedInput>({
+    const [input, setInput] = useState<Input>({
       messages: [
         {
           role: "user" as Role,
@@ -217,7 +218,7 @@ export const UserMessageEditing: Story = {
     });
     return (
       <StoryDebugWrapper debugLabel="input" debugData={input}>
-        <ResolvedInputElement
+        <InputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
@@ -248,7 +249,7 @@ export const AssistantMessage: Story = {
   render: function AssistantMessageStory(args) {
     return (
       <StoryDebugWrapper debugLabel="input" debugData={args.input}>
-        <ResolvedInputElement {...args} />
+        <InputElement {...args} />
       </StoryDebugWrapper>
     );
   },
@@ -275,7 +276,7 @@ export const AssistantMessageEditing: Story = {
     onMessagesChange: () => {},
   },
   render: function AssistantMessageEditingStory() {
-    const [input, setInput] = useState<ResolvedInput>({
+    const [input, setInput] = useState<Input>({
       messages: [
         {
           role: "assistant" as Role,
@@ -290,7 +291,7 @@ export const AssistantMessageEditing: Story = {
     });
     return (
       <StoryDebugWrapper debugLabel="input" debugData={input}>
-        <ResolvedInputElement
+        <InputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}
@@ -301,7 +302,7 @@ export const AssistantMessageEditing: Story = {
   },
 };
 
-const COMPLEX_INPUT: ResolvedInput = {
+const COMPLEX_INPUT: Input = {
   system: "You are a helpful AI assistant with access to tools.",
   messages: [
     {
@@ -313,7 +314,10 @@ const COMPLEX_INPUT: ResolvedInput = {
         },
         {
           type: "file",
-          data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          file_type: "object_storage",
+          data: await getBase64File(
+            "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+          ),
           mime_type: "image/png",
           source_url:
             "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
@@ -360,7 +364,9 @@ const COMPLEX_INPUT: ResolvedInput = {
         {
           type: "tool_call",
           name: "get_weather",
-          arguments:
+          arguments: { city: "Paris", country: "France", units: "metric" },
+          raw_name: "get_weather",
+          raw_arguments:
             '{"city": "Paris", "country": "France", "units": "metric"}',
           id: "call_abc123",
         },
@@ -410,7 +416,7 @@ export const Complex: Story = {
   render: function ComplexStory(args) {
     return (
       <StoryDebugWrapper debugLabel="input" debugData={args.input}>
-        <ResolvedInputElement {...args} />
+        <InputElement {...args} />
       </StoryDebugWrapper>
     );
   },
@@ -425,10 +431,10 @@ export const ComplexEditing: Story = {
     onMessagesChange: () => {},
   },
   render: function ComplexEditingStory() {
-    const [input, setInput] = useState<ResolvedInput>(COMPLEX_INPUT);
+    const [input, setInput] = useState<Input>(COMPLEX_INPUT);
     return (
       <StoryDebugWrapper debugLabel="input" debugData={input}>
-        <ResolvedInputElement
+        <InputElement
           input={input}
           isEditing={true}
           onSystemChange={(system) => setInput({ ...input, system })}

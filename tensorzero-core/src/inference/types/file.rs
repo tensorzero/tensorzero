@@ -261,6 +261,7 @@ pub struct ObjectStorageFile {
 pub struct ObjectStorageError {
     #[serde(flatten)]
     pub file: ObjectStoragePointer,
+    #[ts(optional)]
     pub error: Option<String>,
 }
 

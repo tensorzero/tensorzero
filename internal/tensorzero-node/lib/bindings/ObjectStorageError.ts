@@ -6,7 +6,7 @@ import type { StoragePath } from "./StoragePath";
  * This struct can NOT be stored in the database.
  */
 export type ObjectStorageError = {
-  error: string | null;
+  error?: string;
   source_url?: string;
   mime_type: string;
   storage_path: StoragePath;

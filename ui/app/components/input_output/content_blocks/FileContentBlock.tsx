@@ -9,10 +9,10 @@ import {
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
-import type { ObjectStorageFile } from "~/types/tensorzero";
+import type { File } from "~/types/tensorzero";
 
 interface FileContentBlockProps {
-  block: ObjectStorageFile;
+  block: File;
 }
 
 /**
@@ -20,13 +20,33 @@ interface FileContentBlockProps {
  * Dispatches to specific renderers based on MIME type.
  */
 export function FileContentBlock({ block }: FileContentBlockProps) {
-  // Handle error case
-  if (block.data === undefined) {
-    return <FileErrorContentBlock error="Failed to retrieve file" />;
+  switch (block.file_type) {
+    case "object_storage":
+      break; // handled below
+    case "url":
+      // TODO (GabrielBianconi): we'll need to support this to allow CRUD on file content blocks
+      throw new Error(
+        "The UI should never receive a URL file. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+      );
+    case "base64":
+      // TODO (GabrielBianconi): we'll need to support this to allow CRUD on file content blocks
+      throw new Error(
+        "The UI should never receive a base64 file. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+      );
+    case "object_storage_pointer":
+      // TODO: should we handle this better?
+      throw new Error(
+        "The UI should never receive an object storage pointer. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
+      );
+    case "object_storage_error":
+      return <FileErrorContentBlock error={block.error} />;
   }
 
+  // If we got here, we know that block.file_type is "object_storage"
+  block satisfies Extract<File, { file_type: "object_storage" }>; // compile-time sanity check
+
   // Determine which component to render based on mime type
-  if (block.mime_type.startsWith("image/")) {
+  if (block.mime_type?.startsWith("image/")) {
     return (
       <ImageContentBlock
         imageUrl={block.data}
@@ -35,10 +55,10 @@ export function FileContentBlock({ block }: FileContentBlockProps) {
     );
   }
 
-  if (block.mime_type.startsWith("audio/")) {
+  if (block.mime_type?.startsWith("audio/")) {
     return (
       <AudioContentBlock
-        base64DataUrl={block.data}
+        base64Data={block.data}
         mimeType={block.mime_type}
         filePath={block.storage_path.path}
       />
@@ -47,7 +67,7 @@ export function FileContentBlock({ block }: FileContentBlockProps) {
 
   return (
     <GenericFileContentBlock
-      base64DataUrl={block.data}
+      base64Data={block.data}
       mimeType={block.mime_type}
       filePath={block.storage_path.path}
     />
@@ -84,7 +104,7 @@ function ImageContentBlock({ imageUrl, filePath }: ImageContentBlockProps) {
 
 interface AudioContentBlockProps {
   /** Base64-encoded data URL (data:audio/...) */
-  base64DataUrl: string;
+  base64Data: string;
   mimeType: string;
   filePath: string;
 }
@@ -94,11 +114,11 @@ interface AudioContentBlockProps {
  * Converts base64 data URL to blob URL for audio playback.
  */
 function AudioContentBlock({
-  base64DataUrl,
+  base64Data,
   mimeType,
   filePath,
 }: AudioContentBlockProps) {
-  const blobUrl = useBase64UrlToBlobUrl(base64DataUrl, mimeType);
+  const blobUrl = useBase64UrlToBlobUrl(base64Data, mimeType);
 
   return (
     <div className="flex flex-col gap-1">
@@ -118,7 +138,7 @@ function AudioContentBlock({
 
 interface GenericFileContentBlockProps {
   /** Base64-encoded data URL (data:...) */
-  base64DataUrl: string;
+  base64Data: string;
   mimeType: string;
   filePath: string;
 }
@@ -128,11 +148,11 @@ interface GenericFileContentBlockProps {
  * Converts base64 data URL to blob URL for browser preview.
  */
 function GenericFileContentBlock({
-  base64DataUrl,
+  base64Data,
   filePath,
   mimeType,
 }: GenericFileContentBlockProps) {
-  const blobUrl = useBase64UrlToBlobUrl(base64DataUrl, mimeType);
+  const blobUrl = useBase64UrlToBlobUrl(base64Data, mimeType);
 
   return (
     <div className="flex flex-col gap-1">
@@ -145,7 +165,7 @@ function GenericFileContentBlock({
         </div>
 
         <Link
-          to={base64DataUrl}
+          to={base64Data}
           download={`tensorzero_${filePath}`}
           aria-label={`Download ${filePath}`}
         >
@@ -166,7 +186,7 @@ function GenericFileContentBlock({
 }
 
 interface FileErrorContentBlockProps {
-  error: string;
+  error?: string;
 }
 
 /**
@@ -181,8 +201,8 @@ function FileErrorContentBlock({ error }: FileErrorContentBlockProps) {
       <div className="border-border bg-bg-tertiary relative aspect-video w-60 min-w-60 rounded-md border">
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-2">
           <ImageOff className="text-fg-muted h-4 w-4" />
-          <span className="text-fg-tertiary text-center text-xs font-medium">
-            {error}
+          <span className="text-fg-tertiary text-center text-xs font-medium text-balance">
+            {error || "Failed to retrieve file"}
           </span>
         </div>
       </div>

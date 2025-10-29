@@ -1,27 +1,23 @@
 import { EmptyMessage } from "./ContentBlockElement";
-import type {
-  System,
-  ResolvedInput,
-  ResolvedInputMessage,
-} from "~/types/tensorzero";
+import type { System, Input, InputMessage } from "~/types/tensorzero";
 import { SystemElement } from "./SystemElement";
 import { MessagesElement } from "./MessagesElement";
 
-interface ResolvedInputElementProps {
-  input: ResolvedInput;
+interface InputElementProps {
+  input: Input;
   isEditing?: boolean;
   onSystemChange?: (system?: System) => void;
-  onMessagesChange?: (messages: ResolvedInputMessage[]) => void;
+  onMessagesChange?: (messages: InputMessage[]) => void;
   maxHeight?: number | "Content";
 }
 
-export function ResolvedInputElement({
+export function InputElement({
   input,
   isEditing,
   onSystemChange,
   onMessagesChange,
   maxHeight,
-}: ResolvedInputElementProps) {
+}: InputElementProps) {
   const { messages, system } = input;
 
   return (

@@ -1,12 +1,12 @@
-import type { ResolvedInputMessage } from "~/types/tensorzero";
+import type { InputMessage } from "~/types/tensorzero";
 import { AddButton } from "~/components/ui/AddButton";
 import { ExpandableElement } from "./ExpandableElement";
 import { MessageElement } from "./MessageElement";
 
 interface MessagesElementProps {
-  messages: Array<ResolvedInputMessage>;
+  messages: Array<InputMessage>;
   isEditing?: boolean;
-  onMessagesChange?: (messages: ResolvedInputMessage[]) => void;
+  onMessagesChange?: (messages: InputMessage[]) => void;
   maxHeight?: number | "Content";
 }
 
@@ -27,7 +27,7 @@ export function MessagesElement({
 
   const onUpdateMessage = (
     messageIndex: number,
-    updatedMessage: ResolvedInputMessage,
+    updatedMessage: InputMessage,
   ) => {
     const updatedMessages = [...messages];
     updatedMessages[messageIndex] = updatedMessage;

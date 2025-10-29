@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import type { ResolvedInputMessageContent } from "~/types/tensorzero";
+import type { InputMessageContent } from "~/types/tensorzero";
 import { TextContentBlock } from "~/components/input_output/content_blocks/TextContentBlock";
 import { TemplateContentBlock } from "~/components/input_output/content_blocks/TemplateContentBlock";
 import { ToolCallContentBlock } from "~/components/input_output/content_blocks/ToolCallContentBlock";
@@ -8,9 +8,9 @@ import { FileContentBlock } from "~/components/input_output/content_blocks/FileC
 import { ThoughtContentBlock } from "~/components/input_output/content_blocks/ThoughtContentBlock";
 
 interface ContentBlockElementProps {
-  block: ResolvedInputMessageContent;
+  block: InputMessageContent;
   isEditing?: boolean;
-  onChange?: (updatedContentBlock: ResolvedInputMessageContent) => void;
+  onChange?: (updatedContentBlock: InputMessageContent) => void;
   actionBar?: ReactNode;
 }
 
