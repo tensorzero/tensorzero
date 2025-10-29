@@ -19,7 +19,6 @@ set -euo pipefail
 
 JUNIT_XML_PATH="${1:-target/nextest/e2e/junit.xml}"
 DASHBOARD_REPO_SSH="git@github.com:tensorzero/testing-dashboard.git"
-DASHBOARD_REPO_HTTPS="https://github.com/tensorzero/testing-dashboard.git"
 DASHBOARD_URL="https://tensorzero.github.io/testing-dashboard/"
 
 if [ ! -f "$JUNIT_XML_PATH" ]; then
@@ -130,7 +129,7 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     # Fetch historical data from testing-dashboard
     # ------------------------------------------------------------------------------
     echo "Fetching historical data from testing-dashboard..."
-    if ! git clone --depth 1 --branch gh-pages "$DASHBOARD_REPO_HTTPS" gh-pages-repo; then
+    if ! git clone --depth 1 --branch gh-pages "$DASHBOARD_REPO_SSH" gh-pages-repo; then
         echo "Failed to clone repository"
         ATTEMPT=$((ATTEMPT + 1))
         continue
