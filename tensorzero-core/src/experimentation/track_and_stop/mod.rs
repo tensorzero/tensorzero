@@ -523,6 +523,115 @@ impl VariantSampler for TrackAndStopConfig {
             })
         })
     }
+
+    fn get_current_display_probabilities<'a>(
+        &self,
+        _function_name: &str,
+        _episode_id: Uuid,
+        active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
+        _postgres: &PostgresConnectionInfo,
+    ) -> Result<HashMap<&'a str, f64>, Error> {
+        let state = self.state.load();
+        match state.as_ref() {
+            TrackAndStopState::Stopped {
+                winner_variant_name,
+            } => {
+                let mut probs = HashMap::new();
+                if let Some(key) = active_variants.keys().find(|k| *k == winner_variant_name) {
+                    probs.insert(key.as_str(), 1.0);
+                }
+                Ok(probs)
+            }
+            TrackAndStopState::NurseryOnly(nursery) => {
+                let num_nursery = nursery.variants.len();
+                let uniform_prob = if num_nursery > 0 {
+                    1.0 / (num_nursery as f64)
+                } else {
+                    0.0
+                };
+                let probs = active_variants
+                    .keys()
+                    .filter(|k| nursery.variants.contains(k))
+                    .map(|k| (k.as_str(), uniform_prob))
+                    .collect();
+                Ok(probs)
+            }
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities,
+            } => {
+                let probs = active_variants
+                    .keys()
+                    .filter_map(|k| {
+                        sampling_probabilities
+                            .get(k)
+                            .map(|&prob| (k.as_str(), prob))
+                    })
+                    .collect();
+                Ok(probs)
+            }
+            TrackAndStopState::NurseryAndBandits {
+                nursery,
+                sampling_probabilities,
+            } => {
+                let num_nursery = nursery.variants.len();
+                let num_bandits = sampling_probabilities.len();
+                let nursery_mass = nursery.nursery_total_mass(num_bandits);
+                let bandit_mass = 1.0 - nursery_mass;
+
+                let mut probs = HashMap::new();
+
+                // Assign uniform probability to each nursery variant
+                let uniform_nursery_prob = if num_nursery > 0 {
+                    nursery_mass / (num_nursery as f64)
+                } else {
+                    0.0
+                };
+                for key in active_variants.keys() {
+                    if nursery.variants.contains(key) {
+                        probs.insert(key.as_str(), uniform_nursery_prob);
+                    }
+                }
+
+                // Scale bandit probabilities by bandit_mass
+                for key in active_variants.keys() {
+                    if let Some(&prob) = sampling_probabilities.get(key) {
+                        probs.insert(key.as_str(), prob * bandit_mass);
+                    }
+                }
+
+                Ok(probs)
+            }
+            TrackAndStopState::NurseryAndStopped {
+                nursery,
+                stopped_variant_name,
+            } => {
+                let num_nursery = nursery.variants.len();
+                let nursery_mass = nursery.nursery_total_mass(1); // 1 other variant (stopped)
+                let stopped_mass = 1.0 - nursery_mass;
+
+                let mut probs = HashMap::new();
+
+                // Assign uniform probability to each nursery variant
+                let uniform_nursery_prob = if num_nursery > 0 {
+                    nursery_mass / (num_nursery as f64)
+                } else {
+                    0.0
+                };
+                for key in active_variants.keys() {
+                    if nursery.variants.contains(key) {
+                        probs.insert(key.as_str(), uniform_nursery_prob);
+                    }
+                }
+
+                // Assign probability to stopped variant
+                if let Some(key) = active_variants.keys().find(|k| *k == stopped_variant_name) {
+                    probs.insert(key.as_str(), stopped_mass);
+                }
+
+                Ok(probs)
+            }
+        }
+    }
 }
 
 struct ProbabilityUpdateTaskArgs {
@@ -969,93 +1078,6 @@ impl TrackAndStopState {
                 } else {
                     Ok(None)
                 }
-            }
-        }
-    }
-
-    /// Computes display probabilities for all variants for UI visualization.
-    /// The sampling behavior for nursery variants is actually round-robin, meaning
-    /// it's deterministic rather than probabilistic. For states that include nursery
-    /// variants, we display probabilities that are uniform over the nursery variants.
-    /// In that sense, these probabilities are for visual reference only, since they do
-    /// not strictly represent the sampling behavior.
-    pub fn get_display_sampling_probabilities(&self) -> HashMap<String, f64> {
-        match self {
-            TrackAndStopState::Stopped {
-                winner_variant_name,
-            } => {
-                let mut probs = HashMap::new();
-                probs.insert(winner_variant_name.clone(), 1.0);
-                probs
-            }
-            TrackAndStopState::NurseryOnly(nursery) => {
-                let num_nursery = nursery.variants.len();
-                let uniform_prob = if num_nursery > 0 {
-                    1.0 / (num_nursery as f64)
-                } else {
-                    0.0
-                };
-                nursery
-                    .variants
-                    .iter()
-                    .map(|v| (v.clone(), uniform_prob))
-                    .collect()
-            }
-            TrackAndStopState::BanditsOnly {
-                sampling_probabilities,
-            } => sampling_probabilities.clone(),
-            TrackAndStopState::NurseryAndBandits {
-                nursery,
-                sampling_probabilities,
-            } => {
-                let num_nursery = nursery.variants.len();
-                let num_bandits = sampling_probabilities.len();
-                let nursery_mass = nursery.nursery_total_mass(num_bandits);
-                let bandit_mass = 1.0 - nursery_mass;
-
-                let mut probs = HashMap::new();
-
-                // Assign uniform probability to each nursery variant
-                let uniform_nursery_prob = if num_nursery > 0 {
-                    nursery_mass / (num_nursery as f64)
-                } else {
-                    0.0
-                };
-                for variant in &nursery.variants {
-                    probs.insert(variant.clone(), uniform_nursery_prob);
-                }
-
-                // Scale bandit probabilities by bandit_mass
-                for (variant, &prob) in sampling_probabilities {
-                    probs.insert(variant.clone(), prob * bandit_mass);
-                }
-
-                probs
-            }
-            TrackAndStopState::NurseryAndStopped {
-                nursery,
-                stopped_variant_name,
-            } => {
-                let num_nursery = nursery.variants.len();
-                let nursery_mass = nursery.nursery_total_mass(1); // 1 other variant (stopped)
-                let stopped_mass = 1.0 - nursery_mass;
-
-                let mut probs = HashMap::new();
-
-                // Assign uniform probability to each nursery variant
-                let uniform_nursery_prob = if num_nursery > 0 {
-                    nursery_mass / (num_nursery as f64)
-                } else {
-                    0.0
-                };
-                for variant in &nursery.variants {
-                    probs.insert(variant.clone(), uniform_nursery_prob);
-                }
-
-                // Assign probability to stopped variant
-                probs.insert(stopped_variant_name.clone(), stopped_mass);
-
-                probs
             }
         }
     }
@@ -2217,91 +2239,162 @@ mod tests {
         }
     }
 
-    // Tests for get_display_sampling_probabilities()
+    // Tests for get_current_display_probabilities
     #[test]
-    fn test_get_display_sampling_probabilities_stopped() {
-        let state = TrackAndStopState::Stopped {
-            winner_variant_name: "A".to_string(),
+    fn test_get_current_display_probabilities_stopped() {
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::Stopped {
+                winner_variant_name: "A".to_string(),
+            }))),
+            task_spawned: AtomicBool::new(false),
         };
 
-        let probs = state.get_display_sampling_probabilities();
+        let mut active_variants = create_test_variants(&["A", "B"]);
+        let postgres = PostgresConnectionInfo::new_disabled();
 
+        let probs = config
+            .get_current_display_probabilities(
+                "test",
+                Uuid::now_v7(),
+                &mut active_variants,
+                &postgres,
+            )
+            .unwrap();
+
+        // Only the winner should have probability 1.0
         assert_eq!(probs.len(), 1);
         assert_eq!(probs.get("A"), Some(&1.0));
-
-        // Check sum
-        let sum: f64 = probs.values().sum();
-        assert!((sum - 1.0).abs() < 1e-9, "Probabilities should sum to 1.0");
     }
 
     #[test]
-    fn test_get_display_sampling_probabilities_nursery_only() {
-        let state = TrackAndStopState::NurseryOnly(Nursery::new(vec![
-            "A".to_string(),
-            "B".to_string(),
-            "C".to_string(),
-        ]));
+    fn test_get_current_display_probabilities_nursery_only() {
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::NurseryOnly(
+                Nursery::new(vec!["A".to_string(), "B".to_string(), "C".to_string()]),
+            )))),
+            task_spawned: AtomicBool::new(false),
+        };
 
-        let probs = state.get_display_sampling_probabilities();
+        let mut active_variants = create_test_variants(&["A", "B", "C"]);
+        let postgres = PostgresConnectionInfo::new_disabled();
 
+        let probs = config
+            .get_current_display_probabilities(
+                "test",
+                Uuid::now_v7(),
+                &mut active_variants,
+                &postgres,
+            )
+            .unwrap();
+
+        // Should have uniform probabilities
         assert_eq!(probs.len(), 3);
-
-        // Each variant should have 1/3 probability
-        assert!((probs.get("A").unwrap() - 1.0 / 3.0).abs() < 1e-9);
-        assert!((probs.get("B").unwrap() - 1.0 / 3.0).abs() < 1e-9);
-        assert!((probs.get("C").unwrap() - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs["A"] - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs["B"] - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs["C"] - 1.0 / 3.0).abs() < 1e-9);
 
         // Check sum
-        let sum: f64 = probs.values().sum();
-        assert!((sum - 1.0).abs() < 1e-9, "Probabilities should sum to 1.0");
-    }
-
-    #[test]
-    fn test_get_display_sampling_probabilities_nursery_only_single_variant() {
-        let state = TrackAndStopState::NurseryOnly(Nursery::new(vec!["A".to_string()]));
-
-        let probs = state.get_display_sampling_probabilities();
-
-        assert_eq!(probs.len(), 1);
-        assert_eq!(probs.get("A"), Some(&1.0));
-
         let sum: f64 = probs.values().sum();
         assert!((sum - 1.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_get_display_sampling_probabilities_bandits_only() {
+    fn test_get_current_display_probabilities_bandits_only() {
         let mut sampling_probs = HashMap::new();
         sampling_probs.insert("A".to_string(), 0.3);
         sampling_probs.insert("B".to_string(), 0.7);
 
-        let state = TrackAndStopState::BanditsOnly {
-            sampling_probabilities: sampling_probs.clone(),
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
+                sampling_probabilities: sampling_probs,
+            }))),
+            task_spawned: AtomicBool::new(false),
         };
 
-        let probs = state.get_display_sampling_probabilities();
+        let mut active_variants = create_test_variants(&["A", "B"]);
+        let postgres = PostgresConnectionInfo::new_disabled();
+
+        let probs = config
+            .get_current_display_probabilities(
+                "test",
+                Uuid::now_v7(),
+                &mut active_variants,
+                &postgres,
+            )
+            .unwrap();
 
         assert_eq!(probs.len(), 2);
-        assert_eq!(probs.get("A"), Some(&0.3));
-        assert_eq!(probs.get("B"), Some(&0.7));
+        assert!((probs["A"] - 0.3).abs() < 1e-9);
+        assert!((probs["B"] - 0.7).abs() < 1e-9);
 
         // Check sum
         let sum: f64 = probs.values().sum();
-        assert!((sum - 1.0).abs() < 1e-9, "Probabilities should sum to 1.0");
+        assert!((sum - 1.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_get_display_sampling_probabilities_nursery_and_bandits() {
+    fn test_get_current_display_probabilities_nursery_and_bandits() {
         let mut sampling_probs = HashMap::new();
         sampling_probs.insert("A".to_string(), 0.3);
         sampling_probs.insert("B".to_string(), 0.7);
 
-        let state = TrackAndStopState::NurseryAndBandits {
-            nursery: Nursery::new(vec!["C".to_string()]),
-            sampling_probabilities: sampling_probs,
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(
+                TrackAndStopState::NurseryAndBandits {
+                    nursery: Nursery::new(vec!["C".to_string()]),
+                    sampling_probabilities: sampling_probs,
+                },
+            ))),
+            task_spawned: AtomicBool::new(false),
         };
 
-        let probs = state.get_display_sampling_probabilities();
+        let mut active_variants = create_test_variants(&["A", "B", "C"]);
+        let postgres = PostgresConnectionInfo::new_disabled();
+
+        let probs = config
+            .get_current_display_probabilities(
+                "test",
+                Uuid::now_v7(),
+                &mut active_variants,
+                &postgres,
+            )
+            .unwrap();
 
         assert_eq!(probs.len(), 3);
 
@@ -2313,65 +2406,28 @@ mod tests {
 
         // C gets all nursery mass (1 nursery variant)
         assert!(
-            (probs.get("C").unwrap() - nursery_mass).abs() < 1e-9,
-            "C should get {} but got {}",
+            (probs["C"] - nursery_mass).abs() < 1e-9,
+            "C should get {}, but got {}",
             nursery_mass,
-            probs.get("C").unwrap()
+            probs["C"]
         );
 
-        // A gets 0.3 * bandit_mass
+        // A and B get their proportional shares of bandit mass
+        let expected_a = 0.3 * bandit_mass;
+        let expected_b = 0.7 * bandit_mass;
+
         assert!(
-            (probs.get("A").unwrap() - 0.3 * bandit_mass).abs() < 1e-9,
-            "A should get {} but got {}",
-            0.3 * bandit_mass,
-            probs.get("A").unwrap()
+            (probs["A"] - expected_a).abs() < 1e-9,
+            "A should get {}, but got {}",
+            expected_a,
+            probs["A"]
         );
-
-        // B gets 0.7 * bandit_mass
         assert!(
-            (probs.get("B").unwrap() - 0.7 * bandit_mass).abs() < 1e-9,
-            "B should get {} but got {}",
-            0.7 * bandit_mass,
-            probs.get("B").unwrap()
+            (probs["B"] - expected_b).abs() < 1e-9,
+            "B should get {}, but got {}",
+            expected_b,
+            probs["B"]
         );
-
-        // Check sum
-        let sum: f64 = probs.values().sum();
-        assert!(
-            (sum - 1.0).abs() < 1e-9,
-            "Probabilities should sum to 1.0, got {sum}"
-        );
-    }
-
-    #[test]
-    fn test_get_display_sampling_probabilities_nursery_and_bandits_multiple_nursery() {
-        let mut sampling_probs = HashMap::new();
-        sampling_probs.insert("A".to_string(), 0.4);
-        sampling_probs.insert("B".to_string(), 0.6);
-
-        let state = TrackAndStopState::NurseryAndBandits {
-            nursery: Nursery::new(vec!["C".to_string(), "D".to_string()]),
-            sampling_probabilities: sampling_probs,
-        };
-
-        let probs = state.get_display_sampling_probabilities();
-
-        assert_eq!(probs.len(), 4);
-
-        // Total: 2 bandits + 2 nursery = 4 variants
-        // Nursery gets 2/4 = 0.5 of probability mass
-        // Bandits get 2/4 = 0.5 of probability mass
-        let nursery_mass = 0.5;
-        let bandit_mass = 0.5;
-
-        // Each nursery variant gets nursery_mass / 2
-        let nursery_per_variant = nursery_mass / 2.0;
-        assert!((probs.get("C").unwrap() - nursery_per_variant).abs() < 1e-9);
-        assert!((probs.get("D").unwrap() - nursery_per_variant).abs() < 1e-9);
-
-        // Bandit probabilities are scaled by bandit_mass
-        assert!((probs.get("A").unwrap() - 0.4 * bandit_mass).abs() < 1e-9);
-        assert!((probs.get("B").unwrap() - 0.6 * bandit_mass).abs() < 1e-9);
 
         // Check sum
         let sum: f64 = probs.values().sum();
@@ -2379,24 +2435,44 @@ mod tests {
     }
 
     #[test]
-    fn test_get_display_sampling_probabilities_nursery_and_stopped() {
-        let state = TrackAndStopState::NurseryAndStopped {
-            nursery: Nursery::new(vec!["C".to_string()]),
-            stopped_variant_name: "A".to_string(),
+    fn test_get_current_display_probabilities_nursery_and_stopped() {
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "C".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(
+                TrackAndStopState::NurseryAndStopped {
+                    nursery: Nursery::new(vec!["C".to_string()]),
+                    stopped_variant_name: "A".to_string(),
+                },
+            ))),
+            task_spawned: AtomicBool::new(false),
         };
 
-        let probs = state.get_display_sampling_probabilities();
+        let mut active_variants = create_test_variants(&["A", "C"]);
+        let postgres = PostgresConnectionInfo::new_disabled();
+
+        let probs = config
+            .get_current_display_probabilities(
+                "test",
+                Uuid::now_v7(),
+                &mut active_variants,
+                &postgres,
+            )
+            .unwrap();
 
         assert_eq!(probs.len(), 2);
 
         // Total: 1 stopped + 1 nursery = 2 variants
-        // Nursery gets 1/2 of probability mass
-        // Stopped gets 1/2 of probability mass
-        let nursery_mass = 0.5;
-        let stopped_mass = 0.5;
-
-        assert!((probs.get("C").unwrap() - nursery_mass).abs() < 1e-9);
-        assert!((probs.get("A").unwrap() - stopped_mass).abs() < 1e-9);
+        // Each gets 1/2
+        assert!((probs["C"] - 0.5).abs() < 1e-9);
+        assert!((probs["A"] - 0.5).abs() < 1e-9);
 
         // Check sum
         let sum: f64 = probs.values().sum();
@@ -2404,74 +2480,43 @@ mod tests {
     }
 
     #[test]
-    fn test_get_display_sampling_probabilities_nursery_and_stopped_multiple_nursery() {
-        let state = TrackAndStopState::NurseryAndStopped {
-            nursery: Nursery::new(vec!["C".to_string(), "D".to_string(), "E".to_string()]),
-            stopped_variant_name: "A".to_string(),
+    fn test_get_current_display_probabilities_partial_active() {
+        // Test with only some variants active
+        let mut sampling_probs = HashMap::new();
+        sampling_probs.insert("A".to_string(), 0.4);
+        sampling_probs.insert("B".to_string(), 0.6);
+
+        let config = TrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec!["A".to_string(), "B".to_string()],
+            fallback_variants: vec![],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period: Duration::from_secs(60),
+            min_prob: None,
+            metric_optimize: MetricConfigOptimize::Max,
+            state: Arc::new(ArcSwap::new(Arc::new(TrackAndStopState::BanditsOnly {
+                sampling_probabilities: sampling_probs,
+            }))),
+            task_spawned: AtomicBool::new(false),
         };
 
-        let probs = state.get_display_sampling_probabilities();
+        // Only A is active, B is not
+        let mut active_variants = create_test_variants(&["A"]);
+        let postgres = PostgresConnectionInfo::new_disabled();
 
-        assert_eq!(probs.len(), 4);
+        let probs = config
+            .get_current_display_probabilities(
+                "test",
+                Uuid::now_v7(),
+                &mut active_variants,
+                &postgres,
+            )
+            .unwrap();
 
-        // Total: 1 stopped + 3 nursery = 4 variants
-        // Nursery gets 3/4 of probability mass
-        // Stopped gets 1/4 of probability mass
-        let nursery_mass = 0.75;
-        let stopped_mass = 0.25;
-
-        // Each nursery variant gets nursery_mass / 3
-        let nursery_per_variant = nursery_mass / 3.0;
-        assert!((probs.get("C").unwrap() - nursery_per_variant).abs() < 1e-9);
-        assert!((probs.get("D").unwrap() - nursery_per_variant).abs() < 1e-9);
-        assert!((probs.get("E").unwrap() - nursery_per_variant).abs() < 1e-9);
-
-        assert!((probs.get("A").unwrap() - stopped_mass).abs() < 1e-9);
-
-        // Check sum
-        let sum: f64 = probs.values().sum();
-        assert!((sum - 1.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn test_get_display_sampling_probabilities_always_sums_to_one() {
-        // Test a variety of states to ensure probabilities always sum to 1.0
-        let test_cases = vec![
-            TrackAndStopState::Stopped {
-                winner_variant_name: "winner".to_string(),
-            },
-            TrackAndStopState::NurseryOnly(Nursery::new(vec!["A".to_string(), "B".to_string()])),
-            TrackAndStopState::BanditsOnly {
-                sampling_probabilities: {
-                    let mut probs = HashMap::new();
-                    probs.insert("A".to_string(), 0.25);
-                    probs.insert("B".to_string(), 0.25);
-                    probs.insert("C".to_string(), 0.5);
-                    probs
-                },
-            },
-            TrackAndStopState::NurseryAndBandits {
-                nursery: Nursery::new(vec!["D".to_string()]),
-                sampling_probabilities: {
-                    let mut probs = HashMap::new();
-                    probs.insert("A".to_string(), 0.3);
-                    probs.insert("B".to_string(), 0.7);
-                    probs
-                },
-            },
-            TrackAndStopState::NurseryAndStopped {
-                nursery: Nursery::new(vec!["C".to_string(), "D".to_string()]),
-                stopped_variant_name: "winner".to_string(),
-            },
-        ];
-
-        for (i, state) in test_cases.iter().enumerate() {
-            let probs = state.get_display_sampling_probabilities();
-            let sum: f64 = probs.values().sum();
-            assert!(
-                (sum - 1.0).abs() < 1e-9,
-                "Test case {i}: probabilities should sum to 1.0, got {sum}"
-            );
-        }
+        // Only A should appear
+        assert_eq!(probs.len(), 1);
+        assert!((probs["A"] - 0.4).abs() < 1e-9);
     }
 }
