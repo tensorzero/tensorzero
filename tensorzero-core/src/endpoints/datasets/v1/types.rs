@@ -190,3 +190,21 @@ pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
     pub datapoints: Vec<Datapoint>,
 }
+
+/// Request to delete datapoints from a dataset.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct DeleteDatapointsRequest {
+    /// The IDs of the datapoints to delete.
+    pub ids: Vec<Uuid>,
+}
+
+/// Response containing the number of deleted datapoints.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct DeleteDatapointsResponse {
+    /// The number of deleted datapoints.
+    pub num_deleted_datapoints: u64,
+}

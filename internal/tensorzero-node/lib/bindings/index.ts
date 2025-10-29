@@ -49,6 +49,8 @@ export * from "./DatasetQueryParams";
 export * from "./DeepSeekDefaults";
 export * from "./DeepSeekProvider";
 export * from "./DeepSeekProviderTypeConfig";
+export * from "./DeleteDatapointsRequest";
+export * from "./DeleteDatapointsResponse";
 export * from "./DemonstrationFeedbackRow";
 export * from "./DiclConfig";
 export * from "./DiclOptimizationConfig";
