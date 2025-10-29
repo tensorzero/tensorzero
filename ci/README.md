@@ -14,7 +14,7 @@ PR even if the newly-added job fails
 
 ## Our approach
 
-We have a single 'top-level' statuses: 
+We have two 'top-level' statuses: 
 * check-all-general-jobs-passed
 * merge-checks-buildkite
 
