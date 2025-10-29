@@ -32,8 +32,7 @@ pub async fn unbounded_recursion_wrapper<R: Send + 'static>(
 ) -> Result<R, Error> {
     // We await this immediately
     #[expect(clippy::disallowed_methods)]
-    tokio::spawn(fut)
-        .instrument(Span::current())
+    tokio::spawn(fut.instrument(Span::current()))
         .await
         .map_err(|e| {
             Error::new(ErrorDetails::InternalError {
