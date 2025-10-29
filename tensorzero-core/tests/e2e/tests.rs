@@ -42,4 +42,5 @@ mod retries;
 mod streaming_errors;
 mod template;
 mod timeouts;
+mod tool_params_round_trip;
 mod workflow_evaluations;
