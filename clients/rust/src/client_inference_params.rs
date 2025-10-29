@@ -10,7 +10,7 @@ use tensorzero_core::{
     error::Error,
     inference::types::{
         extra_body::UnfilteredInferenceExtraBody, extra_headers::UnfilteredInferenceExtraHeaders,
-        Input, InputMessage, InputMessageContent,
+        Input, InputMessage,
     },
     tool::DynamicToolParams,
 };
@@ -101,7 +101,7 @@ impl TryFrom<ClientInferenceParams> for Params {
         for message in this.input.messages {
             let mut content = Vec::with_capacity(message.content.len());
             for input_content in message.content {
-                content.push(InputMessageContent::try_from(input_content)?);
+                content.push(input_content.to_input_message_content(&message.role)?);
             }
             messages.push(InputMessage {
                 role: message.role,

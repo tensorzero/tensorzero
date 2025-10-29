@@ -15,7 +15,7 @@ use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
 };
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
+    Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
 };
 use tensorzero_core::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
@@ -40,12 +40,12 @@ async fn test_update_chat_datapoint_output() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -172,12 +172,12 @@ async fn test_update_json_datapoint_output() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -266,12 +266,12 @@ async fn test_update_multiple_datapoints() {
         id: datapoint_id1,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -297,12 +297,12 @@ async fn test_update_multiple_datapoints() {
         id: datapoint_id2,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -433,12 +433,12 @@ async fn test_update_datapoint_type_mismatch() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -500,12 +500,12 @@ async fn test_update_datapoint_with_metadata() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -636,12 +636,12 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -722,12 +722,12 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -815,12 +815,12 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -901,12 +901,12 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -995,12 +995,12 @@ async fn test_update_json_datapoint_set_output_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -1092,12 +1092,12 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {

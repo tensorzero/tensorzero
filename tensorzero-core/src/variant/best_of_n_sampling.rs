@@ -807,11 +807,10 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 
 #[cfg(test)]
 mod tests {
-    use crate::rate_limiting::ScopeInfo;
     use std::collections::HashMap;
-
     use uuid::Uuid;
 
+    use crate::rate_limiting::ScopeInfo;
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         config::{provider_types::ProviderTypesConfig, UninitializedSchemas},
@@ -819,7 +818,7 @@ mod tests {
         endpoints::inference::{InferenceCredentials, InferenceIds},
         http::TensorzeroHttpClient,
         inference::types::{
-            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
+            Arguments, ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
             RequestMessagesOrBatch, Usage,
         },
         minijinja_util::tests::{
@@ -891,12 +890,12 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap(),
         };
-        let input_message = System::Template(
+        let input_message = System::Template(Arguments(
             json!({"message": "You are a helpful assistant."})
                 .as_object()
                 .unwrap()
                 .clone(),
-        );
+        ));
         let max_index = 3;
         let result =
             evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
@@ -963,12 +962,12 @@ mod tests {
         };
 
         let max_index = 6;
-        let input_message = System::Template(
+        let input_message = System::Template(Arguments(
             serde_json::json!({"assistant_name": "ChatGPT"})
                 .as_object()
                 .unwrap()
                 .clone(),
-        );
+        ));
         let result =
             evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
         let prepared_message = result.unwrap();
