@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   ui-tests-e2e-model-inference-cache:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
@@ -71,17 +71,13 @@ jobs:
       - name: Setup Playwright
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
-      # When we're regenerating the model inference cache, don't download the container images
-      # The images will get built by `regenerate-model-inference-cache.sh`
       - name: Download container images
-        if: inputs.regen_cache == false
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with:
           pattern: build-*-container
           merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
-        if: inputs.regen_cache == false
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
@@ -231,17 +227,7 @@ jobs:
         if: failure() && inputs.regen_cache == false
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: playwright-report
-          path: |
-            ui/playwright-report/
-            ui/test-results/
-          retention-days: 7
-
-      - name: Upload Playwright artifacts (Namespace runner)
-        if: failure() && inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
-        with:
-          name: playwright-report
+          name: playwright-report-regen-${{ inputs.regen_cache }}
           path: |
             ui/playwright-report/
             ui/test-results/
