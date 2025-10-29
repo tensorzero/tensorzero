@@ -5,7 +5,6 @@ use axum::extract::{Query, State};
 use axum::{debug_handler, Json};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
-use uuid::Uuid;
 
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
@@ -16,8 +15,6 @@ use crate::variant::VariantInfo;
 pub struct GetVariantSamplingProbabilitiesParams {
     /// The name of the function to get probabilities for
     pub function_name: String,
-    /// The episode ID for context-dependent sampling strategies
-    pub episode_id: Uuid,
 }
 
 /// Response containing variant sampling probabilities
@@ -45,7 +42,6 @@ pub async fn get_variant_sampling_probabilities_handler(
     skip_all,
     fields(
         function_name = %params.function_name,
-        episode_id = %params.episode_id,
     )
 )]
 pub async fn get_variant_sampling_probabilities(
@@ -128,11 +124,9 @@ mod tests {
         .unwrap();
 
         let gateway_handle = get_unit_test_gateway_handle(Arc::new(config));
-        let episode_id = Uuid::now_v7();
 
         let params = GetVariantSamplingProbabilitiesParams {
             function_name: "test_function".to_string(),
-            episode_id,
         };
 
         let result =
@@ -161,11 +155,9 @@ mod tests {
     async fn test_get_variant_sampling_probabilities_no_function() {
         let config = Arc::new(Config::default());
         let gateway_handle = get_unit_test_gateway_handle(config);
-        let episode_id = Uuid::now_v7();
 
         let params = GetVariantSamplingProbabilitiesParams {
             function_name: "nonexistent_function".to_string(),
-            episode_id,
         };
 
         let result =
