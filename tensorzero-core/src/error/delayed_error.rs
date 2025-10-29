@@ -1,6 +1,6 @@
-//! The API for this module is intentionally restrictive - please read this entire comment before adding anthing
+//! The API for this module is intentionally restrictive - please read this entire comment before adding anything
 //! * All of the fields are private - we want to force this to be used through our public methods
-//! * The ony way to extract an `Error` is through `log` or `log_at_level` -
+//! * The only way to extract an `Error` is through `log` or `log_at_level` -
 //!   this enforces the invariant that an `Error` outside of this module has already been logged
 //! * The `reported` field cannot be set directly, to ensure that the only way to skip logging is
 //!   to explicitly call `suppress_logging_of_error_message`
