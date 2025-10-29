@@ -22,7 +22,7 @@ jobs:
         platform:
           - runner: ubuntu-24.04
             target: linux/amd64
-          - runner: ubuntu-24.04-arm
+          - runner: namespace-profile-tensorzero-arm-2x8
             target: linux/arm64
         container:
           # Set the container name to a '-dev' name when this workflow is invoked by a push event
