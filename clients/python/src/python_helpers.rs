@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use pyo3::{exceptions::PyValueError, prelude::*, sync::PyOnceLock};
+use pyo3::{exceptions::PyValueError, prelude::*, sync::PyOnceLock, types::PyDict};
 use tensorzero_core::endpoints::workflow_evaluation_run::WorkflowEvaluationRunEpisodeResponse;
 use tensorzero_core::inference::types::pyo3_helpers::{deserialize_from_pyobj, serialize_to_dict};
 use tensorzero_rust::{
@@ -141,4 +141,51 @@ pub fn parse_tool(py: Python<'_>, key_vals: HashMap<String, Bound<'_, PyAny>>) -
         parameters: tool_params,
         strict,
     })
+}
+
+/// Converts a serializable Rust response type to a Python dataclass
+/// by serializing to JSON dict and using dacite.from_dict to construct
+/// the dataclass with proper nested type handling.
+///
+/// This helper automatically handles type conversions (e.g., UUID → string)
+/// via serde serialization, and dacite handles nested dataclass construction.
+///
+/// # Arguments
+/// * `py` - Python interpreter
+/// * `response` - Rust response object that implements Serialize
+/// * `python_module` - Python module path (e.g., "tensorzero")
+/// * `python_class` - Python class name (e.g., "UpdateDatapointsResponse")
+///
+/// # Example
+/// ```ignore
+/// convert_response_to_python(
+///     py,
+///     update_response,
+///     "tensorzero",
+///     "UpdateDatapointsResponse"
+/// )
+/// ```
+pub fn convert_response_to_python<T: serde::Serialize>(
+    py: Python<'_>,
+    response: T,
+    python_module: &str,
+    python_class: &str,
+) -> PyResult<Py<PyAny>> {
+    // Serialize Rust response to JSON dict
+    let dict = serialize_to_dict(py, &response)?;
+
+    // Import the target dataclass
+    let module = PyModule::import(py, python_module)?;
+    let data_class = module.getattr(python_class)?;
+
+    // Use dacite.from_dict to construct the dataclass, so that it can handle nested dataclass construction.
+    let dacite = PyModule::import(py, "dacite")?;
+    let from_dict = dacite.getattr("from_dict")?;
+
+    // Call dacite.from_dict(data_class=TargetClass, data=dict)
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("data_class", data_class)?;
+    kwargs.set_item("data", dict)?;
+
+    from_dict.call((), Some(&kwargs)).map(Bound::unbind)
 }

@@ -565,8 +565,6 @@ class TensorZeroTypeEncoder(JSONEncoder):
     def default(self, o: Any) -> Any:
         if isinstance(o, UUID) or isinstance(o, uuid_utils.UUID):
             return str(o)
-        elif hasattr(o, "to_dict"):
-            return o.to_dict()
         elif is_dataclass(o) and not isinstance(o, type):
             # Convert dataclass to dict, but filter out UNSET fields
             result = {}
@@ -577,6 +575,8 @@ class TensorZeroTypeEncoder(JSONEncoder):
                     # Recursively handle nested dataclasses/lists/dicts
                     result[field.name] = self._convert_value(value)
             return result  # pyright: ignore[reportUnknownVariableType]
+        elif hasattr(o, "to_dict"):
+            return o.to_dict()
         else:
             super().default(o)
 
@@ -617,8 +617,8 @@ class InferenceFilter(ABC, HasTypeField):
     pass
 
 
-# DEPRECATED: Use InferenceFilter instead
 InferenceFilterTreeNode = InferenceFilter
+"""Deprecated; use InferenceFilter instead."""
 
 
 @dataclass

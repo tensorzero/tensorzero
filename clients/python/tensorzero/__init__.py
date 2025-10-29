@@ -10,12 +10,33 @@ from .client import (
     BaseTensorZeroGateway,
     TensorZeroGateway,
 )
+
+# Generated dataclasses
+from .generated_types import (
+    ContentBlockChatOutput,
+    ContentBlockChatOutputText,
+    CreateDatapointRequest,
+    CreateDatapointRequestChat,
+    CreateDatapointRequestJson,
+    CreateDatapointsFromInferenceRequestParamsInferenceIds,
+    CreateDatapointsResponse,
+    DatapointMetadataUpdate,
+    DeleteDatapointsResponse,
+    GetDatapointsResponse,
+    Input,
+    InputMessage,
+    InputMessageContentTemplate,
+    InputMessageContentText,
+    JsonDatapointOutputUpdate,
+    ListDatapointsRequest,
+    UpdateDatapointMetadataRequest,
+    UpdateDatapointsResponse,
+)
 from .tensorzero import (
     BestOfNSamplingConfig,
     ChainOfThoughtConfig,
     ChatCompletionConfig,
     Config,
-    Datapoint,
     DICLConfig,
     DICLOptimizationConfig,
     FireworksSFTConfig,
@@ -23,6 +44,7 @@ from .tensorzero import (
     FunctionConfigJson,
     FunctionsConfig,
     GCPVertexGeminiSFTConfig,
+    LegacyDatapoint,
     MixtureOfNConfig,
     OpenAIRFTConfig,
     OpenAISFTConfig,
@@ -93,8 +115,8 @@ from .types import (
 # DEPRECATED: use RenderedSample instead
 RenderedStoredInference = RenderedSample
 # Type aliases to preserve backward compatibility with main
-ChatDatapoint = Datapoint.Chat
-JsonDatapoint = Datapoint.Json
+ChatDatapoint = LegacyDatapoint.Chat
+JsonDatapoint = LegacyDatapoint.Json
 
 
 # CAREFUL: deprecated
@@ -135,9 +157,26 @@ __all__ = [
     "ChatInferenceResponse",
     "Config",
     "ContentBlock",
-    "Datapoint",
+    "CreateDatapointRequest",
+    "CreateDatapointRequestChat",
+    "CreateDatapointRequestJson",
+    "CreateDatapointsResponse",
+    "Input",
+    "InputMessage",
+    "InputMessageContentText",
+    "InputMessageContentTemplate",
+    "ContentBlockChatOutput",
+    "ContentBlockChatOutputText",
+    "CreateDatapointsFromInferenceRequestParamsInferenceIds",
+    "LegacyDatapoint",
+    "DatapointMetadataUpdate",
+    "DeleteDatapointsResponse",
     "DiclOptimizationConfig",  # DEPRECATED
     "DICLOptimizationConfig",
+    "GetDatapointsResponse",
+    "JsonDatapointOutputUpdate",
+    "ListDatapointsRequest",
+    "UpdateDatapointsResponse",
     "DynamicEvaluationRunEpisodeResponse",  # DEPRECATED
     "DynamicEvaluationRunResponse",  # DEPRECATED
     "EvaluatorStatsDict",
@@ -206,6 +245,7 @@ __all__ = [
     "ToolCallChunk",
     "ToolResult",
     "UnknownContentBlock",
+    "UpdateDatapointMetadataRequest",
     "Usage",
 ]
 

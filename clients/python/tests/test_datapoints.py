@@ -142,7 +142,7 @@ def test_sync_insert_delete_datapoints(sync_client: TensorZeroGateway):
             tags=None,
         ),
     ]
-    datapoint_ids = sync_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    datapoint_ids = sync_client.create_datapoints_legacy(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 4
     assert isinstance(datapoint_ids[0], UUID)
     assert isinstance(datapoint_ids[1], UUID)
@@ -264,7 +264,7 @@ async def test_async_insert_delete_datapoints(
         ),
     ]
     dataset_name = f"test_{uuid7()}"
-    datapoint_ids = await async_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    datapoint_ids = await async_client.create_datapoints_legacy(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 4
     assert isinstance(datapoint_ids[0], UUID)
     assert isinstance(datapoint_ids[1], UUID)
@@ -379,7 +379,7 @@ def test_sync_render_datapoints(embedded_sync_client: TensorZeroGateway):
         ),
     ]
 
-    datapoint_ids = embedded_sync_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    datapoint_ids = embedded_sync_client.create_datapoints_legacy(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 2
 
     # List the inserted datapoints
@@ -468,7 +468,9 @@ async def test_async_render_datapoints(
         ),
     ]
 
-    datapoint_ids = await embedded_async_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    datapoint_ids = await embedded_async_client.create_datapoints_legacy(
+        dataset_name=dataset_name, datapoints=datapoints
+    )
     assert len(datapoint_ids) == 2
 
     # List the inserted datapoints
@@ -557,7 +559,7 @@ def test_sync_render_filtered_datapoints(
         ),
     ]
 
-    datapoint_ids = embedded_sync_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    datapoint_ids = embedded_sync_client.create_datapoints_legacy(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 3
 
     # List only the basic_test datapoints
@@ -581,6 +583,30 @@ def test_sync_render_filtered_datapoints(
     # Clean up
     for datapoint_id in datapoint_ids:
         embedded_sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_id)
+
+
+def test_sync_create_datapoints_legacy_deprecated(sync_client: TensorZeroGateway):
+    dataset_name = f"test_{uuid7()}"
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "foo"},
+                "messages": [{"role": "user", "content": [{"type": "text", "text": "bar"}]}],
+            },
+            output=[{"type": "text", "text": "foobar"}],
+        ),
+    ]
+
+    # Test that the deprecated function still works
+    with pytest.warns(DeprecationWarning, match="Please use `create_datapoints` instead"):
+        datapoint_ids = sync_client.create_datapoints_legacy(dataset_name=dataset_name, datapoints=datapoints)
+
+    assert len(datapoint_ids) == 1
+    assert isinstance(datapoint_ids[0], UUID)
+
+    # Clean up
+    sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_ids[0])
 
 
 def test_sync_bulk_insert_datapoints_deprecated(sync_client: TensorZeroGateway):
@@ -624,7 +650,7 @@ async def test_async_bulk_insert_datapoints_deprecated(
     ]
 
     # Test that the deprecated function still works
-    with pytest.warns(DeprecationWarning, match="Please use `create_datapoints` instead"):
+    with pytest.warns(DeprecationWarning, match="Please use `create_datapoints_legacy` instead"):
         datapoint_ids = await async_client.bulk_insert_datapoints(dataset_name=dataset_name, datapoints=datapoints)
 
     assert len(datapoint_ids) == 1
@@ -671,7 +697,7 @@ def test_sync_datapoints_with_name(sync_client: TensorZeroGateway):
     ]
 
     # Insert datapoints
-    datapoint_ids = sync_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    datapoint_ids = sync_client.create_datapoints_legacy(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 2
 
     # Retrieve and verify chat datapoint with name
@@ -734,7 +760,7 @@ async def test_async_datapoints_with_name(async_client: AsyncTensorZeroGateway):
     ]
 
     # Insert datapoints
-    datapoint_ids = await async_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    datapoint_ids = await async_client.create_datapoints_legacy(dataset_name=dataset_name, datapoints=datapoints)
     assert len(datapoint_ids) == 2
 
     # Retrieve and verify chat datapoint with name
