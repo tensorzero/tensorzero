@@ -6,10 +6,10 @@ use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 
 /// Filter tree for querying datapoints.
 /// This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
-#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum DatapointFilter {
     /// Filter by tag key-value pair
     Tag(TagFilter),
