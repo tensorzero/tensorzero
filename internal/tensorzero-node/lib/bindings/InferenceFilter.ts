@@ -4,6 +4,9 @@ import type { FloatMetricFilter } from "./FloatMetricFilter";
 import type { TagFilter } from "./TagFilter";
 import type { TimeFilter } from "./TimeFilter";
 
+/**
+ * Filters for querying inferences.
+ */
 export type InferenceFilter =
   | ({ type: "float_metric" } & FloatMetricFilter)
   | ({ type: "boolean_metric" } & BooleanMetricFilter)
