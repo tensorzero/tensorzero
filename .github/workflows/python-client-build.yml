@@ -16,7 +16,7 @@ jobs:
         platform:
           - runner: ubuntu-24.04
             target: x86_64
-          - runner: ubuntu-24.04-arm
+          - runner: namespace-profile-tensorzero-arm-2x8
             target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -69,7 +69,7 @@ jobs:
         platform:
           - runner: ubuntu-24.04
             target: x86_64
-          - runner: ubuntu-24.04-arm
+          - runner: namespace-profile-tensorzero-arm-2x8
             target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683

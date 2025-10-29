@@ -841,6 +841,8 @@ mod tests {
         endpoints::inference::InferenceCredentials,
         experimentation::ExperimentationConfig,
         function::{FunctionConfigChat, FunctionConfigJson},
+    };
+    use crate::{
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
             StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,

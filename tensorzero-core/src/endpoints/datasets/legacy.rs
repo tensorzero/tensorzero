@@ -1115,6 +1115,7 @@ pub struct InsertDatapointResponse {
 }
 
 /// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
+/// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
@@ -1356,6 +1357,7 @@ pub struct JsonDatapointInsert {
 }
 
 /// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
+/// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
