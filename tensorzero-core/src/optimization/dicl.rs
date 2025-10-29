@@ -435,12 +435,17 @@ fn validate_function_config(
         }
         FunctionConfig::Json(json_config) => {
             // JSON functions should have exactly one implicit tool for schema validation
-            if json_config.implicit_tool_call_config.tools_available.len() != 1 {
+            if json_config
+                .implicit_tool_call_config
+                .tools_available()
+                .count()
+                != 1
+            {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
                         function_name,
-                        json_config.implicit_tool_call_config.tools_available.len()
+                        json_config.implicit_tool_call_config.tools_available().count()
                     ),
                 }));
             }
@@ -819,7 +824,6 @@ mod tests {
         },
         endpoints::inference::InferenceCredentials,
         experimentation::ExperimentationConfig,
-        tool::AllowedTools,
     };
     use crate::{
         inference::types::{
@@ -1305,10 +1309,8 @@ mod tests {
 
     fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
         use crate::{
-            config::SchemaData,
-            function::FunctionConfigJson,
-            jsonschema_util::StaticJSONSchema,
-            tool::{ToolCallConfig, ToolChoice},
+            config::SchemaData, function::FunctionConfigJson, jsonschema_util::StaticJSONSchema,
+            tool::ToolCallConfig,
         };
         use serde_json::json;
         use std::collections::HashMap;
@@ -1323,13 +1325,7 @@ mod tests {
         .unwrap();
 
         // Create an invalid config with no tools (should have exactly 1)
-        let invalid_tool_call_config = ToolCallConfig {
-            tools_available: vec![], // Invalid: should have exactly 1 implicit tool
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
-        };
+        let invalid_tool_call_config = ToolCallConfig::default();
 
         FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),
