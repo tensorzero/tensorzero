@@ -10,7 +10,8 @@ import type { ToolConfig } from "./ToolConfig";
  * Most inference providers can convert this into their desired tool format.
  */
 export type ToolCallConfig = {
-  tools_available: Array<ToolConfig>;
+  static_tools_available: Array<ToolConfig>;
+  dynamic_tools_available: Array<ToolConfig>;
   provider_tools: Array<ProviderTool>;
   tool_choice: ToolChoice;
   parallel_tool_calls: boolean | null;
