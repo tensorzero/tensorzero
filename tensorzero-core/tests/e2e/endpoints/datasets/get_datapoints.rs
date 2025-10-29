@@ -1225,7 +1225,7 @@ mod list_datapoints_tests {
         let chat_id = Uuid::now_v7();
         let chat_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
             dataset_name: dataset_name.clone(),
-            function_name: "chat_function".to_string(),
+            function_name: "basic_test".to_string(),
             name: None,
             id: chat_id,
             episode_id: None,
@@ -1254,7 +1254,7 @@ mod list_datapoints_tests {
         let json_id = Uuid::now_v7();
         let json_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
             dataset_name: dataset_name.clone(),
-            function_name: "json_function".to_string(),
+            function_name: "json_success".to_string(),
             name: None,
             id: json_id,
             episode_id: None,
