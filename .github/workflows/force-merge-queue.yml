@@ -1,4 +1,6 @@
 name: Force add to merge queue
+permissions:
+  contents: read
 
 # This workflow allows us to add PRs to the merge queue without waiting on PR checks to pass.
 # It's activated by adding the special 'force-add-to-merge-queue' label to a PR.
