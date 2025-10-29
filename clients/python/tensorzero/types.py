@@ -625,3 +625,29 @@ class OrderBy:
     by: Literal["timestamp", "metric"]
     name: Optional[str] = None
     direction: Literal["ASC", "DESC"] = "DESC"
+
+
+# Type for the create_from_inference API.
+@dataclass
+class CreateDatapointsFromInferenceRequestParams(ABC, HasTypeField):
+    pass
+
+@dataclass
+class CreateDatapointsFromInferenceRequestParamsInferenceIds:    
+    inference_ids: List[str]  # UUIDs as strings
+
+    type: Literal["inference_ids"] = "inference_ids"
+
+@dataclass
+class CreateDatapointsFromInferenceRequestParamsInferenceQuery:
+    # The function name to filter inferences by.
+    function_name: str
+    
+    # Variant name to filter inferences by, optional.
+    variant_name: Optional[str] = None
+    
+    # Filters to apply when querying inferences, optional.
+    filters: Optional[InferenceFilter] = None
+
+    type: Literal["inference_query"] = "inference_query"
+

@@ -4,26 +4,29 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
+pub use crate::db::clickhouse::query_builder::{
+    DatapointFilter, InferenceFilter, OrderBy, OrderByTerm, OrderDirection, TagFilter, TimeFilter,
+};
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
-#[derive(Debug, Deserialize)]
+/// Request to update one or more datapoints in a dataset.
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-/// Request to update one or more datapoints in a dataset.
 pub struct UpdateDatapointsRequest {
     /// The datapoints to update.
     pub datapoints: Vec<UpdateDatapointRequest>,
 }
 
-#[derive(Debug, Deserialize)]
+/// A tagged request to update a single datapoint in a dataset.
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
-/// A tagged request to update a single datapoint in a dataset.
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub enum UpdateDatapointRequest {
     /// Request to update a chat datapoint.
     Chat(UpdateChatDatapointRequest),
@@ -31,9 +34,6 @@ pub enum UpdateDatapointRequest {
     Json(UpdateJsonDatapointRequest),
 }
 
-#[derive(Debug, Deserialize)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
 /// An update request for a chat datapoint.
 /// For any fields that are optional in ChatInferenceDatapoint, the request field distinguishes between an omitted field, `null`, and a value:
 /// - If the field is omitted, it will be left unchanged.
@@ -41,6 +41,10 @@ pub enum UpdateDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateChatDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -75,9 +79,10 @@ pub struct UpdateChatDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateJsonDatapointRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -107,9 +112,10 @@ pub struct UpdateJsonDatapointRequest {
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct DatapointMetadataUpdate {
     /// Datapoint name. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
@@ -117,7 +123,7 @@ pub struct DatapointMetadataUpdate {
 }
 
 /// A response to a request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct UpdateDatapointsResponse {
@@ -128,7 +134,7 @@ pub struct UpdateDatapointsResponse {
 
 /// Request to update metadata for one or more datapoints in a dataset.
 /// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct UpdateDatapointsMetadataRequest {
@@ -137,9 +143,10 @@ pub struct UpdateDatapointsMetadataRequest {
 }
 
 /// A request to update the metadata of a single datapoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub struct UpdateDatapointMetadataRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
@@ -151,7 +158,7 @@ pub struct UpdateDatapointMetadataRequest {
 
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ListDatapointsRequest {
@@ -174,7 +181,7 @@ pub struct ListDatapointsRequest {
 
 /// Request to get specific datapoints by their IDs.
 /// Used by the `POST /v1/datasets/get_datapoints` endpoint.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GetDatapointsRequest {
@@ -183,7 +190,7 @@ pub struct GetDatapointsRequest {
 }
 
 /// Response containing the requested datapoints.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct GetDatapointsResponse {
@@ -195,10 +202,11 @@ pub struct GetDatapointsResponse {
 /// - `None`: Do not include any output in the datapoint.
 /// - `Inference`: Include the original inference output in the datapoint.
 /// - `Demonstration`: Include the latest demonstration feedback as output in the datapoint.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 pub enum CreateDatapointsFromInferenceOutputSource {
     /// Do not include any output in the datapoint.
     None,
@@ -209,7 +217,7 @@ pub enum CreateDatapointsFromInferenceOutputSource {
 }
 
 /// Request to create datapoints from inferences.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct CreateDatapointsFromInferenceRequest {
@@ -224,7 +232,7 @@ pub struct CreateDatapointsFromInferenceRequest {
 
 /// Parameters for creating datapoints from inferences.
 /// Can specify either a list of inference IDs or a query to find inferences.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -260,7 +268,7 @@ pub struct CreateDatapointsResponse {
 }
 
 /// Request to delete datapoints from a dataset.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DeleteDatapointsRequest {
@@ -269,7 +277,7 @@ pub struct DeleteDatapointsRequest {
 }
 
 /// Response containing the number of deleted datapoints.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct DeleteDatapointsResponse {

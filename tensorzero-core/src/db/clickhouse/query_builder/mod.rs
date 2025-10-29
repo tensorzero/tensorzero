@@ -261,11 +261,11 @@ pub struct TimeFilter {
     pub comparison_operator: TimeComparisonOperator,
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
+/// Filters for querying inferences.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
-/// Filters for querying inferences.
 pub enum InferenceFilter {
     /// Filter by the value of a float metric
     FloatMetric(FloatMetricFilter),
