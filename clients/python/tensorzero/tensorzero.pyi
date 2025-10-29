@@ -34,6 +34,7 @@ from tensorzero import (
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
+    CreateDatapointsFromInferenceRequestParams,
     InferenceFilter,
     JsonInferenceOutput,
     OrderBy,
@@ -384,6 +385,66 @@ class TogetherSFTConfig:
         hf_api_token: Optional[str] = None,
         hf_output_repo_name: Optional[str] = None,
     ) -> None: ...
+
+
+@final
+class UpdateDatapointRequest:
+    Chat: Type["UpdateChatDatapointRequest"]
+    Json: Type["UpdateJsonDatapointRequest"]
+
+@final
+class UpdateChatDatapointRequest:
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def input(self) -> Optional[Input]: ...
+    @property
+    def output(self) -> Optional[List[ContentBlockChatOutput]]: ...
+    @property
+    def tool_params(self) -> Optional[DynamicToolParams]: ...
+    @property
+    def tags(self) -> Optional[Dict[str, str]]: ...
+    @property
+    def metadata(self) -> Optional[DatapointMetadataUpdate]: ...
+
+@final
+class ContentBlockChatOutput:
+    @property
+    def role(self) -> str: ...
+    @property
+    def content(self) -> str: ...
+
+@final
+class UpdateJsonDatapointRequest:
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def input(self) -> Optional[Input]: ...
+    @property
+    def output(self) -> Optional[Optional[JsonDatapointOutputUpdate]]: ...
+    @property
+    def output_schema(self) -> Optional[Any]: ...
+    @property
+    def tags(self) -> Optional[Dict[str, str]]: ...
+    @property
+    def metadata(self) -> Optional[DatapointMetadataUpdate]: ...
+
+@final
+class JsonDatapointOutputUpdate:
+    @property
+    def raw(self) -> str: ...
+
+@final
+class UpdateDatapointMetadataRequest:
+    @property
+    def id(self) -> UUID: ...
+    @property
+    def metadata(self) -> Optional[DatapointMetadataUpdate]: ...
+
+@final
+class DatapointMetadataUpdate:
+    @property
+    def name(self) -> Optional[str]: ...
 
 @final
 class Datapoint:
@@ -766,6 +827,102 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param dataset_name: The name of the dataset to get the datapoint from.
         :param datapoint_id: The ID of the datapoint to get.
         :return: A `Datapoint` instance.
+        """
+
+    def update_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        requests: Sequence[UpdateDatapointRequest],
+    ) -> List[UUID]:
+        """
+        Update one or more datapoints in a dataset.
+
+        Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints endpoint.
+
+        :param dataset_name: The name of the dataset containing the datapoints to update.
+        :param requests: A sequence of UpdateDatapointRequest objects.
+        :return: A list of UUIDs of the updated datapoints.
+        """
+
+    def get_datapoints(
+        self,
+        *,
+        ids: Sequence[UUID],
+    ) -> List[Datapoint]:
+        """
+        Get specific datapoints by their IDs.
+
+        Make a POST request to the /v1/datasets/get_datapoints endpoint.
+
+        :param ids: A sequence of UUIDs to retrieve.
+        :return: A list of `Datapoint` instances.
+        """
+
+    def update_datapoints_metadata(
+        self,
+        *,
+        dataset_name: str,
+        requests: Sequence[UpdateDatapointMetadataRequest],
+    ) -> List[UUID]:
+        """
+        Update metadata for one or more datapoints.
+
+        Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints/metadata endpoint.
+
+        :param dataset_name: The name of the dataset containing the datapoints.
+        :param requests: A sequence of UpdateDatapointMetadataRequest objects.
+        :return: A list of UUIDs of the updated datapoints.
+        """
+
+    def delete_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        ids: Sequence[UUID],
+    ) -> int:
+        """
+        Delete multiple datapoints from a dataset.
+
+        Make a DELETE request to the /v1/datasets/{dataset_name}/datapoints endpoint.
+
+        :param dataset_name: The name of the dataset to delete datapoints from.
+        :param ids: A sequence of UUIDs to delete.
+        :return: The number of deleted datapoints.
+        """
+
+    def delete_dataset(
+        self,
+        *,
+        dataset_name: str,
+    ) -> int:
+        """
+        Delete an entire dataset.
+
+        Make a DELETE request to the /v1/datasets/{dataset_name} endpoint.
+
+        :param dataset_name: The name of the dataset to delete.
+        :return: The number of deleted datapoints.
+        """
+
+    def create_from_inferences(
+        self,
+        *,
+        dataset_name: str,
+        params: CreateDatapointsFromInferenceRequestParams,
+        output_source: Optional[Literal["none", "inference", "demonstration"]] = None,
+    ) -> List[UUID]:
+        """
+        Create datapoints from inferences.
+
+        Make a POST request to the /v1/datasets/{dataset_name}/from_inferences endpoint.
+
+        :param dataset_name: The name of the dataset to create datapoints in.
+        :param params: The parameters specifying which inferences to convert to datapoints.
+        :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
+                             If not provided, by default we will use the original inference output as the datapoint's output
+                             (equivalent to `inference`).
+        :return: A list of UUIDs of the created datapoints.
         """
 
     def experimental_list_inferences(
@@ -1182,6 +1339,102 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :return: A `Datapoint` instance.
         """
 
+    async def update_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        requests: Sequence[UpdateDatapointRequest],
+    ) -> List[UUID]:
+        """
+        Update one or more datapoints in a dataset.
+
+        Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints endpoint.
+
+        :param dataset_name: The name of the dataset containing the datapoints to update.
+        :param requests: A sequence of UpdateDatapointRequest objects.
+        :return: A list of UUIDs of the updated datapoints.
+        """
+
+    async def get_datapoints(
+        self,
+        *,
+        ids: Sequence[UUID],
+    ) -> List[Datapoint]:
+        """
+        Get specific datapoints by their IDs.
+
+        Make a POST request to the /v1/datasets/get_datapoints endpoint.
+
+        :param ids: A sequence of UUIDs to retrieve.
+        :return: A list of `Datapoint` instances.
+        """
+
+    async def update_datapoints_metadata(
+        self,
+        *,
+        dataset_name: str,
+        requests: Sequence[UpdateDatapointMetadataRequest],
+    ) -> List[UUID]:
+        """
+        Update metadata for one or more datapoints.
+
+        Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints/metadata endpoint.
+
+        :param dataset_name: The name of the dataset containing the datapoints.
+        :param requests: A sequence of UpdateDatapointMetadataRequest objects.
+        :return: A list of UUIDs of the updated datapoints.
+        """
+
+    async def delete_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        ids: Sequence[UUID],
+    ) -> int:
+        """
+        Delete multiple datapoints from a dataset.
+
+        Make a DELETE request to the /v1/datasets/{dataset_name}/datapoints endpoint.
+
+        :param dataset_name: The name of the dataset to delete datapoints from.
+        :param ids: A sequence of UUIDs to delete.
+        :return: The number of deleted datapoints.
+        """
+
+    async def delete_dataset(
+        self,
+        *,
+        dataset_name: str,
+    ) -> int:
+        """
+        Delete an entire dataset.
+
+        Make a DELETE request to the /v1/datasets/{dataset_name} endpoint.
+
+        :param dataset_name: The name of the dataset to delete.
+        :return: The number of deleted datapoints.
+        """
+
+    async def create_from_inferences(
+        self,
+        *,
+        dataset_name: str,
+        params: CreateDatapointsFromInferenceRequestParams,
+        output_source: Optional[Literal["none", "inference", "demonstration"]] = None,
+    ) -> List[UUID]:
+        """
+        Create datapoints from inferences.
+
+        Make a POST request to the /v1/datasets/{dataset_name}/from_inferences endpoint.
+
+        :param dataset_name: The name of the dataset to create datapoints in.
+        :param params: The parameters specifying which inferences to convert to datapoints.
+        :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
+                             If not provided, by default we will use the original inference output as the datapoint's output
+                             (equivalent to `inference`).
+        :return: A list of UUIDs of the created datapoints.
+        """
+
     async def experimental_list_inferences(
         self,
         *,
@@ -1334,35 +1587,36 @@ class LocalHttpGateway(object):
     def close(self) -> None: ...
 
 __all__ = [
+    "_start_http_gateway",
     "AsyncEvaluationJobHandler",
     "AsyncTensorZeroGateway",
     "BaseTensorZeroGateway",
     "BestOfNSamplingConfig",
-    "ChatCompletionConfig",
     "ChainOfThoughtConfig",
+    "ChatCompletionConfig",
     "Config",
     "Datapoint",
-    "DICLOptimizationConfig",
+    "DatapointMetadataUpdate",
     "DICLConfig",
+    "DICLOptimizationConfig",
     "EvaluationJobHandler",
+    "FireworksSFTConfig",
     "FunctionConfigChat",
     "FunctionConfigJson",
     "FunctionsConfig",
-    "FireworksSFTConfig",
     "GCPVertexGeminiSFTConfig",
-    "TensorZeroGateway",
     "LocalHttpGateway",
     "MixtureOfNConfig",
-    "_start_http_gateway",
     "OpenAIRFTConfig",
     "OpenAISFTConfig",
     "OptimizationJobHandle",
     "OptimizationJobInfo",
     "OptimizationJobStatus",
     "RenderedSample",
-    "TogetherSFTConfig",
-    "StoredInference",
     "ResolvedInput",
     "ResolvedInputMessage",
+    "StoredInference",
+    "TensorZeroGateway",
+    "TogetherSFTConfig",
     "VariantsConfig",
 ]

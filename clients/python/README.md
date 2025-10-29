@@ -190,3 +190,7 @@ async with await AsyncTensorZeroGateway.build_http(gateway_url="http://localhost
 
     print(response)
 ```
+
+### Stub test
+
+`uv run stubtest tensorzero.tensorzero`

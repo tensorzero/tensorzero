@@ -12,6 +12,69 @@ from typing_extensions import NotRequired, TypedDict
 
 
 @dataclass
+class Omitted:
+    pass
+
+OMITTED = Omitted()
+
+def serialize_to_api_json(value: Any) -> Any:
+    """Serialize an object to a JSON string for the API.
+
+    Rules:
+    - If the value is None, it will be serialized as None (JSON "null")
+    - If the value is Omitted (or OMITTED), it will be omitted from parent dicts
+    - Dataclasses are recursively converted to dicts
+    - Lists, tuples are recursively processed
+    - UUIDs are converted to strings
+
+    Usage: json.dumps(serialize_to_api_json(value))
+    """
+    # Handle Omitted sentinel - this should be filtered at the parent level
+    if isinstance(value, Omitted) or value is OMITTED:
+        return OMITTED
+
+    # Handle None explicitly
+    if value is None:
+        return None
+
+    # Handle UUIDs
+    if isinstance(value, (UUID, uuid_utils.UUID)):
+        return str(value)
+
+    # Handle dataclasses
+    if is_dataclass(value) and not isinstance(value, type):
+        result = {}
+        for field_name, field_value in asdict(value).items():
+            serialized = serialize_to_api_json(field_value)
+            # Skip fields that are OMITTED
+            if not (isinstance(serialized, Omitted) or serialized is OMITTED):
+                result[field_name] = serialized
+        return result
+
+    # Handle lists and tuples
+    if isinstance(value, (list, tuple)):
+        # Filter out OMITTED values from lists
+        serialized_list = []
+        for item in value:
+            serialized = serialize_to_api_json(item)
+            if not (isinstance(serialized, Omitted) or serialized is OMITTED):
+                serialized_list.append(serialized)
+        return serialized_list
+
+    # Handle dictionaries
+    if isinstance(value, dict):
+        result = {}
+        for k, v in value.items():
+            serialized = serialize_to_api_json(v)
+            # Skip keys with OMITTED values
+            if not (isinstance(serialized, Omitted) or serialized is OMITTED):
+                result[k] = serialized
+        return result
+
+    # For other types (primitives, etc.), return as-is
+    return value
+
+@dataclass
 class Usage:
     input_tokens: int
     output_tokens: int
@@ -572,8 +635,8 @@ class InferenceFilter(ABC, HasTypeField):
     pass
 
 
-# DEPRECATED: Use InferenceFilter instead
 InferenceFilterTreeNode = InferenceFilter
+"""Deprecated; use InferenceFilter instead."""
 
 
 @dataclass
