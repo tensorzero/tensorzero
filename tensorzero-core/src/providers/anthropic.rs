@@ -2005,7 +2005,7 @@ mod tests {
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
-        let model = "claude-3-5-sonnet-20241022".to_string();
+        let model = "claude-sonnet-4-5-20250929".to_string();
         let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 8_192);
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
