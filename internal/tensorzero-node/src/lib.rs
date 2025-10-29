@@ -334,7 +334,7 @@ impl TensorZeroClient {
     pub async fn stale_dataset(&self, dataset_name: String) -> Result<String, napi::Error> {
         let result = self
             .client
-            .stale_dataset(dataset_name)
+            .delete_dataset(dataset_name)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         let result_str = serde_json::to_string(&result).map_err(|e| {

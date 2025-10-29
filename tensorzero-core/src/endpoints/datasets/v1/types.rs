@@ -155,7 +155,7 @@ pub struct UpdateDatapointMetadataRequest {
 
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
-#[derive(Debug, Serialize, Deserialize, ts_rs::TS)]
+#[derive(Debug, Default, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export, optional_fields)]
 pub struct ListDatapointsRequest {
     /// Optional function name to filter datapoints by.
