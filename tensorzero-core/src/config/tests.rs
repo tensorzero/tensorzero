@@ -1035,7 +1035,7 @@ async fn test_config_validate_function_name_tensorzero_prefix() {
     assert_eq!(
         result.unwrap_err(),
         Error::new(ErrorDetails::Config {
-            message: "Function name cannot start with 'tensorzero::': tensorzero::bad_function"
+            message: "User-defined function name cannot start with 'tensorzero::': tensorzero::bad_function"
                 .to_string()
         })
     );
@@ -2872,4 +2872,55 @@ async fn test_config_file_glob_recursive() {
 
     // Should match both files
     assert_eq!(config_glob.paths.len(), 2);
+}
+
+/// Test that built-in functions are automatically loaded
+#[tokio::test]
+async fn test_built_in_functions_loaded() {
+    // Load a minimal config (empty table)
+    let config = toml::Table::new();
+    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect("Failed to load config");
+
+    // Check that tensorzero::hello is available
+    assert!(config.functions.contains_key("tensorzero::hello"));
+
+    // Verify it's a Chat function with no variants
+    let hello_function = config.functions.get("tensorzero::hello").unwrap();
+    match &**hello_function {
+        FunctionConfig::Chat(chat_config) => {
+            assert!(chat_config.variants.is_empty());
+            assert!(chat_config.tools.is_empty());
+            assert!(chat_config.description.is_some());
+        }
+        FunctionConfig::Json(_) => panic!("Expected tensorzero::hello to be a Chat function"),
+    }
+}
+
+/// Test that built-in functions can be retrieved via get_function
+#[tokio::test]
+async fn test_get_built_in_function() {
+    let config = toml::Table::new();
+    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect("Failed to load config");
+
+    // Should be able to get the built-in function
+    let result = config.get_function("tensorzero::hello");
+    assert!(result.is_ok());
+}
+
+/// Test that built-in functions work alongside user-defined functions
+#[tokio::test]
+async fn test_built_in_and_user_functions_coexist() {
+    let config = get_sample_valid_config();
+
+    let config = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect("Failed to load config");
+
+    // Check that both built-in and user functions exist
+    assert!(config.functions.contains_key("tensorzero::hello"));
+    assert!(config.functions.contains_key("generate_draft"));
 }
