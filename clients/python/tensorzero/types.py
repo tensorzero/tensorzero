@@ -536,6 +536,7 @@ class ToolParams:
     - parallel_tool_calls: Optional[bool]
     - provider_tools: Optional[List[ProviderTool]]
     """
+
     tools_available: List[Tool]
     tool_choice: str
     parallel_tool_calls: Optional[bool] = None
