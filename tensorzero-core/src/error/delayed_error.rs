@@ -13,7 +13,7 @@ use crate::error::{Error, ErrorDetails};
 
 pub struct DelayedError {
     inner: Error,
-    // When a `DelayedError` dropped, we'll log the error unless:
+    // When a `DelayedError` is dropped, we'll log the error unless:
     // * We already logged it via `log`/`log_at_level`
     // * We explicitly suppressed logging via `suppress_logging_of_error_message`
     reported: bool,
