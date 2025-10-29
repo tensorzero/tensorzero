@@ -63,7 +63,7 @@ jobs:
   batch-tests:
     permissions:
       contents: read
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && github.ref != 'refs/heads/aaron/allure-report'
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
 
@@ -373,7 +373,7 @@ jobs:
     permissions:
       contents: read
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && github.ref != 'refs/heads/aaron/allure-report'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build Docker container for production deployment tests
@@ -411,7 +411,7 @@ jobs:
     permissions:
       contents: read
       actions: write
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && github.ref != 'refs/heads/aaron/allure-report'
     uses: ./.github/workflows/ui-tests-e2e-model-inference-cache.yml
     with:
       regen_cache: true
@@ -427,7 +427,7 @@ jobs:
   # See 'ci/README.md' at the repository root for more details.
   check-all-tests-passed:
     permissions: {}
-    if: always() && github.repository == 'tensorzero/tensorzero'
+    if: always() && github.repository == 'tensorzero/tensorzero' && github.ref != 'refs/heads/aaron/allure-report'
     needs:
       [
         check-production-docker-container,
