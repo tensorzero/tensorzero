@@ -548,10 +548,10 @@ pub(super) fn prepare_groq_tools<'a>(
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {
-            if tool_config.tools_available.is_empty() {
+            if !tool_config.any_tools_available() {
                 return (None, None, None);
             }
-            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
+            let tools = Some(tool_config.tools_available().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -1262,7 +1262,7 @@ mod tests {
         providers::test_helpers::{
             MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
         },
-        tool::{AllowedTools, ToolCallConfig},
+        tool::ToolCallConfig,
     };
 
     use super::*;
@@ -1903,11 +1903,9 @@ mod tests {
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
         let tool_config = ToolCallConfig {
-            tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

@@ -683,7 +683,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(c.tools_available.iter().map(Into::into).collect::<Vec<_>>())
+                Some(c.tools_available().map(Into::into).collect::<Vec<_>>())
             }
         });
         // `tool_choice` should only be set if tools are set and non-empty
