@@ -1163,7 +1163,7 @@ impl Datapoint {
 
     pub fn tool_call_config(&self) -> Option<&DynamicToolParams> {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
+            Datapoint::Chat(datapoint) => Some(&datapoint.tool_params),
             Datapoint::Json(_) => None,
         }
     }
@@ -1189,11 +1189,8 @@ impl ChatInferenceDatapoint {
         function_config: &FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<StoredChatInferenceDatapoint, Error> {
-        let tool_params = match self.tool_params {
-            Some(dynamic_params) => function_config
-                .dynamic_tool_params_to_database_insert(dynamic_params, static_tools)?,
-            None => None,
-        };
+        let tool_params = function_config
+            .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?;
 
         Ok(StoredChatInferenceDatapoint {
             dataset_name: self.dataset_name,
@@ -1375,11 +1372,9 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(flatten)]
     #[serde(default)]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
-    #[cfg_attr(test, ts(optional))]
-    pub tool_params: Option<DynamicToolParams>,
+    pub tool_params: DynamicToolParams,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
@@ -1416,7 +1411,8 @@ impl StoredChatInferenceDatapoint {
     pub fn into_datapoint(self, function_config: &FunctionConfig) -> ChatInferenceDatapoint {
         let tool_params = self
             .tool_params
-            .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp));
+            .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp))
+            .unwrap_or_default();
 
         ChatInferenceDatapoint {
             dataset_name: self.dataset_name,

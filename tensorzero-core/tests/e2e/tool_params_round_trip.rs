@@ -807,19 +807,15 @@ async fn test_datapoint_full_tool_params_round_trip() {
     assert_eq!(dp["function_name"], "weather_helper");
 
     // Verify DynamicToolParams structure: tools should be partitioned
-    let tool_params = &dp["tool_params"];
-    assert!(
-        !tool_params.is_null(),
-        "tool_params should not be null after round-trip"
-    );
+    // With flatten, tool params are at the top level, not nested under "tool_params"
 
     // Static tool (from function config) should be in allowed_tools
-    let allowed_tools = tool_params["allowed_tools"].as_array().unwrap();
+    let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 1);
     assert_eq!(allowed_tools[0], "get_temperature");
 
     // Dynamic tool should be in additional_tools
-    let additional_tools = tool_params["additional_tools"].as_array().unwrap();
+    let additional_tools = dp["additional_tools"].as_array().unwrap();
     assert_eq!(additional_tools.len(), 1);
     assert_eq!(additional_tools[0]["name"], "custom_weather_tool");
     assert_eq!(
@@ -829,15 +825,12 @@ async fn test_datapoint_full_tool_params_round_trip() {
     assert_eq!(additional_tools[0]["strict"], false);
 
     // Other fields should be preserved
-    assert_eq!(
-        tool_params["tool_choice"],
-        json!({"specific": "get_temperature"})
-    );
-    assert_eq!(tool_params["parallel_tool_calls"], false);
+    assert_eq!(dp["tool_choice"], json!({"specific": "get_temperature"}));
+    assert_eq!(dp["parallel_tool_calls"], false);
 
     // provider_tools should be None (lossy conversion)
     assert!(
-        tool_params["provider_tools"].is_null(),
+        dp["provider_tools"].is_null(),
         "provider_tools should be null after round-trip (lossy conversion)"
     );
 }
@@ -981,25 +974,21 @@ async fn test_datapoint_update_tool_params() {
     assert_eq!(datapoints.len(), 1);
 
     let dp = &datapoints[0];
-    let tool_params = &dp["tool_params"];
 
-    // Verify updated tool_params
+    // Verify updated tool_params (flattened at top level)
     assert_eq!(
-        tool_params["allowed_tools"],
+        dp["allowed_tools"],
         json!(["get_temperature"]),
         "allowed_tools should be updated"
     );
 
-    let additional_tools = tool_params["additional_tools"].as_array().unwrap();
+    let additional_tools = dp["additional_tools"].as_array().unwrap();
     assert_eq!(additional_tools.len(), 1);
     assert_eq!(additional_tools[0]["name"], "updated_tool");
     assert_eq!(additional_tools[0]["strict"], true);
 
-    assert_eq!(
-        tool_params["tool_choice"],
-        json!({"specific": "updated_tool"})
-    );
-    assert_eq!(tool_params["parallel_tool_calls"], true);
+    assert_eq!(dp["tool_choice"], json!({"specific": "updated_tool"}));
+    assert_eq!(dp["parallel_tool_calls"], true);
 }
 
 /// Test 5.3: List datapoints with tool params
@@ -1168,38 +1157,36 @@ async fn test_list_datapoints_with_tool_params() {
         datapoints
             .iter()
             .find(|dp| dp["id"] == id.to_string())
-            .expect(&format!("Should find datapoint {}", id))
+            .unwrap_or_else(|| panic!("Should find datapoint {id}"))
     };
 
-    // Verify DP1: Only static tool
+    // Verify DP1: Only static tool (flattened)
     let dp1_json = find_dp(&dp1_id);
-    let tp1 = &dp1_json["tool_params"];
-    assert_eq!(tp1["allowed_tools"], json!(["get_temperature"]));
+    assert_eq!(dp1_json["allowed_tools"], json!(["get_temperature"]));
     assert!(
-        tp1["additional_tools"].is_null() || tp1["additional_tools"].as_array().unwrap().is_empty()
+        dp1_json["additional_tools"].is_null()
+            || dp1_json["additional_tools"].as_array().unwrap().is_empty()
     );
-    assert_eq!(tp1["tool_choice"], "auto");
+    assert_eq!(dp1_json["tool_choice"], "auto");
 
-    // Verify DP2: Static + one dynamic
+    // Verify DP2: Static + one dynamic (flattened)
     let dp2_json = find_dp(&dp2_id);
-    let tp2 = &dp2_json["tool_params"];
-    assert_eq!(tp2["allowed_tools"], json!(["get_temperature"]));
-    let add_tools_2 = tp2["additional_tools"].as_array().unwrap();
+    assert_eq!(dp2_json["allowed_tools"], json!(["get_temperature"]));
+    let add_tools_2 = dp2_json["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools_2.len(), 1);
     assert_eq!(add_tools_2[0]["name"], "tool_1");
-    assert_eq!(tp2["tool_choice"], "required");
-    assert_eq!(tp2["parallel_tool_calls"], false);
+    assert_eq!(dp2_json["tool_choice"], "required");
+    assert_eq!(dp2_json["parallel_tool_calls"], false);
 
-    // Verify DP3: Static + different dynamic with strict
+    // Verify DP3: Static + different dynamic with strict (flattened)
     let dp3_json = find_dp(&dp3_id);
-    let tp3 = &dp3_json["tool_params"];
-    assert_eq!(tp3["allowed_tools"], json!(["get_temperature"]));
-    let add_tools_3 = tp3["additional_tools"].as_array().unwrap();
+    assert_eq!(dp3_json["allowed_tools"], json!(["get_temperature"]));
+    let add_tools_3 = dp3_json["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools_3.len(), 1);
     assert_eq!(add_tools_3[0]["name"], "tool_2");
     assert_eq!(add_tools_3[0]["strict"], true);
-    assert_eq!(tp3["tool_choice"], "none");
-    assert_eq!(tp3["parallel_tool_calls"], true);
+    assert_eq!(dp3_json["tool_choice"], "none");
+    assert_eq!(dp3_json["parallel_tool_calls"], true);
 }
 
 /// Test 5.4: Datapoint with only static tools
@@ -1272,19 +1259,17 @@ async fn test_datapoint_only_static_tools() {
     assert_eq!(resp.status(), StatusCode::OK);
     let resp_json: Value = resp.json().await.unwrap();
     let dp = &resp_json["datapoints"][0];
-    let tool_params = &dp["tool_params"];
 
-    // Should have allowed_tools
-    assert_eq!(tool_params["allowed_tools"], json!(["get_temperature"]));
+    // Should have allowed_tools (flattened)
+    assert_eq!(dp["allowed_tools"], json!(["get_temperature"]));
 
     // Should NOT have additional_tools (or should be null/empty)
     assert!(
-        tool_params["additional_tools"].is_null()
-            || tool_params["additional_tools"].as_array().unwrap().is_empty(),
+        dp["additional_tools"].is_null() || dp["additional_tools"].as_array().unwrap().is_empty(),
         "additional_tools should be null or empty when only static tools are used"
     );
 
-    assert_eq!(tool_params["tool_choice"], "auto");
+    assert_eq!(dp["tool_choice"], "auto");
 }
 
 /// Test 5.5: Datapoint with only dynamic tools
@@ -1371,15 +1356,14 @@ async fn test_datapoint_only_dynamic_tools() {
     assert_eq!(resp.status(), StatusCode::OK);
     let resp_json: Value = resp.json().await.unwrap();
     let dp = &resp_json["datapoints"][0];
-    let tool_params = &dp["tool_params"];
 
-    // Static tool from function config should be in allowed_tools
-    let allowed_tools = tool_params["allowed_tools"].as_array().unwrap();
+    // Static tool from function config should be in allowed_tools (flattened)
+    let allowed_tools = dp["allowed_tools"].as_array().unwrap();
     assert_eq!(allowed_tools.len(), 1);
     assert_eq!(allowed_tools[0], "get_temperature");
 
-    // Dynamic tool should be in additional_tools
-    let additional_tools = tool_params["additional_tools"].as_array().unwrap();
+    // Dynamic tool should be in additional_tools (flattened)
+    let additional_tools = dp["additional_tools"].as_array().unwrap();
     assert_eq!(additional_tools.len(), 1);
     assert_eq!(additional_tools[0]["name"], "runtime_tool");
     assert_eq!(additional_tools[0]["strict"], true);
@@ -1480,13 +1464,11 @@ async fn test_datapoint_tool_params_three_states() {
         .unwrap();
 
     let dp1 = &resp1.json::<Value>().await.unwrap()["datapoints"][0];
-    assert!(
-        !dp1["tool_params"].is_null(),
-        "tool_params should still exist when field is omitted"
-    );
+    // With flatten, tool params fields should still exist at top level when omitted
     assert_eq!(
-        dp1["tool_params"]["allowed_tools"],
-        json!(["get_temperature"])
+        dp1["allowed_tools"],
+        json!(["get_temperature"]),
+        "tool_params fields should still exist when field is omitted"
     );
 
     // Test Case 2: Set tool_params to null -> removes tool_params
@@ -1523,9 +1505,12 @@ async fn test_datapoint_tool_params_three_states() {
         .unwrap();
 
     let dp2 = &resp2.json::<Value>().await.unwrap()["datapoints"][0];
+    // With flatten, when tool_params is null, the fields should not be present
     assert!(
-        dp2["tool_params"].is_null(),
-        "tool_params should be null when explicitly set to null"
+        dp2["allowed_tools"].is_null()
+            && dp2["additional_tools"].is_null()
+            && dp2["tool_choice"].is_null(),
+        "tool_params fields should be null when explicitly set to null"
     );
 
     // Test Case 3: Set tool_params to new value -> updates tool_params
@@ -1575,14 +1560,17 @@ async fn test_datapoint_tool_params_three_states() {
         .unwrap();
 
     let dp3 = &resp3.json::<Value>().await.unwrap()["datapoints"][0];
-    let tp3 = &dp3["tool_params"];
-    assert!(!tp3.is_null(), "tool_params should be set to new value");
-    assert_eq!(tp3["tool_choice"], "required");
+    // With flatten, tool params fields should be at top level
+    assert!(
+        !dp3["tool_choice"].is_null(),
+        "tool_params should be set to new value"
+    );
+    assert_eq!(dp3["tool_choice"], "required");
 
     // When only additional_tools provided, function config tools go into allowed_tools
-    assert_eq!(tp3["allowed_tools"], json!(["get_temperature"]));
+    assert_eq!(dp3["allowed_tools"], json!(["get_temperature"]));
 
-    let add_tools = tp3["additional_tools"].as_array().unwrap();
+    let add_tools = dp3["additional_tools"].as_array().unwrap();
     assert_eq!(add_tools.len(), 1);
     assert_eq!(add_tools[0]["name"], "new_tool");
     assert_eq!(add_tools[0]["strict"], true);
@@ -1614,7 +1602,7 @@ async fn test_datapoint_no_tool_params() {
             }],
         },
         output: None,
-        tool_params: None,  // No tool params
+        tool_params: None, // No tool params
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -1643,9 +1631,11 @@ async fn test_datapoint_no_tool_params() {
     let resp_json: Value = resp.json().await.unwrap();
     let dp = &resp_json["datapoints"][0];
 
-    // tool_params should be null or not present when None
+    // With flatten, tool_params fields should be null or not present when None
     assert!(
-        dp["tool_params"].is_null(),
-        "tool_params should be null when not provided"
+        dp["allowed_tools"].is_null()
+            && dp["additional_tools"].is_null()
+            && dp["tool_choice"].is_null(),
+        "tool_params fields should be null when not provided"
     );
 }

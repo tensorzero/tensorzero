@@ -280,6 +280,7 @@ pub struct StoredChatInference {
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
+    #[serde(flatten)]
     #[serde(default)]
     pub tool_params: DynamicToolParams,
     #[serde(default)]
