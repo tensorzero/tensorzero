@@ -13,7 +13,7 @@ use crate::db::datasets::{
     JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{
-    validate_dataset_name, ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+    validate_dataset_name, JsonInferenceDatapoint, StoredChatInferenceDatapoint, StoredDatapoint,
     CLICKHOUSE_DATETIME_FORMAT,
 };
 use crate::error::{Error, ErrorDetails};
@@ -105,7 +105,7 @@ async fn update_datapoints(
         .await?;
 
     // Build a HashMap to construct new DatapointInserts
-    let mut datapoints_map: HashMap<Uuid, Datapoint> =
+    let mut datapoints_map: HashMap<Uuid, StoredDatapoint> =
         datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
 
     // Each update will produce two DatapointInserts: one stale and one updated
@@ -125,21 +125,21 @@ async fn update_datapoints(
         })?;
 
         match (update, existing) {
-            (UpdateDatapointRequest::Chat(_), Datapoint::Json(_)) => {
+            (UpdateDatapointRequest::Chat(_), StoredDatapoint::Json(_)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Datapoint {datapoint_id} is a JSON datapoint but a chat update was provided"
                     ),
                 }));
             }
-            (UpdateDatapointRequest::Json(_), Datapoint::Chat(_)) => {
+            (UpdateDatapointRequest::Json(_), StoredDatapoint::Chat(_)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Datapoint {datapoint_id} is a chat datapoint but a JSON update was provided"
                     ),
                 }));
             }
-            (UpdateDatapointRequest::Chat(update), Datapoint::Chat(existing)) => {
+            (UpdateDatapointRequest::Chat(update), StoredDatapoint::Chat(existing)) => {
                 let prepared = prepare_chat_update(
                     app_state,
                     &fetch_context,
@@ -152,7 +152,7 @@ async fn update_datapoints(
                 datapoints.extend([prepared.stale, prepared.updated]);
                 new_ids.push(prepared.new_id);
             }
-            (UpdateDatapointRequest::Json(update), Datapoint::Json(existing)) => {
+            (UpdateDatapointRequest::Json(update), StoredDatapoint::Json(existing)) => {
                 let prepared = prepare_json_update(
                     app_state,
                     &fetch_context,
@@ -187,7 +187,7 @@ async fn prepare_chat_update(
     fetch_context: &FetchContext<'_>,
     dataset_name: &str,
     update: UpdateChatDatapointRequest,
-    existing_datapoint: ChatInferenceDatapoint,
+    existing_datapoint: StoredChatInferenceDatapoint,
     now_timestamp: &str,
 ) -> Result<PreparedUpdate, Error> {
     if existing_datapoint.dataset_name != dataset_name {
@@ -452,7 +452,7 @@ async fn update_datapoints_metadata(
         .await?;
 
     // Build a HashMap for quick lookup
-    let mut datapoints_map: HashMap<Uuid, Datapoint> =
+    let mut datapoints_map: HashMap<Uuid, StoredDatapoint> =
         datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
 
     let mut datapoints: Vec<DatapointInsert> = Vec::with_capacity(request.datapoints.len());
@@ -467,7 +467,7 @@ async fn update_datapoints_metadata(
         })?;
 
         match existing {
-            Datapoint::Chat(mut existing_datapoint) => {
+            StoredDatapoint::Chat(mut existing_datapoint) => {
                 if existing_datapoint.dataset_name != dataset_name {
                     return Err(Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
@@ -485,7 +485,7 @@ async fn update_datapoints_metadata(
 
                 datapoints.push(DatapointInsert::Chat(existing_datapoint.into()));
             }
-            Datapoint::Json(mut existing_datapoint) => {
+            StoredDatapoint::Json(mut existing_datapoint) => {
                 if existing_datapoint.dataset_name != dataset_name {
                     return Err(Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
@@ -518,7 +518,7 @@ mod tests {
     use crate::config::{Config, ObjectStoreInfo, SchemaData};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
     use crate::endpoints::datasets::v1::types::DatapointMetadataUpdate;
-    use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
+    use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
@@ -697,8 +697,8 @@ mod tests {
         use super::*;
 
         /// Helper to create a sample ChatInferenceDatapoint
-        pub fn create_sample_chat_datapoint(dataset_name: &str) -> ChatInferenceDatapoint {
-            ChatInferenceDatapoint {
+        pub fn create_sample_chat_datapoint(dataset_name: &str) -> StoredChatInferenceDatapoint {
+            StoredChatInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_chat_function".to_string(),
@@ -829,8 +829,8 @@ mod tests {
         }
 
         /// Helper to create a sample ChatInferenceDatapoint
-        fn create_sample_chat_datapoint(dataset_name: &str) -> ChatInferenceDatapoint {
-            ChatInferenceDatapoint {
+        fn create_sample_chat_datapoint(dataset_name: &str) -> StoredChatInferenceDatapoint {
+            StoredChatInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_chat_function".to_string(),
@@ -1792,7 +1792,7 @@ mod tests {
             let existing_datapoint_clone = existing_datapoint.clone();
             mock_db.expect_get_datapoints().returning(move |_| {
                 let cloned_datapoint = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Chat(cloned_datapoint)]) })
+                Box::pin(async move { Ok(vec![StoredDatapoint::Chat(cloned_datapoint)]) })
             });
             mock_db
                 .expect_insert_datapoints()
@@ -1846,7 +1846,7 @@ mod tests {
             let existing_datapoint_clone = existing_datapoint.clone();
             mock_db.expect_get_datapoints().returning(move |_| {
                 let dp = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Json(dp)]) })
+                Box::pin(async move { Ok(vec![StoredDatapoint::Json(dp)]) })
             });
             mock_db
                 .expect_insert_datapoints()
@@ -1900,7 +1900,7 @@ mod tests {
             let existing_datapoint_clone = existing_datapoint.clone();
             mock_db.expect_get_datapoints().returning(move |_| {
                 let dp = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Chat(dp)]) })
+                Box::pin(async move { Ok(vec![StoredDatapoint::Chat(dp)]) })
             });
             mock_db
                 .expect_insert_datapoints()
@@ -1932,7 +1932,7 @@ mod tests {
             let existing_datapoint_clone = existing_datapoint.clone();
             mock_db.expect_get_datapoints().returning(move |_| {
                 let dp = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Chat(dp)]) })
+                Box::pin(async move { Ok(vec![StoredDatapoint::Chat(dp)]) })
             });
             mock_db
                 .expect_insert_datapoints()
@@ -2042,7 +2042,9 @@ mod tests {
             mock_db.expect_get_datapoints().returning(move |_| {
                 let dp1 = datapoint1_clone.clone();
                 let dp2 = datapoint2_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Chat(dp1), Datapoint::Json(dp2)]) })
+                Box::pin(
+                    async move { Ok(vec![StoredDatapoint::Chat(dp1), StoredDatapoint::Json(dp2)]) },
+                )
             });
             mock_db
                 .expect_insert_datapoints()

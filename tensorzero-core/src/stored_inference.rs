@@ -58,12 +58,12 @@ pub struct SimpleStoredSampleInfo {
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "StoredInference"))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub enum StoredInferenceWire {
-    Chat(StoredChatInferenceWire),
+pub enum StoredInference {
+    Chat(StoredChatInference),
     Json(StoredJsonInference),
 }
 
-impl std::fmt::Display for StoredInferenceWire {
+impl std::fmt::Display for StoredInference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -72,7 +72,7 @@ impl std::fmt::Display for StoredInferenceWire {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl StoredInferenceWire {
+impl StoredInference {
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -80,44 +80,44 @@ impl StoredInferenceWire {
     #[getter]
     pub fn get_function_name(&self) -> String {
         match self {
-            StoredInferenceWire::Chat(example) => example.function_name.clone(),
-            StoredInferenceWire::Json(example) => example.function_name.clone(),
+            StoredInference::Chat(example) => example.function_name.clone(),
+            StoredInference::Json(example) => example.function_name.clone(),
         }
     }
 
     #[getter]
     pub fn get_variant_name(&self) -> String {
         match self {
-            StoredInferenceWire::Chat(example) => example.variant_name.clone(),
-            StoredInferenceWire::Json(example) => example.variant_name.clone(),
+            StoredInference::Chat(example) => example.variant_name.clone(),
+            StoredInference::Json(example) => example.variant_name.clone(),
         }
     }
 
     #[getter]
     pub fn get_input(&self) -> StoredInput {
         match self {
-            StoredInferenceWire::Chat(example) => example.input.clone(),
-            StoredInferenceWire::Json(example) => example.input.clone(),
+            StoredInference::Chat(example) => example.input.clone(),
+            StoredInference::Json(example) => example.input.clone(),
         }
     }
 
     #[getter]
     pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
-            StoredInferenceWire::Chat(example) => example
+            StoredInference::Chat(example) => example
                 .output
                 .iter()
                 .map(|x| content_block_chat_output_to_python(py, x.clone()))
                 .collect::<PyResult<Vec<_>>>()?
                 .into_bound_py_any(py)?,
-            StoredInferenceWire::Json(example) => example.output.clone().into_bound_py_any(py)?,
+            StoredInference::Json(example) => example.output.clone().into_bound_py_any(py)?,
         })
     }
 
     #[getter]
     pub fn get_dispreferred_outputs<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
-            StoredInferenceWire::Chat(example) => example
+            StoredInference::Chat(example) => example
                 .dispreferred_outputs
                 .iter()
                 .map(|x| {
@@ -127,7 +127,7 @@ impl StoredInferenceWire {
                 })
                 .collect::<PyResult<Vec<Vec<_>>>>()?
                 .into_bound_py_any(py)?,
-            StoredInferenceWire::Json(example) => {
+            StoredInference::Json(example) => {
                 example.dispreferred_outputs.clone().into_bound_py_any(py)?
             }
         })
@@ -136,34 +136,34 @@ impl StoredInferenceWire {
     #[getter]
     pub fn get_episode_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            StoredInferenceWire::Chat(example) => uuid_to_python(py, example.episode_id),
-            StoredInferenceWire::Json(example) => uuid_to_python(py, example.episode_id),
+            StoredInference::Chat(example) => uuid_to_python(py, example.episode_id),
+            StoredInference::Json(example) => uuid_to_python(py, example.episode_id),
         }
     }
 
     #[getter]
     pub fn get_inference_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            StoredInferenceWire::Chat(example) => uuid_to_python(py, example.inference_id),
-            StoredInferenceWire::Json(example) => uuid_to_python(py, example.inference_id),
+            StoredInference::Chat(example) => uuid_to_python(py, example.inference_id),
+            StoredInference::Json(example) => uuid_to_python(py, example.inference_id),
         }
     }
 
     #[getter]
     pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
-            StoredInferenceWire::Chat(example) => {
+            StoredInference::Chat(example) => {
                 example.tool_params.clone().into_py_any(py)?.into_bound(py)
             }
-            StoredInferenceWire::Json(_) => py.None().into_bound(py),
+            StoredInference::Json(_) => py.None().into_bound(py),
         })
     }
 
     #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
-            StoredInferenceWire::Chat(_) => py.None().into_bound(py),
-            StoredInferenceWire::Json(example) => {
+            StoredInference::Chat(_) => py.None().into_bound(py),
+            StoredInference::Json(example) => {
                 serialize_to_dict(py, example.output_schema.clone())?.into_bound(py)
             }
         })
@@ -172,68 +172,68 @@ impl StoredInferenceWire {
     #[getter]
     pub fn get_type(&self) -> String {
         match self {
-            StoredInferenceWire::Chat(_) => "chat".to_string(),
-            StoredInferenceWire::Json(_) => "json".to_string(),
+            StoredInference::Chat(_) => "chat".to_string(),
+            StoredInference::Json(_) => "json".to_string(),
         }
     }
 
     #[getter]
     pub fn get_tags(&self) -> HashMap<String, String> {
         match self {
-            StoredInferenceWire::Chat(example) => example.tags.clone(),
-            StoredInferenceWire::Json(example) => example.tags.clone(),
+            StoredInference::Chat(example) => example.tags.clone(),
+            StoredInference::Json(example) => example.tags.clone(),
         }
     }
 
     #[getter]
     pub fn get_timestamp(&self) -> String {
         match self {
-            StoredInferenceWire::Chat(example) => example.timestamp.to_rfc3339(),
-            StoredInferenceWire::Json(example) => example.timestamp.to_rfc3339(),
+            StoredInference::Chat(example) => example.timestamp.to_rfc3339(),
+            StoredInference::Json(example) => example.timestamp.to_rfc3339(),
+        }
+    }
+}
+
+impl StoredInferenceDatabase {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn to_wire(self, config: &Config) -> Result<StoredInference, Error> {
+        match self {
+            StoredInferenceDatabase::Chat(chat) => {
+                let function_config = config.get_function(&chat.function_name)?;
+                Ok(StoredInference::Chat(chat.to_wire(&function_config)))
+            }
+            StoredInferenceDatabase::Json(json) => Ok(StoredInference::Json(json)),
         }
     }
 }
 
 impl StoredInference {
-    /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn to_wire(self, config: &Config) -> Result<StoredInferenceWire, Error> {
+    /// Convert to storage type, properly handling tool params with function config
+    pub fn to_storage(self, config: &Config) -> Result<StoredInferenceDatabase, Error> {
         match self {
             StoredInference::Chat(chat) => {
                 let function_config = config.get_function(&chat.function_name)?;
-                Ok(StoredInferenceWire::Chat(chat.to_wire(&function_config)))
-            }
-            StoredInference::Json(json) => Ok(StoredInferenceWire::Json(json)),
-        }
-    }
-}
-
-impl StoredInferenceWire {
-    /// Convert to storage type, properly handling tool params with function config
-    pub fn to_storage(self, config: &Config) -> Result<StoredInference, Error> {
-        match self {
-            StoredInferenceWire::Chat(chat) => {
-                let function_config = config.get_function(&chat.function_name)?;
-                Ok(StoredInference::Chat(
+                Ok(StoredInferenceDatabase::Chat(
                     chat.to_storage(&function_config, &config.tools)?,
                 ))
             }
-            StoredInferenceWire::Json(json) => Ok(StoredInference::Json(json)),
+            StoredInference::Json(json) => Ok(StoredInferenceDatabase::Json(json)),
         }
     }
 }
 
-impl StoredChatInferenceWire {
+impl StoredChatInference {
     /// Convert to storage type, properly handling tool params with function config
     pub fn to_storage(
         self,
         function_config: &FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-    ) -> Result<StoredChatInference, Error> {
+    ) -> Result<StoredChatInferenceDatabase, Error> {
         let tool_params = function_config
             .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?
             .unwrap_or_default();
 
-        Ok(StoredChatInference {
+        Ok(StoredChatInferenceDatabase {
             function_name: self.function_name,
             variant_name: self.variant_name,
             input: self.input,
@@ -251,12 +251,12 @@ impl StoredChatInferenceWire {
 /// Storage variant of StoredInference for database operations (no Python/TypeScript bindings)
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum StoredInference {
-    Chat(StoredChatInference),
+pub enum StoredInferenceDatabase {
+    Chat(StoredChatInferenceDatabase),
     Json(StoredJsonInference),
 }
 
-impl std::fmt::Display for StoredInference {
+impl std::fmt::Display for StoredInferenceDatabase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -268,7 +268,7 @@ impl std::fmt::Display for StoredInference {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct StoredChatInferenceWire {
+pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
     pub input: StoredInput,
@@ -284,7 +284,7 @@ pub struct StoredChatInferenceWire {
     pub tags: HashMap<String, String>,
 }
 
-impl std::fmt::Display for StoredChatInferenceWire {
+impl std::fmt::Display for StoredChatInference {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -293,18 +293,18 @@ impl std::fmt::Display for StoredChatInferenceWire {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl StoredChatInferenceWire {
+impl StoredChatInference {
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
 }
 
-impl StoredChatInference {
+impl StoredChatInferenceDatabase {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn to_wire(self, function_config: &FunctionConfig) -> StoredChatInferenceWire {
+    pub fn to_wire(self, function_config: &FunctionConfig) -> StoredChatInference {
         let tool_params = function_config.database_insert_to_dynamic_tool_params(self.tool_params);
 
-        StoredChatInferenceWire {
+        StoredChatInference {
             function_name: self.function_name,
             variant_name: self.variant_name,
             input: self.input,
@@ -321,7 +321,7 @@ impl StoredChatInference {
 
 /// Storage variant of StoredChatInference for database operations (no Python/TypeScript bindings)
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct StoredChatInference {
+pub struct StoredChatInferenceDatabase {
     pub function_name: String,
     pub variant_name: String,
     pub input: StoredInput,
@@ -337,7 +337,7 @@ pub struct StoredChatInference {
     pub tags: HashMap<String, String>,
 }
 
-impl std::fmt::Display for StoredChatInference {
+impl std::fmt::Display for StoredChatInferenceDatabase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -378,37 +378,37 @@ impl StoredJsonInference {
     }
 }
 
-impl StoredSample for StoredInference {
+impl StoredSample for StoredInferenceDatabase {
     fn input_mut(&mut self) -> &mut StoredInput {
         match self {
-            StoredInference::Chat(example) => &mut example.input,
-            StoredInference::Json(example) => &mut example.input,
+            StoredInferenceDatabase::Chat(example) => &mut example.input,
+            StoredInferenceDatabase::Json(example) => &mut example.input,
         }
     }
     fn input(&self) -> &StoredInput {
         match self {
-            StoredInference::Chat(example) => &example.input,
-            StoredInference::Json(example) => &example.input,
+            StoredInferenceDatabase::Chat(example) => &example.input,
+            StoredInferenceDatabase::Json(example) => &example.input,
         }
     }
 
     fn into_input(self) -> StoredInput {
         match self {
-            StoredInference::Chat(example) => example.input,
-            StoredInference::Json(example) => example.input,
+            StoredInferenceDatabase::Chat(example) => example.input,
+            StoredInferenceDatabase::Json(example) => example.input,
         }
     }
 
     fn function_name(&self) -> &str {
         match self {
-            StoredInference::Chat(example) => &example.function_name,
-            StoredInference::Json(example) => &example.function_name,
+            StoredInferenceDatabase::Chat(example) => &example.function_name,
+            StoredInferenceDatabase::Json(example) => &example.function_name,
         }
     }
 
     fn owned_simple_info(self) -> SimpleStoredSampleInfo {
         match self {
-            StoredInference::Chat(example) => SimpleStoredSampleInfo {
+            StoredInferenceDatabase::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
                 input: example.input,
                 episode_id: Some(example.episode_id),
@@ -420,7 +420,7 @@ impl StoredSample for StoredInference {
                 output_schema: None,
                 tags: example.tags,
             },
-            StoredInference::Json(example) => {
+            StoredInferenceDatabase::Json(example) => {
                 let output = json_output_to_content_block_chat_output(example.output.clone());
                 let dispreferred_outputs = example
                     .dispreferred_outputs

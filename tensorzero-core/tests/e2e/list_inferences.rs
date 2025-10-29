@@ -2,8 +2,8 @@ use chrono::DateTime;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero::{
     BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
-    InferenceOutputSource, ListInferencesParams, StoredInferenceWire, TagComparisonOperator,
-    TagFilter, TimeComparisonOperator, TimeFilter,
+    InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagFilter,
+    TimeComparisonOperator, TimeFilter,
 };
 use tensorzero_core::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
 use uuid::Uuid;
@@ -25,7 +25,7 @@ pub async fn test_simple_query_json_function() {
     assert_eq!(res.len(), 2);
 
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
@@ -35,7 +35,7 @@ pub async fn test_simple_query_json_function() {
     // Verify ORDER BY timestamp DESC - check that timestamps are in descending order
     let mut prev_timestamp = None;
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         if let Some(prev) = prev_timestamp {
@@ -69,7 +69,7 @@ pub async fn test_simple_query_chat_function() {
     assert_eq!(res.len(), 3);
 
     for inference in &res {
-        let StoredInferenceWire::Chat(chat_inference) = inference else {
+        let StoredInference::Chat(chat_inference) = inference else {
             panic!("Expected a Chat inference");
         };
         assert_eq!(chat_inference.function_name, "write_haiku");
@@ -79,7 +79,7 @@ pub async fn test_simple_query_chat_function() {
     // Verify ORDER BY timestamp ASC - check that timestamps are in ascending order
     let mut prev_timestamp = None;
     for inference in &res {
-        let StoredInferenceWire::Chat(chat_inference) = inference else {
+        let StoredInference::Chat(chat_inference) = inference else {
             panic!("Expected a Chat inference");
         };
         if let Some(prev) = prev_timestamp {
@@ -118,7 +118,7 @@ pub async fn test_simple_query_with_float_filter() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 3);
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
@@ -140,7 +140,7 @@ pub async fn test_demonstration_output_source() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 5);
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
@@ -165,7 +165,7 @@ pub async fn test_boolean_metric_filter() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 5);
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
@@ -199,7 +199,7 @@ pub async fn test_and_filter_multiple_float_metrics() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 1);
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
@@ -237,7 +237,7 @@ async fn test_or_filter_mixed_metrics() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 1);
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
@@ -301,7 +301,7 @@ async fn test_simple_time_filter() {
     assert_eq!(res.len(), 5);
 
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
@@ -310,7 +310,7 @@ async fn test_simple_time_filter() {
     // Verify ORDER BY timestamp ASC (secondary sort) - check that for same metric values, timestamps are ascending
     let mut prev_timestamp = None;
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         if let Some(prev) = prev_timestamp {
@@ -342,7 +342,7 @@ async fn test_simple_tag_filter() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 200);
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected a JSON inference");
         };
         assert_eq!(json_inference.function_name, "extract_entities");
@@ -379,7 +379,7 @@ async fn test_combined_time_and_tag_filter() {
     let res = client.experimental_list_inferences(opts).await.unwrap();
     assert_eq!(res.len(), 50);
     for inference in &res {
-        let StoredInferenceWire::Chat(chat_inference) = inference else {
+        let StoredInference::Chat(chat_inference) = inference else {
             panic!("Expected a Chat inference");
         };
         assert_eq!(chat_inference.function_name, "write_haiku");
@@ -405,8 +405,8 @@ pub async fn test_query_by_ids_json_only() {
     let ids: Vec<_> = initial_res
         .iter()
         .map(|inf| match inf {
-            StoredInferenceWire::Json(j) => j.inference_id,
-            StoredInferenceWire::Chat(_) => panic!("Expected JSON inference"),
+            StoredInference::Json(j) => j.inference_id,
+            StoredInference::Chat(_) => panic!("Expected JSON inference"),
         })
         .collect();
 
@@ -421,7 +421,7 @@ pub async fn test_query_by_ids_json_only() {
     // Should get back the same 3 inferences
     assert_eq!(res.len(), 3);
     for inference in &res {
-        let StoredInferenceWire::Json(json_inference) = inference else {
+        let StoredInference::Json(json_inference) = inference else {
             panic!("Expected JSON inference");
         };
         assert!(ids.contains(&json_inference.inference_id));
@@ -446,8 +446,8 @@ pub async fn test_query_by_ids_chat_only() {
     let ids: Vec<_> = initial_res
         .iter()
         .map(|inf| match inf {
-            StoredInferenceWire::Chat(c) => c.inference_id,
-            StoredInferenceWire::Json(_) => panic!("Expected Chat inference"),
+            StoredInference::Chat(c) => c.inference_id,
+            StoredInference::Json(_) => panic!("Expected Chat inference"),
         })
         .collect();
 
@@ -461,7 +461,7 @@ pub async fn test_query_by_ids_chat_only() {
     // Should get back the same 2 inferences
     assert_eq!(res.len(), 2);
     for inference in &res {
-        let StoredInferenceWire::Chat(chat_inference) = inference else {
+        let StoredInference::Chat(chat_inference) = inference else {
             panic!("Expected Chat inference");
         };
         assert!(ids.contains(&chat_inference.inference_id));
@@ -514,13 +514,13 @@ pub async fn test_query_by_ids_mixed_types() {
     let mut ids: Vec<_> = json_res
         .iter()
         .map(|inf| match inf {
-            StoredInferenceWire::Json(j) => j.inference_id,
-            StoredInferenceWire::Chat(_) => panic!("Expected JSON inference"),
+            StoredInference::Json(j) => j.inference_id,
+            StoredInference::Chat(_) => panic!("Expected JSON inference"),
         })
         .collect();
     ids.extend(chat_res.iter().map(|inf| match inf {
-        StoredInferenceWire::Chat(c) => c.inference_id,
-        StoredInferenceWire::Json(_) => panic!("Expected Chat inference"),
+        StoredInference::Chat(c) => c.inference_id,
+        StoredInference::Json(_) => panic!("Expected Chat inference"),
     }));
 
     // Now query by mixed IDs without function_name
@@ -537,12 +537,12 @@ pub async fn test_query_by_ids_mixed_types() {
     let mut chat_count = 0;
     for inference in &res {
         match inference {
-            StoredInferenceWire::Json(json_inference) => {
+            StoredInference::Json(json_inference) => {
                 assert!(ids.contains(&json_inference.inference_id));
                 assert_eq!(json_inference.function_name, "extract_entities");
                 json_count += 1;
             }
-            StoredInferenceWire::Chat(chat_inference) => {
+            StoredInference::Chat(chat_inference) => {
                 assert!(ids.contains(&chat_inference.inference_id));
                 assert_eq!(chat_inference.function_name, "write_haiku");
                 chat_count += 1;
@@ -581,13 +581,13 @@ pub async fn test_query_by_ids_with_order_by_timestamp() {
     let mut ids: Vec<_> = json_res
         .iter()
         .map(|inf| match inf {
-            StoredInferenceWire::Json(j) => j.inference_id,
-            StoredInferenceWire::Chat(_) => panic!("Expected JSON inference"),
+            StoredInference::Json(j) => j.inference_id,
+            StoredInference::Chat(_) => panic!("Expected JSON inference"),
         })
         .collect();
     ids.extend(chat_res.iter().map(|inf| match inf {
-        StoredInferenceWire::Chat(c) => c.inference_id,
-        StoredInferenceWire::Json(_) => panic!("Expected Chat inference"),
+        StoredInference::Chat(c) => c.inference_id,
+        StoredInference::Json(_) => panic!("Expected Chat inference"),
     }));
 
     // Query with ORDER BY timestamp DESC
@@ -608,8 +608,8 @@ pub async fn test_query_by_ids_with_order_by_timestamp() {
     let mut prev_timestamp = None;
     for inference in &res {
         let timestamp = match inference {
-            StoredInferenceWire::Json(j) => j.timestamp,
-            StoredInferenceWire::Chat(c) => c.timestamp,
+            StoredInference::Json(j) => j.timestamp,
+            StoredInference::Chat(c) => c.timestamp,
         };
         if let Some(prev) = prev_timestamp {
             assert!(
@@ -636,8 +636,8 @@ pub async fn test_query_by_ids_with_order_by_metric_errors() {
     let ids: Vec<_> = initial_res
         .iter()
         .map(|inf| match inf {
-            StoredInferenceWire::Json(j) => j.inference_id,
-            StoredInferenceWire::Chat(_) => panic!("Expected JSON inference"),
+            StoredInference::Json(j) => j.inference_id,
+            StoredInference::Chat(_) => panic!("Expected JSON inference"),
         })
         .collect();
 

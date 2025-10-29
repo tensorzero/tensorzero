@@ -533,7 +533,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChatOutput, JsonInferenceOutput, StoredInput, System,
     };
-    use crate::stored_inference::StoredInference;
+    use crate::stored_inference::StoredInferenceDatabase;
     use crate::tool::ToolCallConfigDatabaseInsert;
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
@@ -2003,7 +2003,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Chat(chat_inference) = inference.try_into().unwrap() else {
             panic!("Expected a chat inference");
         };
         assert_eq!(chat_inference.function_name, "test_function");
@@ -2044,8 +2044,8 @@ FORMAT JSONEachRow";
             "timestamp": "2023-01-01T00:00:00Z"
         }
     "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Chat(chat_inference) = inference else {
             panic!("Expected a chat inference");
         };
         assert_eq!(chat_inference.function_name, "test_function");
@@ -2092,7 +2092,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Chat(chat_inference) = inference.try_into().unwrap() else {
             panic!("Expected a chat inference");
         };
         assert_eq!(
@@ -2123,8 +2123,8 @@ FORMAT JSONEachRow";
             "timestamp": "2023-01-01T00:00:00Z"
         }
     "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Chat(chat_inference) = inference else {
             panic!("Expected a chat inference");
         };
         assert_eq!(
@@ -2154,7 +2154,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Json(json_inference) = inference.try_into().unwrap() else {
             panic!("Expected a json inference");
         };
         assert_eq!(json_inference.function_name, "test_function");
@@ -2202,8 +2202,8 @@ FORMAT JSONEachRow";
              "timestamp": "2023-01-01T00:00:00Z"
          }
      "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Json(json_inference) = inference else {
             panic!("Expected a json inference");
         };
         assert_eq!(json_inference.function_name, "test_function");
@@ -2257,7 +2257,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Json(json_inference) = inference.try_into().unwrap() else {
             panic!("Expected a json inference");
         };
         assert_eq!(
@@ -2286,8 +2286,8 @@ FORMAT JSONEachRow";
              "timestamp": "2023-01-01T00:00:00Z"
          }
      "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Json(json_inference) = inference else {
             panic!("Expected a json inference");
         };
 

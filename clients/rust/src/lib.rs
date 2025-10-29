@@ -53,7 +53,8 @@ mod git;
 #[cfg(feature = "e2e_tests")]
 pub mod test_helpers;
 pub use tensorzero_core::stored_inference::{
-    RenderedSample, StoredChatInference, StoredInference, StoredInferenceWire, StoredJsonInference,
+    RenderedSample, StoredChatInferenceDatabase, StoredInference, StoredInferenceDatabase,
+    StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
@@ -66,8 +67,8 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
 };
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::endpoints::datasets::{
-    ChatInferenceDatapoint, ChatInferenceDatapointWire, Datapoint, DatapointKind, DatapointWire,
-    JsonInferenceDatapoint,
+    ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
+    StoredChatInferenceDatapoint, StoredDatapoint,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
@@ -903,7 +904,7 @@ impl Client {
         function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
-    ) -> Result<Vec<DatapointWire>, TensorZeroError> {
+    ) -> Result<Vec<Datapoint>, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
@@ -936,7 +937,7 @@ impl Client {
                 .await?;
 
                 // Convert storage types to wire types
-                let wire_datapoints: Result<Vec<DatapointWire>, _> = datapoints
+                let wire_datapoints: Result<Vec<Datapoint>, _> = datapoints
                     .into_iter()
                     .map(|dp| dp.to_wire(&gateway.handle.app_state.config))
                     .collect();
@@ -950,7 +951,7 @@ impl Client {
         &self,
         dataset_name: String,
         datapoint_id: Uuid,
-    ) -> Result<DatapointWire, TensorZeroError> {
+    ) -> Result<Datapoint, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
@@ -1035,7 +1036,7 @@ impl Client {
     pub async fn experimental_list_inferences(
         &self,
         params: ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInferenceWire>, TensorZeroError> {
+    ) -> Result<Vec<StoredInference>, TensorZeroError> {
         // TODO: consider adding a flag that returns the generated sql query
         let ClientMode::EmbeddedGateway { gateway, .. } = &*self.mode else {
             return Err(TensorZeroError::Other {
@@ -1055,7 +1056,7 @@ impl Client {
             .map_err(err_to_http)?;
 
         // Convert storage types to wire types
-        let wire_inferences: Result<Vec<StoredInferenceWire>, _> = inferences
+        let wire_inferences: Result<Vec<StoredInference>, _> = inferences
             .into_iter()
             .map(|inf| inf.to_wire(&gateway.handle.app_state.config))
             .collect();

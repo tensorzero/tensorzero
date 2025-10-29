@@ -13,7 +13,7 @@ use crate::db::datasets::{
     GetDatasetMetadataParams, GetDatasetRowsParams, JsonInferenceDatapointInsert,
     StaleDatapointParams,
 };
-use crate::endpoints::datasets::{validate_dataset_name, Datapoint, DatapointKind};
+use crate::endpoints::datasets::{validate_dataset_name, DatapointKind, StoredDatapoint};
 use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
@@ -448,7 +448,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(result)
     }
 
-    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error> {
+    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
         const DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT: bool = false;
         let allow_stale = params
             .allow_stale
@@ -477,7 +477,10 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(first_datapoint)
     }
 
-    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error> {
+    async fn get_datapoints(
+        &self,
+        params: &GetDatapointsParams,
+    ) -> Result<Vec<StoredDatapoint>, Error> {
         let GetDatapointsParams {
             dataset_name,
             function_name,
@@ -645,7 +648,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             if line.trim().is_empty() {
                 continue;
             }
-            let datapoint: Datapoint = serde_json::from_str(line).map_err(|e| {
+            let datapoint: StoredDatapoint = serde_json::from_str(line).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseDeserialization {
                     message: format!("Failed to deserialize datapoint: {e}"),
                 })
@@ -3099,7 +3102,7 @@ mod tests {
 
         let result = conn.get_datapoint(&params).await.unwrap();
 
-        if let Datapoint::Chat(datapoint) = result {
+        if let StoredDatapoint::Chat(datapoint) = result {
             // Verify it's a chat datapoint
             assert_eq!(datapoint.dataset_name, "test_dataset");
             assert_eq!(datapoint.function_name, "test_function");
@@ -3149,7 +3152,7 @@ mod tests {
 
         let result = conn.get_datapoint(&params).await.unwrap();
 
-        if let Datapoint::Json(datapoint) = result {
+        if let StoredDatapoint::Json(datapoint) = result {
             // Verify it's a json datapoint
             assert_eq!(datapoint.dataset_name, "json_dataset");
             assert_eq!(datapoint.function_name, "json_function");
@@ -3364,7 +3367,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 1, "Should return exactly one datapoint");
-        if let Datapoint::Chat(datapoint) = &result[0] {
+        if let StoredDatapoint::Chat(datapoint) = &result[0] {
             assert_eq!(datapoint.dataset_name, "test_dataset");
             assert_eq!(datapoint.function_name, "test_function");
             assert_eq!(
@@ -3517,7 +3520,7 @@ mod tests {
             1,
             "Should return staled datapoints when allow_stale=true"
         );
-        if let Datapoint::Chat(datapoint) = &result[0] {
+        if let StoredDatapoint::Chat(datapoint) = &result[0] {
             assert!(
                 datapoint.staled_at.is_some(),
                 "Datapoint should have staled_at timestamp"
@@ -3576,20 +3579,20 @@ mod tests {
         // Count types
         let chat_count = result
             .iter()
-            .filter(|dp| matches!(dp, Datapoint::Chat(_)))
+            .filter(|dp| matches!(dp, StoredDatapoint::Chat(_)))
             .count();
         let json_count = result
             .iter()
-            .filter(|dp| matches!(dp, Datapoint::Json(_)))
+            .filter(|dp| matches!(dp, StoredDatapoint::Json(_)))
             .count();
 
         assert_eq!(chat_count, 1, "Should have 1 chat datapoint");
         assert_eq!(json_count, 1, "Should have 1 json datapoint");
 
         // Verify chat datapoint
-        if let Datapoint::Chat(chat_dp) = result
+        if let StoredDatapoint::Chat(chat_dp) = result
             .iter()
-            .find(|dp| matches!(dp, Datapoint::Chat(_)))
+            .find(|dp| matches!(dp, StoredDatapoint::Chat(_)))
             .unwrap()
         {
             assert_eq!(chat_dp.function_name, "chat_function");
@@ -3597,9 +3600,9 @@ mod tests {
         }
 
         // Verify json datapoint
-        if let Datapoint::Json(json_dp) = result
+        if let StoredDatapoint::Json(json_dp) = result
             .iter()
-            .find(|dp| matches!(dp, Datapoint::Json(_)))
+            .find(|dp| matches!(dp, StoredDatapoint::Json(_)))
             .unwrap()
         {
             assert_eq!(json_dp.function_name, "json_function");

@@ -7,7 +7,7 @@ use tensorzero::{
     DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
@@ -43,7 +43,7 @@ impl LLMJudgeEvaluationResult {
 
 pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_response: &'a InferenceResponse,
-    pub datapoint: &'a Datapoint,
+    pub datapoint: &'a StoredDatapoint,
     pub clients: &'a Clients,
     pub llm_judge_config: &'a LLMJudgeConfig,
     pub evaluation_name: &'a str,
@@ -179,7 +179,7 @@ fn prepare_llm_judge_input(
     llm_judge_config: &LLMJudgeConfig,
     input: &ClientInput,
     inference_response: &InferenceResponse,
-    datapoint: &Datapoint,
+    datapoint: &StoredDatapoint,
 ) -> Result<Option<ClientInput>> {
     let generated_output = match &inference_response {
         InferenceResponse::Chat(chat_response) => {
@@ -412,17 +412,17 @@ fn prepare_serialized_json_output(output: &JsonInferenceOutput) -> Result<String
 /// If the reference output is needed but not present, we throw an error. (this could be mapped to None above this call)
 fn handle_reference_output(
     llm_judge_config: &LLMJudgeConfig,
-    datapoint: &Datapoint,
+    datapoint: &StoredDatapoint,
 ) -> Result<Option<String>> {
     if !llm_judge_config.include.reference_output {
         return Ok(None);
     }
     match datapoint {
-        Datapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
+        StoredDatapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
             Some(output) => prepare_serialized_chat_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
-        Datapoint::Json(json_datapoint) => match &json_datapoint.output {
+        StoredDatapoint::Json(json_datapoint) => match &json_datapoint.output {
             Some(output) => prepare_serialized_json_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
@@ -437,8 +437,8 @@ mod tests {
     use serde_json::json;
     use tensorzero::Role;
     use tensorzero::{File, UrlFile};
-    use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
     use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
+    use tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint;
     use tensorzero_core::endpoints::inference::ChatInferenceResponse;
     use tensorzero_core::endpoints::inference::JsonInferenceResponse;
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
@@ -589,7 +589,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::Chat(ChatInferenceDatapoint {
+            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 name: None,
@@ -659,7 +659,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::Chat(ChatInferenceDatapoint {
+            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 name: None,
@@ -890,7 +890,7 @@ mod tests {
                 reference_output: false,
             },
         };
-        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -923,7 +923,7 @@ mod tests {
                 reference_output: true,
             },
         };
-        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -950,7 +950,7 @@ mod tests {
         );
 
         // Test with reference output enabled and present (chat)
-        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -978,7 +978,7 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
+        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -1084,7 +1084,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::Chat(ChatInferenceDatapoint {
+            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,
@@ -1199,7 +1199,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::Json(JsonInferenceDatapoint {
+            &StoredDatapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,

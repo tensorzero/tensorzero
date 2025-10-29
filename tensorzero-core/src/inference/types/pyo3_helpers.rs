@@ -8,7 +8,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::config::Config;
-use crate::endpoints::datasets::{Datapoint, DatapointWire};
+use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
@@ -21,7 +21,7 @@ use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
-    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredInferenceWire, StoredSample,
+    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredInferenceDatabase, StoredSample,
 };
 use pyo3::types::PyNone;
 
@@ -367,19 +367,19 @@ pub fn deserialize_from_stored_sample<'a>(
     obj: &Bound<'a, PyAny>,
     config: &Config,
 ) -> PyResult<StoredSampleItem> {
-    if obj.is_instance_of::<StoredInferenceWire>() {
+    if obj.is_instance_of::<StoredInference>() {
         // Extract wire type and convert to storage type
-        let wire: StoredInferenceWire = obj.extract()?;
+        let wire: StoredInference = obj.extract()?;
         let storage = match wire.to_storage(config) {
             Ok(s) => s,
             Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
         };
         Ok(StoredSampleItem::StoredInference(storage))
-    } else if obj.is_instance_of::<DatapointWire>() {
+    } else if obj.is_instance_of::<Datapoint>() {
         // Extract wire type and convert to storage type
-        let wire: DatapointWire = obj.extract()?;
+        let wire: Datapoint = obj.extract()?;
         match wire {
-            DatapointWire::Chat(chat_wire) => {
+            Datapoint::Chat(chat_wire) => {
                 let function_config = match config.get_function(&chat_wire.function_name) {
                     Ok(f) => f,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
@@ -388,11 +388,13 @@ pub fn deserialize_from_stored_sample<'a>(
                     Ok(d) => d,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
-                Ok(StoredSampleItem::Datapoint(Datapoint::Chat(datapoint)))
+                Ok(StoredSampleItem::Datapoint(StoredDatapoint::Chat(
+                    datapoint,
+                )))
             }
-            DatapointWire::Json(json_wire) => {
-                Ok(StoredSampleItem::Datapoint(Datapoint::Json(json_wire)))
-            }
+            Datapoint::Json(json_wire) => Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
+                json_wire,
+            ))),
         }
     } else {
         deserialize_from_pyobj(py, obj)
@@ -437,8 +439,8 @@ pub fn deserialize_optimization_config(
 
 #[derive(Clone, Debug, Deserialize)]
 pub enum StoredSampleItem {
-    StoredInference(StoredInference),
-    Datapoint(Datapoint),
+    StoredInference(StoredInferenceDatabase),
+    Datapoint(StoredDatapoint),
 }
 
 impl StoredSample for StoredSampleItem {

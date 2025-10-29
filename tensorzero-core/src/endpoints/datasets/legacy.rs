@@ -267,7 +267,7 @@ async fn insert_from_existing(
                 OutputKind::None => None,
             };
             // TODO(#3957): the `put_chat_datapoints` call should really take a `ChatInferenceDatapointInsert`. We'll fix it separately.
-            let datapoint = ChatInferenceDatapoint {
+            let datapoint = StoredChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
                 name: None,
@@ -404,7 +404,7 @@ pub async fn update_datapoint_handler(
                 None
             };
 
-            let datapoint = ChatInferenceDatapoint {
+            let datapoint = StoredChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: chat.function_name,
                 name: chat.name,
@@ -662,7 +662,7 @@ pub async fn insert_datapoint(
                 };
                 let datapoint_id = Uuid::now_v7();
                 datapoint_ids.push(datapoint_id);
-                chat_datapoints.push(ChatInferenceDatapoint {
+                chat_datapoints.push(StoredChatInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: chat.function_name,
                     name: chat.name,
@@ -874,7 +874,7 @@ pub async fn list_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<ListDatapointsPathParams>,
     Query(query_params): Query<ListDatapointsQueryParams>,
-) -> Result<Json<Vec<DatapointWire>>, Error> {
+) -> Result<Json<Vec<Datapoint>>, Error> {
     let datapoints = list_datapoints(
         path_params.dataset_name,
         &app_state.clickhouse_connection_info,
@@ -885,7 +885,7 @@ pub async fn list_datapoints_handler(
     .await?;
 
     // Convert all storage types to wire types
-    let wires: Vec<DatapointWire> = datapoints
+    let wires: Vec<Datapoint> = datapoints
         .into_iter()
         .map(|dp| dp.to_wire(&app_state.config))
         .collect::<Result<Vec<_>, _>>()?;
@@ -900,7 +900,7 @@ pub async fn list_datapoints(
     function_name: Option<String>,
     limit: Option<u32>,
     offset: Option<u32>,
-) -> Result<Vec<Datapoint>, Error> {
+) -> Result<Vec<StoredDatapoint>, Error> {
     let mut query = r"
     WITH dataset as (
         SELECT
@@ -993,7 +993,7 @@ pub async fn list_datapoints(
     }
     let result_lines = result.response.trim().split("\n").collect::<Vec<&str>>();
 
-    let datapoints: Result<Vec<Datapoint>, _> = result_lines
+    let datapoints: Result<Vec<StoredDatapoint>, _> = result_lines
         .iter()
         .map(|line| serde_json::from_str(line))
         .collect();
@@ -1050,7 +1050,7 @@ pub struct GetDatapointPathParams {
 pub async fn get_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<GetDatapointPathParams>,
-) -> Result<Json<DatapointWire>, Error> {
+) -> Result<Json<Datapoint>, Error> {
     let datapoint = app_state
         .clickhouse_connection_info
         .get_datapoint(&GetDatapointParams {
@@ -1121,82 +1121,82 @@ pub struct InsertDatapointResponse {
 #[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub enum DatapointWire {
-    Chat(ChatInferenceDatapointWire),
+pub enum Datapoint {
+    Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
 }
 
-impl std::fmt::Display for DatapointWire {
+impl std::fmt::Display for Datapoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
     }
 }
 
-impl DatapointWire {
+impl Datapoint {
     pub fn dataset_name(&self) -> &str {
         match self {
-            DatapointWire::Chat(datapoint) => &datapoint.dataset_name,
-            DatapointWire::Json(datapoint) => &datapoint.dataset_name,
+            Datapoint::Chat(datapoint) => &datapoint.dataset_name,
+            Datapoint::Json(datapoint) => &datapoint.dataset_name,
         }
     }
 
     pub fn function_name(&self) -> &str {
         match self {
-            DatapointWire::Chat(datapoint) => &datapoint.function_name,
-            DatapointWire::Json(datapoint) => &datapoint.function_name,
+            Datapoint::Chat(datapoint) => &datapoint.function_name,
+            Datapoint::Json(datapoint) => &datapoint.function_name,
         }
     }
 
     pub fn id(&self) -> Uuid {
         match self {
-            DatapointWire::Chat(datapoint) => datapoint.id,
-            DatapointWire::Json(datapoint) => datapoint.id,
+            Datapoint::Chat(datapoint) => datapoint.id,
+            Datapoint::Json(datapoint) => datapoint.id,
         }
     }
 
     pub fn input(&self) -> &StoredInput {
         match self {
-            DatapointWire::Chat(datapoint) => &datapoint.input,
-            DatapointWire::Json(datapoint) => &datapoint.input,
+            Datapoint::Chat(datapoint) => &datapoint.input,
+            Datapoint::Json(datapoint) => &datapoint.input,
         }
     }
 
     pub fn tool_call_config(&self) -> Option<&DynamicToolParams> {
         match self {
-            DatapointWire::Chat(datapoint) => datapoint.tool_params.as_ref(),
-            DatapointWire::Json(_) => None,
+            Datapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
+            Datapoint::Json(_) => None,
         }
     }
 }
 
-impl Datapoint {
+impl StoredDatapoint {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn to_wire(self, config: &Config) -> Result<DatapointWire, Error> {
+    pub fn to_wire(self, config: &Config) -> Result<Datapoint, Error> {
         match self {
-            Datapoint::Chat(chat) => {
+            StoredDatapoint::Chat(chat) => {
                 let function_config = config.get_function(&chat.function_name)?;
-                Ok(DatapointWire::Chat(chat.to_wire(&function_config)))
+                Ok(Datapoint::Chat(chat.to_wire(&function_config)))
             }
-            Datapoint::Json(json) => Ok(DatapointWire::Json(json)),
+            StoredDatapoint::Json(json) => Ok(Datapoint::Json(json)),
         }
     }
 }
 
-impl ChatInferenceDatapointWire {
+impl ChatInferenceDatapoint {
     /// Convert to storage type, properly handling tool params with function config
     pub fn to_storage(
         self,
         function_config: &FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-    ) -> Result<ChatInferenceDatapoint, Error> {
+    ) -> Result<StoredChatInferenceDatapoint, Error> {
         let tool_params = match self.tool_params {
             Some(dynamic_params) => function_config
                 .dynamic_tool_params_to_database_insert(dynamic_params, static_tools)?,
             None => None,
         };
 
-        Ok(ChatInferenceDatapoint {
+        Ok(StoredChatInferenceDatapoint {
             dataset_name: self.dataset_name,
             function_name: self.function_name,
             id: self.id,
@@ -1218,7 +1218,7 @@ impl ChatInferenceDatapointWire {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl DatapointWire {
+impl Datapoint {
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -1236,7 +1236,7 @@ impl DatapointWire {
     #[getter]
     pub fn get_output<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
-            DatapointWire::Chat(datapoint) => match &datapoint.output {
+            Datapoint::Chat(datapoint) => match &datapoint.output {
                 Some(output) => output
                     .iter()
                     .map(|x| content_block_chat_output_to_python(py, x.clone()))
@@ -1244,7 +1244,7 @@ impl DatapointWire {
                     .into_bound_py_any(py)?,
                 None => py.None().into_bound(py),
             },
-            DatapointWire::Json(datapoint) => datapoint.output.clone().into_bound_py_any(py)?,
+            Datapoint::Json(datapoint) => datapoint.output.clone().into_bound_py_any(py)?,
         })
     }
 
@@ -1270,56 +1270,56 @@ impl DatapointWire {
 /// Storage variant of Datapoint enum for database operations (no Python/TypeScript bindings)
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum Datapoint {
-    Chat(ChatInferenceDatapoint),
+pub enum StoredDatapoint {
+    Chat(StoredChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
 }
 
-impl Datapoint {
+impl StoredDatapoint {
     pub fn dataset_name(&self) -> &str {
         match self {
-            Datapoint::Chat(datapoint) => &datapoint.dataset_name,
-            Datapoint::Json(datapoint) => &datapoint.dataset_name,
+            StoredDatapoint::Chat(datapoint) => &datapoint.dataset_name,
+            StoredDatapoint::Json(datapoint) => &datapoint.dataset_name,
         }
     }
 
     pub fn input(&self) -> &StoredInput {
         match self {
-            Datapoint::Chat(datapoint) => &datapoint.input,
-            Datapoint::Json(datapoint) => &datapoint.input,
+            StoredDatapoint::Chat(datapoint) => &datapoint.input,
+            StoredDatapoint::Json(datapoint) => &datapoint.input,
         }
     }
 
     pub fn tool_call_config(&self) -> Option<&ToolCallConfigDatabaseInsert> {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
-            Datapoint::Json(_datapoint) => None,
+            StoredDatapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
+            StoredDatapoint::Json(_datapoint) => None,
         }
     }
 
     pub fn output_schema(&self) -> Option<&serde_json::Value> {
         match self {
-            Datapoint::Chat(_datapoint) => None,
-            Datapoint::Json(datapoint) => Some(&datapoint.output_schema),
+            StoredDatapoint::Chat(_datapoint) => None,
+            StoredDatapoint::Json(datapoint) => Some(&datapoint.output_schema),
         }
     }
 
     pub fn id(&self) -> Uuid {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.id,
-            Datapoint::Json(datapoint) => datapoint.id,
+            StoredDatapoint::Chat(datapoint) => datapoint.id,
+            StoredDatapoint::Json(datapoint) => datapoint.id,
         }
     }
 
     pub fn name(&self) -> Option<&str> {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.name.as_deref(),
-            Datapoint::Json(datapoint) => datapoint.name.as_deref(),
+            StoredDatapoint::Chat(datapoint) => datapoint.name.as_deref(),
+            StoredDatapoint::Json(datapoint) => datapoint.name.as_deref(),
         }
     }
 }
 
-impl std::fmt::Display for Datapoint {
+impl std::fmt::Display for StoredDatapoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -1364,7 +1364,7 @@ pub struct JsonDatapointInsert {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct ChatInferenceDatapointWire {
+pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
     pub id: Uuid,
@@ -1405,21 +1405,21 @@ pub struct ChatInferenceDatapointWire {
     pub name: Option<String>,
 }
 
-impl std::fmt::Display for ChatInferenceDatapointWire {
+impl std::fmt::Display for ChatInferenceDatapoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
     }
 }
 
-impl ChatInferenceDatapoint {
+impl StoredChatInferenceDatapoint {
     /// Convert to wire type, properly handling tool params by subtracting static tools
-    pub fn to_wire(self, function_config: &FunctionConfig) -> ChatInferenceDatapointWire {
+    pub fn to_wire(self, function_config: &FunctionConfig) -> ChatInferenceDatapoint {
         let tool_params = self
             .tool_params
             .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp));
 
-        ChatInferenceDatapointWire {
+        ChatInferenceDatapoint {
             dataset_name: self.dataset_name,
             function_name: self.function_name,
             id: self.id,
@@ -1441,7 +1441,7 @@ impl ChatInferenceDatapoint {
 
 /// Storage variant of ChatInferenceDatapoint for database operations (no Python/TypeScript bindings)
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct ChatInferenceDatapoint {
+pub struct StoredChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,
     pub id: Uuid,
@@ -1476,15 +1476,15 @@ pub struct ChatInferenceDatapoint {
     pub name: Option<String>,
 }
 
-impl std::fmt::Display for ChatInferenceDatapoint {
+impl std::fmt::Display for StoredChatInferenceDatapoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
     }
 }
 
-impl From<ChatInferenceDatapoint> for ChatInferenceDatapointInsert {
-    fn from(datapoint: ChatInferenceDatapoint) -> Self {
+impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
+    fn from(datapoint: StoredChatInferenceDatapoint) -> Self {
         ChatInferenceDatapointInsert {
             dataset_name: datapoint.dataset_name,
             function_name: datapoint.function_name,
@@ -1574,38 +1574,38 @@ impl From<JsonInferenceDatapoint> for JsonInferenceDatapointInsert {
     }
 }
 
-impl StoredSample for Datapoint {
+impl StoredSample for StoredDatapoint {
     fn function_name(&self) -> &str {
         match self {
-            Datapoint::Chat(datapoint) => &datapoint.function_name,
-            Datapoint::Json(datapoint) => &datapoint.function_name,
+            StoredDatapoint::Chat(datapoint) => &datapoint.function_name,
+            StoredDatapoint::Json(datapoint) => &datapoint.function_name,
         }
     }
 
     fn input(&self) -> &StoredInput {
         match self {
-            Datapoint::Chat(datapoint) => &datapoint.input,
-            Datapoint::Json(datapoint) => &datapoint.input,
+            StoredDatapoint::Chat(datapoint) => &datapoint.input,
+            StoredDatapoint::Json(datapoint) => &datapoint.input,
         }
     }
 
     fn input_mut(&mut self) -> &mut StoredInput {
         match self {
-            Datapoint::Chat(datapoint) => &mut datapoint.input,
-            Datapoint::Json(datapoint) => &mut datapoint.input,
+            StoredDatapoint::Chat(datapoint) => &mut datapoint.input,
+            StoredDatapoint::Json(datapoint) => &mut datapoint.input,
         }
     }
 
     fn into_input(self) -> StoredInput {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.input,
-            Datapoint::Json(datapoint) => datapoint.input,
+            StoredDatapoint::Chat(datapoint) => datapoint.input,
+            StoredDatapoint::Json(datapoint) => datapoint.input,
         }
     }
 
     fn owned_simple_info(self) -> SimpleStoredSampleInfo {
         match self {
-            Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
+            StoredDatapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
                 input: datapoint.input,
                 output: datapoint.output.clone(),
@@ -1617,7 +1617,7 @@ impl StoredSample for Datapoint {
                 inference_id: None,
                 tags: datapoint.tags.unwrap_or_default(),
             },
-            Datapoint::Json(datapoint) => {
+            StoredDatapoint::Json(datapoint) => {
                 let stored_output = datapoint.output.clone().map(StoredOutput::Json);
                 let output = datapoint.output.map(|output| match output.raw {
                     Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],

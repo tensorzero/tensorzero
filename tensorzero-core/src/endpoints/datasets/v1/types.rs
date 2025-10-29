@@ -5,7 +5,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::DatapointFilter;
-use crate::endpoints::datasets::DatapointWire;
+use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
@@ -188,5 +188,5 @@ pub struct GetDatapointsRequest {
 #[cfg_attr(test, ts(export))]
 pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
-    pub datapoints: Vec<DatapointWire>,
+    pub datapoints: Vec<Datapoint>,
 }

@@ -50,7 +50,7 @@ use tensorzero_core::{
         DiclConfigPyClass, MixtureOfNConfigPyClass,
     },
 };
-use tensorzero_core::{endpoints::datasets::DatapointWire, stored_inference::StoredInferenceWire};
+use tensorzero_core::{endpoints::datasets::Datapoint, stored_inference::StoredInference};
 use tensorzero_core::{
     endpoints::{
         datasets::InsertDatapointParams,
@@ -98,7 +98,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TensorZeroGateway>()?;
     m.add_class::<LocalHttpGateway>()?;
     m.add_class::<RenderedSample>()?;
-    m.add_class::<StoredInferenceWire>()?;
+    m.add_class::<StoredInference>()?;
     m.add_class::<EvaluationJobHandler>()?;
     m.add_class::<AsyncEvaluationJobHandler>()?;
     m.add_class::<UninitializedOpenAIRFTConfig>()?;
@@ -107,7 +107,7 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<UninitializedDiclOptimizationConfig>()?;
     m.add_class::<UninitializedGCPVertexGeminiSFTConfig>()?;
     m.add_class::<UninitializedTogetherSFTConfig>()?;
-    m.add_class::<DatapointWire>()?;
+    m.add_class::<Datapoint>()?;
     m.add_class::<ResolvedInput>()?;
     m.add_class::<ResolvedInputMessage>()?;
     m.add_class::<ConfigPyClass>()?;
@@ -1064,11 +1064,11 @@ impl TensorZeroGateway {
         this: PyRef<'py, Self>,
         dataset_name: String,
         datapoint_id: Bound<'py, PyAny>,
-    ) -> PyResult<Bound<'py, DatapointWire>> {
+    ) -> PyResult<Bound<'py, Datapoint>> {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-        let wire: DatapointWire =
+        let wire: Datapoint =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         wire.into_pyobject(this.py())
     }
@@ -1205,7 +1205,7 @@ impl TensorZeroGateway {
         order_by: Option<Bound<'_, PyAny>>,
         limit: Option<u64>,
         offset: Option<u64>,
-    ) -> PyResult<Vec<StoredInferenceWire>> {
+    ) -> PyResult<Vec<StoredInference>> {
         let client = this.as_super().client.clone();
         let filters = filters
             .as_ref()
@@ -1233,7 +1233,7 @@ impl TensorZeroGateway {
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
-        let wires: Vec<StoredInferenceWire> =
+        let wires: Vec<StoredInference> =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         Ok(wires)
     }
