@@ -345,7 +345,7 @@ export const jsonInferenceOutputSchema = z.object({
   parsed: JsonValueSchema.nullable(),
 }) satisfies z.ZodType<JsonInferenceOutput>;
 
-export const toolCallOutputSchema = z
+export const inferenceResponseToolCallSchema = z
   .object({
     type: z.literal("tool_call"),
     arguments: JsonValueSchema.nullable(),
@@ -356,11 +356,13 @@ export const toolCallOutputSchema = z
   })
   .strict();
 
-export type InferenceResponseToolCall = z.infer<typeof toolCallOutputSchema>;
+export type InferenceResponseToolCall = z.infer<
+  typeof inferenceResponseToolCallSchema
+>;
 
 export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,
-  toolCallOutputSchema,
+  inferenceResponseToolCallSchema,
   thoughtContentSchema,
   unknownSchema,
 ]);

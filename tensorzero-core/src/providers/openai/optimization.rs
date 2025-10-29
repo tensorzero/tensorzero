@@ -478,9 +478,9 @@ impl<'a> TryFrom<&'a Vec<ContentBlockChatOutput>> for OpenAIReinforcementOutput<
                 ContentBlockChatOutput::Text(text) => {
                     text_parts.push(text.text.clone());
                 }
-                ContentBlockChatOutput::ToolCall(tool_call_output) => {
+                ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
                     // Convert InferenceResponseToolCall to ToolCall using the From impl
-                    let tool_call: ToolCall = tool_call_output.clone().into();
+                    let tool_call: ToolCall = inference_response_tool_call.clone().into();
                     tool_calls.push(tool_call);
                 }
                 ContentBlockChatOutput::Thought(_) => {

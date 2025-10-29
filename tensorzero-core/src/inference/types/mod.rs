@@ -1948,8 +1948,11 @@ pub async fn parse_chat_output(
             }
             ContentBlockOutput::ToolCall(tool_call) => {
                 // Parse the tool call arguments
-                let tool_call_output = InferenceResponseToolCall::new(tool_call, tool_config).await;
-                output.push(ContentBlockChatOutput::ToolCall(tool_call_output));
+                let inference_response_tool_call =
+                    InferenceResponseToolCall::new(tool_call, tool_config).await;
+                output.push(ContentBlockChatOutput::ToolCall(
+                    inference_response_tool_call,
+                ));
             }
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
@@ -2078,8 +2081,8 @@ impl From<ContentBlockChatOutput> for ContentBlock {
     fn from(output: ContentBlockChatOutput) -> Self {
         match output {
             ContentBlockChatOutput::Text(text) => ContentBlock::Text(text),
-            ContentBlockChatOutput::ToolCall(tool_call_output) => {
-                ContentBlock::ToolCall(tool_call_output.into())
+            ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
+                ContentBlock::ToolCall(inference_response_tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
             ContentBlockChatOutput::Unknown {
@@ -2881,12 +2884,12 @@ mod tests {
                     assert_eq!(tc.name, "test_tool");
                     assert_eq!(tc.arguments, "{}");
                 }
-                ToolCallWrapper::InferenceResponseToolCall(tco) => {
-                    assert_eq!(tco.id, "123");
-                    assert_eq!(tco.name, Some("test_tool".to_string()));
-                    assert_eq!(tco.arguments, Some(json!("{}")));
-                    assert_eq!(tco.raw_name, "test_tool");
-                    assert_eq!(tco.raw_arguments, "{}");
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, Some("test_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!("{}")));
+                    assert_eq!(tc.raw_name, "test_tool");
+                    assert_eq!(tc.raw_arguments, "{}");
                 }
             },
             _ => panic!("Expected ToolCall content"),
@@ -2921,10 +2924,10 @@ mod tests {
                     assert_eq!(tc.name, "another_tool");
                     assert_eq!(tc.arguments, json!({"key":"value"}).to_string());
                 }
-                ToolCallWrapper::InferenceResponseToolCall(tco) => {
-                    assert_eq!(tco.id, "456");
-                    assert_eq!(tco.name, Some("another_tool".to_string()));
-                    assert_eq!(tco.arguments, Some(json!({"key":"value"})));
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, Some("another_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!({"key":"value"})));
                 }
             },
             _ => panic!("Expected ToolCall content"),

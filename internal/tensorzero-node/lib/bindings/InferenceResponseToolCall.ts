@@ -2,7 +2,7 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * A InferenceResponseToolCall is a request by a model to call a Tool
+ * An InferenceResponseToolCall is a request by a model to call a Tool
  * in the form that we return to the client / ClickHouse
  */
 export type InferenceResponseToolCall = {

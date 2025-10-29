@@ -330,7 +330,7 @@ fn generate_tool_call_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     let system_prompt =
         format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
-    let tool_call_output = vec![ContentBlockChatOutput::ToolCall(
+    let inference_response_tool_call = vec![ContentBlockChatOutput::ToolCall(
         InferenceResponseToolCall {
             name: Some("get_weather".to_string()),
             arguments: Some(serde_json::json!({
@@ -446,8 +446,8 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
             ],
         },
-        output: Some(tool_call_output.clone()),
-        stored_output: Some(StoredOutput::Chat(tool_call_output)),
+        output: Some(inference_response_tool_call.clone()),
+        stored_output: Some(StoredOutput::Chat(inference_response_tool_call)),
         tool_params: Some(ToolCallConfigDatabaseInsert {
             tools_available: vec![Tool {
                 name: "get_weather".to_string(),

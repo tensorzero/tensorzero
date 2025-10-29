@@ -519,16 +519,16 @@ impl TryFrom<ToolCallWrapper> for ToolCall {
     fn try_from(wrapper: ToolCallWrapper) -> Result<Self, Self::Error> {
         match wrapper {
             ToolCallWrapper::ToolCall(tc) => Ok(tc),
-            ToolCallWrapper::InferenceResponseToolCall(tco) => Ok(ToolCall {
-                id: tco.id,
-                name: tco.raw_name,
-                arguments: tco.raw_arguments,
+            ToolCallWrapper::InferenceResponseToolCall(tc) => Ok(ToolCall {
+                id: tc.id,
+                name: tc.raw_name,
+                arguments: tc.raw_arguments,
             }),
         }
     }
 }
 
-/// A InferenceResponseToolCall is a request by a model to call a Tool
+/// An InferenceResponseToolCall is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
@@ -1182,7 +1182,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_tool_call_output_new() {
+    async fn test_inference_response_tool_call_new() {
         let tool_call = ToolCall {
             name: "get_temperature".to_string(),
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
@@ -1198,17 +1198,20 @@ mod tests {
         .unwrap()
         .unwrap();
         // Tool call is valid, so we should get a valid InferenceResponseToolCall
-        let tool_call_output =
+        let inference_response_tool_call =
             InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.raw_name, "get_temperature");
+        assert_eq!(inference_response_tool_call.raw_name, "get_temperature");
         assert_eq!(
-            tool_call_output.raw_arguments,
+            inference_response_tool_call.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
         );
-        assert_eq!(tool_call_output.id, "123");
-        assert_eq!(tool_call_output.name, Some("get_temperature".to_string()));
+        assert_eq!(inference_response_tool_call.id, "123");
         assert_eq!(
-            tool_call_output.arguments,
+            inference_response_tool_call.name,
+            Some("get_temperature".to_string())
+        );
+        assert_eq!(
+            inference_response_tool_call.arguments,
             Some(json!({
                 "location": "San Francisco",
                 "unit": "celsius"
@@ -1221,14 +1224,17 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output =
+        let inference_response_tool_call =
             InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.name, Some("get_temperature".to_string()));
-        assert_eq!(tool_call_output.arguments, None);
-        assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.raw_name, "get_temperature");
         assert_eq!(
-            tool_call_output.raw_arguments,
+            inference_response_tool_call.name,
+            Some("get_temperature".to_string())
+        );
+        assert_eq!(inference_response_tool_call.arguments, None);
+        assert_eq!(inference_response_tool_call.id, "321");
+        assert_eq!(inference_response_tool_call.raw_name, "get_temperature");
+        assert_eq!(
+            inference_response_tool_call.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}"
         );
 
@@ -1238,14 +1244,14 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output =
+        let inference_response_tool_call =
             InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.name, None);
-        assert_eq!(tool_call_output.arguments, None);
-        assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.raw_name, "not_get_weather");
+        assert_eq!(inference_response_tool_call.name, None);
+        assert_eq!(inference_response_tool_call.arguments, None);
+        assert_eq!(inference_response_tool_call.id, "321");
+        assert_eq!(inference_response_tool_call.raw_name, "not_get_weather");
         assert_eq!(
-            tool_call_output.raw_arguments,
+            inference_response_tool_call.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
         );
 
@@ -1272,20 +1278,23 @@ mod tests {
             arguments: "{\"location\": \"Lucky Dog\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output =
+        let inference_response_tool_call =
             InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.raw_name, "establish_campground");
         assert_eq!(
-            tool_call_output.raw_arguments,
+            inference_response_tool_call.raw_name,
+            "establish_campground"
+        );
+        assert_eq!(
+            inference_response_tool_call.raw_arguments,
             "{\"location\": \"Lucky Dog\"}"
         );
-        assert_eq!(tool_call_output.id, "321");
+        assert_eq!(inference_response_tool_call.id, "321");
         assert_eq!(
-            tool_call_output.name,
+            inference_response_tool_call.name,
             Some("establish_campground".to_string())
         );
         assert_eq!(
-            tool_call_output.arguments,
+            inference_response_tool_call.arguments,
             Some(json!({"location": "Lucky Dog"}))
         );
     }
