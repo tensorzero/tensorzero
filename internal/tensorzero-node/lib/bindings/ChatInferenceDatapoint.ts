@@ -7,6 +7,7 @@ import type { ToolChoice } from "./ToolChoice";
 
 /**
  * Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
+ * This one should be used in all public interfaces.
  */
 export type ChatInferenceDatapoint = {
   dataset_name: string;
@@ -26,21 +27,21 @@ export type ChatInferenceDatapoint = {
   /**
    * Names of static tools (from function config) to use. If None, all static tools are available.
    */
-  allowed_tools: Array<string> | null;
+  allowed_tools?: Array<string>;
   /**
    * Additional tools provided at runtime (not in function config)
    */
-  additional_tools: Array<Tool> | null;
+  additional_tools?: Array<Tool>;
   /**
    * Override the function's tool choice strategy
    */
-  tool_choice: ToolChoice | null;
+  tool_choice?: ToolChoice;
   /**
    * Override whether parallel tool calls are enabled
    */
-  parallel_tool_calls: boolean | null;
+  parallel_tool_calls?: boolean;
   /**
    * Provider-specific tool configurations (not persisted to database)
    */
-  provider_tools: Array<ProviderTool> | null;
+  provider_tools?: Array<ProviderTool>;
 };

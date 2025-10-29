@@ -160,10 +160,12 @@ export function preparePlaygroundInferenceRequest(
     input,
     functionName,
     variant: variantInferenceInfo.variant,
-    tool_params:
-      datapoint?.type === "chat"
-        ? (datapoint.tool_params ?? undefined)
-        : undefined,
+    allowed_tools: datapoint?.type === "chat" ? datapoint.allowed_tools : null,
+    additional_tools:
+      datapoint?.type === "chat" ? datapoint.additional_tools : null,
+    tool_choice: datapoint?.type === "chat" ? datapoint.tool_choice : null,
+    parallel_tool_calls:
+      datapoint?.type === "chat" ? datapoint.parallel_tool_calls : null,
     output_schema: datapoint?.type === "json" ? datapoint.output_schema : null,
     // The default is write_only but we do off in the playground
     cache_options: {

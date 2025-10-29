@@ -10,7 +10,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
  * Represents an inference that has been prepared for fine-tuning.
  * This is constructed by rendering a StoredInference with a variant for messages
  * and by resolving all network resources (e.g. images).
- * This is a wire type - it uses ToolCallConfigWire and has Python/TypeScript bindings.
+ * This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
  */
 export type RenderedSample = {
   function_name: string;
@@ -21,7 +21,7 @@ export type RenderedSample = {
   dispreferred_outputs: Array<Array<ContentBlockChatOutput>>;
   episode_id: string | null;
   inference_id: string | null;
-  tool_params: DynamicToolParams | null;
+  tool_params: DynamicToolParams;
   output_schema: JsonValue | null;
   tags: { [key in string]?: string };
 };

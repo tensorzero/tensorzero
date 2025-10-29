@@ -483,6 +483,7 @@ pub struct ToolCallConfigDatabaseInsert {
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
+#[ts(optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DynamicToolParams {
     /// Names of static tools (from function config) to use. If None, all static tools are available.

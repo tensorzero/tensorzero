@@ -16,6 +16,8 @@ import type {
   ResolvedTomlPath,
   ChatTemplates,
   StaticToolConfig,
+  Tool,
+  ToolChoice,
 } from "tensorzero-node";
 import type {
   InputMessageContent as TensorZeroContent,
@@ -38,7 +40,6 @@ import type {
   StoredInput as TensorZeroStoredInput,
   StoredInputMessage as TensorZeroStoredInputMessage,
   StoredInputMessageContent as TensorZeroStoredInputMessageContent,
-  DynamicToolParams,
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "tensorzero-node";
@@ -304,8 +305,10 @@ interface ClickHouseDatapointActionArgs {
   source: "clickhouse_datapoint";
   input: DisplayInput;
   functionName: string;
-  // Optional fields for json / chat datapoints
-  tool_params?: DynamicToolParams;
+  allowed_tools?: string[] | null;
+  additional_tools?: Array<Tool> | null;
+  tool_choice?: ToolChoice | null;
+  parallel_tool_calls?: boolean | null;
   output_schema?: JsonValue;
   variant?: string;
   cache_options: CacheParamsOptions;
@@ -365,11 +368,6 @@ export function prepareInferenceActionRequest(
     },
     include_original_response: false,
     internal_dynamic_variant_config: null,
-    allowed_tools: null,
-    additional_tools: null,
-    tool_choice: null,
-    parallel_tool_calls: null,
-    provider_tools: null,
   };
 
   // Prepare request based on source and function type
@@ -381,12 +379,9 @@ export function prepareInferenceActionRequest(
     return { ...baseParams, ...defaultRequest };
   } else if (args.source === "clickhouse_datapoint") {
     // Extract tool parameters from the ClickHouse datapoint args
-    const tool_choice = args.tool_params?.tool_choice;
-    const parallel_tool_calls = args.tool_params?.parallel_tool_calls;
     const dynamicVariantInfo = args.editedVariantInfo
       ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
       : null;
-    const additional_tools = args.tool_params?.additional_tools ?? null;
 
     return {
       ...baseParams,
@@ -394,9 +389,10 @@ export function prepareInferenceActionRequest(
       input: resolvedInputToClientInput(args.input),
       variant_name: args.variant || null,
       output_schema: args.output_schema || null,
-      tool_choice: tool_choice || null,
-      parallel_tool_calls: parallel_tool_calls || null,
-      additional_tools,
+      tool_choice: args.tool_choice || undefined,
+      parallel_tool_calls: args.parallel_tool_calls || undefined,
+      additional_tools: args.additional_tools || undefined,
+      allowed_tools: args.allowed_tools || undefined,
       cache_options: args.cache_options,
       internal_dynamic_variant_config: dynamicVariantInfo,
     };
@@ -436,7 +432,7 @@ function prepareDefaultFunctionRequest(
       model_name: selectedVariant,
       input: clientInput,
       tool_choice: tool_choice,
-      parallel_tool_calls: parallel_tool_calls,
+      parallel_tool_calls: parallel_tool_calls || undefined,
       // We need to add all tools as additional for the default function
       additional_tools: tools_available,
     };
