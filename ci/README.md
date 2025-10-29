@@ -23,7 +23,7 @@ It reads the job statuses from all of its dependencies, and fails if any of thos
 In particular, this invokes the live merge-queue-only tests as a nested workflow (run-merge-queue-checks) when we're
 inside the merge queue, and skips run-merge-queue-checks when we're in PR ci.
 
-The `merge-checks-buildkite` status is repoted in two places:
+The `merge-checks-buildkite` status is reported in two places:
 * From Buildkite, via an external Github integration
 * From `dummy.yml`, via a dummy job that runs in PR CI only, and always succeeds when it *does* run.
 
