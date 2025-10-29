@@ -27,6 +27,7 @@ http-body = "1.0.1"
 pin-project = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }
+tensorzero-auth = { path = "../internal/tensorzero-auth" }
 
 [lints]
 workspace = true
@@ -38,8 +39,9 @@ default = []
 [dev-dependencies]
 reqwest.workspace = true
 tempfile = "3.21.0"
-tensorzero = { path = "../clients/rust" }
+tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
 tracing-test = "0.2"
 serde_json = { workspace = true }
 reqwest-eventsource = { workspace = true }
 futures = { workspace = true }
+secrecy = { workspace = true }
