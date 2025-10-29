@@ -172,16 +172,10 @@ impl InferenceProvider for AWSBedrockProvider {
             get_raw_response,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
-        // We need to use the `aws_http_client::Client` wrapper type, which currently
-        // doesn't work with the `TensorzeroHttpClient` type.
-        // This causes us to lose out on things like connection pooling and outgoing OTEL headers.
-        // TODO: make this use `TensorzeroHttpClient`
         let new_config = self
             .base_config
             .clone()
-            .http_client(super::aws_http_client::Client::new(
-                http_client.dangerous_get_fallback_client().clone(),
-            ));
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
         let start_time = Instant::now();
         let output = bedrock_request
             .customize()
@@ -320,16 +314,10 @@ impl InferenceProvider for AWSBedrockProvider {
             get_raw_response,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
-        // We need to use the `aws_http_client::Client` wrapper type, which currently
-        // doesn't work with the `TensorzeroHttpClient` type.
-        // This causes us to lose out on things like connection pooling and outgoing OTEL headers.
-        // TODO: make this use `TensorzeroHttpClient`
         let new_config = self
             .base_config
             .clone()
-            .http_client(super::aws_http_client::Client::new(
-                http_client.dangerous_get_fallback_client().clone(),
-            ));
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
 
         let start_time = Instant::now();
         let stream = bedrock_request
