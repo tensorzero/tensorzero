@@ -8,10 +8,12 @@ use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::validate_dataset_name;
+use crate::endpoints::feedback::{
+    validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
+};
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::{FetchContext, JsonInferenceOutput};
-use crate::jsonschema_util::StaticJSONSchema;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -37,8 +39,26 @@ pub async fn create_datapoints_handler(
 /// and inserts the new datapoints into ClickHouse.
 ///
 /// Returns an error if there are no datapoints, or if validation fails.
-async fn create_datapoints(
+pub async fn create_datapoints(
     app_state: &AppStateData,
+    dataset_name: &str,
+    request: CreateDatapointsRequest,
+) -> Result<CreateDatapointsResponse, Error> {
+    create_datapoints_impl(
+        &app_state.config,
+        &app_state.http_client,
+        &app_state.clickhouse_connection_info,
+        dataset_name,
+        request,
+    )
+    .await
+}
+
+/// Internal implementation that can be called from legacy code.
+pub async fn create_datapoints_impl(
+    config: &Config,
+    http_client: &crate::http::TensorzeroHttpClient,
+    clickhouse: &crate::db::clickhouse::ClickHouseConnectionInfo,
     dataset_name: &str,
     request: CreateDatapointsRequest,
 ) -> Result<CreateDatapointsResponse, Error> {
@@ -51,8 +71,8 @@ async fn create_datapoints(
     }
 
     let fetch_context = FetchContext {
-        client: &app_state.http_client,
-        object_store_info: &app_state.config.object_store_info,
+        client: http_client,
+        object_store_info: &config.object_store_info,
     };
 
     // Build datapoint inserts
@@ -64,14 +84,14 @@ async fn create_datapoints(
         match datapoint_request {
             CreateDatapointRequest::Chat(chat_request) => {
                 let (insert, id) =
-                    prepare_chat_create(&app_state.config, &fetch_context, dataset_name, chat_request)
+                    prepare_chat_create(config, &fetch_context, dataset_name, chat_request)
                         .await?;
                 datapoints_to_insert.push(DatapointInsert::Chat(insert));
                 ids.push(id);
             }
             CreateDatapointRequest::Json(json_request) => {
                 let (insert, id) =
-                    prepare_json_create(&app_state.config, &fetch_context, dataset_name, json_request)
+                    prepare_json_create(config, &fetch_context, dataset_name, json_request)
                         .await?;
                 datapoints_to_insert.push(DatapointInsert::Json(insert));
                 ids.push(id);
@@ -80,10 +100,7 @@ async fn create_datapoints(
     }
 
     // Insert all datapoints
-    app_state
-        .clickhouse_connection_info
-        .insert_datapoints(&datapoints_to_insert)
-        .await?;
+    clickhouse.insert_datapoints(&datapoints_to_insert).await?;
 
     Ok(CreateDatapointsResponse { ids })
 }
@@ -107,27 +124,51 @@ async fn prepare_chat_create(
 
     // Validate and convert input
     function_config.validate_input(&request.input)?;
-    let stored_input = request
+    let resolved_input = request
         .input
         .into_lazy_resolved_input(FetchContext {
             client: fetch_context.client,
             object_store_info: fetch_context.object_store_info,
         })?
-        .into_stored_input(fetch_context.object_store_info)
+        .resolve()
+        .await?;
+    let stored_input = resolved_input.into_stored_input()?;
+
+    // Prepare the tool config
+    let tool_config = function_config.prepare_tool_config(request.dynamic_tool_params, &config.tools)?;
+    let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(tool_config.clone().unwrap_or_default());
+
+    // Validate and parse output if provided
+    let output = if let Some(output_value) = request.output {
+        let validated_output = validate_parse_demonstration(
+            &function_config,
+            &output_value,
+            dynamic_demonstration_info,
+        )
         .await?;
 
+        let DemonstrationOutput::Chat(output) = validated_output else {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "Expected chat output from validate_parse_demonstration".to_string(),
+            }));
+        };
+
+        Some(output)
+    } else {
+        None
+    };
+
     let id = Uuid::now_v7();
-    let name = request.metadata.as_ref().and_then(|m| m.name.clone()).flatten();
 
     let insert = ChatInferenceDatapointInsert {
         dataset_name: dataset_name.to_string(),
         function_name: request.function_name,
-        name,
+        name: request.name,
         id,
         episode_id: request.episode_id,
         input: stored_input,
-        output: request.output,
-        tool_params: request.tool_params,
+        output,
+        tool_params: tool_config.as_ref().map(|x| x.clone().into()),
         tags: request.tags,
         auxiliary: String::new(),
         staled_at: None,
@@ -146,7 +187,7 @@ async fn prepare_json_create(
 ) -> Result<(JsonInferenceDatapointInsert, Uuid), Error> {
     // Validate function exists and is a JSON function
     let function_config = config.get_function(&request.function_name)?;
-    let FunctionConfig::Json(_) = &**function_config else {
+    let FunctionConfig::Json(json_function_config) = &**function_config else {
         return Err(Error::new(ErrorDetails::InvalidRequest {
             message: format!(
                 "Function '{}' is not configured as a JSON function",
@@ -157,49 +198,58 @@ async fn prepare_json_create(
 
     // Validate and convert input
     function_config.validate_input(&request.input)?;
-    let stored_input = request
+    let resolved_input = request
         .input
         .into_lazy_resolved_input(FetchContext {
             client: fetch_context.client,
             object_store_info: fetch_context.object_store_info,
         })?
-        .into_stored_input(fetch_context.object_store_info)
+        .resolve()
+        .await?;
+    let stored_input = resolved_input.into_stored_input()?;
+
+    // Determine the output schema (use provided or default to function's schema)
+    let output_schema = request
+        .output_schema
+        .unwrap_or_else(|| json_function_config.output_schema.value.clone());
+    let dynamic_demonstration_info = DynamicDemonstrationInfo::Json(output_schema.clone());
+
+    // Validate and parse output if provided
+    let output = if let Some(output_value) = request.output {
+        let validated_output = validate_parse_demonstration(
+            &function_config,
+            &output_value,
+            dynamic_demonstration_info,
+        )
         .await?;
 
-    // Validate output against schema if provided and convert to JsonInferenceOutput
-    let output = if let Some(output_value) = request.output {
-        let schema = StaticJSONSchema::from_value(request.output_schema.clone()).map_err(|e| {
-            Error::new(ErrorDetails::InvalidRequest {
-                message: format!("Invalid output schema: {}", e),
-            })
-        })?;
-
-        schema.validate(&output_value).map_err(|e| {
-            Error::new(ErrorDetails::InvalidRequest {
-                message: format!("Output does not match schema: {}", e),
-            })
-        })?;
+        let DemonstrationOutput::Json(output) = validated_output else {
+            return Err(Error::new(ErrorDetails::InternalError {
+                message: "Expected JSON output from validate_parse_demonstration".to_string(),
+            }));
+        };
 
         Some(JsonInferenceOutput {
-            raw: None,
-            parsed: Some(output_value),
+            raw: output
+                .get("raw")
+                .and_then(|v| v.as_str().map(str::to_string)),
+            parsed: output.get("parsed").cloned(),
         })
     } else {
         None
     };
 
     let id = Uuid::now_v7();
-    let name = request.metadata.as_ref().and_then(|m| m.name.clone()).flatten();
 
     let insert = JsonInferenceDatapointInsert {
         dataset_name: dataset_name.to_string(),
         function_name: request.function_name,
-        name,
+        name: request.name,
         id,
         episode_id: request.episode_id,
         input: stored_input,
         output,
-        output_schema: request.output_schema,
+        output_schema,
         tags: request.tags,
         auxiliary: String::new(),
         staled_at: None,

@@ -16,6 +16,10 @@ use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, GetDatapointParams,
     JsonInferenceDatapointInsert,
 };
+use crate::endpoints::datasets::v1::types::{
+    CreateChatDatapointRequest, CreateDatapointRequest, CreateDatapointsRequest,
+    CreateJsonDatapointRequest,
+};
 use crate::endpoints::feedback::{
     validate_parse_demonstration, DemonstrationOutput, DynamicDemonstrationInfo,
 };
@@ -574,13 +578,10 @@ pub async fn insert_datapoint(
     clickhouse: &ClickHouseConnectionInfo,
 ) -> Result<Vec<Uuid>, Error> {
     validate_dataset_name(&dataset_name)?;
-    let mut chat_datapoints = Vec::with_capacity(params.datapoints.len());
-    let mut json_datapoints = Vec::with_capacity(params.datapoints.len());
-    let fetch_context = FetchContext {
-        client: http_client,
-        object_store_info: &config.object_store_info,
-    };
-    let mut datapoint_ids = Vec::with_capacity(params.datapoints.len());
+
+    // Convert legacy datapoints to v1 request format
+    let mut v1_datapoints = Vec::with_capacity(params.datapoints.len());
+
     for (i, datapoint) in params.datapoints.into_iter().enumerate() {
         let function_name = datapoint
             .get("function_name")
@@ -590,11 +591,13 @@ pub async fn insert_datapoint(
                     message: format!("Expected function name for datapoint {i}"),
                 })
             })?;
+
         let function_config = config.get_function(function_name).map_err(|e| {
             Error::new(ErrorDetails::InvalidRequest {
                 message: format!("Failed to get function config for datapoint {i}: {e}"),
             })
         })?;
+
         match &**function_config {
             FunctionConfig::Chat(_) => {
                 let chat: ChatDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
@@ -602,192 +605,52 @@ pub async fn insert_datapoint(
                         message: format!("Failed to deserialize chat datapoint {i}: {e}"),
                     })
                 })?;
-                // Validate the input
-                function_config.validate_input(&chat.input).map_err(|e| {
-                    Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to validate chat input for datapoint {i}: {e}"),
-                    })
-                })?;
-                let resolved_input = chat
-                    .input
-                    .into_lazy_resolved_input(fetch_context)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InternalError {
-                            message: format!(
-                                "Failed to lazily resolve chat input for datapoint {i}: {e}"
-                            ),
-                        })
-                    })?
-                    .resolve()
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InternalError {
-                            message: format!("Failed to resolve chat input for datapoint {i}: {e}"),
-                        })
-                    })?;
-                // Prepare the tool config
-                let tool_config =
-                    function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools)?;
-                let dynamic_demonstration_info =
-                    DynamicDemonstrationInfo::Chat(tool_config.clone().unwrap_or_default());
-                // Validate the output
-                let output = if let Some(output) = chat.output {
-                    let validated_output = validate_parse_demonstration(
-                        &function_config,
-                        &serde_json::to_value(output).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Failed to serialize chat output for datapoint {i}: {e}"
-                                ),
-                            })
-                        })?,
-                        dynamic_demonstration_info,
-                    )
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InvalidRequest {
-                            message: format!(
-                                "Failed to validate chat output for datapoint {i}: {e}"
-                            ),
-                        })
-                    })?;
-                    let DemonstrationOutput::Chat(output) = validated_output else {
-                        return Err(Error::new(ErrorDetails::InternalError {
-                            message: "Expected chat output from validate_parse_demonstration"
-                                .to_string(),
-                        }));
-                    };
-                    Some(output)
-                } else {
-                    None
-                };
-                let datapoint_id = Uuid::now_v7();
-                datapoint_ids.push(datapoint_id);
-                chat_datapoints.push(ChatInferenceDatapoint {
-                    dataset_name: dataset_name.clone(),
+
+                v1_datapoints.push(CreateDatapointRequest::Chat(CreateChatDatapointRequest {
                     function_name: chat.function_name,
                     name: chat.name,
-                    id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input.into_stored_input()?,
-                    output,
-                    tool_params: tool_config.as_ref().map(|x| x.clone().into()),
+                    input: chat.input,
+                    output: chat.output,
+                    dynamic_tool_params: chat.dynamic_tool_params,
                     tags: chat.tags,
-                    auxiliary: String::new(),
-                    is_deleted: false,
-                    is_custom: true,
-                    source_inference_id: None,
-                    staled_at: None,
-                    // Ignored during insert.
-                    updated_at: Utc::now().to_string(),
-                });
+                }));
             }
-            FunctionConfig::Json(json_function_config) => {
+            FunctionConfig::Json(_) => {
                 let json: JsonDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Failed to deserialize json datapoint {i}: {e}"),
                     })
                 })?;
-                // Validate the input
-                function_config.validate_input(&json.input).map_err(|e| {
-                    Error::new(ErrorDetails::InvalidRequest {
-                        message: format!("Failed to validate input for datapoint {i}: {e}"),
-                    })
-                })?;
-                let resolved_input = json
-                    .input
-                    .into_lazy_resolved_input(fetch_context)?
-                    .resolve()
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InternalError {
-                            message: format!("Failed to resolve input for datapoint {i}: {e}"),
-                        })
-                    })?;
-                // Validate the outputs against the output schema
-                let output_schema = json
-                    .output_schema
-                    .unwrap_or_else(|| json_function_config.output_schema.value.clone());
-                let dynamic_demonstration_info =
-                    DynamicDemonstrationInfo::Json(output_schema.clone());
-                let output = if let Some(output) = json.output {
-                    let validated_output = validate_parse_demonstration(
-                        &function_config,
-                        &serde_json::to_value(output).map_err(|e| {
-                            Error::new(ErrorDetails::Serialization {
-                                message: format!(
-                                    "Failed to serialize json output for datapoint {i}: {e}"
-                                ),
-                            })
-                        })?,
-                        dynamic_demonstration_info,
-                    )
-                    .await
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InvalidRequest {
-                            message: format!(
-                                "Failed to validate chat output for datapoint {i}: {e}"
-                            ),
-                        })
-                    })?;
-                    let DemonstrationOutput::Json(output) = validated_output else {
-                        return Err(Error::new(ErrorDetails::InternalError {
-                            message: "Expected valid JSON output from validate_parse_demonstration"
-                                .to_string(),
-                        }));
-                    };
-                    Some(JsonInferenceOutput {
-                        raw: output
-                            .get("raw")
-                            .and_then(|v| v.as_str().map(str::to_string)),
-                        parsed: output.get("parsed").cloned(),
-                    })
-                } else {
-                    None
-                };
-                let datapoint_id = Uuid::now_v7();
-                datapoint_ids.push(datapoint_id);
-                let datapoint = JsonInferenceDatapoint {
-                    dataset_name: dataset_name.clone(),
+
+                v1_datapoints.push(CreateDatapointRequest::Json(CreateJsonDatapointRequest {
                     function_name: json.function_name,
                     name: json.name,
-                    id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input.into_stored_input()?,
-                    output,
-                    output_schema,
+                    input: json.input,
+                    output: json.output,
+                    output_schema: json.output_schema,
                     tags: json.tags,
-                    auxiliary: String::new(),
-                    is_deleted: false,
-                    is_custom: true,
-                    source_inference_id: None,
-                    staled_at: None,
-                    // Ignored during insert.
-                    updated_at: Utc::now().to_string(),
-                };
-                json_datapoints.push(datapoint);
+                }));
             }
         }
     }
 
-    // Convert to DatapointInsert enum and write all at once
-    let mut all_datapoints = Vec::with_capacity(chat_datapoints.len() + json_datapoints.len());
-    all_datapoints.extend(
-        chat_datapoints
-            .into_iter()
-            .map(|dp| DatapointInsert::Chat(dp.into())),
-    );
-    all_datapoints.extend(
-        json_datapoints
-            .into_iter()
-            .map(|dp| DatapointInsert::Json(dp.into())),
-    );
+    // Delegate to the v1 implementation
+    let v1_request = CreateDatapointsRequest {
+        datapoints: v1_datapoints,
+    };
 
-    if !all_datapoints.is_empty() {
-        clickhouse.insert_datapoints(&all_datapoints).await?;
-    }
+    let response = crate::endpoints::datasets::v1::create_datapoints_impl(
+        config,
+        http_client,
+        clickhouse,
+        &dataset_name,
+        v1_request,
+    )
+    .await?;
 
-    Ok(datapoint_ids)
+    Ok(response.ids)
 }
 
 #[derive(Debug, Deserialize)]

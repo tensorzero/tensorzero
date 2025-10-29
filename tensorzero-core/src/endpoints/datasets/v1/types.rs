@@ -8,7 +8,7 @@ use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::{DynamicToolParams, ToolCallConfigDatabaseInsert};
 
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -291,27 +291,30 @@ pub struct CreateChatDatapointRequest {
 
     /// Episode ID that the datapoint belongs to. Optional.
     #[serde(default)]
-    #[cfg_attr(test, ts(optional))]
     pub episode_id: Option<Uuid>,
 
     /// Input to the function. Required.
     pub input: Input,
 
     /// Chat datapoint output. Optional.
+    /// This can be provided as either a string or a list of content blocks.
+    /// If provided, it will be validated against the function's output schema.
     #[serde(default)]
-    pub output: Option<Vec<ContentBlockChatOutput>>,
+    pub output: Option<Value>,
 
-    /// Tool parameters for the datapoint. Optional.
-    #[serde(default)]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    /// Dynamic tool parameters for the datapoint. Optional.
+    /// This is flattened into the request, so tool-related fields like `tools`, `tool_choice`, etc.
+    /// can be specified at the top level of the request.
+    #[serde(flatten)]
+    pub dynamic_tool_params: DynamicToolParams,
 
     /// Tags associated with this datapoint. Optional.
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
 
-    /// Metadata fields. Optional.
+    /// Human-readable name for the datapoint. Optional.
     #[serde(default)]
-    pub metadata: Option<DatapointMetadataUpdate>,
+    pub name: Option<String>,
 }
 
 /// A request to create a JSON datapoint.
@@ -330,19 +333,22 @@ pub struct CreateJsonDatapointRequest {
     pub input: Input,
 
     /// JSON datapoint output. Optional.
+    /// If provided, it will be validated against the output_schema (or the function's output schema if not provided).
     #[serde(default)]
     pub output: Option<Value>,
 
-    /// The output schema of the JSON datapoint. Required.
-    pub output_schema: Value,
+    /// The output schema of the JSON datapoint. Optional.
+    /// If not provided, the function's output schema will be used.
+    #[serde(default)]
+    pub output_schema: Option<Value>,
 
     /// Tags associated with this datapoint. Optional.
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
 
-    /// Metadata fields. Optional.
+    /// Human-readable name for the datapoint. Optional.
     #[serde(default)]
-    pub metadata: Option<DatapointMetadataUpdate>,
+    pub name: Option<String>,
 }
 
 /// Request to delete datapoints from a dataset.
