@@ -207,6 +207,14 @@ class RenderedSample:
     output_schema: Optional[Dict[str, Any]]
     dispreferred_outputs: List[ChatInferenceOutput] = []
     tags: Dict[str, str]
+    @property
+    def allowed_tools(self) -> Optional[List[str]]: ...
+    @property
+    def additional_tools(self) -> Optional[List[Any]]: ...
+    @property
+    def parallel_tool_calls(self) -> Optional[bool]: ...
+    @property
+    def provider_tools(self) -> Optional[List[Any]]: ...
 
 @final
 class OptimizationJobHandle:
