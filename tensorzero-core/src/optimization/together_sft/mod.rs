@@ -209,21 +209,21 @@ pub struct TogetherSupervisedRow<'a> {
 
 impl<'a> TogetherSupervisedRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        let tools = match &inference.tool_params {
-            Some(tool_params) => {
-                if tool_params.parallel_tool_calls.unwrap_or_default() {
-                    return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
-                        message: "Parallel tool calls are not supported for Together".to_string(),
-                    }));
-                }
-                tool_params
-                    .additional_tools
-                    .as_ref()
-                    .map(|tools| tools.iter().map(Into::into).collect())
-                    .unwrap_or_default()
-            }
-            None => vec![],
-        };
+        if inference
+            .tool_params
+            .parallel_tool_calls
+            .unwrap_or_default()
+        {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "Parallel tool calls are not supported for Together".to_string(),
+            }));
+        }
+        let tools = inference
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| tools.iter().map(Into::into).collect())
+            .unwrap_or_default();
         let mut messages = prepare_together_messages(
             inference.system_input.as_deref(),
             &inference.messages,

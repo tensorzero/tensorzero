@@ -1268,7 +1268,11 @@ impl Datapoint {
     #[getter]
     pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.tool_params.additional_tools.clone().into_bound_py_any(py),
+            Datapoint::Chat(datapoint) => datapoint
+                .tool_params
+                .additional_tools
+                .clone()
+                .into_bound_py_any(py),
             Datapoint::Json(_) => Ok(py.None().into_bound(py)),
         }
     }
@@ -1286,7 +1290,11 @@ impl Datapoint {
     #[getter]
     pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.tool_params.provider_tools.clone().into_bound_py_any(py),
+            Datapoint::Chat(datapoint) => datapoint
+                .tool_params
+                .provider_tools
+                .clone()
+                .into_bound_py_any(py),
             Datapoint::Json(_) => Ok(py.None().into_bound(py)),
         }
     }
@@ -1295,7 +1303,9 @@ impl Datapoint {
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
             Datapoint::Chat(_) => py.None().into_bound(py),
-            Datapoint::Json(datapoint) => serialize_to_dict(py, &datapoint.output_schema)?.into_bound(py),
+            Datapoint::Json(datapoint) => {
+                serialize_to_dict(py, &datapoint.output_schema)?.into_bound(py)
+            }
         })
     }
 

@@ -330,7 +330,6 @@ pub async fn test_render_samples_normal() {
 
     // Check other fields
     assert!(first_inference.output.as_ref().unwrap().is_empty());
-    assert!(first_inference.tool_params.is_some());
     assert!(first_inference.output_schema.is_none());
 
     // Check the second rendered inference
@@ -369,7 +368,6 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "{}");
     // Check other fields
-    assert!(second_inference.tool_params.is_none());
     assert!(second_inference.output_schema.is_some());
 
     // Check the third rendered inference
@@ -411,7 +409,6 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "Hello, world!");
     // Check other fields
-    assert!(third_inference.tool_params.is_some());
     assert!(third_inference.output_schema.is_none());
 
     // Check the fourth rendered inference
@@ -445,7 +442,6 @@ pub async fn test_render_samples_normal() {
     assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
-    assert!(fourth_inference.tool_params.is_some());
     assert!(fourth_inference.output_schema.is_none());
 }
 
@@ -546,7 +542,6 @@ pub async fn test_render_samples_template_no_schema() {
 
     // Check other fields
     assert!(first_inference.output.as_ref().unwrap().is_empty());
-    assert!(first_inference.tool_params.is_some());
     assert!(first_inference.output_schema.is_none());
 }
 
@@ -891,7 +886,6 @@ pub async fn test_render_datapoints_normal() {
 
     // Check other fields
     assert!(first_sample.output.as_ref().unwrap().is_empty());
-    assert!(first_sample.tool_params.is_some());
     assert!(first_sample.output_schema.is_none());
 
     // Check the second rendered sample (json_success)
@@ -923,7 +917,6 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(output_text.text, "{}");
 
     // Check other fields
-    assert!(second_sample.tool_params.is_none());
     assert!(second_sample.output_schema.is_some());
 
     // Check the third rendered sample (weather_helper with tool call)
@@ -958,7 +951,6 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(tool_call.arguments, Some(json!({"location": "Tokyo"})));
 
     // Check other fields
-    assert!(third_sample.tool_params.is_some());
     assert!(third_sample.output_schema.is_none());
 
     // Check the fourth rendered sample (basic_test with image)
@@ -992,7 +984,6 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(fourth_sample.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
-    assert!(fourth_sample.tool_params.is_some());
     assert!(fourth_sample.output_schema.is_none());
 }
 
@@ -1098,6 +1089,5 @@ pub async fn test_render_datapoints_template_no_schema() {
 
     // Check other fields
     assert!(first_sample.output.as_ref().unwrap().is_empty());
-    assert!(first_sample.tool_params.is_some());
     assert!(first_sample.output_schema.is_none());
 }

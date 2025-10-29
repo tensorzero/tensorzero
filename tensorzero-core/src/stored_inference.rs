@@ -163,7 +163,7 @@ impl StoredInference {
 impl StoredInference {
     #[new]
     #[pyo3(signature = (r#type, function_name, variant_name, input, output, episode_id, inference_id, timestamp, output_schema=None, dispreferred_outputs=None, tags=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, provider_tools=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     pub fn new(
         py: Python<'_>,
         r#type: String,
@@ -238,7 +238,7 @@ impl StoredInference {
             .extract::<String>()?;
 
         serde_json::from_str(&json_str).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Failed to deserialize: {}", e))
+            pyo3::exceptions::PyValueError::new_err(format!("Failed to deserialize: {e}"))
         })
     }
 
@@ -363,7 +363,11 @@ impl StoredInference {
     #[getter]
     pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            StoredInference::Chat(example) => example.tool_params.additional_tools.clone().into_bound_py_any(py),
+            StoredInference::Chat(example) => example
+                .tool_params
+                .additional_tools
+                .clone()
+                .into_bound_py_any(py),
             StoredInference::Json(_) => Ok(py.None().into_bound(py)),
         }
     }
@@ -381,7 +385,11 @@ impl StoredInference {
     #[getter]
     pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match self {
-            StoredInference::Chat(example) => example.tool_params.provider_tools.clone().into_bound_py_any(py),
+            StoredInference::Chat(example) => example
+                .tool_params
+                .provider_tools
+                .clone()
+                .into_bound_py_any(py),
             StoredInference::Json(_) => Ok(py.None().into_bound(py)),
         }
     }
@@ -669,7 +677,7 @@ pub enum StoredOutput {
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
-/// This is a wire type - it uses ToolCallConfigWire and has Python/TypeScript bindings.
+/// This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -683,7 +691,7 @@ pub struct RenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_params: Option<DynamicToolParams>,
+    pub tool_params: DynamicToolParams,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -724,7 +732,7 @@ pub struct LazyRenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_params: Option<DynamicToolParams>,
+    pub tool_params: DynamicToolParams,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -788,13 +796,36 @@ impl RenderedSample {
     }
 
     #[getter]
-    pub fn get_tool_params(&self) -> Option<DynamicToolParams> {
-        self.tool_params.clone()
+    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
     }
 
     #[getter]
-    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
+    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
+        self.tool_params.allowed_tools.clone()
+    }
+
+    #[getter]
+    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.tool_params
+            .additional_tools
+            .clone()
+            .into_bound_py_any(py)
+    }
+
+    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
+
+    #[getter]
+    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+        self.tool_params.parallel_tool_calls
+    }
+
+    #[getter]
+    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.tool_params
+            .provider_tools
+            .clone()
+            .into_bound_py_any(py)
     }
 
     #[getter]
@@ -902,8 +933,11 @@ pub async fn render_stored_sample<T: StoredSample>(
 
     // Convert tool_params from storage format to wire format, subtracting static tools
     let function_config = config.get_function(&function_name)?;
-    let dynamic_tool_params =
-        tool_params.map(|tp| function_config.database_insert_to_dynamic_tool_params(tp));
+    let dynamic_tool_params = tool_params
+        .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp))
+        // should default for JSON functions or functions with no tools to a default DynamicToolParams
+        // where everything is empty
+        .unwrap_or_default();
 
     Ok(RenderedSample {
         function_name,

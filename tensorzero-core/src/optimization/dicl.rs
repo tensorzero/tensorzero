@@ -476,32 +476,33 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
             }));
         }
         // Check if tools are available
-        if let Some(tool_params) = &example.tool_params {
-            let has_additional_tools = tool_params
+        let has_additional_tools = example
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| !tools.is_empty())
+            .unwrap_or(false);
+        let has_allowed_tools = example
+            .tool_params
+            .allowed_tools
+            .as_ref()
+            .map(|tools| !tools.is_empty())
+            .unwrap_or(false);
+
+        if has_additional_tools || has_allowed_tools {
+            let num_tools = example
+                .tool_params
                 .additional_tools
                 .as_ref()
-                .map(|tools| !tools.is_empty())
-                .unwrap_or(false);
-            let has_allowed_tools = tool_params
-                .allowed_tools
-                .as_ref()
-                .map(|tools| !tools.is_empty())
-                .unwrap_or(false);
-
-            if has_additional_tools || has_allowed_tools {
-                let num_tools = tool_params
-                    .additional_tools
-                    .as_ref()
-                    .map(std::vec::Vec::len)
-                    .unwrap_or(0);
-                return Err(Error::new(ErrorDetails::InvalidRequest {
+                .map(std::vec::Vec::len)
+                .unwrap_or(0);
+            return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "DICL optimization does not support tool calls. Training example {} contains {} available tools.",
                         i + 1,
                         num_tools
                     ),
                 }));
-            }
         }
 
         // Check stored_input messages for ToolCall or ToolResult content
@@ -1072,7 +1073,7 @@ mod tests {
             )])),
             episode_id: Some(Uuid::now_v7()),
             inference_id: Some(Uuid::now_v7()),
-            tool_params: None,
+            tool_params: DynamicToolParams::default(),
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -1081,13 +1082,13 @@ mod tests {
 
     fn create_test_rendered_sample_with_tools(tools: Vec<Tool>) -> RenderedSample {
         let mut sample = create_test_rendered_sample();
-        sample.tool_params = Some(DynamicToolParams {
+        sample.tool_params = DynamicToolParams {
             allowed_tools: None,
             additional_tools: Some(tools),
             tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: Some(true),
             provider_tools: None,
-        });
+        };
         sample
     }
 
@@ -1105,13 +1106,13 @@ mod tests {
         });
 
         // Also add empty tool params to make it realistic
-        sample.tool_params = Some(DynamicToolParams {
+        sample.tool_params = DynamicToolParams {
             allowed_tools: None,
             additional_tools: None,
             tool_choice: Some(ToolChoice::None),
             parallel_tool_calls: Some(false),
             provider_tools: None,
-        });
+        };
 
         sample
     }
@@ -1130,13 +1131,13 @@ mod tests {
         });
 
         // Also add empty tool params to make it realistic
-        sample.tool_params = Some(DynamicToolParams {
+        sample.tool_params = DynamicToolParams {
             allowed_tools: None,
             additional_tools: None,
             tool_choice: Some(ToolChoice::None),
             parallel_tool_calls: Some(false),
             provider_tools: None,
-        });
+        };
 
         sample
     }
