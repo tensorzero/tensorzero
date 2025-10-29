@@ -63,9 +63,10 @@ use tensorzero_core::{
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
-    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
-    InferenceStream, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
-    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    CreateDatapointsRequest, Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput,
+    InferenceParams, InferenceStream, LaunchOptimizationParams, ListInferencesParams,
+    OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -938,13 +939,14 @@ impl TensorZeroGateway {
             .iter()
             .map(|dp| deserialize_from_pyobj(this.py(), dp))
             .collect::<Result<Vec<_>, _>>()?;
-        let params = InsertDatapointParams { datapoints };
-        let fut = client.create_datapoints(dataset_name, params);
+        let request = CreateDatapointsRequest { datapoints };
+        let fut = client.create_datapoints(dataset_name, request);
         let self_module = PyModule::import(this.py(), "uuid")?;
         let uuid = self_module.getattr("UUID")?.unbind();
         let res =
             tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
         let uuids = res
+            .ids
             .iter()
             .map(|x| uuid.call(this.py(), (x.to_string(),), None))
             .collect::<Result<Vec<_>, _>>()?;
