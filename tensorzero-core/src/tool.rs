@@ -543,14 +543,21 @@ impl ToolCallConfigDatabaseInsert {
 #[ts(optional_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct DynamicToolParams {
-    /// Names of static tools (from function config) to use. If None, all static tools are available.
+    /// A subset of static tools configured for the function that the inference is allowed to use. Optional.
+    /// If not provided, all static tools are allowed.
     pub allowed_tools: Option<Vec<String>>,
-    /// Additional tools provided at runtime (not in function config)
+
+    /// Tools that the user provided at inference time (not in function config), in addition to the function-configured
+    /// tools, that are also allowed.
     pub additional_tools: Option<Vec<Tool>>,
-    /// Override the function's tool choice strategy
+    /// User-specified tool choice strategy. If provided during inference, it will override the function-configured tool choice.
+    /// Optional.
     pub tool_choice: Option<ToolChoice>,
-    /// Override whether parallel tool calls are enabled
+
+    /// Whether to use parallel tool calls in the inference. Optional.
+    /// If provided during inference, it will override the function-configured parallel tool calls.
     pub parallel_tool_calls: Option<bool>,
+
     /// Provider-specific tool configurations (not persisted to database)
     pub provider_tools: Option<Vec<ProviderTool>>,
 }

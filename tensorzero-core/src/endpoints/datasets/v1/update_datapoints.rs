@@ -19,7 +19,7 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input};
-use crate::jsonschema_util::DynamicJSONSchema;
+use crate::jsonschema_util::{DynamicJSONSchema, JsonSchemaRef};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -332,7 +332,11 @@ async fn prepare_json_update(
     // Validate the output against the output schema. If the output is invalid, we only store the raw output.
     if let Some(new_output) = update.output {
         updated_datapoint.output = match new_output {
-            Some(output) => Some(output.into_json_inference_output(&output_schema).await),
+            Some(output) => Some(
+                output
+                    .into_json_inference_output(JsonSchemaRef::Dynamic(&output_schema))
+                    .await,
+            ),
             None => None,
         };
     }
