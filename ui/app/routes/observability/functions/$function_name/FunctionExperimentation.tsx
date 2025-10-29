@@ -1,7 +1,6 @@
 import type {
   CumulativeFeedbackTimeSeriesPoint,
   FunctionConfig,
-  TrackAndStopResponse,
 } from "tensorzero-node";
 import {
   ExperimentationPieChart,
@@ -18,64 +17,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
   functionName: string;
-  trackAndStopState?: TrackAndStopResponse;
   feedbackTimeseries?: CumulativeFeedbackTimeSeriesPoint[];
-}
-
-function extractVariantWeights(
-  functionConfig: FunctionConfig,
-  trackAndStopState?: TrackAndStopResponse,
-): VariantWeight[] {
-  const experimentationConfig = functionConfig.experimentation;
-
-  let variantWeights: VariantWeight[];
-
-  if (experimentationConfig.type === "static_weights") {
-    // Extract weights from config and normalize to probabilities
-    const candidateVariants = experimentationConfig.candidate_variants;
-    variantWeights = Object.entries(candidateVariants)
-      .filter(([, weight]) => weight !== undefined)
-      .map(([variant_name, weight]) => ({
-        variant_name,
-        weight: weight!,
-      }))
-      .sort((a, b) => a.variant_name.localeCompare(b.variant_name));
-  } else if (experimentationConfig.type === "uniform") {
-    // Compute equal probabilities for all variants
-    const variantNames = Object.keys(functionConfig.variants);
-    const equalWeight = 1.0 / variantNames.length;
-    variantWeights = variantNames.map((variant_name) => ({
-      variant_name,
-      weight: equalWeight,
-    }));
-  } else if (experimentationConfig.type === "track_and_stop") {
-    // Extract display probabilities from track-and-stop response
-    // Always use the probabilities from computeTrackAndStopState()
-    if (!trackAndStopState?.display_probabilities) {
-      return [];
-    }
-
-    variantWeights = Object.entries(
-      trackAndStopState.display_probabilities,
-    ).map(([variant_name, weight]) => ({
-      variant_name,
-      weight,
-    }));
-  } else {
-    variantWeights = [];
-  }
-
-  // Sort alphabetically for consistent display order (affects pie chart segment order and reload stability)
-  return variantWeights.sort((a, b) =>
-    a.variant_name.localeCompare(b.variant_name),
-  );
+  variantSamplingProbabilities: Record<string, number>;
 }
 
 export const FunctionExperimentation = memo(function FunctionExperimentation({
   functionConfig,
   functionName,
-  trackAndStopState,
   feedbackTimeseries,
+  variantSamplingProbabilities,
 }: FunctionExperimentationProps) {
   const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
     "cumulative_feedback_time_granularity",
@@ -87,10 +37,15 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     return null;
   }
 
-  const variantWeights = extractVariantWeights(
-    functionConfig,
-    trackAndStopState,
-  );
+  // Convert the probabilities from the loader to VariantWeight format
+  const variantWeights: VariantWeight[] = Object.entries(
+    variantSamplingProbabilities,
+  )
+    .map(([variant_name, weight]) => ({
+      variant_name,
+      weight,
+    }))
+    .sort((a, b) => a.variant_name.localeCompare(b.variant_name));
 
   // Don't render if there are no variant weights
   if (variantWeights.length === 0) {

@@ -57,7 +57,6 @@ const {
   DatabaseClient: NativeDatabaseClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
-  computeTrackAndStopState,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -124,6 +123,14 @@ export class TensorZeroClient {
       await this.nativeClient.staleDataset(datasetName);
     return JSON.parse(staleDatasetString) as StaleDatasetResponse;
   }
+
+  async getVariantSamplingProbabilities(
+    functionName: string,
+  ): Promise<Record<string, number>> {
+    const probabilitiesString =
+      await this.nativeClient.getVariantSamplingProbabilities(functionName);
+    return JSON.parse(probabilitiesString) as Record<string, number>;
+  }
 }
 
 export default TensorZeroClient;
@@ -135,9 +142,6 @@ export async function getConfig(configPath: string | null): Promise<Config> {
 
 // Export quantiles array from migration_0035
 export { getQuantiles };
-
-// Export experimentation computation functions
-export { computeTrackAndStopState };
 
 interface RunEvaluationStreamingParams {
   gatewayUrl: string;

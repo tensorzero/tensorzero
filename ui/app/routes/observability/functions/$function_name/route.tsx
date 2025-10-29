@@ -39,9 +39,11 @@ import {
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
-import type { TimeWindow, TrackAndStopResponse } from "tensorzero-node";
-import { computeTrackAndStopState } from "tensorzero-node";
+import {
+  getNativeDatabaseClient,
+  getNativeTensorZeroClient,
+} from "~/utils/tensorzero/native_client.server";
+import type { TimeWindow } from "tensorzero-node";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -127,6 +129,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       })()
     : Promise.resolve(undefined);
 
+  // Get variant sampling probabilities from the gateway
+  const variantSamplingProbabilitiesPromise = (async () => {
+    try {
+      const tensorZeroClient = await getNativeTensorZeroClient();
+      return await tensorZeroClient.getVariantSamplingProbabilities(
+        function_name,
+      );
+    } catch (error) {
+      logger.error("Failed to get variant sampling probabilities:", error);
+      return {};
+    }
+  })();
+
   const [
     inferences,
     inference_bounds,
@@ -136,6 +151,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_counts,
     variant_throughput,
     feedback_timeseries,
+    variant_sampling_probabilities,
   ] = await Promise.all([
     inferencePromise,
     tableBoundsPromise,
@@ -145,49 +161,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantCountsPromise,
     variantThroughputPromise,
     feedbackTimeseriesPromise,
+    variantSamplingProbabilitiesPromise,
   ]);
-
-  // Compute track-and-stop state if needed
-  let track_and_stop_state: TrackAndStopResponse | undefined = undefined;
-
-  if (function_config.experimentation.type === "track_and_stop") {
-    try {
-      const dbClient = await getNativeDatabaseClient();
-      const experimentationConfig = function_config.experimentation;
-      const metric_config = config.metrics[experimentationConfig.metric];
-
-      if (metric_config) {
-        const feedback = await dbClient.getFeedbackByVariant({
-          metric_name: experimentationConfig.metric,
-          function_name,
-          variant_names: experimentationConfig.candidate_variants,
-        });
-
-        // Compute the track-and-stop state (includes sampling probabilities)
-        // Convert BigInt fields to numbers before JSON serialization
-        const stateJson = computeTrackAndStopState(
-          JSON.stringify({
-            candidate_variants: experimentationConfig.candidate_variants,
-            feedback: feedback.map((f) => ({
-              ...f,
-              count: Number(f.count),
-            })),
-            min_samples_per_variant: Number(
-              experimentationConfig.min_samples_per_variant,
-            ),
-            delta: experimentationConfig.delta,
-            epsilon: experimentationConfig.epsilon,
-            min_prob: experimentationConfig.min_prob,
-            metric_optimize: metric_config.optimize,
-          }),
-        );
-
-        track_and_stop_state = JSON.parse(stateJson);
-      }
-    } catch (error) {
-      logger.error("Failed to compute track-and-stop state:", error);
-    }
-  }
 
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
     let variant_config = function_config.variants[
@@ -241,8 +216,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_performances,
     variant_throughput,
     variant_counts: variant_counts_with_metadata,
-    track_and_stop_state,
     feedback_timeseries,
+    variant_sampling_probabilities,
   };
 }
 
@@ -256,8 +231,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_performances,
     variant_throughput,
     variant_counts,
-    track_and_stop_state,
     feedback_timeseries,
+    variant_sampling_probabilities,
   } = loaderData;
 
   const navigate = useNavigate();
@@ -337,8 +312,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             <FunctionExperimentation
               functionConfig={function_config}
               functionName={function_name}
-              trackAndStopState={track_and_stop_state}
               feedbackTimeseries={feedback_timeseries}
+              variantSamplingProbabilities={variant_sampling_probabilities}
             />
           </SectionLayout>
         )}
