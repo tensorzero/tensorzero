@@ -1,15 +1,22 @@
 /// A test-only struct that implements all mock ClickHouse queries. This allows us to use a single struct in tests that need to mock multiple traits.
 use async_trait::async_trait;
+use uuid::Uuid;
 
 use crate::config::Config;
-use crate::db::datasets::{DatapointInsert, DatasetQueries, MockDatasetQueries};
+use crate::db::datasets::{
+    AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
+    DatasetDetailRow, DatasetMetadata, DatasetQueries, DatasetQueryParams,
+    GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
+    GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries, StaleDatapointParams,
+};
 use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
+use crate::endpoints::datasets::Datapoint;
 use crate::error::Error;
 use crate::stored_inference::StoredInference;
 
 /// Mock struct that implements all traits on ClickHouseConnectionInfo.
 /// Usage: in tests, create a new mutable instance of this struct, and use the appropriate expect_ methods on the fields inside to mock
-/// the expected method call. This struct will deliegate each method call to the appropriate mock.
+/// the expected method call. This struct will delegate each method call to the appropriate mock.
 /// Example:
 /// ```
 /// let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -44,31 +51,25 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
 
 #[async_trait]
 impl DatasetQueries for MockClickHouseConnectionInfo {
-    async fn count_rows_for_dataset(
-        &self,
-        params: &crate::db::datasets::DatasetQueryParams,
-    ) -> Result<u32, Error> {
+    async fn count_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
         self.dataset_queries.count_rows_for_dataset(params).await
     }
 
-    async fn insert_rows_for_dataset(
-        &self,
-        params: &crate::db::datasets::DatasetQueryParams,
-    ) -> Result<u32, Error> {
+    async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
         self.dataset_queries.insert_rows_for_dataset(params).await
     }
 
     async fn get_dataset_rows(
         &self,
-        params: &crate::db::datasets::GetDatasetRowsParams,
-    ) -> Result<Vec<crate::db::datasets::DatasetDetailRow>, Error> {
+        params: &GetDatasetRowsParams,
+    ) -> Result<Vec<DatasetDetailRow>, Error> {
         self.dataset_queries.get_dataset_rows(params).await
     }
 
     async fn get_dataset_metadata(
         &self,
-        params: &crate::db::datasets::GetDatasetMetadataParams,
-    ) -> Result<Vec<crate::db::datasets::DatasetMetadata>, Error> {
+        params: &GetDatasetMetadataParams,
+    ) -> Result<Vec<DatasetMetadata>, Error> {
         self.dataset_queries.get_dataset_metadata(params).await
     }
 
@@ -76,10 +77,7 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries.count_datasets().await
     }
 
-    async fn stale_datapoint(
-        &self,
-        params: &crate::db::datasets::StaleDatapointParams,
-    ) -> Result<(), Error> {
+    async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error> {
         self.dataset_queries.stale_datapoint(params).await
     }
 
@@ -89,7 +87,7 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
 
     async fn count_datapoints_for_dataset_function(
         &self,
-        params: &crate::db::datasets::CountDatapointsForDatasetFunctionParams,
+        params: &CountDatapointsForDatasetFunctionParams,
     ) -> Result<u32, Error> {
         self.dataset_queries
             .count_datapoints_for_dataset_function(params)
@@ -98,24 +96,28 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
 
     async fn get_adjacent_datapoint_ids(
         &self,
-        params: &crate::db::datasets::GetAdjacentDatapointIdsParams,
-    ) -> Result<crate::db::datasets::AdjacentDatapointIds, Error> {
+        params: &GetAdjacentDatapointIdsParams,
+    ) -> Result<AdjacentDatapointIds, Error> {
         self.dataset_queries
             .get_adjacent_datapoint_ids(params)
             .await
     }
 
-    async fn get_datapoint(
-        &self,
-        params: &crate::db::datasets::GetDatapointParams,
-    ) -> Result<crate::endpoints::datasets::Datapoint, Error> {
+    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error> {
         self.dataset_queries.get_datapoint(params).await
     }
 
-    async fn get_datapoints(
-        &self,
-        params: &crate::db::datasets::GetDatapointsParams,
-    ) -> Result<Vec<crate::endpoints::datasets::Datapoint>, Error> {
+    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error> {
         self.dataset_queries.get_datapoints(params).await
+    }
+
+    async fn delete_datapoints(
+        &self,
+        dataset_name: &str,
+        datapoint_ids: Option<&[Uuid]>,
+    ) -> Result<u64, Error> {
+        self.dataset_queries
+            .delete_datapoints(dataset_name, datapoint_ids)
+            .await
     }
 }
