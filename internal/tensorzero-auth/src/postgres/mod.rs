@@ -116,7 +116,7 @@ pub async fn disable_key(
     pool: &PgPool,
 ) -> Result<DateTime<Utc>, TensorZeroAuthError> {
     // Round to microseconds, since postgres only has microsecond precision
-    // This enures that the value we return matches the value we set in the database.
+    // This ensures that the value we return matches the value we set in the database.
     let now = Utc::now().round_subsecs(6);
     sqlx::query!(
         "UPDATE tensorzero_auth_api_key SET disabled_at = $1, updated_at = $1 WHERE short_id = $2 AND hash = $3",
