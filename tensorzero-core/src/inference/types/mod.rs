@@ -81,7 +81,6 @@ use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
-use serde_untagged::UntaggedEnumVisitor;
 use std::borrow::Borrow;
 use std::ops::Add;
 use std::{
@@ -109,6 +108,7 @@ pub mod batch;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod file;
+mod input_message;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
@@ -214,7 +214,7 @@ impl InputMessage {
             content: self
                 .content
                 .into_iter()
-                .map(|content| content.into_lazy_resolved_input_message(self.role, context))
+                .map(|content| content.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
         })
     }
@@ -254,7 +254,7 @@ impl LazyResolvedInputMessage {
     }
 }
 
-/// Extracts the StorageKind from the FetchContext, or returns an error if the object store is not configured.
+/// Extracts the `StorageKind` from the `FetchContext`, or returns an error if the object store is not configured.
 fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
     let object_store_info = context.object_store_info.as_ref().ok_or_else(|| {
         Error::new(ErrorDetails::ObjectStoreUnconfigured {
@@ -265,20 +265,19 @@ fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
 }
 
 impl InputMessageContent {
-    /// The 'role' parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
+    /// The `role` parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
     /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
-    /// we can remove the 'role' parameter.
+    /// we can remove the `role` parameter.
     pub fn into_lazy_resolved_input_message(
         self,
-        role: Role,
         context: FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
-            InputMessageContent::Text(TextKind::Text { text }) => {
-                LazyResolvedInputMessageContent::Text { text }
+            InputMessageContent::Text(Text { text }) => {
+                LazyResolvedInputMessageContent::Text(Text { text })
             }
-            InputMessageContent::RawText { value } => {
-                LazyResolvedInputMessageContent::RawText { value }
+            InputMessageContent::RawText(raw_text) => {
+                LazyResolvedInputMessageContent::RawText(raw_text)
             }
             InputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
@@ -286,39 +285,11 @@ impl InputMessageContent {
             InputMessageContent::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)
             }
-            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                // Map the legacy `{{"type": "text", "arguments": ...}}` format to an explicit
-                // `{{"type": "template", "name": "<role>", "arguments": ...}}` format, with the template
-                // name chosen based on the message role.
-                LazyResolvedInputMessageContent::Template(TemplateInput {
-                    name: role.implicit_template_name().to_string(),
-                    arguments,
-                })
-            }
             InputMessageContent::ToolCall(tool_call) => {
                 LazyResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
             }
             InputMessageContent::ToolResult(tool_result) => {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
-            }
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                tracing::warn!(
-                    r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
-                );
-                match value {
-                    Value::String(text) => LazyResolvedInputMessageContent::Text { text },
-                    Value::Object(arguments) => {
-                        LazyResolvedInputMessageContent::Template(TemplateInput {
-                            name: role.implicit_template_name().to_string(),
-                            arguments,
-                        })
-                    }
-                    _ => {
-                        return Err(Error::new(ErrorDetails::InvalidMessage {
-                            message: r#"The 'value' field in a `{"type": "text", "value": ... }` content block must be a string or object"#.to_string(),
-                        }));
-                    }
-                }
             }
             InputMessageContent::File(file) => {
                 match &file {
@@ -442,13 +413,9 @@ impl InputMessageContent {
                     ),
                 }
             }
-            InputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => LazyResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            InputMessageContent::Unknown(unknown) => {
+                LazyResolvedInputMessageContent::Unknown(unknown)
+            }
         })
     }
 }
@@ -460,9 +427,7 @@ impl LazyResolvedInputMessageContent {
     /// that don't support URL forwarding, or for observability).
     pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
-            LazyResolvedInputMessageContent::Text { text } => {
-                ResolvedInputMessageContent::Text(Text { text })
-            }
+            LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
             LazyResolvedInputMessageContent::Template(template) => {
                 ResolvedInputMessageContent::Template(template)
             }
@@ -472,8 +437,8 @@ impl LazyResolvedInputMessageContent {
             LazyResolvedInputMessageContent::ToolResult(tool_result) => {
                 ResolvedInputMessageContent::ToolResult(tool_result)
             }
-            LazyResolvedInputMessageContent::RawText { value } => {
-                ResolvedInputMessageContent::RawText { value }
+            LazyResolvedInputMessageContent::RawText(raw_text) => {
+                ResolvedInputMessageContent::RawText(raw_text)
             }
             LazyResolvedInputMessageContent::Thought(thought) => {
                 ResolvedInputMessageContent::Thought(thought)
@@ -498,13 +463,9 @@ impl LazyResolvedInputMessageContent {
                     ResolvedInputMessageContent::File(Box::new(resolved))
                 }
             },
-            LazyResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => ResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            LazyResolvedInputMessageContent::Unknown(unknown) => {
+                ResolvedInputMessageContent::Unknown(unknown)
+            }
         })
     }
 
@@ -590,22 +551,27 @@ impl LazyResolvedInputMessageContent {
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct InputMessage {
     pub role: Role,
-    #[serde(deserialize_with = "deserialize_content")]
     pub content: Vec<InputMessageContent>,
 }
+
+/// A newtype wrapper around Map<String, Value> for template and system arguments
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct Arguments(pub Map<String, Value>);
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
-pub struct TemplateInput {
+pub struct Template {
     pub name: String,
-    pub arguments: Map<String, Value>,
+    pub arguments: Arguments,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
@@ -613,7 +579,7 @@ pub struct TemplateInput {
 #[ts(export)]
 pub enum System {
     Text(String),
-    Template(Map<String, Value>),
+    Template(Arguments),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -621,26 +587,20 @@ pub enum System {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
 pub enum InputMessageContent {
-    Text(TextKind),
-    Template(TemplateInput),
+    Text(Text),
+    Template(Template),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
-    /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
+    /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
-    /// The 'data' field hold the original content block from the provider,
+    /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
-    // We may extend this in the future to include other types of content
+    Unknown(Unknown),
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -649,8 +609,7 @@ pub enum InputMessageContent {
 #[ts(export)]
 pub enum TextKind {
     Text { text: String },
-    Arguments { arguments: Map<String, Value> },
-    LegacyValue { value: Value },
+    Arguments { arguments: Arguments },
 }
 
 impl<'de> Deserialize<'de> for TextKind {
@@ -671,17 +630,16 @@ impl<'de> Deserialize<'de> for TextKind {
         match key.as_str() {
             "text" => Ok(TextKind::Text {
                 text: serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing 'text': {e}"))
+                    serde::de::Error::custom(format!("Error deserializing `text`: {e}"))
                 })?,
             }),
             "arguments" => Ok(TextKind::Arguments {
-                arguments: serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing 'arguments': {e}"))
-                })?,
+                arguments: Arguments(serde_json::from_value(value).map_err(|e| {
+                    serde::de::Error::custom(format!("Error deserializing `arguments`: {e}"))
+                })?),
             }),
-            "value" => Ok(TextKind::LegacyValue { value }),
             _ => Err(serde::de::Error::custom(format!(
-                "Unknown key '{key}' in text content"
+                "Unknown key `{key}` in text content"
             ))),
         }
     }
@@ -742,6 +700,7 @@ impl Role {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[serde(deny_unknown_fields)]
 pub struct Text {
     pub text: String,
 }
@@ -764,6 +723,65 @@ impl RateLimitedInputContent for Text {
 impl Text {
     pub fn __repr__(&self) -> String {
         self.to_string()
+    }
+}
+
+/// Struct that represents raw text content that should be passed directly to the model
+/// without any template processing or validation
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[serde(deny_unknown_fields)]
+pub struct RawText {
+    pub value: String,
+}
+
+impl std::fmt::Display for RawText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl RateLimitedInputContent for RawText {
+    fn estimated_input_token_usage(&self) -> u64 {
+        get_estimated_tokens(&self.value)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RawText {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+/// Struct that represents an unknown provider-specific content block.
+/// We pass this along as-is without any validation or transformation.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass)]
+#[serde(deny_unknown_fields)]
+pub struct Unknown {
+    /// The underlying content block to be passed to the model provider.
+    pub data: Value,
+    /// A fully-qualified name specifying when this content block should
+    /// be included in the model provider input.
+    pub model_provider_name: Option<String>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Unknown {
+    #[getter]
+    pub fn data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::inference::types::pyo3_helpers::serialize_to_dict;
+        serialize_to_dict(py, &self.data).map(|p| p.into_bound(py))
+    }
+
+    #[getter]
+    pub fn model_provider_name(&self) -> Option<String> {
+        self.model_provider_name.clone()
     }
 }
 
@@ -1563,7 +1581,7 @@ pub struct ModelInferenceDatabaseInsert {
 #[cfg(test)]
 impl From<String> for InputMessageContent {
     fn from(text: String) -> Self {
-        InputMessageContent::Text(TextKind::Text { text })
+        InputMessageContent::Text(Text { text })
     }
 }
 
@@ -1577,7 +1595,7 @@ impl From<String> for ResolvedInputMessageContent {
 #[cfg(test)]
 impl From<String> for LazyResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        LazyResolvedInputMessageContent::Text { text }
+        LazyResolvedInputMessageContent::Text(Text { text })
     }
 }
 
@@ -1586,26 +1604,6 @@ impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
         ContentBlockChatOutput::Text(Text { text })
     }
-}
-
-fn deserialize_content<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<InputMessageContent>, D::Error> {
-    #[expect(clippy::redundant_closure_for_method_calls)]
-    UntaggedEnumVisitor::new()
-        .string(|text| {
-            Ok(vec![InputMessageContent::Text(TextKind::Text {
-                text: text.to_string(),
-            })])
-        })
-        .map(|object| {
-            tracing::warn!("Deprecation Warning: passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
-            Ok(vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: object.deserialize()?,
-            })])
-        })
-        .seq(|seq| seq.deserialize())
-        .deserialize(deserializer)
 }
 
 impl From<String> for ContentBlock {
@@ -2834,13 +2832,13 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::Text { text }) => {
-                assert_eq!(text, "Hello, world!");
+            InputMessageContent::Text(text) => {
+                assert_eq!(&text.text, "Hello, world!");
             }
             _ => panic!("Expected Text content: {message:?}"),
         }
 
-        // Test case for object content
+        // Test case for object content (should be converted to Template)
         let input = json!({
             "role": "assistant",
             "content": {"key": "value"}
@@ -2849,17 +2847,21 @@ mod tests {
         assert_eq!(message.role, Role::Assistant);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap());
+            InputMessageContent::Template(template) => {
+                assert_eq!(template.name, "assistant");
+                assert_eq!(
+                    &template.arguments.0,
+                    json!({"key": "value"}).as_object().unwrap()
+                );
             }
-            _ => panic!("Expected Text content"),
+            _ => panic!("Expected Template content"),
         }
 
         // Test case for multiple content items
         let input = json!({
             "role": "user",
             "content": [
-                {"type": "text", "value": "Hello"},
+                {"type": "text", "text": "Hello"},
                 {"type": "tool_call", "id": "123", "name": "test_tool", "arguments": "{}"}
             ]
         });
@@ -2867,8 +2869,8 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                assert_eq!(value, "Hello");
+            InputMessageContent::Text(text) => {
+                assert_eq!(&text.text, "Hello");
             }
             _ => panic!("Expected Text content"),
         }
@@ -2894,10 +2896,10 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Template(TemplateInput { name, arguments }) => {
+            InputMessageContent::Template(Template { name, arguments }) => {
                 assert_eq!(name, "user");
                 assert_eq!(
-                    arguments,
+                    &arguments.0,
                     json!({"complex": "json", "with": ["nested", "array"]})
                         .as_object()
                         .unwrap()

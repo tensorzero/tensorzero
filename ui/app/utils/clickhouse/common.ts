@@ -11,9 +11,8 @@ import type {
 } from "tensorzero-node";
 
 /**
- * JSON types.
+ * JSON types
  */
-
 export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
     z.string(),
@@ -28,20 +27,20 @@ export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 export const roleSchema = z.enum(["user", "assistant"]);
 export type Role = z.infer<typeof roleSchema>;
 
-export const textInputSchema = z.object({
+export const legacyTextSchema = z.object({
   type: z.literal("text"),
   // TODO: get rid of this type completely, we should not run queries in the UI...
   value: JsonValueSchema.optional(),
   text: z.string().optional(),
 });
-export type TextInput = z.infer<typeof textInputSchema>;
+export type LegacyTextInput = z.infer<typeof legacyTextSchema>;
 
-export const templateInputSchema = z.object({
+export const templateSchema = z.object({
   type: z.literal("template"),
   name: z.string(),
   arguments: z.record(JsonValueSchema.optional()),
 });
-export type TemplateInput = z.infer<typeof templateInputSchema>;
+export type Template = z.infer<typeof templateSchema>;
 
 // The three display text types below handle the scenario
 // where the function 1) does not use schemas
@@ -213,8 +212,8 @@ export type ResolvedImageContentError = z.infer<
 
 // Types for input to TensorZero
 export const inputMessageContentSchema = z.discriminatedUnion("type", [
-  textInputSchema,
-  templateInputSchema,
+  legacyTextSchema,
+  templateSchema,
   toolCallContentSchema,
   toolResultContentSchema,
   imageContentSchema,
