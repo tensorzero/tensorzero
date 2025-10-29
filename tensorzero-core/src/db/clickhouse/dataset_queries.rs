@@ -372,12 +372,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(())
     }
 
-    async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error> {
-        self.insert_datapoints(std::slice::from_ref(datapoint))
-            .await?;
-        Ok(())
-    }
-
     async fn count_datapoints_for_dataset_function(
         &self,
         params: &CountDatapointsForDatasetFunctionParams,
@@ -2098,7 +2092,7 @@ mod tests {
             is_custom: true,
         };
         assert!(
-            conn.insert_datapoint(&DatapointInsert::Chat(datapoint))
+            conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
                 .await
                 .is_ok(),
             "Should insert chat datapoint successfully"
@@ -2185,7 +2179,7 @@ mod tests {
             is_custom: true,
         };
         assert!(
-            conn.insert_datapoint(&DatapointInsert::Json(datapoint))
+            conn.insert_datapoints(&[DatapointInsert::Json(datapoint)])
                 .await
                 .is_ok(),
             "Should insert json datapoint successfully"

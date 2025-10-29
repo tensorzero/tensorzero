@@ -270,7 +270,7 @@ async fn test_create_delete_datapoint_chat() {
         // Verify input structure
         let input = &datapoint.input;
         assert!(match input.system.as_ref().unwrap() {
-            System::Template(map) => map.get("assistant_name"),
+            System::Template(arguments) => arguments.0.get("assistant_name"),
             System::Text(_) => panic!("Expected System::Template"),
         }
         .is_some());
@@ -285,7 +285,7 @@ async fn test_create_delete_datapoint_chat() {
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
         assert!(match input.system.as_ref().unwrap() {
-            System::Template(map) => map.get("assistant_name"),
+            System::Template(arguments) => arguments.0.get("assistant_name"),
             System::Text(_) => panic!("Expected System::Template"),
         }
         .is_some());
@@ -1065,7 +1065,7 @@ async fn test_create_delete_datapoint_json() {
         // Verify input structure
         let input = &datapoint.input;
         assert!(match input.system.as_ref().unwrap() {
-            System::Template(map) => map.get("assistant_name"),
+            System::Template(arguments) => arguments.0.get("assistant_name"),
             System::Text(_) => panic!("Expected System::Template"),
         }
         .is_some());
@@ -1083,7 +1083,7 @@ async fn test_create_delete_datapoint_json() {
         // Verify the list datapoint input structure and content
         let input = &list_datapoint.input;
         assert!(match input.system.as_ref().unwrap() {
-            System::Template(map) => map.get("assistant_name"),
+            System::Template(arguments) => arguments.0.get("assistant_name"),
             System::Text(_) => panic!("Expected System::Template"),
         }
         .is_some());
@@ -2991,7 +2991,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(initial_datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(initial_datapoint)])
         .await
         .unwrap();
 

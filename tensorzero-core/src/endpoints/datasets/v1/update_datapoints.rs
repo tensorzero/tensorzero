@@ -526,7 +526,7 @@ mod tests {
     use crate::inference::types::{
         Base64File, ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
         JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputMessage,
-        StoredInputMessageContent, Text, TextKind,
+        StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::tool::{DynamicToolParams, ToolCallConfigDatabaseInsert, ToolChoice};
@@ -976,7 +976,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new input text".into(),
                     })],
                 }],
@@ -1356,7 +1356,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new input".into(),
                     })],
                 }],
@@ -1733,7 +1733,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new json input".into(),
                     })],
                 }],

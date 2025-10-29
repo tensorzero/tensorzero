@@ -338,10 +338,6 @@ pub trait DatasetQueries {
     /// Marks a datapoint as stale by inserting a new row with staled_at set to now
     async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error>;
 
-    /// Inserts a single new datapoint into the dataset
-    /// TODO(shuyangli): To deprecate in favor of `insert_datapoints`
-    async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error>;
-
     /// Inserts a batch of datapoints into the database
     /// Internally separates chat and JSON datapoints and writes them to the appropriate tables
     /// Returns the number of rows written.

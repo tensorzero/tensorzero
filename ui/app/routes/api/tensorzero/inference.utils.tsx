@@ -13,7 +13,6 @@ import type {
   PathWithContents,
   UninitializedVariantInfo,
   VariantInfo,
-  Tool,
   ResolvedTomlPath,
   ChatTemplates,
   StaticToolConfig,
@@ -39,7 +38,7 @@ import type {
   StoredInput as TensorZeroStoredInput,
   StoredInputMessage as TensorZeroStoredInputMessage,
   StoredInputMessageContent as TensorZeroStoredInputMessageContent,
-  ToolCallConfigDatabaseInsert,
+  DynamicToolParams,
   ContentBlockChatOutput,
   JsonInferenceOutput,
 } from "tensorzero-node";
@@ -306,7 +305,7 @@ interface ClickHouseDatapointActionArgs {
   input: DisplayInput;
   functionName: string;
   // Optional fields for json / chat datapoints
-  tool_params?: ToolCallConfigDatabaseInsert;
+  tool_params?: DynamicToolParams;
   output_schema?: JsonValue;
   variant?: string;
   cache_options: CacheParamsOptions;
@@ -387,13 +386,7 @@ export function prepareInferenceActionRequest(
     const dynamicVariantInfo = args.editedVariantInfo
       ? variantInfoToUninitializedVariantInfo(args.editedVariantInfo)
       : null;
-    const additional_tools = args.tool_params?.tools_available
-      ? subtractStaticToolsFromInferenceInput(
-          args.tool_params?.tools_available,
-          args.functionConfig,
-          args.toolsConfig,
-        )
-      : null;
+    const additional_tools = args.tool_params?.additional_tools ?? null;
 
     return {
       ...baseParams,
@@ -811,35 +804,4 @@ function variantInfoToUninitializedVariantInfo(
     default:
       throw new Error(`Unknown variant type`);
   }
-}
-
-/*
- * For both inferences and datapoints, we store a full tool config that
- * specifies what the model saw or could have seen at inference time for a particular example.
- * However, TensorZero will automatically use the tools that are currently configured for inferences.
- * It will also error if there are tools with duplicated names. In order to avoid this, we "subtract"
- * out all currently configured tools from the tools that we pass in dynamically.
- */
-function subtractStaticToolsFromInferenceInput(
-  datapointTools: Tool[],
-  functionConfig: FunctionConfig,
-  toolsConfig: { [key in string]?: StaticToolConfig },
-): Tool[] {
-  if (functionConfig.type === "json") {
-    return datapointTools;
-  }
-
-  // We can't differentiate between static and dynamic tools.
-  // We also can't differentiate between tool IDs and tool names.
-  // TODO: #3880, #3879 would allow us to remove this workaround entirely
-  const toolNames = new Set<string>();
-  for (const toolConfigId of functionConfig.tools) {
-    const toolConfig = toolsConfig?.[toolConfigId];
-    if (toolConfig) {
-      toolNames.add(toolConfig.name);
-    }
-  }
-
-  // Filter out static tools
-  return datapointTools.filter((tool) => !toolNames.has(tool.name));
 }
