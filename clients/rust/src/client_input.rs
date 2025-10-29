@@ -6,7 +6,7 @@ use tensorzero_core::{
         File, InputMessageContent, RawText, Role, System, Template, Text, TextKind, Thought,
         Unknown,
     },
-    tool::{ToolCallInput, ToolResult},
+    tool::{ToolCallWrapper, ToolResult},
 };
 use tensorzero_derive::TensorZeroDeserialize;
 
@@ -42,7 +42,7 @@ pub struct ClientInputMessage {
 pub enum ClientInputMessageContent {
     Text(TextKind),
     Template(Template),
-    ToolCall(ToolCallInput),
+    ToolCall(ToolCallWrapper),
     ToolResult(ToolResult),
     RawText(RawText),
     Thought(Thought),
@@ -146,19 +146,7 @@ pub(super) fn test_client_to_message_content(
             })
         }
         ClientInputMessageContent::Template(template) => InputMessageContent::Template(template),
-        ClientInputMessageContent::ToolCall(ToolCallInput {
-            id,
-            name,
-            raw_name,
-            arguments,
-            raw_arguments,
-        }) => InputMessageContent::ToolCall(ToolCallInput {
-            id,
-            name,
-            raw_name,
-            raw_arguments,
-            arguments,
-        }),
+        ClientInputMessageContent::ToolCall(tool_call) => InputMessageContent::ToolCall(tool_call),
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)
         }

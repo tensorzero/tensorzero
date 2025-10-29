@@ -479,7 +479,7 @@ impl<'a> TryFrom<&'a Vec<ContentBlockChatOutput>> for OpenAIReinforcementOutput<
                     text_parts.push(text.text.clone());
                 }
                 ContentBlockChatOutput::ToolCall(tool_call_output) => {
-                    // Convert ToolCallOutput to ToolCall using the From impl
+                    // Convert InferenceResponseToolCall to ToolCall using the From impl
                     let tool_call: ToolCall = tool_call_output.clone().into();
                     tool_calls.push(tool_call);
                 }
@@ -613,7 +613,7 @@ mod tests {
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
-        tool::ToolCallOutput,
+        tool::InferenceResponseToolCall,
     };
 
     #[tokio::test]
@@ -779,7 +779,7 @@ mod tests {
                 ContentBlockChatOutput::Text(Text {
                     text: "I'll check the weather for you.".to_string(),
                 }),
-                ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                     id: "call_123".to_string(),
                     name: Some("get_weather".to_string()),
                     raw_name: "get_weather".to_string(),
@@ -791,7 +791,7 @@ mod tests {
                 ContentBlockChatOutput::Text(Text {
                     text: "I'll check the weather for you.".to_string(),
                 }),
-                ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                     id: "call_123".to_string(),
                     name: Some("get_weather".to_string()),
                     raw_name: "get_weather".to_string(),

@@ -449,15 +449,31 @@ pub struct BatchDynamicToolParams {
 // Helper type for converting BatchDynamicToolParams into a Vec<DynamicToolParams>
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
-/// A ToolCall is a request by a model to call a Tool
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+/// In most cases, tool call arguments are a string.
+/// However, when looping back from an inference response, they will be an object.
+fn deserialize_tool_call_arguments<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::String(s) => Ok(s),
+        serde_json::Value::Object(_) => Ok(value.to_string()),
+        _ => Err(D::Error::custom(
+            "`arguments` must be a string or an object",
+        )),
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ToolCall {
-    pub name: String,
-    pub arguments: String,
     pub id: String,
+    pub name: String,
+    #[serde(deserialize_with = "deserialize_tool_call_arguments")] // String or Object --> String
+    pub arguments: String,
 }
 
 impl std::fmt::Display for ToolCall {
@@ -487,77 +503,45 @@ impl ToolCall {
     }
 }
 
-/// The input format that we accept from the clients.
-/// This is like `ToolCallOutput`, but more relaxed (`raw_arguments` and `raw_name` are optional)
-/// This allows round-tripping a `ToolCallOutput` without needing to modify the json object,
-/// but also allows manually-constructed `ToolCallInput` where users don't care about the
-/// name/raw_name distinction.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
+/// `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
-pub struct ToolCallInput {
-    pub name: Option<String>,
-    pub arguments: Option<Value>,
-    pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_arguments: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_name: Option<String>,
+#[serde(untagged)]
+pub enum ToolCallWrapper {
+    ToolCall(ToolCall), // the format we store in the database
+    InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
 }
 
-impl TryFrom<ToolCallInput> for ToolCall {
+/// - ToolCallWrapper::ToolCall: passthrough
+/// - ToolCallWrapper::InferenceResponseToolCall: this is an inference loopback --> use raw values, ignore parsed values
+impl TryFrom<ToolCallWrapper> for ToolCall {
     type Error = Error;
-    fn try_from(value: ToolCallInput) -> Result<Self, Self::Error> {
-        let name = value.name.or(value.raw_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidRequest {
-                message: "ToolCall must have `name` or `raw_name` set".to_string(),
-            })
-        })?;
-
-        let arguments = if let Some(arguments) = value.arguments {
-            match arguments {
-                Value::String(s) => {
-                    tracing::warn!("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object. Please pass in a JSON object instead. Support for strings will be removed in a future release: https://github.com/tensorzero/tensorzero/issues/1410");
-                    s
-                }
-                Value::Object(obj) => Value::Object(obj).to_string(),
-                _ => {
-                    return Err(Error::new(ErrorDetails::InvalidRequest {
-                        message: "ToolCall arguments must be a string or an object".to_string(),
-                    }));
-                }
-            }
-        } else if let Some(raw_arguments) = value.raw_arguments {
-            raw_arguments
-        } else {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: "ToolCall must have `arguments` or `raw_arguments` set".to_string(),
-            }));
-        };
-
-        Ok(ToolCall {
-            name,
-            arguments,
-            id: value.id,
-        })
+    fn try_from(wrapper: ToolCallWrapper) -> Result<Self, Self::Error> {
+        match wrapper {
+            ToolCallWrapper::ToolCall(tc) => Ok(tc),
+            ToolCallWrapper::InferenceResponseToolCall(tco) => Ok(ToolCall {
+                id: tco.id,
+                name: tco.raw_name,
+                arguments: tco.raw_arguments,
+            }),
+        }
     }
 }
 
-/// A ToolCallOutput is a request by a model to call a Tool
+/// A InferenceResponseToolCall is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct ToolCallOutput {
-    pub arguments: Option<Value>,
+pub struct InferenceResponseToolCall {
     pub id: String,
-    pub name: Option<String>,
-    pub raw_arguments: String,
     pub raw_name: String,
+    pub raw_arguments: String,
+    pub name: Option<String>,
+    pub arguments: Option<Value>,
 }
 
-impl std::fmt::Display for ToolCallOutput {
+impl std::fmt::Display for InferenceResponseToolCall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -566,13 +550,13 @@ impl std::fmt::Display for ToolCallOutput {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ToolCallOutput {
+impl InferenceResponseToolCall {
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
 }
 
-impl ToolCallOutput {
+impl InferenceResponseToolCall {
     /// Validates that a ToolCall is compliant with the ToolCallConfig
     /// First, it finds the ToolConfig for the ToolCall
     /// Then, it validates the ToolCall arguments against the ToolConfig
@@ -1213,8 +1197,9 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        // Tool call is valid, so we should get a valid ToolCallOutput
-        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
+        // Tool call is valid, so we should get a valid InferenceResponseToolCall
+        let tool_call_output =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
         assert_eq!(tool_call_output.raw_name, "get_temperature");
         assert_eq!(
             tool_call_output.raw_arguments,
@@ -1236,7 +1221,8 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
+        let tool_call_output =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
         assert_eq!(tool_call_output.name, Some("get_temperature".to_string()));
         assert_eq!(tool_call_output.arguments, None);
         assert_eq!(tool_call_output.id, "321");
@@ -1252,7 +1238,8 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
+        let tool_call_output =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
         assert_eq!(tool_call_output.name, None);
         assert_eq!(tool_call_output.arguments, None);
         assert_eq!(tool_call_output.id, "321");
@@ -1285,7 +1272,8 @@ mod tests {
             arguments: "{\"location\": \"Lucky Dog\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
+        let tool_call_output =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
         assert_eq!(tool_call_output.raw_name, "establish_campground");
         assert_eq!(
             tool_call_output.raw_arguments,
@@ -1327,8 +1315,8 @@ mod tests {
             "raw_arguments": "my raw arguments",
             "id": "123"
         });
-        let tool_call_input: ToolCallInput = serde_json::from_value(tool_call).unwrap();
-        let tool_call: ToolCall = tool_call_input.try_into().unwrap();
+        let tool_call_wrapper: ToolCallWrapper = serde_json::from_value(tool_call).unwrap();
+        let tool_call: ToolCall = tool_call_wrapper.try_into().unwrap();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "my raw arguments");
         assert_eq!(tool_call.id, "123");
@@ -1341,8 +1329,8 @@ mod tests {
             "arguments": {"my": "arguments"},
             "id": "123"
         });
-        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
-        let tool_call = TryInto::<ToolCall>::try_into(tool_call_input).unwrap();
+        let tool_call_wrapper = serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap();
+        let tool_call = TryInto::<ToolCall>::try_into(tool_call_wrapper).unwrap();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "{\"my\":\"arguments\"}");
         assert_eq!(tool_call.id, "123");
@@ -1367,12 +1355,9 @@ mod tests {
             "arguments": "{\"my\": \"arguments\"}",
             "id": "123"
         });
-        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
-        let err = TryInto::<ToolCall>::try_into(tool_call_input).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "ToolCall must have `name` or `raw_name` set"
-        );
+        // Now we get an ugly error because of the untagged enum, but that's ok for now...
+        // https://github.com/tensorzero/tensorzero/discussions/4258
+        serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap_err();
     }
 
     #[test]
@@ -1389,19 +1374,19 @@ mod tests {
 
     #[test]
     #[traced_test]
-    fn test_tool_call_deserialize_deprecated_arguments() {
+    fn test_tool_call_deserialize_object_arguments() {
         let tool_call = serde_json::json!({
             "name": "get_temperature",
             "id": "123",
-            "arguments": "My string arguments"
+            "arguments": {
+                "role": "intern"
+            }
         });
-        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
-        let tool_call = TryInto::<ToolCall>::try_into(tool_call_input).unwrap();
-        assert_eq!(tool_call.arguments, "My string arguments");
+        let tool_call_wrapper = serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap();
+        let tool_call = TryInto::<ToolCall>::try_into(tool_call_wrapper).unwrap();
+        assert_eq!(tool_call.arguments, "{\"role\":\"intern\"}");
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.id, "123");
-
-        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."));
     }
 
     #[tokio::test]

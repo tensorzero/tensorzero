@@ -2928,7 +2928,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
     use tensorzero_core::{
         db::datasets::{ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries},
         inference::types::{ContentBlockChatOutput, StoredInput},
-        tool::ToolCallOutput,
+        tool::InferenceResponseToolCall,
     };
 
     let episode_id = Uuid::now_v7();
@@ -2973,13 +2973,15 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             system: None,
             messages: vec![],
         },
-        output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-            id: "call_eBDiwZRnNnddB5tjcQbhdY0s".to_string(),
-            name: Some("load_wikipedia_page".to_string()),
-            raw_name: "load_wikipedia_page".to_string(),
-            arguments: Some(json!({"title": "Russell Hoban"})),
-            raw_arguments: "{\"title\": \"Russell Hoban\"}".to_string(),
-        })]),
+        output: Some(vec![ContentBlockChatOutput::ToolCall(
+            InferenceResponseToolCall {
+                id: "call_eBDiwZRnNnddB5tjcQbhdY0s".to_string(),
+                name: Some("load_wikipedia_page".to_string()),
+                raw_name: "load_wikipedia_page".to_string(),
+                arguments: Some(json!({"title": "Russell Hoban"})),
+                raw_arguments: "{\"title\": \"Russell Hoban\"}".to_string(),
+            },
+        )]),
         tool_params: None,
         tags: None,
         auxiliary: String::new(),

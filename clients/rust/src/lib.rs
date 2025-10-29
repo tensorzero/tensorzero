@@ -1,12 +1,11 @@
 use std::{
-    cmp::Ordering, collections::HashMap, env, fmt::Display, future::Future, path::PathBuf,
-    sync::Arc, time::Duration,
+    collections::HashMap, env, fmt::Display, future::Future, path::PathBuf, sync::Arc,
+    time::Duration,
 };
 
 use git::GitInfo;
 use reqwest::header::HeaderMap;
 use reqwest_eventsource::{Event, EventSource, RequestBuilderExt};
-use serde_json::Value;
 use std::fmt::Debug;
 use tensorzero_core::config::ConfigFileGlob;
 pub use tensorzero_core::db::datasets::{
@@ -82,7 +81,7 @@ pub use tensorzero_core::inference::types::{Base64File, File, ObjectStoragePoint
 pub use tensorzero_core::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System, Unknown,
 };
-pub use tensorzero_core::tool::{DynamicToolParams, Tool};
+pub use tensorzero_core::tool::{DynamicToolParams, Tool, ToolCallWrapper};
 
 // Export quantile array from migration_0035
 pub use tensorzero_core::db::clickhouse::migration_manager::migrations::migration_0037::QUANTILES;
@@ -542,14 +541,10 @@ impl Client {
     // See https://www.tensorzero.com/docs/gateway/api-reference#post-inference
     pub async fn inference(
         &self,
-        mut params: ClientInferenceParams,
+        params: ClientInferenceParams,
     ) -> Result<InferenceOutput, TensorZeroError> {
         match &*self.mode {
             ClientMode::HTTPGateway(client) => {
-                let gateway_version = { client.gateway_version.lock().await.clone() };
-                // We only perform this adjustment in HTTP gateway mode, since the embedded gateway
-                // version always matches our client version.
-                try_adjust_tool_call_arguments(gateway_version.as_deref(), &mut params.input)?;
                 let url =
                     client
                         .base_url
@@ -1446,75 +1441,6 @@ pub async fn get_config_no_verify_credentials(
     }
 }
 
-/// Compares two TensorZero version strings, returning `None`
-/// if the versions cannot be meaningfully compared
-/// (e.g. at least one is not in the <year>.<month>.<number> format).
-fn compare_versions(first: &str, second: &str) -> Result<Ordering, TensorZeroError> {
-    let extract_numbers = |s: &str| {
-        s.split('.')
-            .map(str::parse::<u32>)
-            .collect::<Result<Vec<_>, _>>()
-    };
-    let first_components = extract_numbers(first).map_err(|e| TensorZeroError::Other {
-        source: Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to parse first version string `{first}`: {e}"),
-        })
-        .into(),
-    })?;
-    let second_components = extract_numbers(second).map_err(|e| TensorZeroError::Other {
-        source: Error::new(ErrorDetails::InternalError {
-            message: format!("Failed to parse second version string `{second}`: {e}"),
-        })
-        .into(),
-    })?;
-    if first_components.len() != second_components.len() {
-        return Err(TensorZeroError::Other {
-            source: Error::new(ErrorDetails::InternalError {
-                message: format!(
-                    "Version strings `{first}` and `{second}` have different number of components"
-                ),
-            })
-            .into(),
-        });
-    }
-    // Compare in lexicographical order
-    Ok(first_components.cmp(&second_components))
-}
-
-fn supports_tool_call_arguments_object(gateway_version: &str) -> Result<bool, TensorZeroError> {
-    // This is the first release that includes commit https://github.com/tensorzero/tensorzero/commit/0bb8832b88e767287eed6d1c7e4502ea5d2397fa
-    const MIN_VERSION: &str = "2025.03.3";
-    Ok(compare_versions(gateway_version, MIN_VERSION)?.is_ge())
-}
-
-fn try_adjust_tool_call_arguments(
-    gateway_version: Option<&str>,
-    input: &mut ClientInput,
-) -> Result<(), TensorZeroError> {
-    // If we know the gateway version, and it's recent enough, we skip adjusting tool call arguments.
-    // We perform the adjustment if the version is known to be too old, or if we didn't get a
-    // version header at all (old enough gateways don't send a version header).
-
-    // TODO (#1410): Deprecate this behavior
-
-    if let Some(gateway_version) = gateway_version {
-        if supports_tool_call_arguments_object(gateway_version)? {
-            return Ok(());
-        }
-    }
-    for msg in &mut input.messages {
-        for content in &mut msg.content {
-            if let ClientInputMessageContent::ToolCall(tool_call) = content {
-                if let Some(args @ Value::Object(_)) = &mut tool_call.arguments {
-                    // Stringify 'arguments' to support older gateways
-                    tool_call.arguments = Some(Value::String(args.to_string()));
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 // This is intentionally not a `From` impl, since we only want to make fake HTTP
 // errors for certain embedded gateway errors. For example, a config parsing error
 // should be `TensorZeroError::Other`, not `TensorZeroError::Http`.
@@ -1598,132 +1524,5 @@ mod tests {
         ));
         assert!(logs_contain("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`"));
         assert!(logs_contain("Disabling observability: `gateway.observability.enabled` is not explicitly specified in config and `clickhouse_url` was not provided."));
-    }
-
-    use std::cmp::Ordering;
-
-    use super::compare_versions;
-    use super::try_adjust_tool_call_arguments;
-    use serde_json::Value;
-    use tensorzero_core::tool::ToolCallInput;
-
-    #[test]
-    fn test_compare_versions() {
-        assert_eq!(
-            compare_versions("2025.01.1", "2025.01.1").unwrap(),
-            Ordering::Equal
-        );
-        assert_eq!(
-            compare_versions("2025.01.1", "2025.01.01").unwrap(),
-            Ordering::Equal
-        );
-        assert_eq!(
-            compare_versions("2025.01.1", "2025.01.10").unwrap(),
-            Ordering::Less
-        );
-        assert_eq!(
-            compare_versions("2026.01.1", "2025.07.8").unwrap(),
-            Ordering::Greater
-        );
-
-        let missing_component = compare_versions("2025.01", "2025.01.1").unwrap_err();
-        assert!(
-            missing_component.to_string().contains("component"),
-            "Unexpected error: {missing_component}"
-        );
-
-        let invalid_version = compare_versions("2025.01.1", "2025.01.a").unwrap_err();
-        assert!(
-            invalid_version.to_string().contains("invalid digit"),
-            "Unexpected error: {invalid_version}"
-        );
-    }
-
-    #[test]
-    fn test_adjust_tool_call_args() {
-        let input = ClientInput {
-            system: None,
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("test_name".to_string()),
-                        arguments: Some(serde_json::json!({
-                            "key": "value"
-                        })),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("other_test_name".to_string()),
-                        arguments: Some(Value::String("Initial string args".to_string())),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("other_test_name".to_string()),
-                        arguments: Some(Value::Array(vec![
-                            Value::String("First entry".to_string()),
-                            Value::Bool(true),
-                        ])),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                ],
-            }],
-        };
-
-        let expected_adjusted = ClientInput {
-            system: None,
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("test_name".to_string()),
-                        arguments: Some(Value::String(r#"{"key":"value"}"#.to_string())),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("other_test_name".to_string()),
-                        arguments: Some(Value::String("Initial string args".to_string())),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                    ClientInputMessageContent::ToolCall(ToolCallInput {
-                        name: Some("other_test_name".to_string()),
-                        arguments: Some(Value::Array(vec![
-                            Value::String("First entry".to_string()),
-                            Value::Bool(true),
-                        ])),
-                        raw_arguments: Some("My raw args".to_string()),
-                        id: "My id".to_string(),
-                        raw_name: Some("test_raw_name".to_string()),
-                    }),
-                ],
-            }],
-        };
-
-        // Versions greater or equal to `2025.03.3` should not cause the input to be adjusted
-        let mut non_adjusted = input.clone();
-        try_adjust_tool_call_arguments(Some("2025.03.3"), &mut non_adjusted).unwrap();
-        assert_eq!(input, non_adjusted);
-        try_adjust_tool_call_arguments(Some("2026.01.01"), &mut non_adjusted).unwrap();
-        assert_eq!(input, non_adjusted);
-
-        // When we don't provide a gateway version, the input should be adjusted
-        let mut adjusted_no_version = input.clone();
-        try_adjust_tool_call_arguments(None, &mut adjusted_no_version).unwrap();
-        assert_eq!(expected_adjusted, adjusted_no_version);
-
-        // When we provide a version lower than `2025.03.3`, the input should be adjusted
-        let mut adjusted_with_version = input.clone();
-        try_adjust_tool_call_arguments(Some("2025.03.2"), &mut adjusted_with_version).unwrap();
-        assert_eq!(expected_adjusted, adjusted_with_version);
     }
 }

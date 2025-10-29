@@ -940,7 +940,7 @@ mod tests {
         model::{ModelConfig, ModelProvider, ProviderConfig},
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
-        tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
+        tool::{InferenceResponseToolCall, ToolCallConfig, ToolChoice},
     };
 
     use super::*;
@@ -1699,7 +1699,7 @@ mod tests {
                     ContentBlockChatOutput::Text(Text {
                         text: "First text message".to_string(),
                     }),
-                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "123".into(),
                         name: Some("first_tool".into()),
                         raw_name: "first_tool".into(),
@@ -1720,7 +1720,7 @@ mod tests {
                         summary: None,
                         provider_type: None,
                     }),
-                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "456".into(),
                         name: Some("second_tool".into()),
                         raw_name: "second_tool".into(),

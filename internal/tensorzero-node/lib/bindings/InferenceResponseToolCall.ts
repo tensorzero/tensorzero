@@ -2,13 +2,13 @@
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * A ToolCallOutput is a request by a model to call a Tool
+ * A InferenceResponseToolCall is a request by a model to call a Tool
  * in the form that we return to the client / ClickHouse
  */
-export type ToolCallOutput = {
-  arguments: JsonValue | null;
+export type InferenceResponseToolCall = {
   id: string;
-  name: string | null;
-  raw_arguments: string;
   raw_name: string;
+  raw_arguments: string;
+  name: string | null;
+  arguments: JsonValue | null;
 };

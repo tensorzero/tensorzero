@@ -38,7 +38,7 @@ use tensorzero_core::{
         DUMMY_JSON_RESPONSE_RAW, DUMMY_RAW_REQUEST, DUMMY_STREAMING_RESPONSE,
         DUMMY_STREAMING_TOOL_RESPONSE, DUMMY_TOOL_RESPONSE,
     },
-    tool::{ToolCall, ToolCallInput},
+    tool::{ToolCall, ToolCallWrapper},
 };
 use tokio::task::JoinSet;
 use tokio::time::{sleep, Duration};
@@ -3396,16 +3396,15 @@ async fn test_tool_call_input_no_warning() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::ToolCall(ToolCallInput {
-                            name: Some("get_temperature".to_string()),
-                            arguments: Some(json!({
+                        ClientInputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
+                            id: "0".to_string(),
+                            name: "get_temperature".to_string(),
+                            arguments: json!({
                                 "location": "Brooklyn",
                                 "units": "celsius"
-                            })),
-                            raw_arguments: None,
-                            raw_name: None,
-                            id: "0".to_string(),
-                        }),
+                            })
+                            .to_string(),
+                        })),
                     ],
                 }],
             },
@@ -3486,16 +3485,17 @@ async fn test_client_adjust_tool_call() {
             system: None,
             messages: vec![ClientInputMessage {
                 role: Role::User,
-                content: vec![ClientInputMessageContent::ToolCall(ToolCallInput {
-                    name: Some("my_tool_call".to_string()),
-                    arguments: Some(json!({
-                        "location": "Brooklyn",
-                        "units": "celsius"
-                    })),
-                    id: "my_id".to_string(),
-                    raw_arguments: None,
-                    raw_name: None,
-                })],
+                content: vec![ClientInputMessageContent::ToolCall(
+                    ToolCallWrapper::ToolCall(ToolCall {
+                        id: "my_id".to_string(),
+                        name: "my_tool_call".to_string(),
+                        arguments: json!({
+                            "location": "Brooklyn",
+                            "units": "celsius"
+                        })
+                        .to_string(),
+                    }),
+                )],
             }],
         },
         ..Default::default()

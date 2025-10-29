@@ -356,7 +356,7 @@ export const toolCallOutputSchema = z
   })
   .strict();
 
-export type ToolCallOutput = z.infer<typeof toolCallOutputSchema>;
+export type InferenceResponseToolCall = z.infer<typeof toolCallOutputSchema>;
 
 export const contentBlockChatOutputSchema = z.discriminatedUnion("type", [
   textContentSchema,

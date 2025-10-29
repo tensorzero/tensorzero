@@ -3,7 +3,7 @@ use tensorzero_core::inference::types::{
     Base64File, File, ObjectStorageFile, ResolvedInput, ResolvedInputMessage,
     ResolvedInputMessageContent, TextKind,
 };
-use tensorzero_core::tool::{ToolCall, ToolCallInput};
+use tensorzero_core::tool::{ToolCall, ToolCallWrapper};
 
 /// Convert a resolved input to a client input
 pub fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> ClientInput {
@@ -26,14 +26,8 @@ fn resolved_input_message_to_client_input_message(
     ClientInputMessage { role, content }
 }
 
-fn convert_tool_call(tool_call: ToolCall) -> ToolCallInput {
-    ToolCallInput {
-        id: tool_call.id,
-        name: Some(tool_call.name),
-        arguments: None,
-        raw_arguments: Some(tool_call.arguments),
-        raw_name: None,
-    }
+fn convert_tool_call(tool_call: ToolCall) -> ToolCallWrapper {
+    ToolCallWrapper::ToolCall(tool_call)
 }
 
 fn resolved_input_message_content_to_client_input_message_content(
@@ -98,16 +92,18 @@ mod tests {
             .to_string(),
         };
 
-        let result = convert_tool_call(input_tool_call);
+        let result = convert_tool_call(input_tool_call.clone());
 
-        assert_eq!(result.id, "test_id");
-        assert_eq!(result.name, Some("test_tool".to_string()));
-        assert_eq!(result.arguments, None);
-        assert_eq!(
-            result.raw_arguments,
-            Some(r#"{"param1":"value1","param2":"value2"}"#.to_string())
-        );
-        assert_eq!(result.raw_name, None);
+        match result {
+            ToolCallWrapper::ToolCall(tc) => {
+                assert_eq!(tc.id, "test_id");
+                assert_eq!(tc.name, "test_tool");
+                assert_eq!(tc.arguments, r#"{"param1":"value1","param2":"value2"}"#);
+            }
+            ToolCallWrapper::InferenceResponseToolCall(_) => {
+                panic!("Expected ToolCallWrapper::ToolCall variant")
+            }
+        }
     }
 
     #[tokio::test]

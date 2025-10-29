@@ -148,7 +148,7 @@ export const ChatFunctionWithMassiveText: Story = {
   },
 };
 
-const massiveToolCallOutputFixture = {
+const massiveInferenceResponseToolCallFixture = {
   text: massiveTextOutputFixture,
 };
 
@@ -159,9 +159,9 @@ export const ChatFunctionWithMassiveToolCall: Story = {
         type: "tool_call",
         id: "tc-1234567890",
         raw_name: "summarize_text",
-        raw_arguments: JSON.stringify(massiveToolCallOutputFixture),
+        raw_arguments: JSON.stringify(massiveInferenceResponseToolCallFixture),
         name: "summarize_text",
-        arguments: massiveToolCallOutputFixture,
+        arguments: massiveInferenceResponseToolCallFixture,
       },
     ],
   },
