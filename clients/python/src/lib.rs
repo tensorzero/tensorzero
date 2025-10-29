@@ -1265,6 +1265,11 @@ impl TensorZeroGateway {
                 "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
             )
         })?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_inferences = stored_inferences
             .iter()
             .map(|x| deserialize_from_stored_sample(this.py(), x, config))
@@ -1298,6 +1303,11 @@ impl TensorZeroGateway {
                 "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
             )
         })?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
             .map(|x| deserialize_from_stored_sample(this.py(), x, config))
@@ -2144,6 +2154,11 @@ impl AsyncTensorZeroGateway {
                 "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
             )
         })?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_inferences = stored_inferences
             .iter()
             .map(|x| deserialize_from_stored_sample(this.py(), x, config))
@@ -2185,6 +2200,11 @@ impl AsyncTensorZeroGateway {
                 "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
             )
         })?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
             .map(|x| deserialize_from_stored_sample(this.py(), x, config))
