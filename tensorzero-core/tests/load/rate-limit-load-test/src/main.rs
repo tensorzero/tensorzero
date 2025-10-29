@@ -62,7 +62,7 @@ async fn main() -> Result<()> {
     // Create connection pool
     let pool_size = args.pool_size.unwrap_or(50);
     let pool = create_postgres_pool(pool_size).await?;
-    let client = PostgresConnectionInfo::new_with_pool(pool);
+    let client = PostgresConnectionInfo::new_with_pool(pool, None);
 
     // Create bucket settings
     let bucket_settings = Arc::new(create_bucket_settings(args.capacity, args.refill_amount));
