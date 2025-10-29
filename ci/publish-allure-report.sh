@@ -70,33 +70,6 @@ mkdir -p allure-results
 cp "$JUNIT_XML_PATH" allure-results/
 
 # ------------------------------------------------------------------------------
-# Fetch historical data from testing-dashboard
-# ------------------------------------------------------------------------------
-echo "Fetching historical data from testing-dashboard..."
-git clone --depth 1 --branch gh-pages "$DASHBOARD_REPO_HTTPS" gh-pages-repo
-
-if [ -d "gh-pages-repo/allure-history" ]; then
-    echo "Found existing Allure history"
-    cp -r gh-pages-repo/allure-history allure-history
-else
-    echo "No existing Allure history found, starting fresh"
-    mkdir -p allure-history
-fi
-
-# ------------------------------------------------------------------------------
-# Generate Allure HTML report
-# ------------------------------------------------------------------------------
-echo "Generating Allure HTML report..."
-# Set ALLURE_RESULTS_LIMIT to keep more history (default is 20)
-export ALLURE_RESULTS_LIMIT=99999
-allure generate --clean allure-results -o allure-report --history-dir allure-history
-
-# Copy history for next run
-echo "Copying history for next run..."
-mkdir -p allure-report/allure-history
-cp -r allure-report/history/* allure-report/allure-history/ 2>/dev/null || true
-
-# ------------------------------------------------------------------------------
 # Set up SSH authentication
 # ------------------------------------------------------------------------------
 if [ -z "$TESTING_DASHBOARD_DEPLOY_KEY" ]; then
@@ -123,42 +96,122 @@ EOF
 chmod 600 ~/.ssh/config
 
 # ------------------------------------------------------------------------------
-# Configure git and prepare gh-pages branch
+# Configure git
 # ------------------------------------------------------------------------------
 echo "Configuring git..."
 git config --global user.email "ci@tensorzero.com"
 git config --global user.name "TensorZero CI"
 
-# Update gh-pages branch in testing-dashboard
-echo "Updating gh-pages branch..."
-cd gh-pages-repo
-
-# Update remote to use SSH
-git remote set-url origin "$DASHBOARD_REPO_SSH"
-
-# Remove old content and copy new report
-git rm -rf . || true
-cp -r ../allure-report/* .
-
 # ------------------------------------------------------------------------------
-# Commit and push to GitHub
+# Retry logic for fetch, build, and push (handles concurrent PR pushes)
 # ------------------------------------------------------------------------------
-echo "Committing and pushing report..."
-git add .
+MAX_ATTEMPTS=3
+ATTEMPT=1
 
-# Create commit message using CI environment variables
-COMMIT_MSG="Update Allure Report - Build #${CI_BUILD_NUMBER} - ${CI_COMMIT_SHA:0:7}"
-git commit -m "$COMMIT_MSG" || {
-    echo "No changes to commit"
-    cd ..
-    exit 0
-}
+while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+    echo "=== Attempt $ATTEMPT of $MAX_ATTEMPTS ==="
 
-# Push using SSH authentication
-echo "Pushing to testing-dashboard repository..."
-git push origin gh-pages --force
+    # Clean up from previous attempt if needed
+    if [ $ATTEMPT -gt 1 ]; then
+        echo "Cleaning up from previous attempt..."
+        rm -rf gh-pages-repo allure-history allure-report
 
-cd ..
+        # Add sleep with jitter to avoid collision with other concurrent runs
+        # Base delay increases with each attempt: 5s, 10s, 15s
+        BASE_DELAY=$((5 * $ATTEMPT))
+        # Add random jitter between 0-5 seconds
+        JITTER=$((RANDOM % 6))
+        TOTAL_DELAY=$((BASE_DELAY + JITTER))
+        echo "Waiting ${TOTAL_DELAY} seconds before retry..."
+        sleep $TOTAL_DELAY
+    fi
+
+    # ------------------------------------------------------------------------------
+    # Fetch historical data from testing-dashboard
+    # ------------------------------------------------------------------------------
+    echo "Fetching historical data from testing-dashboard..."
+    if ! git clone --depth 1 --branch gh-pages "$DASHBOARD_REPO_HTTPS" gh-pages-repo; then
+        echo "Failed to clone repository"
+        ATTEMPT=$((ATTEMPT + 1))
+        continue
+    fi
+
+    if [ -d "gh-pages-repo/allure-history" ]; then
+        echo "Found existing Allure history"
+        cp -r gh-pages-repo/allure-history allure-history
+    else
+        echo "No existing Allure history found, starting fresh"
+        mkdir -p allure-history
+    fi
+
+    # ------------------------------------------------------------------------------
+    # Generate Allure HTML report
+    # ------------------------------------------------------------------------------
+    echo "Generating Allure HTML report..."
+    # Set ALLURE_RESULTS_LIMIT to keep more history (default is 20)
+    export ALLURE_RESULTS_LIMIT=99999
+    if ! allure generate --clean allure-results -o allure-report --history-dir allure-history; then
+        echo "Failed to generate Allure report"
+        ATTEMPT=$((ATTEMPT + 1))
+        continue
+    fi
+
+    # Copy history for next run
+    echo "Copying history for next run..."
+    mkdir -p allure-report/allure-history
+    cp -r allure-report/history/* allure-report/allure-history/ 2>/dev/null || true
+
+    # ------------------------------------------------------------------------------
+    # Update gh-pages branch in testing-dashboard
+    # ------------------------------------------------------------------------------
+    echo "Updating gh-pages branch..."
+    cd gh-pages-repo
+
+    # Update remote to use SSH
+    git remote set-url origin "$DASHBOARD_REPO_SSH"
+
+    # Remove old content and copy new report
+    git rm -rf . || true
+    cp -r ../allure-report/* .
+
+    # ------------------------------------------------------------------------------
+    # Commit and push to GitHub
+    # ------------------------------------------------------------------------------
+    echo "Committing and pushing report..."
+    git add .
+
+    # Create commit message using CI environment variables
+    COMMIT_MSG="Update Allure Report - Build #${CI_BUILD_NUMBER} - ${CI_COMMIT_SHA:0:7}"
+    if ! git commit -m "$COMMIT_MSG"; then
+        echo "No changes to commit"
+        cd ..
+        break
+    fi
+
+    # Push using SSH authentication (no force, will fail if branch has moved)
+    echo "Pushing to testing-dashboard repository..."
+    if git push origin gh-pages; then
+        echo "✓ Successfully pushed to testing-dashboard"
+        cd ..
+        break
+    else
+        echo "✗ Push failed, likely due to concurrent update"
+        cd ..
+        ATTEMPT=$((ATTEMPT + 1))
+
+        if [ $ATTEMPT -le $MAX_ATTEMPTS ]; then
+            echo "Will retry..."
+        else
+            echo "Max attempts reached, giving up"
+            exit 1
+        fi
+    fi
+done
+
+if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
+    echo "Error: Failed to push report after $MAX_ATTEMPTS attempts"
+    exit 1
+fi
 
 echo "✓ Allure Report successfully published!"
 echo "View at: $DASHBOARD_URL"
