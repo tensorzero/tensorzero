@@ -83,10 +83,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
         self.dataset_queries.stale_datapoint(params).await
     }
 
-    async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error> {
-        self.dataset_queries.insert_datapoint(datapoint).await
-    }
-
     async fn insert_datapoints(&self, datapoints: &[DatapointInsert]) -> Result<u64, Error> {
         self.dataset_queries.insert_datapoints(datapoints).await
     }
