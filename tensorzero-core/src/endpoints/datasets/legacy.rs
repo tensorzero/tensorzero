@@ -37,7 +37,9 @@ use crate::{
 };
 
 #[cfg(feature = "pyo3")]
-use crate::inference::types::pyo3_helpers::{content_block_chat_output_to_python, uuid_to_python};
+use crate::inference::types::pyo3_helpers::{
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
+};
 
 #[cfg(debug_assertions)]
 use crate::utils::gateway::AppStateData;
@@ -1256,10 +1258,60 @@ impl Datapoint {
     }
 
     #[getter]
-    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self.tool_call_config() {
-            Some(tool_params) => tool_params.clone().into_bound_py_any(py),
-            None => Ok(py.None().into_bound(py)),
+    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.tool_params.allowed_tools.clone(),
+            Datapoint::Json(_) => None,
+        }
+    }
+
+    #[getter]
+    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.tool_params.additional_tools.clone().into_bound_py_any(py),
+            Datapoint::Json(_) => Ok(py.None().into_bound(py)),
+        }
+    }
+
+    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
+
+    #[getter]
+    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.tool_params.parallel_tool_calls,
+            Datapoint::Json(_) => None,
+        }
+    }
+
+    #[getter]
+    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.tool_params.provider_tools.clone().into_bound_py_any(py),
+            Datapoint::Json(_) => Ok(py.None().into_bound(py)),
+        }
+    }
+
+    #[getter]
+    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        Ok(match self {
+            Datapoint::Chat(_) => py.None().into_bound(py),
+            Datapoint::Json(datapoint) => serialize_to_dict(py, &datapoint.output_schema)?.into_bound(py),
+        })
+    }
+
+    #[getter]
+    pub fn get_is_custom(&self) -> bool {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.is_custom,
+            Datapoint::Json(datapoint) => datapoint.is_custom,
+        }
+    }
+
+    #[getter]
+    pub fn get_name(&self) -> Option<String> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.name.clone(),
+            Datapoint::Json(datapoint) => datapoint.name.clone(),
         }
     }
 }

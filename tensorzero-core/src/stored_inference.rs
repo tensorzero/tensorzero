@@ -161,6 +161,87 @@ impl StoredInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredInference {
+    #[new]
+    #[pyo3(signature = (r#type, function_name, variant_name, input, output, episode_id, inference_id, timestamp, output_schema=None, dispreferred_outputs=None, tags=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, provider_tools=None))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        py: Python<'_>,
+        r#type: String,
+        function_name: String,
+        variant_name: String,
+        input: Bound<'_, PyAny>,
+        output: Bound<'_, PyAny>,
+        episode_id: Bound<'_, PyAny>,
+        inference_id: Bound<'_, PyAny>,
+        timestamp: Bound<'_, PyAny>,
+        output_schema: Option<Bound<'_, PyAny>>,
+        dispreferred_outputs: Option<Bound<'_, PyAny>>,
+        tags: Option<Bound<'_, PyAny>>,
+        // Flattened DynamicToolParams fields
+        allowed_tools: Option<Vec<String>>,
+        additional_tools: Option<Bound<'_, PyAny>>,
+        tool_choice: Option<Bound<'_, PyAny>>,
+        parallel_tool_calls: Option<bool>,
+        provider_tools: Option<Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
+        use pyo3::types::{IntoPyDict, PyAnyMethods, PyDict};
+
+        // Build a Python dict with all the fields
+        let dict = PyDict::new(py);
+        dict.set_item("type", r#type.clone())?;
+        dict.set_item("function_name", function_name)?;
+        dict.set_item("variant_name", variant_name)?;
+        dict.set_item("input", input)?;
+        dict.set_item("output", output)?;
+        dict.set_item("episode_id", episode_id)?;
+        dict.set_item("inference_id", inference_id)?;
+        dict.set_item("timestamp", timestamp)?;
+
+        if let Some(schema) = output_schema {
+            dict.set_item("output_schema", schema)?;
+        }
+        if let Some(dispreferred) = dispreferred_outputs {
+            dict.set_item("dispreferred_outputs", dispreferred)?;
+        }
+        if let Some(t) = tags {
+            dict.set_item("tags", t)?;
+        }
+
+        // Add flattened DynamicToolParams fields for chat type
+        if r#type == "chat" {
+            if let Some(tools) = allowed_tools {
+                dict.set_item("allowed_tools", tools)?;
+            }
+            if let Some(tools) = additional_tools {
+                dict.set_item("additional_tools", tools)?;
+            }
+            if let Some(choice) = tool_choice {
+                dict.set_item("tool_choice", choice)?;
+            }
+            if let Some(parallel) = parallel_tool_calls {
+                dict.set_item("parallel_tool_calls", parallel)?;
+            }
+            if let Some(provider) = provider_tools {
+                dict.set_item("provider_tools", provider)?;
+            }
+        }
+
+        // Convert to JSON string and then deserialize to Rust
+        // Use TensorZeroTypeEncoder to handle custom types like Text, Tool, etc.
+        let json_module = py.import("json")?;
+        let tensorzero_module = py.import("tensorzero.types")?;
+        let encoder_class = tensorzero_module.getattr("TensorZeroTypeEncoder")?;
+        let kwargs = [("cls", encoder_class)].into_py_dict(py)?;
+        let json_str = json_module
+            .getattr("dumps")?
+            .call((dict,), Some(&kwargs))?
+            .extract::<String>()?;
+
+        serde_json::from_str(&json_str).map_err(|e| {
+            pyo3::exceptions::PyValueError::new_err(format!("Failed to deserialize: {}", e))
+        })
+    }
+
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
@@ -238,16 +319,6 @@ impl StoredInference {
     }
 
     #[getter]
-    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            StoredInference::Chat(example) => {
-                example.tool_params.clone().into_py_any(py)?.into_bound(py)
-            }
-            StoredInference::Json(_) => py.None().into_bound(py),
-        })
-    }
-
-    #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
             StoredInference::Chat(_) => py.None().into_bound(py),
@@ -278,6 +349,40 @@ impl StoredInference {
         match self {
             StoredInference::Chat(example) => example.timestamp.to_rfc3339(),
             StoredInference::Json(example) => example.timestamp.to_rfc3339(),
+        }
+    }
+
+    #[getter]
+    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
+        match self {
+            StoredInference::Chat(example) => example.tool_params.allowed_tools.clone(),
+            StoredInference::Json(_) => None,
+        }
+    }
+
+    #[getter]
+    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            StoredInference::Chat(example) => example.tool_params.additional_tools.clone().into_bound_py_any(py),
+            StoredInference::Json(_) => Ok(py.None().into_bound(py)),
+        }
+    }
+
+    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
+
+    #[getter]
+    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+        match self {
+            StoredInference::Chat(example) => example.tool_params.parallel_tool_calls,
+            StoredInference::Json(_) => None,
+        }
+    }
+
+    #[getter]
+    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            StoredInference::Chat(example) => example.tool_params.provider_tools.clone().into_bound_py_any(py),
+            StoredInference::Json(_) => Ok(py.None().into_bound(py)),
         }
     }
 }

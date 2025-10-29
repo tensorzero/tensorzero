@@ -150,7 +150,11 @@ class StoredInference:
         episode_id: UUID,
         inference_id: UUID,
         timestamp: str,
-        tool_params: Optional[Any] = None,
+        allowed_tools: Optional[List[str]] = None,
+        additional_tools: Optional[List[Any]] = None,
+        tool_choice: Optional[str] = None,
+        parallel_tool_calls: Optional[bool] = None,
+        provider_tools: Optional[List[Any]] = None,
         output_schema: Optional[Any] = None,
         # Dispreferred outputs are lists because there may be several of them in the future.
         dispreferred_outputs: Union[List[ChatInferenceOutput], List[JsonInferenceOutput]] = [],

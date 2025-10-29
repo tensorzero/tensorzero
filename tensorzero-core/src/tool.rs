@@ -504,6 +504,38 @@ impl std::fmt::Display for DynamicToolParams {
     }
 }
 
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl DynamicToolParams {
+    #[getter]
+    pub fn allowed_tools(&self) -> Option<Vec<String>> {
+        self.allowed_tools.clone()
+    }
+
+    #[getter]
+    pub fn additional_tools(&self) -> Option<Vec<Tool>> {
+        self.additional_tools.clone()
+    }
+
+    // TODO: Add tool_choice getter when we decide how to handle it.
+    // Mixed enums (with unit and tuple variants) aren't well supported in PyO3,
+    // and we need to decide on the proper Python representation.
+
+    #[getter]
+    pub fn parallel_tool_calls(&self) -> Option<bool> {
+        self.parallel_tool_calls
+    }
+
+    #[getter]
+    pub fn provider_tools(&self) -> Option<Vec<ProviderTool>> {
+        self.provider_tools.clone()
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct BatchDynamicToolParams {
     pub allowed_tools: Option<Vec<Option<Vec<String>>>>,
