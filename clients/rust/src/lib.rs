@@ -143,67 +143,185 @@ pub trait ClientExt {
     // ================================================================
     // Dataset operations
     // ================================================================
+    #[deprecated(since = "2025.11.1", note = "Use `create_datapoints` instead.")]
+    async fn create_datapoints_legacy(
+        &self,
+        dataset_name: String,
+        params: InsertDatapointParams,
+    ) -> Result<Vec<Uuid>, TensorZeroError>;
+
+    /// Creates new datapoints in the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to create the datapoints in.
+    /// * `datapoints` - The datapoints to create.
+    ///
+    /// # Returns
+    ///
+    /// A `CreateDatapointsResponse` containing the IDs of the newly-created datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
     async fn create_datapoints(
         &self,
         dataset_name: String,
         datapoints: Vec<CreateDatapointRequest>,
     ) -> Result<CreateDatapointsResponse, TensorZeroError>;
 
-    // TODO(shuyangli): Mark as deprecated once Python client doesn't call it directly.
+    #[deprecated(since = "2025.11.1", note = "Use `create_datapoints` instead.")]
     async fn bulk_insert_datapoints(
         &self,
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError>;
 
-    // TODO(shuyangli): Mark as deprecated once Python client doesn't call it directly.
+    #[deprecated(since = "2025.11.1", note = "Use `delete_datapoints` instead.")]
     async fn delete_datapoint(
         &self,
         dataset_name: String,
         datapoint_id: Uuid,
     ) -> Result<(), TensorZeroError>;
 
+    /// Lists datapoints in the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to list the datapoints from.
+    /// * `request` - The request to list the datapoints.
+    ///
+    /// # Returns
+    ///
+    /// A `GetDatapointsResponse` containing the datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
     async fn list_datapoints(
         &self,
         dataset_name: String,
         request: ListDatapointsRequest,
     ) -> Result<GetDatapointsResponse, TensorZeroError>;
 
+    /// Updates datapoints in the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to update the datapoints in.
+    /// * `datapoints` - The datapoints to update.
+    ///
+    /// # Returns
+    ///
+    /// A `UpdateDatapointsResponse` containing the IDs of the updated datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
     async fn update_datapoints(
         &self,
         dataset_name: String,
         datapoints: Vec<UpdateDatapointRequest>,
     ) -> Result<UpdateDatapointsResponse, TensorZeroError>;
 
-    // TODO(shuyangli): Mark as deprecated once Python client doesn't call it directly.
+    #[deprecated(since = "2025.11.1", note = "Use `get_datapoints` instead.")]
     async fn get_datapoint(
         &self,
         dataset_name: String,
         datapoint_id: Uuid,
     ) -> Result<Datapoint, TensorZeroError>;
 
+    /// Gets datapoints by their IDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `datapoint_ids` - The IDs of the datapoints to get.
+    ///
+    /// # Returns
+    ///
+    /// A `GetDatapointsResponse` containing the datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
     async fn get_datapoints(
         &self,
         datapoint_ids: Vec<Uuid>,
     ) -> Result<GetDatapointsResponse, TensorZeroError>;
 
+    /// Updates the metadata of datapoints in the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to update the metadata of.
+    /// * `datapoints` - The datapoints to update the metadata of.
+    ///
+    /// # Returns
+    ///
+    /// A `UpdateDatapointsResponse` containing the IDs of the updated datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
     async fn update_datapoints_metadata(
         &self,
         dataset_name: String,
         datapoints: Vec<UpdateDatapointMetadataRequest>,
     ) -> Result<UpdateDatapointsResponse, TensorZeroError>;
 
+    /// Deletes datapoints from the dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to delete the datapoints from.
+    /// * `datapoint_ids` - The IDs of the datapoints to delete.
+    ///
+    /// # Returns
+    ///
+    /// A `DeleteDatapointsResponse` containing the number of deleted datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
     async fn delete_datapoints(
         &self,
         dataset_name: String,
         datapoint_ids: Vec<Uuid>,
     ) -> Result<DeleteDatapointsResponse, TensorZeroError>;
 
+    /// Deletes a dataset.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to delete.
+    ///
+    /// # Returns
+    ///
+    /// A `DeleteDatapointsResponse` containing the number of deleted datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
     async fn delete_dataset(
         &self,
         dataset_name: String,
     ) -> Result<DeleteDatapointsResponse, TensorZeroError>;
 
+    /// Creates datapoints from inferences.
+    ///
+    /// # Arguments
+    ///
+    /// * `dataset_name` - The name of the dataset to create the datapoints from.
+    /// * `params` - The parameters for the creation.
+    /// * `output_source` - The output source for the creation.
+    ///
+    /// # Returns
+    ///
+    /// A `CreateDatapointsResponse` containing the IDs of the newly-created datapoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `TensorZeroError` if the request fails.
     async fn create_from_inferences(
         &self,
         dataset_name: String,
@@ -483,7 +601,7 @@ impl ClientExt for Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::create_datapoints(
                         &gateway.handle.app_state.config,
                         &gateway.handle.app_state.http_client,
@@ -494,9 +612,19 @@ impl ClientExt for Client {
                     .await
                     .map_err(err_to_http)
                 })
-                .await?)
+                .await
             }
         }
+    }
+
+    /// DEPRECATED: Use `create_datapoints` instead.
+    async fn create_datapoints_legacy(
+        &self,
+        dataset_name: String,
+        params: InsertDatapointParams,
+    ) -> Result<Vec<Uuid>, TensorZeroError> {
+        // No warning because the python client still uses it.
+        create_datapoints_internal(self, dataset_name, params, "datapoints").await
     }
 
     /// DEPRECATED: Use `create_datapoints` instead.
@@ -527,7 +655,7 @@ impl ClientExt for Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::update_datapoints(
                         &gateway.handle.app_state,
                         &dataset_name,
@@ -536,7 +664,7 @@ impl ClientExt for Client {
                     .await
                     .map_err(err_to_http)
                 })
-                .await?)
+                .await
             }
         }
     }
@@ -558,7 +686,7 @@ impl ClientExt for Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::get_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
                         &gateway.handle.app_state.config,
@@ -567,7 +695,7 @@ impl ClientExt for Client {
                     .await
                     .map_err(err_to_http)
                 })
-                .await?)
+                .await
             }
         }
     }
@@ -654,7 +782,7 @@ impl ClientExt for Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::v1::delete_datapoints(
                         &gateway.handle.app_state.clickhouse_connection_info,
                         &dataset_name,
@@ -663,7 +791,7 @@ impl ClientExt for Client {
                     .await
                     .map_err(err_to_http)
                 })
-                .await?)
+                .await
             }
         }
     }
