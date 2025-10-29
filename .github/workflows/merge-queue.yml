@@ -4,6 +4,9 @@ run-name: Merge Queue Checks for ${{ github.ref }}
 # This workflow is called from 'general.yml' (so that it can depend on artifacts from other jobs)
 # It is *not* invoked directly via a 'merge_group' event, so checking for 'github.event_name == 'merge_group' will not work
 on:
+  push:
+    branches:
+      - aaron/allure-report
   workflow_dispatch:
   workflow_call:
   schedule:
