@@ -1,23 +1,22 @@
 use crate::config::Config;
 use crate::endpoints::object_storage::get_object;
 use crate::error::Error;
-use crate::inference::types::file::Base64FileMetadata;
+use crate::inference::types::file::{Base64FileMetadata, ObjectStorageFile, ObjectStoragePointer};
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::stored_input_message_content_to_python;
 use crate::inference::types::storage::StoragePath;
-use crate::inference::types::Base64File;
-use crate::inference::types::FileWithPath;
 use crate::inference::types::ResolvedInput;
 use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
 use crate::inference::types::System;
-use crate::inference::types::TemplateInput;
-use crate::inference::types::{Role, Text, Thought, ToolCall, ToolResult};
+use crate::inference::types::Template;
+use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult, Unknown};
 use futures::future::try_join_all;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::ops::Deref;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
@@ -81,7 +80,7 @@ impl StoredInput {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
     pub role: Role,
     pub content: Vec<StoredInputMessageContent>,
@@ -104,6 +103,12 @@ impl StoredInputMessage {
     }
 }
 
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database:
+///
+/// - {"type": "text", "value": "..."} -> {"type": "text", "text": "..."}
+/// - {"type": "text", "value": { ... }} -> {"type": "template", "name": "role", "arguments": { ... }}
+///
+/// The correct type {"type": "text", "text": "..."} goes through without modification.
 impl<'de> Deserialize<'de> for StoredInputMessage {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -208,20 +213,14 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 #[cfg_attr(test, ts(export))]
 pub enum StoredInputMessageContent {
     Text(Text),
-    Template(TemplateInput),
+    Template(Template),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(Box<StoredFile>),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
-    // We may extend this in the future to include other types of content
+    Unknown(Unknown),
 }
 
 impl StoredInputMessageContent {
@@ -240,42 +239,100 @@ impl StoredInputMessageContent {
             StoredInputMessageContent::ToolResult(tool_result) => {
                 Ok(ResolvedInputMessageContent::ToolResult(tool_result))
             }
-            StoredInputMessageContent::RawText { value } => {
-                Ok(ResolvedInputMessageContent::RawText { value })
+            StoredInputMessageContent::RawText(raw_text) => {
+                Ok(ResolvedInputMessageContent::RawText(raw_text))
             }
             StoredInputMessageContent::Thought(thought) => {
                 Ok(ResolvedInputMessageContent::Thought(thought))
             }
             StoredInputMessageContent::File(file) => {
                 let data = resolver.resolve(file.storage_path.clone()).await?;
-                Ok(ResolvedInputMessageContent::File(Box::new(FileWithPath {
-                    file: Base64File {
-                        url: file.file.url.clone(),
-                        mime_type: file.file.mime_type.clone(),
+                Ok(ResolvedInputMessageContent::File(Box::new(
+                    ObjectStorageFile {
+                        file: ObjectStoragePointer {
+                            source_url: file.source_url.clone(),
+                            mime_type: file.mime_type.clone(),
+                            storage_path: file.storage_path.clone(),
+                        },
                         data,
                     },
-                    storage_path: file.storage_path.clone(),
-                })))
+                )))
             }
-            StoredInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(ResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            }),
+            StoredInputMessageContent::Unknown(unknown) => {
+                Ok(ResolvedInputMessageContent::Unknown(unknown))
+            }
         }
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
-pub struct StoredFile {
-    #[serde(alias = "image")]
-    pub file: Base64FileMetadata,
-    pub storage_path: StoragePath,
+/// A newtype wrapper around `ObjectStoragePointer` that handles legacy deserialization formats.
+/// See the deserializer implementation below for details on the legacy formats it supports.
+#[derive(Clone, Debug, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[repr(transparent)]
+#[serde(transparent)]
+pub struct StoredFile(pub ObjectStoragePointer);
+
+impl Deref for StoredFile {
+    type Target = ObjectStoragePointer;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<ObjectStoragePointer> for StoredFile {
+    fn from(file: ObjectStoragePointer) -> Self {
+        Self(file)
+    }
+}
+
+impl From<StoredFile> for ObjectStoragePointer {
+    fn from(file: StoredFile) -> Self {
+        file.0
+    }
+}
+
+/// Implement a custom deserializer for `StoredFile` to handle legacy formats
+///
+/// The custom deserializer handles:
+///
+/// - Legacy nested format: `{ file: { source_url, mime_type }, storage_path }`
+/// - Legacy `image` alias: `{ image: { source_url, mime_type }, storage_path }`
+/// - Deprecated `url` field (via `ObjectStorageFile`): `{ url: ..., mime_type, storage_path }`
+/// - New flattened format: `{ source_url, mime_type, storage_path }` (delegates to `ObjectStorageFile`)
+impl<'de> Deserialize<'de> for StoredFile {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct LegacyStoredFile {
+            #[serde(alias = "image")]
+            file: Base64FileMetadata,
+            storage_path: StoragePath,
+        }
+
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        // Check if this is the legacy nested format (has `file` or `image` field)
+        if value.get("file").is_some() || value.get("image").is_some() {
+            let legacy: LegacyStoredFile =
+                serde_json::from_value(value).map_err(de::Error::custom)?;
+
+            return Ok(StoredFile(ObjectStoragePointer {
+                source_url: legacy.file.source_url,
+                mime_type: legacy.file.mime_type,
+                storage_path: legacy.storage_path,
+            }));
+        }
+
+        // For the new flattened format, delegate to `ObjectStorageFile`'s deserializer
+        // which already handles the `url` vs `source_url` alias deprecation
+        let file: ObjectStoragePointer =
+            serde_json::from_value(value).map_err(de::Error::custom)?;
+        Ok(StoredFile(file))
+    }
 }
 
 impl std::fmt::Display for StoredInput {
@@ -296,6 +353,32 @@ impl std::fmt::Display for StoredFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl StoredFile {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+
+    #[getter(source_url)]
+    pub fn source_url_string(&self) -> Option<String> {
+        self.0
+            .source_url
+            .as_ref()
+            .map(std::string::ToString::to_string)
+    }
+
+    #[getter(mime_type)]
+    pub fn mime_type_string(&self) -> String {
+        self.0.mime_type.to_string()
+    }
+
+    #[getter]
+    pub fn get_storage_path(&self) -> StoragePath {
+        self.0.storage_path.clone()
     }
 }
 
@@ -390,8 +473,8 @@ mod tests {
         match &message.content[0] {
             StoredInputMessageContent::Template(template) => {
                 assert_eq!(template.name, "user");
-                assert_eq!(template.arguments.get("foo").unwrap(), "bar");
-                assert_eq!(template.arguments.get("baz").unwrap(), 123);
+                assert_eq!(template.arguments.0.get("foo").unwrap(), "bar");
+                assert_eq!(template.arguments.0.get("baz").unwrap(), 123);
             }
             _ => panic!("Expected Template variant"),
         }
@@ -443,5 +526,163 @@ mod tests {
         let deserialized: StoredInputMessage = serde_json::from_value(json).unwrap();
 
         assert_eq!(message, deserialized);
+    }
+
+    #[test]
+    fn test_deserialize_stored_file_legacy_nested_format() {
+        use crate::inference::types::storage::StorageKind;
+
+        // Legacy format with nested "file" field
+        let json = json!({
+            "file": {
+                "source_url": "https://example.com/image.png",
+                "mime_type": "image/png"
+            },
+            "storage_path": {
+                "kind": {
+                    "type": "disabled"
+                },
+                "path": "test/image.png"
+            }
+        });
+
+        let stored_file: StoredFile = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            stored_file.source_url.as_ref().unwrap().as_str(),
+            "https://example.com/image.png"
+        );
+        assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
+        assert!(matches!(
+            stored_file.storage_path.kind,
+            StorageKind::Disabled
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_stored_file_legacy_nested_format_with_image_alias() {
+        use crate::inference::types::storage::StorageKind;
+
+        // Legacy format with nested "image" field (alias)
+        let json = json!({
+            "image": {
+                "source_url": "https://example.com/photo.jpg",
+                "mime_type": "image/jpeg"
+            },
+            "storage_path": {
+                "kind": {
+                    "type": "disabled"
+                },
+                "path": "test/photo.jpg"
+            }
+        });
+
+        let stored_file: StoredFile = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            stored_file.source_url.as_ref().unwrap().as_str(),
+            "https://example.com/photo.jpg"
+        );
+        assert_eq!(stored_file.mime_type, mime::IMAGE_JPEG);
+        assert!(matches!(
+            stored_file.storage_path.kind,
+            StorageKind::Disabled
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_stored_file_new_flattened_format() {
+        use crate::inference::types::storage::StorageKind;
+
+        // New flattened format
+        let json = json!({
+            "source_url": "https://example.com/image.png",
+            "mime_type": "image/png",
+            "storage_path": {
+                "kind": {
+                    "type": "disabled"
+                },
+                "path": "test/image.png"
+            }
+        });
+
+        let stored_file: StoredFile = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            stored_file.source_url.as_ref().unwrap().as_str(),
+            "https://example.com/image.png"
+        );
+        assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
+        assert!(matches!(
+            stored_file.storage_path.kind,
+            StorageKind::Disabled
+        ));
+    }
+
+    #[test]
+    fn test_deserialize_stored_file_with_url_alias() {
+        use crate::inference::types::storage::StorageKind;
+
+        // New format with deprecated "url" field
+        let json = json!({
+            "url": "https://example.com/image.png",
+            "mime_type": "image/png",
+            "storage_path": {
+                "kind": {
+                    "type": "disabled"
+                },
+                "path": "test/image.png"
+            }
+        });
+
+        let stored_file: StoredFile = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            stored_file.source_url.as_ref().unwrap().as_str(),
+            "https://example.com/image.png"
+        );
+        assert_eq!(stored_file.mime_type, mime::IMAGE_PNG);
+        assert!(matches!(
+            stored_file.storage_path.kind,
+            StorageKind::Disabled
+        ));
+    }
+
+    #[test]
+    fn test_serialize_stored_file_always_flattened() {
+        use crate::inference::types::storage::{StorageKind, StoragePath};
+
+        let stored_file = StoredFile(ObjectStoragePointer {
+            source_url: Some("https://example.com/image.png".parse().unwrap()),
+            mime_type: mime::IMAGE_PNG,
+            storage_path: StoragePath {
+                kind: StorageKind::Disabled,
+                path: object_store::path::Path::parse("test/image.png").unwrap(),
+            },
+        });
+
+        let json = serde_json::to_value(&stored_file).unwrap();
+
+        // Serialization should always produce flattened format
+        assert!(json.get("source_url").is_some());
+        assert!(json.get("mime_type").is_some());
+        assert!(json.get("storage_path").is_some());
+        assert!(json.get("file").is_none());
+        assert!(json.get("image").is_none());
+    }
+
+    #[test]
+    fn test_round_trip_stored_file_serialization() {
+        use crate::inference::types::storage::{StorageKind, StoragePath};
+
+        let original = StoredFile(ObjectStoragePointer {
+            source_url: Some("https://example.com/test.png".parse().unwrap()),
+            mime_type: mime::IMAGE_PNG,
+            storage_path: StoragePath {
+                kind: StorageKind::Disabled,
+                path: object_store::path::Path::parse("test/path.png").unwrap(),
+            },
+        });
+
+        let json = serde_json::to_value(&original).unwrap();
+        let deserialized: StoredFile = serde_json::from_value(json).unwrap();
+
+        assert_eq!(original, deserialized);
     }
 }

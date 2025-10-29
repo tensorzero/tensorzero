@@ -1,10 +1,10 @@
 import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
-import type { TimeWindow } from "~/types/tensorzero";
-// import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,
   formatDetailedNumber,
+  formatXAxisTimestamp,
+  formatTooltipTimestamp,
   CHART_COLORS,
 } from "~/utils/chart";
 
@@ -23,20 +23,21 @@ import {
   ChartTooltipContent,
 } from "~/components/ui/chart";
 import { TimeGranularitySelector } from "./TimeGranularitySelector";
+import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 
 export function VariantPerformance({
   variant_performances,
   metric_name,
-  time_granularity,
-  onTimeGranularityChange,
   singleVariantMode = false,
 }: {
   variant_performances: VariantPerformanceRow[];
   metric_name: string;
-  time_granularity: TimeWindow;
-  onTimeGranularityChange: (time_granularity: TimeWindow) => void;
   singleVariantMode?: boolean;
 }) {
+  const [time_granularity, onTimeGranularityChange] = useTimeGranularityParam(
+    "time_granularity",
+    "week",
+  );
   const { data, variantNames } =
     transformVariantPerformances(variant_performances);
 
@@ -91,7 +92,9 @@ export function VariantPerformance({
                 tickLine={false}
                 tickMargin={10}
                 axisLine={true}
-                tickFormatter={(value) => new Date(value).toLocaleDateString()}
+                tickFormatter={(value) =>
+                  formatXAxisTimestamp(new Date(value), time_granularity)
+                }
               />
               <YAxis
                 tickLine={false}
@@ -103,7 +106,7 @@ export function VariantPerformance({
                 content={
                   <ChartTooltipContent
                     labelFormatter={(label) =>
-                      new Date(label).toLocaleDateString()
+                      formatTooltipTimestamp(new Date(label), time_granularity)
                     }
                     formatter={(value, name, entry) => {
                       const numInferences =
@@ -199,7 +202,9 @@ export function transformVariantPerformances(
   // Remove rows with n=0 inferences
   const filtered = parsedRows.filter((row) => row.count > 0);
 
-  const variantNames = [...new Set(filtered.map((row) => row.variant_name))];
+  const variantNames = [
+    ...new Set(filtered.map((row) => row.variant_name)),
+  ].sort();
 
   // First group by date
   const groupedByDate = filtered.reduce<PerformanceDataGroupedByDate>(

@@ -16,7 +16,7 @@ use tensorzero_core::db::datasets::{
     StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
-use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{
@@ -625,11 +625,11 @@ async fn test_count_datasets() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint1))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint1)])
         .await
         .unwrap();
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint2))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint2)])
         .await
         .unwrap();
 
@@ -686,7 +686,7 @@ async fn test_count_datapoints_for_dataset_function_chat() {
         };
 
         clickhouse
-            .insert_datapoint(&DatapointInsert::Chat(datapoint))
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
             .await
             .unwrap();
     }
@@ -755,7 +755,7 @@ async fn test_count_datapoints_for_dataset_function_json() {
         };
 
         clickhouse
-            .insert_datapoint(&DatapointInsert::Json(datapoint))
+            .insert_datapoints(&[DatapointInsert::Json(datapoint)])
             .await
             .unwrap();
     }
@@ -809,7 +809,7 @@ async fn test_insert_datapoint_chat() {
 
     // Insert the datapoint
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -864,7 +864,7 @@ async fn test_insert_datapoint_json() {
 
     // Insert the datapoint
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -913,7 +913,7 @@ async fn test_insert_datapoint_validates_dataset_name_builder() {
     };
 
     let result = clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await;
     assert!(result.is_err());
 }
@@ -945,7 +945,7 @@ async fn test_insert_datapoint_validates_dataset_name_tensorzero_prefix() {
     };
 
     let result = clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await;
     assert!(result.is_err());
 }
@@ -1108,7 +1108,10 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
     });
 
     // Test insertion
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[chat_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1211,7 +1214,10 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
     });
 
     // Test insertion
-    clickhouse.insert_datapoint(&json_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[json_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -1332,12 +1338,19 @@ async fn test_handles_duplicate_insertions_gracefully() {
         source_inference_id: Some(source_inference_id),
         is_custom: false,
     });
+    let datapoint_slice = [chat_datapoint];
 
     // First insertion
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&datapoint_slice)
+        .await
+        .unwrap();
 
     // Second insertion with same ID should not throw
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&datapoint_slice)
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -1480,7 +1493,7 @@ async fn test_insert_datapoint_handles_invalid_dataset_names() {
         is_custom: true,
     });
 
-    let result = clickhouse.insert_datapoint(&chat_datapoint).await;
+    let result = clickhouse.insert_datapoints(&[chat_datapoint]).await;
     assert!(
         result.is_err(),
         "Should reject reserved dataset name 'builder'"
@@ -1521,7 +1534,7 @@ async fn test_get_adjacent_datapoint_ids() {
         };
 
         clickhouse
-            .insert_datapoint(&DatapointInsert::Chat(datapoint))
+            .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
             .await
             .unwrap();
     }
@@ -1634,7 +1647,7 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -1696,7 +1709,7 @@ async fn test_get_datapoints_with_single_json_datapoint() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Json(datapoint))
+        .insert_datapoints(&[DatapointInsert::Json(datapoint)])
         .await
         .unwrap();
 
@@ -1761,7 +1774,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(chat_dp1))
+        .insert_datapoints(&[DatapointInsert::Chat(chat_dp1)])
         .await
         .unwrap();
 
@@ -1789,7 +1802,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Json(json_dp))
+        .insert_datapoints(&[DatapointInsert::Json(json_dp)])
         .await
         .unwrap();
 
@@ -1816,7 +1829,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(chat_dp2))
+        .insert_datapoints(&[DatapointInsert::Chat(chat_dp2)])
         .await
         .unwrap();
 
@@ -1892,7 +1905,7 @@ async fn test_get_datapoints_with_non_existent_ids() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -1952,7 +1965,7 @@ async fn test_get_datapoints_respects_allow_stale_false() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -2037,7 +2050,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -2116,7 +2129,7 @@ async fn test_get_datapoints_with_wrong_dataset_name() {
     };
 
     clickhouse
-        .insert_datapoint(&DatapointInsert::Chat(datapoint))
+        .insert_datapoints(&[DatapointInsert::Chat(datapoint)])
         .await
         .unwrap();
 
@@ -2152,16 +2165,14 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
     // Create a StoredFile with ObjectStorage
-    let stored_file = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/original.png".parse().unwrap()),
-            mime_type: mime::IMAGE_PNG,
-        },
+    let stored_file = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/original.png".parse().unwrap()),
+        mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image.png").unwrap(),
         },
-    };
+    });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2190,7 +2201,10 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
     });
 
     // Insert the datapoint
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[chat_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -2213,9 +2227,9 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
 
         match &chat_dp.input.messages[0].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/original.png".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file.storage_path.path);
@@ -2234,16 +2248,14 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     let dataset_name = format!("test_file_storage_{}", Uuid::now_v7());
 
     // Create a StoredFile with ObjectStorage
-    let stored_file = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/data.json".parse().unwrap()),
-            mime_type: mime::APPLICATION_JSON,
-        },
+    let stored_file = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/data.json".parse().unwrap()),
+        mime_type: mime::APPLICATION_JSON,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/data.json").unwrap(),
         },
-    };
+    });
 
     let json_datapoint = DatapointInsert::Json(JsonInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2273,7 +2285,10 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
     });
 
     // Insert the datapoint
-    clickhouse.insert_datapoint(&json_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[json_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -2296,9 +2311,9 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
 
         match &json_dp.input.messages[0].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::APPLICATION_JSON);
+                assert_eq!(file.mime_type, mime::APPLICATION_JSON);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/data.json".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file.storage_path.path);
@@ -2317,27 +2332,23 @@ async fn test_datapoint_with_mixed_file_types() {
     let dataset_name = format!("test_mixed_files_{}", Uuid::now_v7());
 
     // Create multiple StoredFiles
-    let stored_file1 = StoredFile {
-        file: Base64FileMetadata {
-            url: Some("https://example.com/image1.png".parse().unwrap()),
-            mime_type: mime::IMAGE_PNG,
-        },
+    let stored_file1 = StoredFile(ObjectStoragePointer {
+        source_url: Some("https://example.com/image1.png".parse().unwrap()),
+        mime_type: mime::IMAGE_PNG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image1.png").unwrap(),
         },
-    };
+    });
 
-    let stored_file2 = StoredFile {
-        file: Base64FileMetadata {
-            url: None, // No source URL
-            mime_type: mime::IMAGE_JPEG,
-        },
+    let stored_file2 = StoredFile(ObjectStoragePointer {
+        source_url: None, // No source URL
+        mime_type: mime::IMAGE_JPEG,
         storage_path: StoragePath {
             kind: StorageKind::Disabled,
             path: ObjectStorePath::parse("test/files/image2.jpg").unwrap(),
         },
-    };
+    });
 
     let chat_datapoint = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -2377,7 +2388,10 @@ async fn test_datapoint_with_mixed_file_types() {
     });
 
     // Insert the datapoint
-    clickhouse.insert_datapoint(&chat_datapoint).await.unwrap();
+    clickhouse
+        .insert_datapoints(&[chat_datapoint])
+        .await
+        .unwrap();
 
     // Sleep for 1 second for ClickHouse to become consistent
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -2407,9 +2421,9 @@ async fn test_datapoint_with_mixed_file_types() {
         }
         match &chat_dp.input.messages[0].content[1] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_PNG);
+                assert_eq!(file.mime_type, mime::IMAGE_PNG);
                 assert_eq!(
-                    file.file.url,
+                    file.source_url,
                     Some("https://example.com/image1.png".parse().unwrap())
                 );
                 assert_eq!(file.storage_path.path, stored_file1.storage_path.path);
@@ -2421,8 +2435,8 @@ async fn test_datapoint_with_mixed_file_types() {
         assert_eq!(chat_dp.input.messages[1].content.len(), 1);
         match &chat_dp.input.messages[1].content[0] {
             StoredInputMessageContent::File(file) => {
-                assert_eq!(file.file.mime_type, mime::IMAGE_JPEG);
-                assert_eq!(file.file.url, None);
+                assert_eq!(file.mime_type, mime::IMAGE_JPEG);
+                assert_eq!(file.source_url, None);
                 assert_eq!(file.storage_path.path, stored_file2.storage_path.path);
             }
             _ => panic!("Expected File content"),

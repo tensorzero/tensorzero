@@ -78,9 +78,9 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunParams, WorkflowEvaluationRunResponse,
 };
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
-pub use tensorzero_core::inference::types::File;
+pub use tensorzero_core::inference::types::{Base64File, File, ObjectStoragePointer, UrlFile};
 pub use tensorzero_core::inference::types::{
-    ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System,
+    ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System, Unknown,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 

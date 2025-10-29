@@ -797,7 +797,9 @@ describe("OpenAI Compatibility", () => {
         // @ts-expect-error - custom TensorZero property
         "tensorzero::episode_id": episodeId,
       })
-    ).rejects.toThrow(/System message must be a text content block/);
+    ).rejects.toThrow(
+      /System message must contain only text or template content blocks/
+    );
   });
 
   it("should handle json failure", async () => {
@@ -1265,7 +1267,7 @@ describe("OpenAI Compatibility", () => {
 
     expect(result.choices[0].message.content).not.toBeNull();
     const jsonContent = JSON.parse(result.choices[0].message.content!);
-    expect(jsonContent[0].FileWithPath.storage_path).toEqual({
+    expect(jsonContent[0].Base64.storage_path).toEqual({
       kind: { type: "disabled" },
       path: "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
     });

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::db::clickhouse::query_builder::DatapointFilter;
+use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
@@ -126,6 +126,29 @@ pub struct UpdateDatapointsResponse {
     pub ids: Vec<Uuid>,
 }
 
+/// Request to update metadata for one or more datapoints in a dataset.
+/// Used by the `PATCH /v1/datasets/{dataset_id}/datapoints/metadata` endpoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct UpdateDatapointsMetadataRequest {
+    /// The datapoints to update metadata for.
+    pub datapoints: Vec<UpdateDatapointMetadataRequest>,
+}
+
+/// A request to update the metadata of a single datapoint.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
+pub struct UpdateDatapointMetadataRequest {
+    /// The ID of the datapoint to update. Required.
+    pub id: Uuid,
+
+    /// Metadata fields to update. If omitted, no metadata changes will be made.
+    #[serde(default)]
+    pub metadata: Option<DatapointMetadataUpdate>,
+}
+
 /// Request to list datapoints from a dataset with pagination and filters.
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
 #[derive(Debug, Deserialize)]
@@ -166,4 +189,90 @@ pub struct GetDatapointsRequest {
 pub struct GetDatapointsResponse {
     /// The retrieved datapoints.
     pub datapoints: Vec<Datapoint>,
+}
+
+/// Specifies the source of the output for the datapoint when creating datapoints from inferences.
+/// - `None`: Do not include any output in the datapoint.
+/// - `Inference`: Include the original inference output in the datapoint.
+/// - `Demonstration`: Include the latest demonstration feedback as output in the datapoint.
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(rename_all = "snake_case")]
+pub enum CreateDatapointsFromInferenceOutputSource {
+    /// Do not include any output in the datapoint.
+    None,
+    /// Include the original inference output in the datapoint.
+    Inference,
+    /// Include the latest demonstration feedback as output in the datapoint.
+    Demonstration,
+}
+
+/// Request to create datapoints from inferences.
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export, optional_fields))]
+pub struct CreateDatapointsFromInferenceRequest {
+    #[serde(flatten)]
+    pub params: CreateDatapointsFromInferenceRequestParams,
+
+    /// When creating the datapoint, this specifies the source of the output for the datapoint.
+    /// If not provided, by default we will use the original inference output as the datapoint's output
+    /// (equivalent to `inference`).
+    pub output_source: Option<CreateDatapointsFromInferenceOutputSource>,
+}
+
+/// Parameters for creating datapoints from inferences.
+/// Can specify either a list of inference IDs or a query to find inferences.
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CreateDatapointsFromInferenceRequestParams {
+    /// Create datapoints from specific inference IDs.
+    InferenceIds {
+        /// The inference IDs to create datapoints from.
+        inference_ids: Vec<Uuid>,
+    },
+
+    /// Create datapoints from an inference query.
+    InferenceQuery {
+        /// The function name to filter inferences by.
+        function_name: String,
+
+        /// Variant name to filter inferences by, optional.
+        #[cfg_attr(test, ts(optional))]
+        variant_name: Option<String>,
+
+        /// Filters to apply when querying inferences, optional.
+        #[cfg_attr(test, ts(optional))]
+        filters: Option<InferenceFilter>,
+    },
+}
+
+/// Response from creating datapoints from inferences.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct CreateDatapointsFromInferenceResponse {
+    /// The IDs of the newly-generated datapoints.
+    pub ids: Vec<Uuid>,
+}
+
+/// Request to delete datapoints from a dataset.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct DeleteDatapointsRequest {
+    /// The IDs of the datapoints to delete.
+    pub ids: Vec<Uuid>,
+}
+
+/// Response containing the number of deleted datapoints.
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct DeleteDatapointsResponse {
+    /// The number of deleted datapoints.
+    pub num_deleted_datapoints: u64,
 }

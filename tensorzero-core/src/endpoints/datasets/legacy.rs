@@ -1,7 +1,6 @@
 use axum::extract::{Path, Query, State};
 use axum::Json;
 use chrono::Utc;
-use futures::try_join;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
 #[cfg(feature = "pyo3")]
@@ -412,7 +411,7 @@ pub async fn update_datapoint_handler(
                 name: chat.name,
                 id: path_params.datapoint_id,
                 episode_id: chat.episode_id,
-                input: resolved_input.into_stored_input(),
+                input: resolved_input.into_stored_input()?,
                 output,
                 tool_params: chat.tool_params,
                 tags: chat.tags,
@@ -486,7 +485,7 @@ pub async fn update_datapoint_handler(
                 name: json.name,
                 id: path_params.datapoint_id,
                 episode_id: json.episode_id,
-                input: resolved_input.into_stored_input(),
+                input: resolved_input.into_stored_input()?,
                 output,
                 output_schema: json.output_schema,
                 tags: json.tags,
@@ -670,7 +669,7 @@ pub async fn insert_datapoint(
                     name: chat.name,
                     id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input.into_stored_input(),
+                    input: resolved_input.into_stored_input()?,
                     output,
                     tool_params: tool_config.as_ref().map(|x| x.clone().into()),
                     tags: chat.tags,
@@ -754,7 +753,7 @@ pub async fn insert_datapoint(
                     name: json.name,
                     id: datapoint_id,
                     episode_id: None,
-                    input: resolved_input.into_stored_input(),
+                    input: resolved_input.into_stored_input()?,
                     output,
                     output_schema,
                     tags: json.tags,
@@ -1295,7 +1294,6 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-
     // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -1582,6 +1580,18 @@ pub struct StaleDatasetResponse {
     pub num_staled_datapoints: u64,
 }
 
+/// Helper function for staling a dataset. Used by the Rust client.
+pub async fn stale_dataset(
+    clickhouse: &impl DatasetQueries,
+    dataset_name: &str,
+) -> Result<StaleDatasetResponse, Error> {
+    let num_staled_datapoints = clickhouse.delete_datapoints(dataset_name, None).await?;
+    Ok(StaleDatasetResponse {
+        num_staled_datapoints,
+    })
+}
+
+/// Deprecated in favor of `delete_dataset_handler` in `v1/datasets/v1/mod.rs`.
 #[axum::debug_handler(state = AppStateData)]
 pub async fn stale_dataset_handler(
     State(app_state): AppState,
@@ -1594,53 +1604,6 @@ pub async fn stale_dataset_handler(
     )
     .await?;
     Ok(Json(response))
-}
-
-/// Stales all datapoints in a dataset that have not been staled yet.
-/// This is a soft deletion, so evaluation runs will still refer to it.
-/// Returns the number of datapoints that were staled.
-pub async fn stale_dataset(
-    clickhouse: &ClickHouseConnectionInfo,
-    dataset_name: &str,
-) -> Result<StaleDatasetResponse, Error> {
-    // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
-    let chat_query = r"
-    INSERT INTO ChatInferenceDatapoint
-    SELECT
-        *
-        REPLACE (
-            now64() AS updated_at,
-            now64() AS staled_at
-        )
-    FROM ChatInferenceDatapoint FINAL
-    WHERE dataset_name = {dataset_name:String}
-    AND staled_at IS NULL
-    "
-    .to_string();
-
-    let json_query = r"
-    INSERT INTO JsonInferenceDatapoint
-    SELECT
-        *
-        REPLACE (
-            now64() AS updated_at,
-            now64() AS staled_at
-        )
-    FROM JsonInferenceDatapoint FINAL
-    WHERE dataset_name = {dataset_name:String}
-    AND staled_at IS NULL
-    "
-    .to_string();
-    let query_params = HashMap::from([("dataset_name", dataset_name)]);
-
-    let (chat_result, json_result) = try_join!(
-        clickhouse.run_query_synchronous(chat_query, &query_params),
-        clickhouse.run_query_synchronous(json_query, &query_params)
-    )?;
-    Ok(StaleDatasetResponse {
-        num_staled_datapoints: chat_result.metadata.written_rows
-            + json_result.metadata.written_rows,
-    })
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { TemplateContentBlock } from "./TemplateContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { TemplateInput } from "~/types/tensorzero";
+import type { Template } from "~/types/tensorzero";
 
 const meta = {
   title: "Input Output/Content Blocks/TemplateContentBlock",
@@ -69,7 +69,7 @@ export const SimpleEditing: Story = {
           writing: ["Grammarly", "ProWritingAid"],
         },
       },
-    } as TemplateInput);
+    } as Template);
     return (
       <TemplateContentBlock
         block={block}
@@ -128,7 +128,7 @@ export const SystemEditing: Story = {
           writing: ["Grammarly", "ProWritingAid"],
         },
       },
-    } as TemplateInput);
+    } as Template);
     return (
       <TemplateContentBlock
         block={block}
@@ -175,7 +175,7 @@ export const LongValuesEditing: Story = {
           "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.",
         long_array: Array.from({ length: 50 }, (_, i) => `item_${i + 1}`),
       },
-    } as TemplateInput);
+    } as Template);
     return (
       <TemplateContentBlock
         block={block}

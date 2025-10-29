@@ -20,7 +20,7 @@ use tensorzero::{
     ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
     ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
-use tensorzero_core::inference::types::{StoredInput, System};
+use tensorzero_core::inference::types::{Arguments, StoredInput, System};
 use tensorzero_core::observability::enter_fake_http_request_otel;
 use tensorzero_core::{
     db::clickhouse::test_helpers::get_clickhouse_replica,
@@ -30,8 +30,8 @@ use tensorzero_core::{
     },
     endpoints::inference::ChatInferenceResponse,
     inference::types::{
-        ContentBlockOutput, File, Role, StoredContentBlock, StoredInputMessageContent,
-        StoredRequestMessage, Text, TextKind,
+        Base64File, ContentBlockOutput, File, RawText, Role, StoredContentBlock,
+        StoredInputMessageContent, StoredRequestMessage, Text, TextKind,
     },
     providers::dummy::{
         DUMMY_BAD_TOOL_RESPONSE, DUMMY_INFER_RESPONSE_CONTENT, DUMMY_INFER_RESPONSE_RAW,
@@ -1370,19 +1370,17 @@ async fn e2e_test_variant_zero_weight_skip_zero() {
         .inference(ClientInferenceParams {
             function_name: Some("variant_failover_zero_weight".to_string()),
             input: ClientInput {
-                system: Some(System::Template(
-                    serde_json::json!({"assistant_name": "AskJeeves"})
-                        .as_object()
-                        .unwrap()
-                        .clone(),
-                )),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "AskJeeves".into(),
+                )])))),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
-                        arguments: serde_json::json!({"type": "tacos", "quantity": 13})
-                            .as_object()
-                            .unwrap()
-                            .clone(),
+                        arguments: Arguments(serde_json::Map::from_iter([
+                            ("type".to_string(), "tacos".into()),
+                            ("quantity".to_string(), 13.into()),
+                        ])),
                     })],
                 }],
             },
@@ -1418,19 +1416,17 @@ async fn e2e_test_variant_zero_weight_pin_zero() {
             function_name: Some("variant_failover_zero_weight".to_string()),
             variant_name: Some("zero_weight".to_string()),
             input: ClientInput {
-                system: Some(System::Template(
-                    serde_json::json!({"assistant_name": "AskJeeves"})
-                        .as_object()
-                        .unwrap()
-                        .clone(),
-                )),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "AskJeeves".into(),
+                )])))),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
-                        arguments: serde_json::json!({"type": "tacos", "quantity": 13})
-                            .as_object()
-                            .unwrap()
-                            .clone(),
+                        arguments: Arguments(serde_json::Map::from_iter([
+                            ("type".to_string(), "tacos".into()),
+                            ("quantity".to_string(), 13.into()),
+                        ])),
                     })],
                 }],
             },
@@ -1767,12 +1763,10 @@ base_path = "{root}"
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
         input: ClientInput {
-            system: Some(System::Template(
-                serde_json::json!({"assistant_name": "AskJeeves"})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                "AskJeeves".into(),
+            )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -1814,12 +1808,10 @@ model = "dummy::good"
     let params = ClientInferenceParams {
         function_name: Some("my_test".to_string()),
         input: ClientInput {
-            system: Some(System::Template(
-                serde_json::json!({"assistant_name": "AskJeeves"})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                "AskJeeves".into(),
+            )])))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -2085,7 +2077,7 @@ async fn check_good_mixture_response(
     };
     check_dummy_model_span(variant1_model_span, &spans, "dummy::alternate", "alternate");
 
-    assert_eq!(num_spans, 10);
+    assert_eq!(num_spans, 16);
 }
 
 fn check_dummy_model_span(
@@ -2117,11 +2109,22 @@ fn check_dummy_model_span(
     );
     assert_eq!(model_attr_map["stream"], false.into());
 
+    let rate_limiting_spans = spans
+        .span_children
+        .get(&model_provider_span.span_context.span_id())
+        .unwrap();
+
+    // Check that we have a 'consume' and 'return' span - we have much more extensive checks in the 'otel' tests.
+    let [first_span, second_span] = rate_limiting_spans.as_slice() else {
+        panic!("Expected two rate limiting spans: {rate_limiting_spans:#?}");
+    };
+    let names = HashSet::from([&*first_span.name, &*second_span.name]);
     assert_eq!(
-        spans
-            .span_children
-            .get(&model_provider_span.span_context.span_id()),
-        None
+        names,
+        HashSet::from([
+            "rate_limiting_consume_tickets",
+            "rate_limiting_return_tickets"
+        ])
     );
 }
 
@@ -2579,19 +2582,15 @@ pub async fn test_raw_text(client: tensorzero::Client) {
             episode_id: Some(episode_id),
             function_name: Some("json_success".to_string()),
             input: ClientInput {
-                system: Some(System::Template(
-                    serde_json::json!({
-                        "assistant_name": "Dr. Mehta"
-                    })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-                )),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
-                    content: vec![ClientInputMessageContent::RawText {
+                    content: vec![ClientInputMessageContent::RawText(RawText {
                         value: "This is not the normal input".into(),
-                    }],
+                    })],
                 }],
             },
             ..Default::default()
@@ -3226,10 +3225,11 @@ async fn test_image_inference_without_object_store() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe the contents of the image".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64 {
+                        ClientInputMessageContent::File(File::Base64(Base64File {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
-                        }),
+                        })),
                     ],
                 }],
             },

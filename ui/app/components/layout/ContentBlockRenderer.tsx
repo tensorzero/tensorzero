@@ -202,18 +202,18 @@ export function ContentBlockRenderer({
     case "file": {
       return block.file.mime_type.startsWith("image/") ? (
         <ImageMessage
-          url={block.file.dataUrl}
+          url={block.file.data}
           downloadName={`tensorzero_${block.storage_path.path}`}
         />
       ) : block.file.mime_type.startsWith("audio/") ? (
         <AudioMessage
-          fileData={block.file.dataUrl}
+          data={block.file.data}
           mimeType={block.file.mime_type}
           filePath={block.storage_path.path}
         />
       ) : (
         <FileMessage
-          fileData={block.file.dataUrl}
+          data={block.file.data}
           mimeType={block.file.mime_type}
           filePath={block.storage_path.path}
         />

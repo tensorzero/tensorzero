@@ -20,11 +20,13 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function getBase64File(url: string): Promise<string | null> {
+// TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
+async function getBase64File(url: string): Promise<string> {
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      return null;
+      // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
+      return "";
     }
     const blob = await response.blob();
     return new Promise((resolve) => {
@@ -33,11 +35,13 @@ async function getBase64File(url: string): Promise<string | null> {
         const base64String = reader.result as string;
         resolve(`data:${blob.type};base64,${base64String.split(",")[1]}`);
       };
-      reader.onerror = () => resolve(null);
+      // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
+      reader.onerror = () => resolve("");
       reader.readAsDataURL(blob);
     });
   } catch {
-    return null;
+    // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
+    return "";
   }
 }
 
@@ -45,11 +49,10 @@ export const ImageURL: Story = {
   name: "Image (URL)",
   args: {
     block: {
-      file: {
-        url: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-        mime_type: "image/png",
-        data: "",
-      },
+      source_url:
+        "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+      mime_type: "image/png",
+      data: "",
       storage_path: {
         kind: {
           type: "s3_compatible",
@@ -68,13 +71,12 @@ export const ImageBase64: Story = {
   name: "Image (Base64)",
   args: {
     block: {
-      file: {
-        url: await getBase64File(
-          "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-        ),
-        mime_type: "image/png",
-        data: "",
-      },
+      data: await getBase64File(
+        "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+      ),
+      source_url:
+        "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+      mime_type: "image/png",
       storage_path: {
         kind: {
           type: "filesystem",
@@ -90,11 +92,8 @@ export const AudioURL: Story = {
   name: "Audio (URL)",
   args: {
     block: {
-      file: {
-        url: await getBase64File(mp3Url),
-        mime_type: "audio/mp3",
-        data: "",
-      },
+      data: await getBase64File(mp3Url),
+      mime_type: "audio/mp3",
       storage_path: {
         kind: {
           type: "filesystem",
@@ -110,11 +109,8 @@ export const AudioBase64: Story = {
   name: "Audio (Base64)",
   args: {
     block: {
-      file: {
-        url: await getBase64File(mp3Url),
-        mime_type: "audio/mp3",
-        data: "",
-      },
+      data: await getBase64File(mp3Url),
+      mime_type: "audio/mp3",
       storage_path: {
         kind: {
           type: "s3_compatible",
@@ -133,11 +129,8 @@ export const PDFURL: Story = {
   name: "PDF (URL)",
   args: {
     block: {
-      file: {
-        url: await getBase64File(pdfUrl),
-        mime_type: "application/pdf",
-        data: "",
-      },
+      data: await getBase64File(pdfUrl),
+      mime_type: "application/pdf",
       storage_path: {
         kind: {
           type: "s3_compatible",
@@ -156,11 +149,8 @@ export const PDFBase64: Story = {
   name: "PDF (Base64)",
   args: {
     block: {
-      file: {
-        url: await getBase64File(pdfUrl),
-        mime_type: "application/pdf",
-        data: "",
-      },
+      data: await getBase64File(pdfUrl),
+      mime_type: "application/pdf",
       storage_path: {
         kind: {
           type: "filesystem",
@@ -175,11 +165,9 @@ export const PDFBase64: Story = {
 export const Error: Story = {
   args: {
     block: {
-      file: {
-        url: null,
-        mime_type: "image/png",
-        data: "",
-      },
+      // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
+      data: "",
+      mime_type: "image/png",
       storage_path: {
         kind: {
           type: "s3_compatible",

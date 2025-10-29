@@ -33,6 +33,7 @@ import {
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
+import { ReadOnlyBadge } from "./ReadOnlyBadge";
 
 interface NavigationItem {
   title: string;
@@ -199,6 +200,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="relative">
+        <ReadOnlyBadge />
         {state === "expanded" && <TensorZeroStatusIndicator />}
         <SidebarTrigger className="justify-left mt-1 flex" />
       </SidebarFooter>

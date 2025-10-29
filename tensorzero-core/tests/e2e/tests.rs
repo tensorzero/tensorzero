@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 #![expect(
     clippy::expect_used,
     clippy::panic,

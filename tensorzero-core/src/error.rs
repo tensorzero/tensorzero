@@ -4,11 +4,14 @@ use std::time::Duration;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Json, Response};
+use opentelemetry::trace::Status;
 use serde::{Serialize, Serializer};
 use serde_json::{json, Value};
 use std::fmt::{Debug, Display};
 use thiserror::Error;
 use tokio::sync::OnceCell;
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 use url::Url;
 use uuid::Uuid;
 
@@ -133,6 +136,19 @@ impl Error {
 
     pub fn get_details(&self) -> &ErrorDetails {
         &self.0
+    }
+
+    /// Ensures that the OpenTelemetry span corresponding to `span` is marked as an error.
+    /// If our level is `ERROR`, then we'll do nothing, since logging an error automatically marks the span as an error.
+    /// If our level is anything else, then we explicitly mark the span as an error using our own messages
+    /// This is used by callers that only want to log a warning to the console, but want an error to show up in OpenTelemetry
+    /// for a particular span.
+    pub fn ensure_otel_span_errored(&self, span: &Span) {
+        if self.0.level() != tracing::Level::ERROR {
+            span.set_status(Status::Error {
+                description: self.to_string().into(),
+            });
+        }
     }
 
     pub fn log(&self) {

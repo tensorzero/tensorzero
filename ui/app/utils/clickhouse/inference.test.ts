@@ -35,7 +35,7 @@ test("countInferencesForFunction returns correct counts", async () => {
     output_schema: { value: {} },
     implicit_tool_call_config: {
       tools_available: [],
-      provider_tools: null,
+      provider_tools: [],
       tool_choice: "none",
       parallel_tool_calls: false,
       allowed_tools: { tools: [], choice: "function_default" },
@@ -69,7 +69,7 @@ test("countInferencesForVariant returns correct counts", async () => {
       output_schema: { value: {} },
       implicit_tool_call_config: {
         tools_available: [],
-        provider_tools: null,
+        provider_tools: [],
         tool_choice: "none",
         parallel_tool_calls: false,
         allowed_tools: {

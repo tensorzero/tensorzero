@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use itertools::Itertools;
-use serde_json::json;
 use std::collections::HashMap;
 use std::num::ParseIntError;
+use tokio::try_join;
+use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::QueryParameter;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
@@ -373,12 +374,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(())
     }
 
-    async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error> {
-        self.insert_datapoints(std::slice::from_ref(datapoint))
-            .await?;
-        Ok(())
-    }
-
     async fn count_datapoints_for_dataset_function(
         &self,
         params: &CountDatapointsForDatasetFunctionParams,
@@ -657,6 +652,74 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(datapoints)
     }
 
+    /// Deletes datapoints from a dataset.
+    /// If datapoint_ids is empty, all datapoints in the dataset will be deleted.
+    /// Otherwise, only the datapoints with the given IDs will be deleted.
+    ///
+    /// Returns the number of datapoints that were deleted.
+    async fn delete_datapoints(
+        &self,
+        dataset_name: &str,
+        datapoint_ids: Option<&[Uuid]>,
+    ) -> Result<u64, Error> {
+        let datapoint_ids_filter_clause = match datapoint_ids {
+            None => Ok(String::new()),
+            Some(datapoint_ids) => {
+                if datapoint_ids.is_empty() {
+                    Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: "If datapoint_ids are provided as a vector, it must be non-empty"
+                            .to_string(),
+                    }))
+                } else {
+                    Ok(format!(
+                        "AND id IN [{}]",
+                        datapoint_ids.iter().map(|id| format!("'{id}'")).join(",")
+                    ))
+                }
+            }
+        }?;
+
+        // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
+        let chat_query = format!(
+            r"
+            INSERT INTO ChatInferenceDatapoint
+            SELECT
+                *
+                REPLACE (
+                    now64() AS updated_at,
+                    now64() AS staled_at
+                )
+            FROM ChatInferenceDatapoint FINAL
+            WHERE dataset_name = {{dataset_name:String}}
+            {datapoint_ids_filter_clause}
+            AND staled_at IS NULL
+            "
+        );
+
+        let json_query = format!(
+            r"
+            INSERT INTO JsonInferenceDatapoint
+            SELECT
+                *
+                REPLACE (
+                    now64() AS updated_at,
+                    now64() AS staled_at
+                )
+            FROM JsonInferenceDatapoint FINAL
+            WHERE dataset_name = {{dataset_name:String}}
+            {datapoint_ids_filter_clause}
+            AND staled_at IS NULL
+            "
+        );
+        let query_params = HashMap::from([("dataset_name", dataset_name)]);
+
+        let (chat_result, json_result) = try_join!(
+            self.run_query_synchronous(chat_query, &query_params),
+            self.run_query_synchronous(json_query, &query_params)
+        )?;
+        Ok(chat_result.metadata.written_rows + json_result.metadata.written_rows)
+    }
+
     /// Inserts a batch of datapoints into the database. Internally, separate chat and JSON datapoints and write them to the appropriate tables. Note that this is not very atomic: the Chat table and Json table updates are not rolled back if one fails.
     ///
     /// Returns the number of rows written.
@@ -685,79 +748,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
     }
 }
 
-/// Internal helper: Build the JSON value for the insert to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
-/// TODO(shuyangli): Consider restructuring the types so this takes a RawChatDatapointInsert (or something that directly corresponds to the internal ClickHouse structure).
-fn convert_chat_datapoint_to_json_string(
-    chat_datapoint: &ChatInferenceDatapointInsert,
-) -> Result<String, Error> {
-    // tool_params in clickhouse is a non-null String
-    let tool_params_value = if let Some(tool_params) = &chat_datapoint.tool_params {
-        serde_json::to_value(tool_params)?
-    } else {
-        json!("")
-    };
-    // Tags in clickhouse is a Non-null Map(String, String)
-    let tags_value = if let Some(tags) = &chat_datapoint.tags {
-        serde_json::to_value(tags)?
-    } else {
-        json!({})
-    };
-
-    let json_value = json!({
-        "dataset_name": chat_datapoint.dataset_name,
-        "function_name": chat_datapoint.function_name,
-        "id": chat_datapoint.id,
-        "name": chat_datapoint.name,
-        "episode_id": chat_datapoint.episode_id,
-        "input": chat_datapoint.input,
-        "output": chat_datapoint.output,
-        "tool_params": tool_params_value,
-        "tags": tags_value,
-        "auxiliary": chat_datapoint.auxiliary,
-        "source_inference_id": chat_datapoint.source_inference_id,
-        "is_custom": chat_datapoint.is_custom,
-        "staled_at": chat_datapoint.staled_at,
-    });
-    serde_json::to_string(&json_value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize chat datapoint: {e}"),
-        })
-    })
-}
-
-/// Internal helper: Build the JSON value for the insert to match what ClickHouse expects, these values are either JSON objects or an empty string (in the case of null).
-/// TODO(shuyangli): Consider restructuring the types so this takes a RawJsonDatapointInsert (or something that directly corresponds to the internal ClickHouse structure).
-fn convert_json_datapoint_to_json_string(
-    json_datapoint: &JsonInferenceDatapointInsert,
-) -> Result<String, Error> {
-    // Tags in clickhouse is a Non-null Map(String, String)
-    let tags_value = if let Some(tags) = &json_datapoint.tags {
-        serde_json::to_value(tags)?
-    } else {
-        json!({})
-    };
-    let json_value = json!({
-        "dataset_name": json_datapoint.dataset_name,
-        "function_name": json_datapoint.function_name,
-        "id": json_datapoint.id,
-        "name": json_datapoint.name,
-        "episode_id": json_datapoint.episode_id,
-        "input": json_datapoint.input,
-        "output": json_datapoint.output,
-        "output_schema": json_datapoint.output_schema,
-        "tags": tags_value,
-        "auxiliary": json_datapoint.auxiliary,
-        "source_inference_id": json_datapoint.source_inference_id,
-        "is_custom": json_datapoint.is_custom,
-        "staled_at": json_datapoint.staled_at,
-    });
-    serde_json::to_string(&json_value).map_err(|e| {
-        Error::new(ErrorDetails::Serialization {
-            message: format!("Failed to serialize json datapoint: {e}"),
-        })
-    })
-}
-
 impl ClickHouseConnectionInfo {
     /// Internal helper: Puts chat datapoints into the database
     /// Returns the number of rows written
@@ -772,10 +762,8 @@ impl ClickHouseConnectionInfo {
             validate_dataset_name(&datapoint.dataset_name)?;
         }
 
-        let serialized_datapoints = datapoints
-            .iter()
-            .map(|datapoint| convert_chat_datapoint_to_json_string(datapoint))
-            .collect::<Result<Vec<_>, _>>()?;
+        let serialized_datapoints: Vec<String> =
+            datapoints.iter().map(serde_json::to_string).try_collect()?;
 
         let query = r"
         INSERT INTO ChatInferenceDatapoint
@@ -840,10 +828,8 @@ impl ClickHouseConnectionInfo {
             validate_dataset_name(&datapoint.dataset_name)?;
         }
 
-        let serialized_datapoints = datapoints
-            .iter()
-            .map(|datapoint| convert_json_datapoint_to_json_string(datapoint))
-            .collect::<Result<Vec<_>, _>>()?;
+        let serialized_datapoints: Vec<String> =
+            datapoints.iter().map(serde_json::to_string).try_collect()?;
 
         let query = r"
         INSERT INTO JsonInferenceDatapoint
@@ -1050,6 +1036,9 @@ mod tests {
 
     use crate::config::{MetricConfigLevel, MetricConfigType};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
+    use crate::db::clickhouse::query_builder::test_util::{
+        assert_query_contains, assert_query_does_not_contain,
+    };
     use crate::db::clickhouse::query_builder::{
         DatapointFilter, FloatComparisonOperator, TagComparisonOperator, TagFilter,
     };
@@ -1075,30 +1064,6 @@ mod tests {
             limit: None,
             offset: None,
         }
-    }
-
-    /// Normalize whitespace and newlines in a query for comparison
-    fn normalize_whitespace(s: &str) -> String {
-        s.split_whitespace().collect::<Vec<_>>().join(" ")
-    }
-
-    /// Assert that the query contains a section (ignoring whitespace and newline differences)
-    fn assert_query_contains(query: &str, expected_section: &str) {
-        let normalized_query = normalize_whitespace(query);
-        let normalized_section = normalize_whitespace(expected_section);
-        assert!(
-            normalized_query.contains(&normalized_section),
-            "Query does not contain expected section.\nExpected section: {normalized_section}\nFull query: {normalized_query}"
-        );
-    }
-
-    fn assert_query_does_not_contain(query: &str, unexpected_section: &str) {
-        let normalized_query = normalize_whitespace(query);
-        let normalized_section = normalize_whitespace(unexpected_section);
-        assert!(
-            !normalized_query.contains(&normalized_section),
-            "Query contains unexpected section: {normalized_section}\nFull query: {normalized_query}"
-        );
     }
 
     #[test]
@@ -2194,7 +2159,7 @@ mod tests {
             is_custom: true,
         };
         assert!(
-            conn.insert_datapoint(&DatapointInsert::Chat(datapoint))
+            conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
                 .await
                 .is_ok(),
             "Should insert chat datapoint successfully"
@@ -2281,7 +2246,7 @@ mod tests {
             is_custom: true,
         };
         assert!(
-            conn.insert_datapoint(&DatapointInsert::Json(datapoint))
+            conn.insert_datapoints(&[DatapointInsert::Json(datapoint)])
                 .await
                 .is_ok(),
             "Should insert json datapoint successfully"
@@ -3830,5 +3795,135 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_delete_datapoints_with_specific_ids() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let id1 = Uuid::now_v7();
+        let id2 = Uuid::now_v7();
+
+        // Expect two queries: one for ChatInferenceDatapoint, one for JsonInferenceDatapoint
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(2)
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "INSERT INTO");
+                assert_query_contains(
+                    query,
+                    "SELECT * REPLACE ( now64() AS updated_at, now64() AS staled_at )",
+                );
+                assert_query_contains(query, "WHERE dataset_name = {dataset_name:String}");
+                assert_query_contains(query, &format!("AND id IN ['{id1}','{id2}']"));
+                assert_query_contains(query, "AND staled_at IS NULL");
+
+                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 2,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .delete_datapoints("test_dataset", Some(&[id1, id2]))
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 4); // 2 from chat + 2 from json
+    }
+
+    #[tokio::test]
+    async fn test_delete_datapoints_with_empty_ids_deletes_all() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // Expect two queries: one for ChatInferenceDatapoint, one for JsonInferenceDatapoint
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(2)
+            .withf(|query, parameters| {
+                // Verify the query structure
+                assert_query_contains(query, "INSERT INTO");
+                assert_query_contains(
+                    query,
+                    "SELECT * REPLACE ( now64() AS updated_at, now64() AS staled_at )",
+                );
+                assert_query_contains(query, "WHERE dataset_name = {dataset_name:String}");
+                assert_query_contains(query, "AND staled_at IS NULL");
+
+                assert_query_does_not_contain(query, "AND id IN");
+
+                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 5,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn.delete_datapoints("test_dataset", None).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 10); // 5 from chat + 5 from json
+    }
+
+    #[tokio::test]
+    async fn test_delete_datapoints_queries_both_tables() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let id1 = Uuid::now_v7();
+
+        // The queries are executed in parallel via try_join!, so we can't rely on ordering
+        // Just verify that both table types are queried
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(2)
+            .withf(move |query, _parameters| {
+                query.contains("ChatInferenceDatapoint") || query.contains("JsonInferenceDatapoint")
+            })
+            .returning(|query, _| {
+                // Return different row counts for each table to verify aggregation
+                if query.contains("ChatInferenceDatapoint") {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 1,
+                        },
+                    })
+                } else if query.contains("JsonInferenceDatapoint") {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 2,
+                        },
+                    })
+                } else {
+                    panic!("Unexpected query: {query}");
+                }
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn.delete_datapoints("my_dataset", Some(&[id1])).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3); // 1 from chat + 2 from json
     }
 }

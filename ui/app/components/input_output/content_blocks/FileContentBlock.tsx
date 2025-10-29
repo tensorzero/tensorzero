@@ -9,10 +9,10 @@ import {
 } from "lucide-react";
 import { useBase64UrlToBlobUrl } from "~/hooks/use-blob-url";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
-import type { FileWithPath } from "~/types/tensorzero";
+import type { ObjectStorageFile } from "~/types/tensorzero";
 
 interface FileContentBlockProps {
-  block: FileWithPath;
+  block: ObjectStorageFile;
 }
 
 /**
@@ -21,25 +21,25 @@ interface FileContentBlockProps {
  */
 export function FileContentBlock({ block }: FileContentBlockProps) {
   // Handle error case
-  if (block.file.url === null) {
+  if (block.data === undefined) {
     return <FileErrorContentBlock error="Failed to retrieve file" />;
   }
 
   // Determine which component to render based on mime type
-  if (block.file.mime_type.startsWith("image/")) {
+  if (block.mime_type.startsWith("image/")) {
     return (
       <ImageContentBlock
-        imageUrl={block.file.url}
+        imageUrl={block.data}
         filePath={block.storage_path.path}
       />
     );
   }
 
-  if (block.file.mime_type.startsWith("audio/")) {
+  if (block.mime_type.startsWith("audio/")) {
     return (
       <AudioContentBlock
-        base64DataUrl={block.file.url}
-        mimeType={block.file.mime_type}
+        base64DataUrl={block.data}
+        mimeType={block.mime_type}
         filePath={block.storage_path.path}
       />
     );
@@ -47,8 +47,8 @@ export function FileContentBlock({ block }: FileContentBlockProps) {
 
   return (
     <GenericFileContentBlock
-      base64DataUrl={block.file.url}
-      mimeType={block.file.mime_type}
+      base64DataUrl={block.data}
+      mimeType={block.mime_type}
       filePath={block.storage_path.path}
     />
   );

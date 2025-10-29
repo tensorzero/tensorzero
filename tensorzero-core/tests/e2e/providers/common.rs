@@ -39,9 +39,9 @@ use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
-use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::file::{Base64File, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
-use tensorzero_core::inference::types::{FinishReason, System, TextKind, Thought};
+use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -1634,10 +1634,10 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Url {
+                            ClientInputMessageContent::File(File::Url(UrlFile {
                                 url: image_url.clone(),
                                 mime_type: None,
-                            }),
+                            })),
                         ],
                     }],
                 },
@@ -1695,10 +1695,11 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64 {
+                            ClientInputMessageContent::File(File::Base64(Base64File {
+                                source_url: None,
                                 mime_type: mime::APPLICATION_PDF,
                                 data: pdf_data.clone(),
-                            }),
+                            })),
                         ],
                     }],
                 },
@@ -1755,10 +1756,11 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                     ClientInputMessageContent::Text(TextKind::Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
-                    ClientInputMessageContent::File(File::Base64 {
+                    ClientInputMessageContent::File(File::Base64(Base64File {
+                        source_url: None,
                         mime_type: mime::IMAGE_PNG,
                         data: image_data.clone(),
-                    }),
+                    })),
                 ],
             }],
         },
@@ -1814,10 +1816,12 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
-    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
-        mime_type: mime::IMAGE_PNG,
-        data: updated_base64,
-    });
+    params.input.messages[0].content[1] =
+        ClientInputMessageContent::File(File::Base64(Base64File {
+            source_url: None,
+            mime_type: mime::IMAGE_PNG,
+            data: updated_base64,
+        }));
 
     let response = client.inference(params.clone()).await.unwrap();
 
@@ -2328,7 +2332,12 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                     || res["error"]
                         .as_str()
                         .unwrap()
-                        .contains("No auth credentials found"),
+                        .contains("No auth credentials found")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .to_lowercase()
+                        .contains("no cookie auth"),
                 "Unexpected error: {res}"
             );
         }
@@ -2385,12 +2394,10 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name.clone()),
             input: ClientInput {
-                system: Some(System::Template(
-                    serde_json::json!({"assistant_name": "Dr. Mehta"})
-                        .as_object()
-                        .unwrap()
-                        .clone(),
-                )),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![
                     ClientInputMessage {
                         role: Role::Assistant,
@@ -2592,10 +2599,8 @@ pub async fn check_base64_pdf_response(
                     {"type": "text", "text": "Describe the contents of the PDF"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": null,
-                            "mime_type": "application/pdf",
-                        },
+                        "source_url": null,
+                        "mime_type": "application/pdf",
                         "storage_path": {
                             "kind": kind_json,
                             "path": format!("{prefix}observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf"),
@@ -2632,13 +2637,11 @@ pub async fn check_base64_pdf_response(
                 StoredContentBlock::Text(Text {
                     text: "Describe the contents of the PDF".to_string(),
                 }),
-                StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
-                        url: None,
-                        mime_type: mime::APPLICATION_PDF,
-                    },
+                StoredContentBlock::File(Box::new(StoredFile(ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
-                }))
+                },)))
             ]
         },]
     );
@@ -2747,10 +2750,8 @@ pub async fn check_base64_image_response(
                     {"type": "text", "text": "Describe the contents of the image"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": null,
-                            "mime_type": "image/png",
-                        },
+                        "source_url": null,
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": kind_json,
                             "path": format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
@@ -2787,13 +2788,11 @@ pub async fn check_base64_image_response(
                 StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
-                        url: None,
-                        mime_type: mime::IMAGE_PNG,
-                    },
+                StoredContentBlock::File(Box::new(StoredFile(ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
-                }))
+                },)))
             ]
         },]
     );
@@ -2902,10 +2901,8 @@ pub async fn check_url_image_response(
                     {"type": "text", "text": "Describe the contents of the image"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": image_url.to_string(),
-                            "mime_type": "image/png",
-                        },
+                        "source_url": image_url.to_string(),
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": kind_json,
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
@@ -2936,16 +2933,16 @@ pub async fn check_url_image_response(
                 role: Role::User,
                 content: vec![StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
-                        url: Some(image_url.clone()),
+                }), StoredContentBlock::File(Box::new(StoredFile(
+                    ObjectStoragePointer {
+                        source_url: Some(image_url.clone()),
                         mime_type: mime::IMAGE_PNG,
+                        storage_path: StoragePath {
+                            kind: kind.clone(),
+                            path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                        },
                     },
-                    storage_path: StoragePath {
-                        kind: kind.clone(),
-                        path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
-                    }
-                }))]
+                )))]
             },
         ]
     );
@@ -3271,10 +3268,8 @@ pub async fn check_simple_image_inference_response(
                     {"type": "text", "text": "What kind of animal is in this image?"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                            "mime_type": "image/png",
-                        },
+                        "source_url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": {"type": "disabled"},
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
@@ -8703,7 +8698,10 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             variant_name: Some(provider.variant_name.clone()),
             episode_id: Some(episode_id),
             input: tensorzero::ClientInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![tensorzero::ClientInputMessage {
                     role: Role::User,
                     content: vec![tensorzero::ClientInputMessageContent::Text(
@@ -8824,7 +8822,10 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         episode_id: Some(episode_id),
         extra_headers: get_extra_headers(),
         input: tensorzero::ClientInput {
-            system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                "Dr. Mehta".into(),
+            )])))),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![
@@ -9129,7 +9130,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
         input: tensorzero::ClientInput {
-            system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                "Dr. Mehta".into(),
+            )])))),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],

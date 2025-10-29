@@ -4,13 +4,13 @@ import { z } from "zod";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import { Input } from "~/components/ui/input";
 import { CodeEditor, useFormattedJson } from "~/components/ui/code-editor";
-import { type TemplateInput } from "~/types/tensorzero";
+import { type Template } from "~/types/tensorzero";
 import { JsonValueSchema } from "~/utils/clickhouse/common";
 
 export interface TemplateContentBlockProps {
-  block: TemplateInput;
+  block: Template;
   isEditing?: boolean;
-  onChange?: (updatedContentBlock: TemplateInput) => void;
+  onChange?: (updatedContentBlock: Template) => void;
   actionBar?: ReactNode;
 }
 

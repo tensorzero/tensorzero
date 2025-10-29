@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use tensorzero::{
     test_helpers::make_embedded_gateway_with_config, ClientInferenceParams, ClientInput,
     ClientInputMessage, ClientInputMessageContent, File, InferenceOutput, InferenceResponse, Role,
+    UrlFile,
 };
 use url::Url;
 use uuid::Uuid;
@@ -1008,10 +1009,10 @@ async fn test_forward_image_url() {
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
-                ClientInputMessageContent::File(File::Url {
+                ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG)
-                }),
+                })),
                 ],
             }],
             ..Default::default()
@@ -1085,10 +1086,10 @@ async fn test_forward_file_url() {
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
-                ClientInputMessageContent::File(File::Url {
+                ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF)
-                }),
+                })),
                 ],
             }],
             ..Default::default()
