@@ -70,11 +70,13 @@ pub async fn get_variant_sampling_probabilities(
     }
 
     // Get the current display probabilities from the experimentation config
-    let probabilities = function.experimentation().get_current_display_probabilities(
-        function_name,
-        &mut active_variants,
-        &postgres_connection_info,
-    )?;
+    let probabilities = function
+        .experimentation()
+        .get_current_display_probabilities(
+            function_name,
+            &mut active_variants,
+            &postgres_connection_info,
+        )?;
 
     // Convert HashMap<&str, f64> to HashMap<String, f64>
     let probabilities: HashMap<String, f64> = probabilities

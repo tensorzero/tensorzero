@@ -15,7 +15,6 @@ use tensorzero_core::{
     cache::CacheEnabledMode,
     config::{Config, ConfigFileGlob, MetricConfigOptimize},
     db::{clickhouse::ClickHouseConnectionInfo, feedback::FeedbackByVariant},
-    experimentation::track_and_stop,
 };
 use uuid::Uuid;
 
@@ -395,50 +394,4 @@ pub struct ComputeTrackAndStopStateParams {
     pub epsilon: f64,
     pub min_prob: Option<f64>,
     pub metric_optimize: MetricConfigOptimize,
-}
-
-#[derive(serde::Serialize, ts_rs::TS)]
-#[ts(export)]
-struct TrackAndStopResponse {
-    state: tensorzero_core::experimentation::track_and_stop::TrackAndStopState,
-    #[ts(type = "Record<string, number>")]
-    display_probabilities: HashMap<String, f64>,
-}
-
-/// Computes the Track-and-Stop state (including sampling probabilities) from config and feedback.
-///
-/// This function is the single source of truth for computing the experiment state in the UI.
-/// It handles all the logic including:
-/// - Determining which variants are in nursery vs bandit phase
-/// - Computing optimal probabilities for bandit variants
-/// - Detecting if a winner has been found (stopped state)
-/// - Correctly allocating probability mass to nursery and bandit variants
-///
-/// Returns a JSON string with both the state information and display probabilities.
-#[napi]
-pub fn compute_track_and_stop_state(params: String) -> Result<String, napi::Error> {
-    let params: ComputeTrackAndStopStateParams =
-        serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-
-    let state = track_and_stop::compute_track_and_stop_state(
-        &params.candidate_variants,
-        params.feedback,
-        params.min_samples_per_variant,
-        params.delta,
-        params.epsilon,
-        params.min_prob,
-        params.metric_optimize,
-    )
-    .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-
-    // Compute display probabilities from the state
-    let display_probabilities = state.get_display_sampling_probabilities();
-
-    // Return both state and display probabilities
-    let response = TrackAndStopResponse {
-        state,
-        display_probabilities,
-    };
-
-    serde_json::to_string(&response).map_err(|e| napi::Error::from_reason(e.to_string()))
 }
