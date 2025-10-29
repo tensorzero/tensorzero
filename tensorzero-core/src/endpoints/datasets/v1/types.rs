@@ -303,8 +303,7 @@ pub struct CreateChatDatapointRequest {
     pub output: Option<Value>,
 
     /// Dynamic tool parameters for the datapoint. Optional.
-    /// This is flattened into the request, so tool-related fields like `tools`, `tool_choice`, etc.
-    /// can be specified at the top level of the request.
+    /// This is flattened to mirror inference requests.
     #[serde(flatten)]
     pub dynamic_tool_params: DynamicToolParams,
 
