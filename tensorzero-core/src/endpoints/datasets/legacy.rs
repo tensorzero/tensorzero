@@ -919,7 +919,7 @@ pub async fn list_datapoints(
             is_deleted,
             is_custom,
             staled_at,
-            updated_at
+            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
         AND staled_at IS NULL"
@@ -949,7 +949,7 @@ pub async fn list_datapoints(
             is_deleted,
             is_custom,
             staled_at,
-            updated_at
+            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
         AND staled_at IS NULL",

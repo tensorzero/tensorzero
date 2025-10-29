@@ -265,13 +265,27 @@ pub struct TimeFilter {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
+/// Filters for querying inferences.
 pub enum InferenceFilter {
+    /// Filter by the value of a float metric
     FloatMetric(FloatMetricFilter),
+
+    /// Filter by the value of a boolean metric
     BooleanMetric(BooleanMetricFilter),
+
+    /// Filter by tag key-value pair
     Tag(TagFilter),
+
+    /// Filter by the timestamp of an inference.
     Time(TimeFilter),
+
+    /// Logical AND of multiple filters
     And { children: Vec<InferenceFilter> },
+
+    /// Logical OR of multiple filters
     Or { children: Vec<InferenceFilter> },
+
+    /// Logical NOT of a filter
     Not { child: Box<InferenceFilter> },
 }
 

@@ -4,9 +4,8 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{
-    JsonInferenceDatapoint, Role, StoredChatInferenceDatapoint, StoredDatapoint, System,
-};
+use tensorzero::{JsonInferenceDatapoint, Role, StoredDatapoint, System};
+use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
 use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{
@@ -225,11 +224,11 @@ async fn test_create_delete_datapoint_chat() {
     }
     let list_datapoints = list_datapoints_json
         .into_iter()
-        .map(|datapoint| serde_json::from_value::<StoredChatInferenceDatapoint>(datapoint).unwrap())
+        .map(|datapoint| serde_json::from_value::<ChatInferenceDatapoint>(datapoint).unwrap())
         .collect::<Vec<_>>();
     assert_eq!(list_datapoints.len(), 3);
 
-    for (datapoint, list_datapoint) in datapoints.iter().zip(list_datapoints.iter()) {
+    for datapoint in &datapoints {
         let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
         println!("pretty_datapoint: {pretty_datapoint}");
         // Verify the datapoint structure and content
@@ -241,6 +240,12 @@ async fn test_create_delete_datapoint_chat() {
         assert_eq!(datapoint.auxiliary, "");
         assert!(datapoint.staled_at.is_none());
         let datapoint_id = datapoint.id;
+
+        // Find the matching list_datapoint by ID
+        let list_datapoint = list_datapoints
+            .iter()
+            .find(|dp| dp.id == datapoint_id)
+            .expect("datapoint from database should be in list response");
 
         // Test the getter
         let get_datapoint_response = client
@@ -255,8 +260,8 @@ async fn test_create_delete_datapoint_chat() {
         // Assert that the auxiliary field is not returned by the get datapoint API
         assert!(get_datapoint_json.get("auxiliary").is_none());
         let get_datapoint =
-            serde_json::from_value::<StoredChatInferenceDatapoint>(get_datapoint_json).unwrap();
-        assert_eq!(&get_datapoint, datapoint);
+            serde_json::from_value::<ChatInferenceDatapoint>(get_datapoint_json).unwrap();
+        assert_eq!(&get_datapoint, list_datapoint);
 
         // Verify the list datapoint structure and content
         assert_eq!(list_datapoint.dataset_name, dataset_name);
@@ -362,10 +367,9 @@ async fn test_create_delete_datapoint_chat() {
         }
 
         // Verify tool_params if present for the list datapoint
-        if let Some(tool_params) = &list_datapoint.tool_params {
-            let tools_available = &tool_params.tools_available;
-            assert!(!tools_available.is_empty());
-            let first_tool = tools_available[0].clone();
+        if let Some(additional_tools) = &list_datapoint.tool_params.additional_tools {
+            assert!(!additional_tools.is_empty());
+            let first_tool = &additional_tools[0];
             assert_eq!(first_tool.name, "get_temperature");
             assert_eq!(
                 first_tool.description,
@@ -2500,7 +2504,7 @@ async fn test_list_datapoints_nonexistent_dataset() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
-    let datapoints: Vec<StoredChatInferenceDatapoint> = resp.json().await.unwrap();
+    let datapoints: Vec<ChatInferenceDatapoint> = resp.json().await.unwrap();
     assert!(datapoints.is_empty());
 }
 

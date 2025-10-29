@@ -619,7 +619,7 @@ mod list_datapoints_tests {
         let function1_id = Uuid::now_v7();
         let function1_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
             dataset_name: dataset_name.clone(),
-            function_name: "function_one".to_string(),
+            function_name: "basic_test".to_string(),
             name: None,
             id: function1_id,
             episode_id: None,
@@ -648,7 +648,7 @@ mod list_datapoints_tests {
         let function2_id = Uuid::now_v7();
         let function2_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
             dataset_name: dataset_name.clone(),
-            function_name: "function_two".to_string(),
+            function_name: "weather_helper".to_string(),
             name: None,
             id: function2_id,
             episode_id: None,
@@ -702,7 +702,7 @@ mod list_datapoints_tests {
                 "/v1/datasets/{dataset_name}/list_datapoints"
             )))
             .json(&json!({
-                "function_name": "function_one"
+                "function_name": "basic_test"
             }))
             .send()
             .await
@@ -713,7 +713,7 @@ mod list_datapoints_tests {
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
         assert_eq!(datapoints[0]["id"], function1_id.to_string());
-        assert_eq!(datapoints[0]["function_name"], "function_one");
+        assert_eq!(datapoints[0]["function_name"], "basic_test");
     }
 
     #[tokio::test]

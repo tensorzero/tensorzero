@@ -1939,7 +1939,7 @@ impl AsyncTensorZeroGateway {
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
     /// :param dataset_name: The name of the dataset to get the datapoints from.
-    /// :return: A list of `DatapointWire` objects.
+    /// :return: A list of `Datapoint` objects.
     #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
     fn list_datapoints(
         this: PyRef<'_, Self>,
