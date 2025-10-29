@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use chrono::SubsecRound;
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use secrecy::{ExposeSecret, SecretString};
@@ -108,17 +109,24 @@ pub async fn check_key(
     }
 }
 
-/// Marks an API key as disabled in the database
-pub async fn disable_key(key: &TensorZeroApiKey, pool: &PgPool) -> Result<(), TensorZeroAuthError> {
+/// Marks an API key as disabled in the database.
+/// Returns the `disabled_at` timestamp.
+pub async fn disable_key(
+    key: &TensorZeroApiKey,
+    pool: &PgPool,
+) -> Result<DateTime<Utc>, TensorZeroAuthError> {
+    // Round to microseconds, since postgres only has microsecond precision
+    // This enures that the value we return matches the value we set in the database.
+    let now = Utc::now().round_subsecs(6);
     sqlx::query!(
         "UPDATE tensorzero_auth_api_key SET disabled_at = $1, updated_at = $1 WHERE short_id = $2 AND hash = $3",
-        Utc::now(),
+        now,
         key.short_id,
         key.hashed_long_key.expose_secret()
     )
     .execute(pool)
     .await?;
-    Ok(())
+    Ok(now)
 }
 
 /// Lists all API keys in the database, optionally filtered by organization,

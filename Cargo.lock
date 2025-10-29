@@ -2161,6 +2161,7 @@ dependencies = [
  "pin-project",
  "reqwest",
  "reqwest-eventsource",
+ "secrecy",
  "serde",
  "serde_json",
  "tempfile",
