@@ -41,7 +41,7 @@ export * from "./CountFeedbackByTargetIdParams";
 export * from "./CreateDatapointsFromInferenceOutputSource";
 export * from "./CreateDatapointsFromInferenceRequest";
 export * from "./CreateDatapointsFromInferenceRequestParams";
-export * from "./CreateDatapointsFromInferenceResponse";
+export * from "./CreateDatapointsResponse";
 export * from "./CumulativeFeedbackTimeSeriesPoint";
 export * from "./Datapoint";
 export * from "./DatapointFilter";
