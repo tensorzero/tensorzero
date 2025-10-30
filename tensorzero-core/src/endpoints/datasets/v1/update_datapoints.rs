@@ -4,7 +4,6 @@ use axum::extract::{Path, State};
 use axum::Json;
 use chrono::Utc;
 use serde::Deserialize;
-use serde_json;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -20,7 +19,6 @@ use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{FetchContext, Input, JsonInferenceOutput};
-use crate::jsonschema_util::StaticJSONSchema;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -286,8 +284,6 @@ async fn prepare_json_update(
         }));
     };
 
-    // Grab a copy of IDs for logging.
-    let existing_datapoint_id = existing_datapoint.id;
     let updated_datapoint_id = Uuid::now_v7();
 
     // Update old datapoint as staled, and create new datapoint.
@@ -310,32 +306,7 @@ async fn prepare_json_update(
         updated_datapoint.output_schema = new_output_schema;
     }
     if let Some(new_output) = update.output {
-        updated_datapoint.output = match new_output {
-            None => None,
-            Some(value) => {
-                // Validate the output with schema before saving.
-                StaticJSONSchema::from_value(updated_datapoint.output_schema.clone())?
-                    .validate(&value)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InvalidRequest {
-                            message: format!(
-                                "Provided output for datapoint {existing_datapoint_id} does not match function output schema: {e}",
-                            ),
-                        })
-                    })?;
-
-                Some(JsonInferenceOutput {
-                    raw: Some(serde_json::to_string(&value).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Failed to serialize provided output for datapoint {existing_datapoint_id}: {e}",
-                            )
-                        })
-                    })?),
-                    parsed: Some(value),
-                })
-            }
-        }
+        updated_datapoint.output = new_output.map(JsonInferenceOutput::from);
     }
 
     if let Some(new_tags) = update.tags {
@@ -517,7 +488,9 @@ mod tests {
     use super::*;
     use crate::config::{Config, ObjectStoreInfo, SchemaData};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
-    use crate::endpoints::datasets::v1::types::DatapointMetadataUpdate;
+    use crate::endpoints::datasets::v1::types::{
+        DatapointMetadataUpdate, JsonDatapointOutputUpdate,
+    };
     use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -1541,7 +1514,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(new_output_value.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output_value).unwrap(),
+                })),
                 output_schema: None,
                 tags: None,
                 metadata: None,
@@ -1624,7 +1599,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(new_output.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output).unwrap(),
+                })),
                 output_schema: Some(new_schema.clone()),
                 tags: None,
                 metadata: None,
@@ -1650,19 +1627,61 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn test_prepare_json_update_output_validation_failure() {
+        async fn test_prepare_json_update_output_nonconformant_raw_value() {
             let app_state = create_test_app_state();
             let fetch_context = create_fetch_context(&app_state.http_client);
             let dataset_name = "test_dataset";
             let existing = create_sample_json_datapoint(dataset_name);
 
-            // Output doesn't match the schema (expects {value: string}, providing {count: number})
-            let bad_output = json!({"count": 123});
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: "\"intentionally nonconformant json\"".to_string(),
+                })),
+                output_schema: None,
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(
+                updated.output.as_ref().unwrap().raw,
+                Some("\"intentionally nonconformant json\"".to_string())
+            );
+            assert_eq!(
+                updated.output.as_ref().unwrap().parsed,
+                Some(json!("intentionally nonconformant json"))
+            );
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_output_invalid_json() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
 
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(bad_output)),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: "intentionally invalid \" json".to_string(),
+                })),
                 output_schema: None, // Will use existing schema which expects {value: string}
                 tags: None,
                 metadata: None,
@@ -1676,15 +1695,19 @@ mod tests {
                 existing,
                 "2025-01-01 00:00:00",
             )
-            .await;
+            .await
+            .unwrap();
 
-            assert!(result.is_err(), "Expected validation error");
-            let err = result.unwrap_err();
-            let err_msg = format!("{err:?}");
-            assert!(
-                err_msg.contains("does not match") || err_msg.contains("schema"),
-                "Expected schema validation error, got: {err_msg}"
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(
+                updated.output.as_ref().unwrap().raw,
+                Some("intentionally invalid \" json".to_string())
             );
+            // JSON parsing failure should turn into a None parsed value.
+            assert_eq!(updated.output.as_ref().unwrap().parsed, None);
         }
 
         #[tokio::test]
@@ -1746,7 +1769,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: Some(new_input),
-                output: Some(Some(new_output.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output).unwrap(),
+                })),
                 output_schema: Some(new_schema.clone()),
                 tags: Some(new_tags.clone()),
                 metadata: Some(DatapointMetadataUpdate {

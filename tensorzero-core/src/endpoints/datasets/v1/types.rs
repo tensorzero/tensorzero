@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
-use crate::inference::types::{ContentBlockChatOutput, Input};
+use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput};
 use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
@@ -87,9 +87,9 @@ pub struct UpdateJsonDatapointRequest {
     pub input: Option<Input>,
 
     /// JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    /// This will be validated against `output_schema` or the function's output schema.
+    /// This will NOT be validated against output_schema, because we allow invalid outputs in datapoints by design.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    pub output: Option<Option<Value>>,
+    pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
     /// The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     /// If not provided, the function's output schema will be used.
@@ -104,6 +104,27 @@ pub struct UpdateJsonDatapointRequest {
     /// Metadata fields. If omitted, it will be left unchanged.
     #[serde(default)]
     pub metadata: Option<DatapointMetadataUpdate>,
+}
+
+/// A request to update the output of a JSON datapoint.
+/// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
+/// for users to run evals against them.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct JsonDatapointOutputUpdate {
+    /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
+    pub raw: String,
+}
+
+impl From<JsonDatapointOutputUpdate> for JsonInferenceOutput {
+    fn from(update: JsonDatapointOutputUpdate) -> Self {
+        let parsed_value = serde_json::from_str(&update.raw).ok();
+        Self {
+            raw: Some(update.raw),
+            parsed: parsed_value,
+        }
+    }
 }
 
 /// A request to update the metadata of a datapoint.

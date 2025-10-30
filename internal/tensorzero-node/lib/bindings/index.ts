@@ -139,6 +139,7 @@ export * from "./InferenceResponse";
 export * from "./Input";
 export * from "./InputMessage";
 export * from "./InputMessageContent";
+export * from "./JsonDatapointOutputUpdate";
 export * from "./JsonInferenceDatapoint";
 export * from "./JsonInferenceOutput";
 export * from "./JsonInferenceResponse";
