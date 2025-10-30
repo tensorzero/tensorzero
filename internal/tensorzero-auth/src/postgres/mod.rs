@@ -57,11 +57,11 @@ pub async fn create_key(
     let key = secure_fresh_api_key();
     let parsed_key = TensorZeroApiKey::parse(key.expose_secret())?;
     sqlx::query!(
-        "INSERT INTO tensorzero_auth_api_key (organization, workspace, description, short_id, hash) VALUES ($1, $2, $3, $4, $5)",
+        "INSERT INTO tensorzero_auth_api_key (organization, workspace, description, public_id, hash) VALUES ($1, $2, $3, $4, $5)",
         organization,
         workspace,
         description,
-        parsed_key.short_id,
+        parsed_key.public_id,
         parsed_key.hashed_long_key.expose_secret()
     ).execute(pool).await?;
     Ok(key)
@@ -79,7 +79,7 @@ pub enum AuthResult {
 
 #[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone)]
 pub struct KeyInfo {
-    pub id: i64,
+    pub public_id: String,
     pub organization: String,
     pub workspace: String,
     pub description: Option<String>,
@@ -93,8 +93,8 @@ pub async fn check_key(
 ) -> Result<AuthResult, TensorZeroAuthError> {
     let key = sqlx::query_as!(
         KeyInfo,
-        "SELECT id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE short_id = $1 AND hash = $2",
-        key.short_id,
+        "SELECT public_id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE public_id = $1 AND hash = $2",
+        key.public_id,
         key.hashed_long_key.expose_secret()
     ).fetch_optional(pool).await?;
     match key {
@@ -109,20 +109,15 @@ pub async fn check_key(
     }
 }
 
-/// Marks an API key as disabled in the database.
-/// Returns the `disabled_at` timestamp.
-pub async fn disable_key(
-    key: &TensorZeroApiKey,
-    pool: &PgPool,
-) -> Result<DateTime<Utc>, TensorZeroAuthError> {
+/// Marks an API key as disabled in the database by its public_id
+pub async fn disable_key(public_id: &str, pool: &PgPool) -> Result<DateTime<Utc>, TensorZeroAuthError> {
     // Round to microseconds, since postgres only has microsecond precision
     // This ensures that the value we return matches the value we set in the database.
     let now = Utc::now().round_subsecs(6);
     sqlx::query!(
-        "UPDATE tensorzero_auth_api_key SET disabled_at = $1, updated_at = $1 WHERE short_id = $2 AND hash = $3",
+        "UPDATE tensorzero_auth_api_key SET disabled_at = $1, updated_at = $1 WHERE public_id = $2",
         now,
-        key.short_id,
-        key.hashed_long_key.expose_secret()
+        public_id
     )
     .execute(pool)
     .await?;
@@ -139,7 +134,7 @@ pub async fn list_key_info(
 ) -> Result<Vec<KeyInfo>, TensorZeroAuthError> {
     let keys = sqlx::query_as!(
         KeyInfo,
-        "SELECT id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY ID ASC LIMIT $2 OFFSET $3",
+        "SELECT public_id, organization, workspace, description, disabled_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         organization,
         // We take in a 'u32' and convert to 'i64' to avoid any weirdness around negative values
         // Postgres does the right thing when the LIMIT or OFFSET is null (it gets ignored)

@@ -57,7 +57,7 @@ pub fn build_axum_router(
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024))
         .layer(axum::middleware::from_fn(
-            crate::warn_early_drop::warn_on_early_connection_drop,
+            tensorzero_core::observability::warn_early_drop::warn_on_early_connection_drop,
         ))
         // We want tracing/status to run for all requests, regardless of whether or not authentication succeeds
         // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
