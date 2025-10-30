@@ -80,7 +80,6 @@ pub mod estimate_optimal_probabilities;
 #[derive(Debug, Serialize, ts_rs::TS)]
 #[ts(export)]
 pub struct TrackAndStopConfig {
-    // TODO: validate all of these fields
     metric: String,
     candidate_variants: Vec<String>,
     fallback_variants: Vec<String>,
@@ -295,6 +294,13 @@ impl UninitializedTrackAndStopConfig {
                     self.metric,
                     metrics.keys().collect::<Vec<_>>()
                 ),
+            }));
+        }
+
+        // Validate candidate_variants is non-empty
+        if self.candidate_variants.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: "Track-and-Stop candidate_variants cannot be empty".to_string(),
             }));
         }
 
@@ -883,9 +889,12 @@ impl TrackAndStopState {
 
     /// Initializes a new TrackAndStopState instance based on the current statistics
     /// and configured parameters.
-    /// NOTE: This function may do some CPU-bound work to compute probabilities
-    // TODO: should we validate that candidate_variances and variant_performances have the same length?
-    // TODO: Where do we validate upstream that there are > 0 variants?
+    ///
+    /// NOTE: This function may do some CPU-bound work to compute probabilities.
+    ///
+    /// # Assumptions
+    /// - `candidate_variants` is non-empty (validated in `UninitializedTrackAndStopConfig::load()`)
+    /// - `variant_performances` may contain feedback for non-candidate variants (these are filtered out)
     fn new(
         candidate_variants: &[String],
         variant_performances: Vec<FeedbackByVariant>,
@@ -895,6 +904,7 @@ impl TrackAndStopState {
         min_prob: Option<f64>,
         metric_optimize: MetricConfigOptimize,
     ) -> Result<Self, TrackAndStopError> {
+        // Filter out feedback for non-candidate variants (can happen if config changed)
         let variant_performances = if variant_performances.len() > candidate_variants.len() {
             tracing::warn!("Feedback is being filtered out for non-candidate variants. Current candidate variants: {candidate_variants:?}");
             variant_performances
@@ -1102,7 +1112,10 @@ impl TrackAndStopState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{ErrorContext, SchemaData};
+    use crate::config::{
+        ErrorContext, MetricConfig, MetricConfigLevel, MetricConfigOptimize, MetricConfigType,
+        SchemaData,
+    };
     use crate::db::clickhouse::ClickHouseConnectionInfo;
     use crate::db::feedback::FeedbackByVariant;
     use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
@@ -2509,5 +2522,53 @@ mod tests {
         // Only A should appear
         assert_eq!(probs.len(), 1);
         assert!((probs["A"] - 0.4).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_load_error_empty_candidate_variants() {
+        let config = UninitializedTrackAndStopConfig {
+            metric: "test_metric".to_string(),
+            candidate_variants: vec![], // Empty!
+            fallback_variants: vec!["A".to_string()],
+            min_samples_per_variant: 10,
+            delta: 0.05,
+            epsilon: 0.0,
+            update_period_s: 60,
+            min_prob: None,
+        };
+
+        let mut variants = HashMap::new();
+        variants.insert(
+            "A".to_string(),
+            Arc::new(VariantInfo {
+                inner: VariantConfig::ChatCompletion(
+                    UninitializedChatCompletionConfig {
+                        weight: None,
+                        model: "model-name".into(),
+                        ..Default::default()
+                    }
+                    .load(&SchemaData::default(), &ErrorContext::new_test())
+                    .unwrap(),
+                ),
+                timeouts: Default::default(),
+            }),
+        );
+
+        let mut metrics = HashMap::new();
+        metrics.insert(
+            "test_metric".to_string(),
+            MetricConfig {
+                r#type: MetricConfigType::Float,
+                optimize: MetricConfigOptimize::Max,
+                level: MetricConfigLevel::Inference,
+            },
+        );
+
+        let result = config.load(&variants, &metrics);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("candidate_variants cannot be empty"));
     }
 }

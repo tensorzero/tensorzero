@@ -303,13 +303,12 @@ pub fn check_stopping(args: CheckStoppingArgs<'_>) -> Result<StoppingResult, Che
         delta,
         metric_optimize,
     } = args;
-    // TODO: how to validate inputs?
     let variance_floor: f64 = variance_floor.unwrap_or(1e-12);
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let delta: f64 = delta.unwrap_or(0.05);
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();
 
-    // Negate means if we're minimizing, so we can always use argmax
+    // Negate the means if we're minimizing, so that we can always use argmax
     let means: Vec<f64> = feedback
         .iter()
         .map(|x| {
