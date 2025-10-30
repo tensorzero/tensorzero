@@ -1183,7 +1183,7 @@ impl StoredDatapoint {
 
 impl ChatInferenceDatapoint {
     /// Convert to storage type, properly handling tool params with function config
-    pub fn to_storage(
+    pub fn into_storage(
         self,
         function_config: &FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,

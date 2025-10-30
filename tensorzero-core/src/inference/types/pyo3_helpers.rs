@@ -378,7 +378,7 @@ pub fn deserialize_from_stored_sample<'a>(
                     Ok(f) => f,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
-                let datapoint = match chat_wire.to_storage(&function_config, &config.tools) {
+                let datapoint = match chat_wire.into_storage(&function_config, &config.tools) {
                     Ok(d) => d,
                     Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
                 };
