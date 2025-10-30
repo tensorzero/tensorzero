@@ -129,7 +129,8 @@ async fn tensorzero_auth_middleware(
 
         // Check cache first if available
         if let Some(cache) = &app_state.auth_cache {
-            if let Some(cached_result) = cache.get(&parsed_key.public_id) {
+            let cache_key = parsed_key.cache_key();
+            if let Some(cached_result) = cache.get(&cache_key) {
                 return match cached_result {
                     AuthResult::Success(key_info) => Ok(key_info),
                     AuthResult::Disabled(disabled_at) => {
@@ -156,7 +157,8 @@ async fn tensorzero_auth_middleware(
 
         // Store result in cache if available
         if let Some(cache) = &app_state.auth_cache {
-            cache.insert(parsed_key.public_id.clone(), postgres_key.clone());
+            let cache_key = parsed_key.cache_key();
+            cache.insert(cache_key, postgres_key.clone());
         }
 
         match postgres_key {

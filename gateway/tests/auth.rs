@@ -312,7 +312,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     required = true
     [gateway.auth.cache]
     enabled = true
-    ttl_ms = 2000
+    ttl_ms = 20000
     ",
         None,
     )
@@ -505,5 +505,130 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
         response2.status(),
         StatusCode::UNAUTHORIZED,
         "Disabled key should fail immediately when cache is disabled"
+    );
+}
+
+#[tokio::test]
+async fn test_auth_cache_requires_full_key_match() {
+    // Test that the cache includes the secret portion of the API key, not just the public_id.
+    // This prevents an attacker from using the same public_id with a different secret to bypass authentication.
+    let child_data = start_gateway_on_random_port(
+        "
+    [gateway.auth]
+    required = true
+    [gateway.auth.cache]
+    enabled = true
+    ttl_ms = 2000
+    ",
+        None,
+    )
+    .await;
+
+    let embedded_client = make_embedded_gateway_with_config_and_postgres(
+        "
+    [gateway.auth]
+    required = true
+    ",
+    )
+    .await;
+
+    let postgres_pool = embedded_client
+        .get_app_state_data()
+        .unwrap()
+        .postgres_connection_info
+        .get_alpha_pool()
+        .unwrap();
+
+    // Create a valid key
+    let valid_key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, postgres_pool)
+            .await
+            .unwrap();
+    let parsed_valid_key = TensorZeroApiKey::parse(valid_key.expose_secret()).unwrap();
+
+    // First request with valid key - should succeed and populate cache
+    let response1 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", valid_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+
+    // Craft an attacker key with the same public_id but different long key (secret)
+    // This simulates an attacker who knows the public portion but not the secret
+    let attacker_key = format!(
+        "sk-t0-{}-attackerattackerattackerattackerattackerattacker",
+        parsed_valid_key.public_id
+    );
+
+    // Request with attacker key - should FAIL even though the valid key is cached
+    // If the cache only used public_id, this would succeed (security vulnerability)
+    let response2 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {attacker_key}"),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response2.status();
+    let text = response2.text().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "Attacker key with same public_id but different secret should be rejected"
+    );
+    assert_eq!(
+        text,
+        "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+    );
+
+    // Verify the original valid key still works (cache should still be valid)
+    let response3 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", valid_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        response3.status(),
+        StatusCode::OK,
+        "Valid key should still work from cache"
     );
 }
