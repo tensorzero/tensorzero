@@ -1702,7 +1702,7 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
         100
     };
 
-    let expected_inference_params = vec![
+    let expected_inference_params = [
         json!({
             "chat_completion": {
                 "max_tokens": expected_max_tokens,
