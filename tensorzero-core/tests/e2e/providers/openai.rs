@@ -9,7 +9,7 @@ use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
-    InputMessage, InputMessageContent, Role,
+    InputMessage, InputMessageContent, Role, Unknown, UrlFile,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
@@ -22,7 +22,7 @@ use tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams;
 use tensorzero_core::endpoints::inference::{InferenceClients, InferenceCredentials};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, TextKind,
+    ContentBlockChatOutput, Latency, ModelInferenceRequestJsonMode, Text, TextKind,
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
@@ -512,7 +512,7 @@ async fn test_default_function_model_name_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -626,7 +626,7 @@ async fn test_default_function_model_name_non_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -862,7 +862,7 @@ async fn test_chat_function_json_override_with_mode(json_mode: ModelInferenceReq
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan (possibly as JSON)?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan (possibly as JSON)?"}]
             }
         ]
     });
@@ -1001,7 +1001,7 @@ async fn test_o4_mini_inference() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -1119,7 +1119,7 @@ async fn test_o3_mini_inference_with_reasoning_effort() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -1588,7 +1588,7 @@ async fn test_content_block_text_field() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital of Japan?"}]
             }
         ]
     });
@@ -1943,11 +1943,11 @@ pub async fn test_start_batch_inference_write_file() {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text { text: "Tell me about this image".to_string() }),
-                    InputMessageContent::File(File::Url {
+                    content: vec![InputMessageContent::Text(Text { text: "Tell me about this image".to_string() }),
+                    InputMessageContent::File(File::Url(UrlFile {
                         url: "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png".parse().unwrap(),
                         mime_type: None,
-                    })],
+                    }))],
                 }],
             }],
             tags: Some(vec![Some([("foo".to_string(), "bar".to_string()), ("test_type".to_string(), "batch_image_object_store".to_string())].into_iter().collect() )]),
@@ -2005,13 +2005,11 @@ pub async fn test_start_batch_inference_write_file() {
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Tell me about this image"},
+                    {"type": "text", "text": "Tell me about this image"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                            "mime_type": "image/png",
-                        },
+                        "source_url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": {"type": "filesystem", "path": temp_dir.path().to_string_lossy()},
                             "path": file_path
@@ -2051,10 +2049,10 @@ async fn test_forward_image_url() {
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the image".to_string() }),
-                ClientInputMessageContent::File(File::Url {
+                ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap(),
                     mime_type: Some(mime::IMAGE_PNG)
-                }),
+                })),
                 ],
             }],
             ..Default::default()
@@ -2128,10 +2126,10 @@ async fn test_forward_file_url() {
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text { text: "Describe the contents of the PDF".to_string() }),
-                ClientInputMessageContent::File(File::Url {
+                ClientInputMessageContent::File(File::Url(UrlFile {
                     url: Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf").unwrap(),
                     mime_type: Some(mime::APPLICATION_PDF)
-                }),
+                })),
                 ],
             }],
             ..Default::default()
@@ -2495,10 +2493,10 @@ model = "test-model"
             ContentBlockChatOutput::Unknown {
                 data,
                 model_provider_name,
-            } => ClientInputMessageContent::Unknown {
+            } => ClientInputMessageContent::Unknown(Unknown {
                 data: data.clone(),
                 model_provider_name: model_provider_name.clone(),
-            },
+            }),
         })
         .collect();
 
@@ -2890,10 +2888,10 @@ model = "test-model"
             ContentBlockChatOutput::Unknown {
                 data,
                 model_provider_name,
-            } => ClientInputMessageContent::Unknown {
+            } => ClientInputMessageContent::Unknown(Unknown {
                 data: data.clone(),
                 model_provider_name: model_provider_name.clone(),
-            },
+            }),
         })
         .collect();
 
@@ -3035,7 +3033,7 @@ async fn test_responses_api_shorthand() {
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital of France?"}]
+                "content": [{"type": "text", "text": "What is the capital of France?"}]
             }
         ]
     });

@@ -43,7 +43,7 @@ pub async fn delete_datapoint(
 
     // We delete datapoints by writing a new row (which ClickHouse will merge)
     // with the 'is_deleted' and 'updated_at' fields modified.
-    datapoint_json["is_deleted"] = serde_json::Value::Bool(true);
+    datapoint_json["is_deleted"] = true.into();
     datapoint_json["updated_at"] =
         format!("{}", chrono::Utc::now().format(CLICKHOUSE_DATETIME_FORMAT)).into();
 

@@ -11,7 +11,9 @@ use tensorzero_core::{
     },
     endpoints::feedback::{feedback, Params},
     http::TensorzeroHttpClient,
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, Text, TextKind},
+    inference::types::{
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+    },
     utils::gateway::GatewayHandle,
 };
 use tokio::time::{sleep, Duration};
@@ -27,7 +29,7 @@ async fn e2e_test_comment_feedback_normal_function() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     })).await;
@@ -129,7 +131,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -384,7 +386,7 @@ async fn e2e_test_demonstration_feedback_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -498,7 +500,7 @@ async fn e2e_test_demonstration_feedback_llm_judge() {
         "function_name": "tensorzero::llm_judge::haiku_without_outputs::topic_starts_with_f",
         "input": {
             "messages": [{"role": "user", "content": [
-                {"type": "text", "arguments": {"input": "foo", "reference_output": null, "generated_output": "A poem about a cat"}},
+                {"type": "template", "name": "user", "arguments": {"input": "foo", "reference_output": null, "generated_output": "A poem about a cat"}},
             ]}]
         },
         "stream": false,
@@ -591,7 +593,7 @@ async fn e2e_test_demonstration_feedback_dynamic_json() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
         "output_schema": new_output_schema,
@@ -1017,7 +1019,7 @@ async fn e2e_test_float_feedback_normal_function() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     })).await;
@@ -1149,7 +1151,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1253,7 +1255,7 @@ async fn e2e_test_boolean_feedback_normal_function() {
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     })).await;
@@ -1393,7 +1395,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
         "function_name": "json_success",
         "input": {
             "system": {"assistant_name": "Alfred Pennyworth"},
-            "messages": [{"role": "user", "content": [{"type": "text", "arguments": {"country": "Japan"}}]}]
+            "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]}]
         },
         "stream": false,
     });
@@ -1507,7 +1509,9 @@ async fn test_fast_inference_then_feedback() {
                     variant_name: None,
                     episode_id: None,
                     input: tensorzero::ClientInput {
-                        system: Some(json!({"assistant_name": "Alfred Pennyworth"})),
+                        system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                            ("assistant_name".to_string(), "Alfred Pennyworth".into()),
+                        ])))),
                         messages: vec![tensorzero::ClientInputMessage {
                             role: Role::User,
                             content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {

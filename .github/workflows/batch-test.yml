@@ -42,6 +42,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
+      - name: Cleanup disk space
+        run: ./ci/free-disk-space.sh
+
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do

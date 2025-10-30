@@ -28,11 +28,10 @@ use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::file::mime_type_to_ext;
-use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, FunctionType, Latency, ModelInferenceRequest,
-    ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
+    ModelInferenceRequestJsonMode, ObjectStorageFile, PeekableProviderInferenceResponseStream,
     ProviderInferenceResponse, ProviderInferenceResponseChunk,
     ProviderInferenceResponseStreamInner, RequestMessage, Role, Text, TextChunk, Usage,
 };
@@ -138,8 +137,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -287,8 +285,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -684,11 +681,8 @@ async fn bedrock_content_block_from_content_block(
         }
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
-            let FileWithPath {
-                file,
-                storage_path: _,
-            } = &*resolved_file;
-            let file_bytes = aws_smithy_types::base64::decode(file.data()?).map_err(|e| {
+            let ObjectStorageFile { file, data } = &*resolved_file;
+            let file_bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,
                     raw_response: None,

@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use tensorzero::{
     CacheParamsOptions, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, File, InferenceOutput, InferenceResponse, Role,
+    ClientInputMessageContent, InferenceOutput, InferenceResponse, Role,
 };
 use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -18,6 +18,7 @@ use tensorzero_core::db::clickhouse::test_helpers::{
 };
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::{Base64File, File, UrlFile};
 use url::Url;
 use uuid::Uuid;
 
@@ -163,10 +164,10 @@ async fn test_image_url_with_fetch_true() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url {
+                        ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
-                        }),
+                        })),
                     ],
                 }],
             },
@@ -239,10 +240,10 @@ async fn test_image_url_with_fetch_false() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url {
+                        ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
-                        }),
+                        })),
                     ],
                 }],
             },
@@ -296,10 +297,11 @@ async fn test_base64_image_with_fetch_true() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64 {
+                        ClientInputMessageContent::File(File::Base64(Base64File {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             data: IMAGE_BASE64.to_string(),
-                        }),
+                        })),
                     ],
                 }],
             },
@@ -370,10 +372,11 @@ async fn test_base64_image_with_fetch_false() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "Describe this image briefly.".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Base64 {
+                        ClientInputMessageContent::File(File::Base64(Base64File {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             data: IMAGE_BASE64.to_string(),
-                        }),
+                        })),
                     ],
                 }],
             },
@@ -446,10 +449,10 @@ async fn test_wikipedia_image_url_with_fetch_true() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url {
+                        ClientInputMessageContent::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
-                        }),
+                        })),
                     ],
                 }],
             },
@@ -520,10 +523,10 @@ async fn test_wikipedia_image_url_with_fetch_false() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url {
+                        ClientInputMessageContent::File(File::Url(UrlFile {
                             url: wikipedia_url.clone(),
                             mime_type: None,
-                        }),
+                        })),
                     ],
                 }],
             },
@@ -596,10 +599,10 @@ async fn test_image_url_403_error() {
                         ClientInputMessageContent::Text(TextKind::Text {
                             text: "What's in this image?".to_string(),
                         }),
-                        ClientInputMessageContent::File(File::Url {
+                        ClientInputMessageContent::File(File::Url(UrlFile {
                             url: image_url.clone(),
                             mime_type: None,
-                        }),
+                        })),
                     ],
                 }],
             },

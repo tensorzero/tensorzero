@@ -577,7 +577,7 @@ jobs:
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=20
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            while ! curl http://localhost:3000/health; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
               count=$((count + 1))
@@ -595,7 +595,7 @@ jobs:
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=40
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            while ! curl http://localhost:3000/health; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
               count=$((count + 1))
@@ -718,7 +718,7 @@ jobs:
       - name: Launch the gateway for E2E tests
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
-          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+          while ! curl http://localhost:3000/health; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
           done
@@ -768,6 +768,24 @@ jobs:
       S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+  run-merge-queue-checks:
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+      actions: write
+    uses: ./.github/workflows/merge-queue.yml
+    secrets: inherit
+
+  check-all-live-tests-passed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - run: echo "This is a dummy job to satisfy branch protection checks"
+
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -788,6 +806,7 @@ jobs:
         ui-tests,
         ui-tests-e2e,
         mock-optimization-tests,
+        run-merge-queue-checks,
       ]
     runs-on: ubuntu-latest
     steps:

@@ -1,12 +1,13 @@
 use std::collections::HashSet;
 use std::fmt;
+use std::future::Future;
 use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
 use futures::StreamExt;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use tokio::time::{timeout, Duration};
 
 use crate::config::{ErrorContext, PathWithContents, SchemaData};
@@ -18,6 +19,7 @@ use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role,
+    System,
 };
 use crate::inference::types::{
     ChatInferenceResultChunk, ContentBlockChatOutput, ContentBlockChunk, InferenceResultChunk,
@@ -25,6 +27,7 @@ use crate::inference::types::{
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;
+use crate::utils::unbounded_recursion_wrapper;
 use crate::{
     endpoints::inference::InferenceParams,
     error::{Error, ErrorDetails},
@@ -131,7 +134,10 @@ impl UninitializedMixtureOfNConfig {
 }
 
 impl Variant for MixtureOfNConfig {
-    async fn infer(
+    // The compiler gives us 'cycle detected when looking up the hidden types stored across await points in a coroutine'
+    // if we try to use 'async fn' here
+    #[expect(refining_impl_trait, clippy::manual_async_fn)]
+    fn infer(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
@@ -139,17 +145,18 @@ impl Variant for MixtureOfNConfig {
         inference_config: Arc<InferenceConfig>,
         clients: InferenceClients,
         _inference_params: InferenceParams,
-    ) -> Result<InferenceResult, Error> {
-        let candidate_inference_results = self
-            .infer_candidates(
-                &input,
-                &models,
-                &function,
-                Arc::clone(&inference_config),
-                clients.clone(),
-            )
-            .await?;
-        match self
+    ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
+        async move {
+            let candidate_inference_results = self
+                .infer_candidates(
+                    &input,
+                    &models,
+                    &function,
+                    Arc::clone(&inference_config),
+                    clients.clone(),
+                )
+                .await?;
+            match self
             .fuse_candidates(
                 &input,
                 &function,
@@ -166,6 +173,7 @@ impl Variant for MixtureOfNConfig {
             },
             InferenceOrStreamResult::Stream(..) => {
                 Err(ErrorDetails::InternalError { message: format!("MixtureOfNConfig.fuse_candidates returned a stream for a non-streaming request. {IMPOSSIBLE_ERROR_MESSAGE}") }.into())
+                }
             }
         }
     }
@@ -468,25 +476,33 @@ impl MixtureOfNConfig {
                     extra_cache_key: Some(format!("candidate_{i}")),
                     ..inference_config.as_ref().clone()
                 };
-                Ok((candidate.to_string(), variant, Arc::new(config)))
+                Ok((candidate.to_string(), variant.clone(), Arc::new(config)))
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
         // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
-        for (candidate_name, candidate_variant, config) in &candidate_variants {
+        for (candidate_name, candidate_variant, config) in candidate_variants {
+            let input = Arc::new(input.clone());
+            let models = models.clone();
+            let function = Arc::clone(function);
+            let clients = clients.clone();
             inference_futures.push((
                 candidate_name.clone(),
                 timeout(
                     Duration::from_secs_f64(self.timeout_s),
-                    candidate_variant.infer(
-                        Arc::new(input.clone()),
-                        models.clone(),
-                        Arc::clone(function),
-                        Arc::clone(config),
-                        clients.clone(),
-                        InferenceParams::default(),
-                    ),
+                    unbounded_recursion_wrapper(async move {
+                        candidate_variant
+                            .infer(
+                                input,
+                                models,
+                                function,
+                                config,
+                                clients,
+                                InferenceParams::default(),
+                            )
+                            .await
+                    }),
                 ),
             ));
         }
@@ -726,7 +742,7 @@ impl FuserConfig {
     fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
-        system: Option<&Value>,
+        system: Option<&System>,
         max_index: usize,
     ) -> Result<String, Error> {
         let inner_system_message = self.inner.prepare_system_message(templates, system)?;
@@ -913,8 +929,8 @@ mod tests {
         function::{FunctionConfigChat, FunctionConfigJson},
         http::TensorzeroHttpClient,
         inference::types::{
-            ChatInferenceResult, FinishReason, InternalJsonInferenceOutput, JsonInferenceResult,
-            Latency, ModelInferenceResponseWithMetadata, Text, Thought,
+            Arguments, ChatInferenceResult, FinishReason, InternalJsonInferenceOutput,
+            JsonInferenceResult, Latency, ModelInferenceResponseWithMetadata, Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
         minijinja_util::tests::{
@@ -943,7 +959,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap(),
         };
-        let input_message = Value::String("You are a helpful assistant.".to_string());
+        let input_message = System::Text("You are a helpful assistant.".to_string());
         let max_index = 2;
         let result =
             fuser_config.prepare_system_message(&templates, Some(&input_message), max_index);
@@ -966,15 +982,24 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap(),
         };
-        let input_message = json!({"message": "You are a helpful assistant."});
+        let input_message = System::Template(Arguments(
+            json!({"message": "You are a helpful assistant."})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ));
         let max_index = 3;
         let result =
             fuser_config.prepare_system_message(&templates, Some(&input_message), max_index);
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
-        prepared_message,
-        ErrorDetails::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }.into()
+            prepared_message,
+            ErrorDetails::InvalidMessage {
+                message: "System message content is a template but there is no variant template"
+                    .to_string()
+            }
+            .into()
         );
 
         // Test without templates, no message
@@ -1031,7 +1056,12 @@ mod tests {
         };
 
         let max_index = 6;
-        let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
+        let input_message = System::Template(Arguments(
+            serde_json::json!({"assistant_name": "ChatGPT"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ));
         let prepared_message = fuser_config
             .prepare_system_message(&templates, Some(&input_message), max_index)
             .unwrap();

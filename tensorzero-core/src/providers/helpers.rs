@@ -862,7 +862,7 @@ mod tests {
                 extra_headers: None,
             },
             "dummy_model",
-            &mut serde_json::Value::String("test".to_string()),
+            &mut "test".into(),
         )
         .unwrap_err()
         .to_string();

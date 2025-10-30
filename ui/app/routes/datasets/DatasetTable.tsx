@@ -31,6 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 const columnHelper = createColumnHelper<DatasetMetadata>();
 
@@ -74,17 +75,21 @@ export default function DatasetTable({
         header: "",
         cell: (info) => (
           <div className="text-right">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="opacity-60 transition-opacity hover:opacity-100"
+            <ReadOnlyGuard
+              asChild
               onClick={() => {
                 setDatasetToDelete(info.row.original.dataset_name);
                 setDeleteDialogOpen(true);
               }}
             >
-              <Trash />
-            </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="opacity-60 transition-opacity hover:opacity-100"
+              >
+                <Trash />
+              </Button>
+            </ReadOnlyGuard>
           </div>
         ),
         enableSorting: false,

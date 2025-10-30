@@ -66,7 +66,9 @@ use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
 use file::sanitize_raw_request;
-pub use file::{Base64File, File};
+pub use file::{
+    Base64File, File, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
+};
 use futures::future::{join_all, try_join_all};
 use futures::FutureExt;
 use itertools::Itertools;
@@ -76,11 +78,9 @@ use pyo3::prelude::*;
 use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
-use resolved_input::FileWithPath;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
-use serde_untagged::UntaggedEnumVisitor;
 use std::borrow::Borrow;
 use std::ops::Add;
 use std::{
@@ -108,6 +108,7 @@ pub mod batch;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod file;
+mod input_message;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
@@ -140,7 +141,8 @@ pub use streams::{
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct Input {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<Value>,
+    #[cfg_attr(test, ts(optional))]
+    pub system: Option<System>,
     #[serde(default)]
     pub messages: Vec<InputMessage>,
 }
@@ -212,7 +214,7 @@ impl InputMessage {
             content: self
                 .content
                 .into_iter()
-                .map(|content| content.into_lazy_resolved_input_message(self.role, context))
+                .map(|content| content.into_lazy_resolved_input_message(context))
                 .collect::<Result<Vec<LazyResolvedInputMessageContent>, Error>>()?,
         })
     }
@@ -252,7 +254,7 @@ impl LazyResolvedInputMessage {
     }
 }
 
-/// Extracts the StorageKind from the FetchContext, or returns an error if the object store is not configured.
+/// Extracts the `StorageKind` from the `FetchContext`, or returns an error if the object store is not configured.
 fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
     let object_store_info = context.object_store_info.as_ref().ok_or_else(|| {
         Error::new(ErrorDetails::ObjectStoreUnconfigured {
@@ -263,20 +265,19 @@ fn get_storage_kind(context: &FetchContext<'_>) -> Result<StorageKind, Error> {
 }
 
 impl InputMessageContent {
-    /// The 'role' parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
+    /// The `role` parameter is only used to handle legacy role-based templates (`{"type": "text", "value": ...}`).
     /// Once we removed support for these input blocks (and only support `{"type": "template", "name": "...", "arguments": ...}`),
-    /// we can remove the 'role' parameter.
+    /// we can remove the `role` parameter.
     pub fn into_lazy_resolved_input_message(
         self,
-        role: Role,
         context: FetchContext<'_>,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
-            InputMessageContent::Text(TextKind::Text { text }) => {
-                LazyResolvedInputMessageContent::Text { text }
+            InputMessageContent::Text(Text { text }) => {
+                LazyResolvedInputMessageContent::Text(Text { text })
             }
-            InputMessageContent::RawText { value } => {
-                LazyResolvedInputMessageContent::RawText { value }
+            InputMessageContent::RawText(raw_text) => {
+                LazyResolvedInputMessageContent::RawText(raw_text)
             }
             InputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
@@ -284,50 +285,30 @@ impl InputMessageContent {
             InputMessageContent::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)
             }
-            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                // Map the legacy `{{"type": "text", "arguments": ...}}` format to an explicit
-                // `{{"type": "template", "name": "<role>", "arguments": ...}}` format, with the template
-                // name chosen based on the message role.
-                LazyResolvedInputMessageContent::Template(TemplateInput {
-                    name: role.implicit_template_name().to_string(),
-                    arguments,
-                })
-            }
             InputMessageContent::ToolCall(tool_call) => {
                 LazyResolvedInputMessageContent::ToolCall(tool_call.try_into()?)
             }
             InputMessageContent::ToolResult(tool_result) => {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
             }
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                tracing::warn!(
-                    r#"Deprecation Warning: `{{"type": "text", "value", ...}}` is deprecated. Please use `{{"type": "text", "text": "String input"}}` or `{{"type": "text", "arguments": {{..}}}} ` instead."#
-                );
-                match value {
-                    Value::String(text) => LazyResolvedInputMessageContent::Text { text },
-                    Value::Object(arguments) => {
-                        LazyResolvedInputMessageContent::Template(TemplateInput {
-                            name: role.implicit_template_name().to_string(),
-                            arguments,
-                        })
-                    }
-                    _ => {
-                        return Err(Error::new(ErrorDetails::InvalidMessage {
-                            message: r#"The 'value' field in a `{"type": "text", "value": ... }` content block must be a string or object"#.to_string(),
-                        }));
-                    }
-                }
-            }
             InputMessageContent::File(file) => {
                 match &file {
-                    File::Url { url, mime_type } => {
+                    // User provided a file URL.
+                    // We create a lazy future that will fetch the file when needed.
+                    // The future is not executed immediately - it only runs when awaited.
+                    // This allows model providers that support URL forwarding to skip the fetch entirely.
+                    // When the future does run, it:
+                    // 1. Fetches the file from the URL
+                    // 2. Computes a content-addressed `storage_path`
+                    // 3. Returns a `ObjectStorageFile` with the data
+                    File::Url(UrlFile { url, mime_type }) => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
                         let storage_kind = get_storage_kind(&context)?;
                         let client = context.client.clone();
                         // Construct a future that will actually fetch the file URL from the network.
-                        // Important - we do *not* use `tokio::spawn` here. As a result, the future
+                        // Important: we do *not* use `tokio::spawn` here. As a result, the future
                         // will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
                         // This ensures that if we never actually need to download the file
@@ -336,11 +317,15 @@ impl InputMessageContent {
                         let url = url.clone();
                         let mime_type = mime_type.clone();
                         let delayed_file_future = async move {
-                            let file = file.take_or_fetch(&client).await?;
-                            let path = storage_kind.file_path(&file)?;
-                            Ok(FileWithPath {
-                                file,
-                                storage_path: path,
+                            let base64_file = file.take_or_fetch(&client).await?;
+                            let path = storage_kind.file_path(&base64_file)?;
+                            Ok(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: base64_file.source_url,
+                                    mime_type: base64_file.mime_type,
+                                    storage_path: path,
+                                },
+                                data: base64_file.data,
                             })
                         };
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
@@ -348,76 +333,101 @@ impl InputMessageContent {
                             future: delayed_file_future.boxed().shared(),
                         }))
                     }
-                    File::Base64 { mime_type, data } => {
-                        let file = Base64File {
-                            url: None,
+                    // User provided base64-encoded file data.
+                    // We immediately:
+                    // 1. Compute a content-addressed `storage_path` from the data
+                    // 2. Wrap the data in `PendingObjectStoreFile` to signal it needs writing
+                    // The data is ready to use but not yet persisted to object storage.
+                    // The write will happen later in `into_stored_input_message_content`.
+                    File::Base64(Base64File {
+                        source_url,
+                        mime_type,
+                        data,
+                    }) => {
+                        let storage_kind = get_storage_kind(&context)?;
+                        let base64_file = Base64File {
+                            source_url: source_url.clone(),
                             mime_type: mime_type.clone(),
                             data: data.clone(),
                         };
-                        let storage_kind = get_storage_kind(&context)?;
-                        let path = storage_kind.file_path(&file)?;
+                        let path = storage_kind.file_path(&base64_file)?;
 
-                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::FileWithPath(
-                            FileWithPath {
-                                file,
-                                storage_path: path,
-                            },
+                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::Base64(
+                            PendingObjectStoreFile(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: source_url.clone(),
+                                    mime_type: mime_type.clone(),
+                                    storage_path: path,
+                                },
+                                data: data.clone(),
+                            }),
                         )))
                     }
-                    File::ObjectStorage {
+                    // User provided a reference to a file already in object storage.
+                    // We create a lazy future that will fetch the file data when needed.
+                    // The future is not executed immediately - it only runs when awaited.
+                    // This allows us to skip fetching if the file data isn't needed (e.g., just storing metadata).
+                    // When the future does run, it fetches the file from object storage.
+                    File::ObjectStoragePointer(ObjectStoragePointer {
                         source_url,
                         mime_type,
                         storage_path,
-                    } => {
-                        let source_url = source_url.clone();
+                    }) => {
+                        let source_url_for_future = source_url.clone();
                         let object_store_info = context.object_store_info.clone();
                         let owned_storage_path = storage_path.clone();
                         let mime_type_for_closure = mime_type.clone();
                         // Construct a future that will fetch the file from the object store.
-                        // Important - the future will not actually begin executing (including opening the network connection)
+                        // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
                         let delayed_file_future = async move {
                             let object_response =
                                 get_object(object_store_info.as_ref(), owned_storage_path.clone())
                                     .await?;
-                            let file = Base64File {
-                                url: None,
-                                mime_type: mime_type_for_closure,
+                            Ok(ObjectStorageFile {
+                                file: ObjectStoragePointer {
+                                    source_url: source_url_for_future,
+                                    mime_type: mime_type_for_closure,
+                                    storage_path: owned_storage_path,
+                                },
                                 data: object_response.data,
-                            };
-                            Ok(FileWithPath {
-                                file,
-                                storage_path: owned_storage_path,
                             })
                         };
-                        LazyResolvedInputMessageContent::File(Box::new(LazyFile::ObjectStorage {
-                            metadata: Base64FileMetadata {
-                                url: source_url,
-                                mime_type: mime_type.clone(),
+                        LazyResolvedInputMessageContent::File(Box::new(
+                            LazyFile::ObjectStoragePointer {
+                                metadata: Base64FileMetadata {
+                                    source_url: source_url.clone(),
+                                    mime_type: mime_type.clone(),
+                                },
+                                storage_path: storage_path.clone(),
+                                future: delayed_file_future.boxed().shared(),
                             },
-                            storage_path: storage_path.clone(),
-                            future: delayed_file_future.boxed().shared(),
-                        }))
+                        ))
                     }
+                    // User provided a file reference with data already in memory.
+                    // This typically comes from roundtripping (e.g., `get_datapoints` → `update_datapoints`).
+                    // The file is already persisted at `storage_path`, and we have the data available.
+                    // No fetch or write is needed - we can use it directly.
+                    File::ObjectStorage(resolved_file) => LazyResolvedInputMessageContent::File(
+                        Box::new(LazyFile::ObjectStorage(resolved_file.clone())),
+                    ),
                 }
             }
-            InputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => LazyResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            InputMessageContent::Unknown(unknown) => {
+                LazyResolvedInputMessageContent::Unknown(unknown)
+            }
         })
     }
 }
 
 impl LazyResolvedInputMessageContent {
+    /// Converts lazy content into fully resolved content by executing any pending operations.
+    /// For files, this means fetching data if needed (from URLs or object storage).
+    /// This is used when we need the actual file data (e.g., for inference with providers
+    /// that don't support URL forwarding, or for observability).
     pub async fn resolve(self) -> Result<ResolvedInputMessageContent, Error> {
         Ok(match self {
-            LazyResolvedInputMessageContent::Text { text } => {
-                ResolvedInputMessageContent::Text { text }
-            }
+            LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
             LazyResolvedInputMessageContent::Template(template) => {
                 ResolvedInputMessageContent::Template(template)
             }
@@ -427,90 +437,149 @@ impl LazyResolvedInputMessageContent {
             LazyResolvedInputMessageContent::ToolResult(tool_result) => {
                 ResolvedInputMessageContent::ToolResult(tool_result)
             }
-            LazyResolvedInputMessageContent::RawText { value } => {
-                ResolvedInputMessageContent::RawText { value }
+            LazyResolvedInputMessageContent::RawText(raw_text) => {
+                ResolvedInputMessageContent::RawText(raw_text)
             }
             LazyResolvedInputMessageContent::Thought(thought) => {
                 ResolvedInputMessageContent::Thought(thought)
             }
             LazyResolvedInputMessageContent::File(file) => match *file {
+                // File from URL: await the fetch future to get the data.
+                // This performs the network request and returns the file data.
                 LazyFile::Url {
                     future,
                     file_url: _,
                 } => ResolvedInputMessageContent::File(Box::new(future.await?)),
-                LazyFile::FileWithPath(file) => ResolvedInputMessageContent::File(Box::new(file)),
-                LazyFile::ObjectStorage { future, .. } => {
+                // Base64 file: unwrap from `PendingObjectStoreFile`.
+                // The data is already in memory, just needs type conversion.
+                LazyFile::Base64(pending) => ResolvedInputMessageContent::File(Box::new(pending.0)),
+                // File from object storage: await the fetch future to get the data.
+                // This fetches the file from object storage and returns the file data.
+                LazyFile::ObjectStoragePointer { future, .. } => {
                     ResolvedInputMessageContent::File(Box::new(future.await?))
                 }
+                // Already resolved file: data is in memory, return it directly.
+                LazyFile::ObjectStorage(resolved) => {
+                    ResolvedInputMessageContent::File(Box::new(resolved))
+                }
             },
-            LazyResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => ResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            LazyResolvedInputMessageContent::Unknown(unknown) => {
+                ResolvedInputMessageContent::Unknown(unknown)
+            }
         })
     }
 
-    /// Converts the message content into a StoredInputMessageContent,
-    /// bypassing fetching files / resolving network resources if possible.
+    /// Converts the message content into a StoredInputMessageContent for database storage.
+    /// This method optimizes file handling by:
+    /// - Skipping fetches when the file is already in object storage (`ObjectStoragePointer`, `ObjectStorageFile`)
+    /// - Only writing files that aren't already persisted (`Url`, `Base64`)
+    /// This enables efficient roundtripping: data from the database can be passed back
+    /// to new requests without re-fetching or re-writing files.
     pub async fn into_stored_input_message_content(
         self,
         object_store_info: &Option<ObjectStoreInfo>,
     ) -> Result<StoredInputMessageContent, Error> {
         Ok(match self {
-            // When the input file already contains the ObjectStorage path, we discard the future without awaiting
-            // (which doesn't trigger the pending network request), and directly convert the metadata and
-            // storage_path into a StoredFile.
             LazyResolvedInputMessageContent::File(file) => match *file {
-                LazyFile::ObjectStorage {
+                // File reference to object storage without data in memory.
+                // Origin: User provided File::ObjectStorage (e.g., from list_datapoints)
+                // The file is already persisted at storage_path, so we skip both fetch and write.
+                // We discard the future without awaiting (avoiding the pending fetch operation)
+                // and directly convert the metadata and storage_path into a StoredFile.
+                LazyFile::ObjectStoragePointer {
                     metadata,
                     storage_path,
                     future: _,
-                } => StoredInputMessageContent::File(Box::new(StoredFile {
-                    file: metadata,
+                } => StoredInputMessageContent::File(Box::new(StoredFile(ObjectStoragePointer {
+                    source_url: metadata.source_url,
+                    mime_type: metadata.mime_type,
                     storage_path,
-                })),
-                // All other file types need to be resolved first.
-                other => {
-                    let file = other.resolve().await?.into_owned();
-                    // Because this may trigger during a datapoint update,
-                    // we need to try and write the file to object storage first.
+                }))),
+                // File reference to object storage with data in memory.
+                // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)
+                //         User provided File::ObjectStorageFile with file data attached
+                // The file is already persisted at storage_path, so we skip the write.
+                // We drop the in-memory data and keep only the metadata for storage.
+                LazyFile::ObjectStorage(resolved) => {
+                    StoredInputMessageContent::File(Box::new(StoredFile(resolved.file)))
+                }
+                // File from a URL that needs to be fetched and stored.
+                // Origin: User provided File::Url
+                // We fetch the file from the URL, then write it to object storage.
+                LazyFile::Url {
+                    future,
+                    file_url: _,
+                } => {
+                    let resolved_file = future.await?;
                     write_file(
                         object_store_info,
-                        file.file.clone(),
-                        file.storage_path.clone(),
+                        Base64File {
+                            source_url: resolved_file.file.source_url.clone(),
+                            mime_type: resolved_file.file.mime_type.clone(),
+                            data: resolved_file.data.clone(),
+                        },
+                        resolved_file.file.storage_path.clone(),
                     )
                     .await?;
 
-                    StoredInputMessageContent::File(Box::new(file.into_stored_file()))
+                    StoredInputMessageContent::File(Box::new(StoredFile(resolved_file.file)))
+                }
+                // Base64-encoded file data that needs to be written to storage.
+                // Origin: User provided File::Base64 (fresh file data)
+                // We write the base64 data to object storage.
+                // The PendingObjectStoreFile wrapper type signals this write requirement.
+                LazyFile::Base64(pending) => {
+                    write_file(
+                        object_store_info,
+                        Base64File {
+                            source_url: pending.0.file.source_url.clone(),
+                            mime_type: pending.0.file.mime_type.clone(),
+                            data: pending.0.data.clone(),
+                        },
+                        pending.0.file.storage_path.clone(),
+                    )
+                    .await?;
+
+                    StoredInputMessageContent::File(Box::new(StoredFile(pending.0.file)))
                 }
             },
             // All other cases delegate to the "resolve" case, which is mostly just a type conversion.
-            other => other.resolve().await?.into_stored_input_message_content(),
+            other => other.resolve().await?.into_stored_input_message_content()?,
         })
     }
 }
 
 /// InputMessage and Role are our representation of the input sent by the client
 /// prior to any processing into LLM representations below.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+/// `InputMessage` has a custom deserializer that addresses legacy data formats that we used to support (see input_message.rs).
+#[derive(Clone, Debug, Serialize, PartialEq)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct InputMessage {
     pub role: Role,
-    #[serde(deserialize_with = "deserialize_content")]
     pub content: Vec<InputMessageContent>,
 }
+
+/// A newtype wrapper around Map<String, Value> for template and system arguments
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[ts(export)]
+#[serde(transparent)]
+pub struct Arguments(pub Map<String, Value>);
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
-pub struct TemplateInput {
+pub struct Template {
     pub name: String,
-    pub arguments: Map<String, Value>,
+    pub arguments: Arguments,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[serde(untagged)]
+#[ts(export)]
+pub enum System {
+    Text(String),
+    Template(Arguments),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -518,26 +587,20 @@ pub struct TemplateInput {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
 pub enum InputMessageContent {
-    Text(TextKind),
-    Template(TemplateInput),
+    Text(Text),
+    Template(Template),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
-    /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
+    /// content blocks (e.g. Anthropic's `redacted_thinking`) in and out
     /// of TensorZero.
-    /// The 'data' field hold the original content block from the provider,
+    /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
-    // We may extend this in the future to include other types of content
+    Unknown(Unknown),
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -546,8 +609,7 @@ pub enum InputMessageContent {
 #[ts(export)]
 pub enum TextKind {
     Text { text: String },
-    Arguments { arguments: Map<String, Value> },
-    LegacyValue { value: Value },
+    Arguments { arguments: Arguments },
 }
 
 impl<'de> Deserialize<'de> for TextKind {
@@ -568,17 +630,16 @@ impl<'de> Deserialize<'de> for TextKind {
         match key.as_str() {
             "text" => Ok(TextKind::Text {
                 text: serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing 'text': {e}"))
+                    serde::de::Error::custom(format!("Error deserializing `text`: {e}"))
                 })?,
             }),
             "arguments" => Ok(TextKind::Arguments {
-                arguments: serde_json::from_value(value).map_err(|e| {
-                    serde::de::Error::custom(format!("Error deserializing 'arguments': {e}"))
-                })?,
+                arguments: Arguments(serde_json::from_value(value).map_err(|e| {
+                    serde::de::Error::custom(format!("Error deserializing `arguments`: {e}"))
+                })?),
             }),
-            "value" => Ok(TextKind::LegacyValue { value }),
             _ => Err(serde::de::Error::custom(format!(
-                "Unknown key '{key}' in text content"
+                "Unknown key `{key}` in text content"
             ))),
         }
     }
@@ -639,6 +700,7 @@ impl Role {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[serde(deny_unknown_fields)]
 pub struct Text {
     pub text: String,
 }
@@ -661,6 +723,65 @@ impl RateLimitedInputContent for Text {
 impl Text {
     pub fn __repr__(&self) -> String {
         self.to_string()
+    }
+}
+
+/// Struct that represents raw text content that should be passed directly to the model
+/// without any template processing or validation
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
+#[serde(deny_unknown_fields)]
+pub struct RawText {
+    pub value: String,
+}
+
+impl std::fmt::Display for RawText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl RateLimitedInputContent for RawText {
+    fn estimated_input_token_usage(&self) -> u64 {
+        get_estimated_tokens(&self.value)
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl RawText {
+    pub fn __repr__(&self) -> String {
+        self.to_string()
+    }
+}
+
+/// Struct that represents an unknown provider-specific content block.
+/// We pass this along as-is without any validation or transformation.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+#[cfg_attr(feature = "pyo3", pyclass)]
+#[serde(deny_unknown_fields)]
+pub struct Unknown {
+    /// The underlying content block to be passed to the model provider.
+    pub data: Value,
+    /// A fully-qualified name specifying when this content block should
+    /// be included in the model provider input.
+    pub model_provider_name: Option<String>,
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl Unknown {
+    #[getter]
+    pub fn data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::inference::types::pyo3_helpers::serialize_to_dict;
+        serialize_to_dict(py, &self.data).map(|p| p.into_bound(py))
+    }
+
+    #[getter]
+    pub fn model_provider_name(&self) -> Option<String> {
+        self.model_provider_name.clone()
     }
 }
 
@@ -757,13 +878,12 @@ impl ContentBlock {
             ContentBlock::ToolResult(tool_result) => {
                 Ok(StoredContentBlock::ToolResult(tool_result))
             }
-            ContentBlock::File(file) => Ok(StoredContentBlock::File(Box::new(
-                file.resolve()
-                    .await?
-                    .clone()
-                    .into_owned()
-                    .into_stored_file(),
-            ))),
+            ContentBlock::File(file) => {
+                let resolved_file = file.resolve().await?.clone().into_owned();
+                Ok(StoredContentBlock::File(Box::new(
+                    File::ObjectStorage(resolved_file).into_stored_file()?,
+                )))
+            }
             ContentBlock::Thought(thought) => Ok(StoredContentBlock::Thought(thought)),
             ContentBlock::Unknown {
                 data,
@@ -848,7 +968,7 @@ pub enum StoredContentBlock {
     },
 }
 
-/// Like `ContentBlock`, but stores an in-memory `FileWithPath` instead of a `LazyFile`
+/// Like `ContentBlock`, but stores an in-memory `ObjectStorageFile` instead of a `LazyFile`
 /// As a result, it can implement both `Serialize` and `Deserialize`
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -858,7 +978,7 @@ pub enum ResolvedContentBlock {
     Text(Text),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    File(Box<FileWithPath>),
+    File(Box<ObjectStorageFile>),
     Thought(Thought),
     Unknown {
         data: Value,
@@ -867,13 +987,14 @@ pub enum ResolvedContentBlock {
 }
 
 impl ResolvedContentBlock {
+    /// Converts a `ResolvedContentBlock` into a `ContentBlock`.
     pub fn into_content_block(self) -> ContentBlock {
         match self {
             ResolvedContentBlock::Text(text) => ContentBlock::Text(text),
             ResolvedContentBlock::ToolCall(tool_call) => ContentBlock::ToolCall(tool_call),
             ResolvedContentBlock::ToolResult(tool_result) => ContentBlock::ToolResult(tool_result),
-            ResolvedContentBlock::File(file) => {
-                ContentBlock::File(Box::new(LazyFile::FileWithPath(*file)))
+            ResolvedContentBlock::File(resolved) => {
+                ContentBlock::File(Box::new(LazyFile::ObjectStorage(*resolved)))
             }
             ResolvedContentBlock::Thought(thought) => ContentBlock::Thought(thought),
             ResolvedContentBlock::Unknown {
@@ -1460,21 +1581,21 @@ pub struct ModelInferenceDatabaseInsert {
 #[cfg(test)]
 impl From<String> for InputMessageContent {
     fn from(text: String) -> Self {
-        InputMessageContent::Text(TextKind::Text { text })
+        InputMessageContent::Text(Text { text })
     }
 }
 
 #[cfg(test)]
 impl From<String> for ResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        ResolvedInputMessageContent::Text { text }
+        ResolvedInputMessageContent::Text(Text { text })
     }
 }
 
 #[cfg(test)]
 impl From<String> for LazyResolvedInputMessageContent {
     fn from(text: String) -> Self {
-        LazyResolvedInputMessageContent::Text { text }
+        LazyResolvedInputMessageContent::Text(Text { text })
     }
 }
 
@@ -1483,26 +1604,6 @@ impl From<String> for ContentBlockChatOutput {
     fn from(text: String) -> Self {
         ContentBlockChatOutput::Text(Text { text })
     }
-}
-
-fn deserialize_content<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Vec<InputMessageContent>, D::Error> {
-    #[expect(clippy::redundant_closure_for_method_calls)]
-    UntaggedEnumVisitor::new()
-        .string(|text| {
-            Ok(vec![InputMessageContent::Text(TextKind::Text {
-                text: text.to_string(),
-            })])
-        })
-        .map(|object| {
-            tracing::warn!("Deprecation Warning: passing in an object for `content` is deprecated. Please use an array of content blocks instead.");
-            Ok(vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: object.deserialize()?,
-            })])
-        })
-        .seq(|seq| seq.deserialize())
-        .deserialize(deserializer)
 }
 
 impl From<String> for ContentBlock {
@@ -2092,7 +2193,7 @@ mod tests {
     use super::*;
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{AllowedTools, DynamicToolConfig, ToolChoice, ToolConfig};
+    use crate::tool::{DynamicToolConfig, ToolChoice, ToolConfig};
     use serde_json::json;
     use tokio::time::Instant;
 
@@ -2469,27 +2570,27 @@ mod tests {
         // Case 6: Additional tools
         let inference_id = Uuid::now_v7();
         let additional_tool_config = ToolCallConfig {
-            tools_available: vec![ToolConfig::Dynamic(DynamicToolConfig {
-                name: "custom_tool".to_string(),
-                description: "A custom tool".to_string(),
-                parameters: DynamicJSONSchema::new(
-                    serde_json::from_str(
-                        r#"{
-                    "type": "object",
-                    "properties": {
-                        "input": {"type": "string"}
-                    },
-                    "required": ["input"]
-                }"#,
-                    )
-                    .unwrap(),
-                ),
-                strict: true,
-            })],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
+            ..ToolCallConfig::with_tools_available(
+                vec![],
+                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                    name: "custom_tool".to_string(),
+                    description: "A custom tool".to_string(),
+                    parameters: DynamicJSONSchema::new(
+                        serde_json::from_str(
+                            r#"{
+                        "type": "object",
+                        "properties": {
+                            "input": {"type": "string"}
+                        },
+                        "required": ["input"]
+                    }"#,
+                        )
+                        .unwrap(),
+                    ),
+                    strict: true,
+                })],
+            )
         };
 
         // Test valid arguments for additional tool
@@ -2592,28 +2693,28 @@ mod tests {
         // Case 7: Allowed tools restriction
         let inference_id = Uuid::now_v7();
         let restricted_tool_config = ToolCallConfig {
-            tools_available: vec![ToolConfig::Dynamic(DynamicToolConfig {
-                name: "weather_tool".to_string(),
-                description: "Get weather information".to_string(),
-                parameters: DynamicJSONSchema::new(
-                    serde_json::from_str(
-                        r#"{
-                    "type": "object",
-                    "properties": {
-                        "location": {"type": "string"},
-                        "units": {"type": "string", "enum": ["celsius", "fahrenheit"]}
-                    },
-                    "required": ["location"]
-                }"#,
-                    )
-                    .unwrap(),
-                ),
-                strict: true,
-            })],
             tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
+            ..ToolCallConfig::with_tools_available(
+                vec![],
+                vec![ToolConfig::Dynamic(DynamicToolConfig {
+                    name: "weather_tool".to_string(),
+                    description: "Get weather information".to_string(),
+                    parameters: DynamicJSONSchema::new(
+                        serde_json::from_str(
+                            r#"{
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string"},
+                            "units": {"type": "string", "enum": ["celsius", "fahrenheit"]}
+                        },
+                        "required": ["location"]
+                    }"#,
+                        )
+                        .unwrap(),
+                    ),
+                    strict: true,
+                })],
+            )
         };
 
         // Test allowed tool call
@@ -2731,13 +2832,13 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::Text { text }) => {
-                assert_eq!(text, "Hello, world!");
+            InputMessageContent::Text(text) => {
+                assert_eq!(&text.text, "Hello, world!");
             }
             _ => panic!("Expected Text content: {message:?}"),
         }
 
-        // Test case for object content
+        // Test case for object content (should be converted to Template)
         let input = json!({
             "role": "assistant",
             "content": {"key": "value"}
@@ -2746,17 +2847,21 @@ mod tests {
         assert_eq!(message.role, Role::Assistant);
         assert_eq!(message.content.len(), 1);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                assert_eq!(arguments, json!({"key": "value"}).as_object().unwrap());
+            InputMessageContent::Template(template) => {
+                assert_eq!(template.name, "assistant");
+                assert_eq!(
+                    &template.arguments.0,
+                    json!({"key": "value"}).as_object().unwrap()
+                );
             }
-            _ => panic!("Expected Text content"),
+            _ => panic!("Expected Template content"),
         }
 
         // Test case for multiple content items
         let input = json!({
             "role": "user",
             "content": [
-                {"type": "text", "value": "Hello"},
+                {"type": "text", "text": "Hello"},
                 {"type": "tool_call", "id": "123", "name": "test_tool", "arguments": "{}"}
             ]
         });
@@ -2764,8 +2869,8 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Text(TextKind::LegacyValue { value }) => {
-                assert_eq!(value, "Hello");
+            InputMessageContent::Text(text) => {
+                assert_eq!(&text.text, "Hello");
             }
             _ => panic!("Expected Text content"),
         }
@@ -2791,10 +2896,10 @@ mod tests {
         assert_eq!(message.role, Role::User);
         assert_eq!(message.content.len(), 2);
         match &message.content[0] {
-            InputMessageContent::Template(TemplateInput { name, arguments }) => {
+            InputMessageContent::Template(Template { name, arguments }) => {
                 assert_eq!(name, "user");
                 assert_eq!(
-                    arguments,
+                    &arguments.0,
                     json!({"complex": "json", "with": ["nested", "array"]})
                         .as_object()
                         .unwrap()

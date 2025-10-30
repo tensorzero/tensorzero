@@ -12,9 +12,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     config::Config,
-    db::clickhouse::{
-        query_builder::{InferenceFilter, InferenceOutputSource, ListInferencesParams, OrderBy},
-        ClickHouseConnectionInfo, ClickhouseFormat,
+    db::{
+        clickhouse::{
+            query_builder::{InferenceFilter, OrderBy},
+            ClickHouseConnectionInfo,
+        },
+        inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
     endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
     error::{Error, ErrorDetails},
@@ -44,8 +47,6 @@ pub struct LaunchOptimizationWorkflowParams {
     #[serde(deserialize_with = "deserialize_option_u64")]
     pub offset: Option<u64>,
     pub val_fraction: Option<f64>,
-    #[serde(default)]
-    pub format: ClickhouseFormat,
     pub optimizer_config: UninitializedOptimizerInfo,
 }
 
@@ -86,7 +87,6 @@ pub async fn launch_optimization_workflow(
         limit,
         offset,
         val_fraction,
-        format,
         optimizer_config,
     } = params;
     // Query the database for the stored inferences
@@ -94,13 +94,14 @@ pub async fn launch_optimization_workflow(
         .list_inferences(
             &config,
             &ListInferencesParams {
-                function_name: &function_name,
+                function_name: Some(&function_name),
+                ids: None,
                 variant_name: query_variant_name.as_deref(),
+                episode_id: None,
                 filters: filters.as_ref(),
                 output_source,
                 limit,
                 offset,
-                format,
                 order_by: order_by.as_deref(),
             },
         )

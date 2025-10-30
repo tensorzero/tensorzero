@@ -740,13 +740,11 @@ pub async fn test_start_simple_image_batch_inference_request_with_provider(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "What kind of animal is in this image?"},
+                    {"type": "text", "text": "What kind of animal is in this image?"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                            "mime_type": "image/png",
-                        },
+                        "source_url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": {"type": "disabled"},
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
@@ -1481,25 +1479,25 @@ pub async fn test_tool_use_batch_inference_request_with_provider(provider: E2ETe
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         },
         {
             "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [{"role": "user", "content": [{"type": "text", "value": "What is your name?"}]}]
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "What is your name?"}]}]
         },
         {
             "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [{"role": "user", "content": [{"type": "text", "value": "What is your name?"}]}]
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "What is your name?"}]}]
         },
         {
             "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [{"role": "user", "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]}]
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]}]
         },
         {
             "system": {"assistant_name": "Dr. Mehta"},
-            "messages": [{"role": "user", "content": [{"type": "text", "value": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]}]
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]}]
         }
     ]);
     let expected_input_messages = [
@@ -2149,7 +2147,7 @@ pub async fn test_allowed_tools_batch_inference_request_with_provider(provider: 
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
+                "content": [{"type": "text", "text": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
             }
         ]
     });
@@ -2549,7 +2547,7 @@ pub async fn test_multi_turn_parallel_tool_use_batch_inference_request_with_prov
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
+                "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Fahrenheit)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
             },
             {
                 "role": "assistant",
@@ -2795,7 +2793,7 @@ pub async fn test_tool_multi_turn_batch_inference_request_with_provider(provider
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
             },
             {
                 "role": "assistant",
@@ -3351,7 +3349,7 @@ pub async fn test_dynamic_tool_use_batch_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
+                "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
             }
         ]
     });
@@ -3699,7 +3697,7 @@ pub async fn test_parallel_tool_use_batch_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
+                "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
             }
         ]
     });
@@ -4012,7 +4010,7 @@ pub async fn test_json_mode_batch_inference_request_with_provider(provider: E2ET
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]}],
         "tags": [{"test_type": "json_mode_v2"}]
@@ -4360,7 +4358,7 @@ pub async fn test_dynamic_json_mode_batch_inference_request_with_provider(
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]}],
         "output_schemas": [output_schema.clone()],

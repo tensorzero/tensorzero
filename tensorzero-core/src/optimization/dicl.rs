@@ -1,10 +1,10 @@
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
+use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Semaphore;
+use uuid::Uuid;
 
-#[cfg(feature = "pyo3")]
-use crate::model::CredentialLocation;
 use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
@@ -19,6 +19,7 @@ use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
+    inference::types::StoredInputMessageContent,
     model::CredentialLocationWithFallback,
     model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
@@ -28,10 +29,11 @@ use crate::{
     utils::retries::RetryConfig,
     variant::dicl::UninitializedDiclConfig,
 };
-use futures::future::try_join_all;
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::Semaphore;
-use uuid::Uuid;
+
+#[cfg(feature = "pyo3")]
+use crate::model::CredentialLocation;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 fn default_batch_size() -> usize {
     128
@@ -433,12 +435,17 @@ fn validate_function_config(
         }
         FunctionConfig::Json(json_config) => {
             // JSON functions should have exactly one implicit tool for schema validation
-            if json_config.implicit_tool_call_config.tools_available.len() != 1 {
+            if json_config
+                .implicit_tool_call_config
+                .tools_available()
+                .count()
+                != 1
+            {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
                         function_name,
-                        json_config.implicit_tool_call_config.tools_available.len()
+                        json_config.implicit_tool_call_config.tools_available().count()
                     ),
                 }));
             }
@@ -485,7 +492,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
         for message in &example.stored_input.messages {
             for content in &message.content {
                 match content {
-                    crate::inference::types::StoredInputMessageContent::ToolCall(_) => {
+                    StoredInputMessageContent::ToolCall(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool call in message content.",
@@ -493,7 +500,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
                             ),
                         }));
                     }
-                    crate::inference::types::StoredInputMessageContent::ToolResult(_) => {
+                    StoredInputMessageContent::ToolResult(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool result in message content.",
@@ -806,6 +813,9 @@ pub async fn dicl_examples_exist(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
+
     use crate::{
         config::provider_types::ProviderTypesConfig,
         embeddings::{
@@ -814,10 +824,14 @@ mod tests {
         },
         endpoints::inference::InferenceCredentials,
         experimentation::ExperimentationConfig,
-        tool::AllowedTools,
     };
-    use std::collections::{HashMap, HashSet};
-    use std::sync::Arc;
+    use crate::{
+        inference::types::{
+            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+        },
+        stored_inference::StoredOutput,
+    };
 
     // Helper functions to create test embedding models using the Dummy provider
 
@@ -1004,17 +1018,6 @@ mod tests {
 
     // Helper function to create a basic RenderedSample for testing
     fn create_test_rendered_sample() -> RenderedSample {
-        use crate::{
-            inference::types::{
-                ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage,
-                Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
-            },
-            stored_inference::StoredOutput,
-        };
-        use serde_json::json;
-        use std::collections::HashMap;
-        use uuid::Uuid;
-
         RenderedSample {
             function_name: "test_function".to_string(),
             input: ModelInput {
@@ -1027,12 +1030,12 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("Test system")),
+                system: Some(System::Text("Test system".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Test message"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test message".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -1306,10 +1309,8 @@ mod tests {
 
     fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
         use crate::{
-            config::SchemaData,
-            function::FunctionConfigJson,
-            jsonschema_util::StaticJSONSchema,
-            tool::{ToolCallConfig, ToolChoice},
+            config::SchemaData, function::FunctionConfigJson, jsonschema_util::StaticJSONSchema,
+            tool::ToolCallConfig,
         };
         use serde_json::json;
         use std::collections::HashMap;
@@ -1324,13 +1325,7 @@ mod tests {
         .unwrap();
 
         // Create an invalid config with no tools (should have exactly 1)
-        let invalid_tool_call_config = ToolCallConfig {
-            tools_available: vec![], // Invalid: should have exactly 1 implicit tool
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        };
+        let invalid_tool_call_config = ToolCallConfig::default();
 
         FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),

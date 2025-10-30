@@ -603,17 +603,18 @@ pub enum OpenAIFineTuningJobStatus {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use serde_json::json;
+
     use crate::{
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
+        tool::ToolCallOutput,
     };
-    use serde_json::json;
-
-    use super::*;
 
     #[tokio::test]
     async fn test_convert_to_sft_row() {
@@ -632,12 +633,14 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                system: Some(System::Text(
+                    "You are a helpful assistant named Dr. M.M. Patel.".to_string(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "What is the capital of France?".into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
                 }],
             },
             output: output.clone(),
@@ -683,8 +686,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_rft_row() {
-        use crate::stored_inference::StoredOutput;
-
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
@@ -697,12 +698,14 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                system: Some(System::Text(
+                    "You are a helpful assistant named Dr. M.M. Patel.".to_string(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What is the capital of France?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -752,9 +755,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_rft_row_with_tool_calls() {
-        use crate::stored_inference::StoredOutput;
-        use crate::tool::ToolCallOutput;
-
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
@@ -767,12 +767,12 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant.")),
+                system: Some(System::Text("You are a helpful assistant.".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What's the weather like?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What's the weather like?".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![

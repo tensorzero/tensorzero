@@ -76,7 +76,7 @@ mod tests {
         },
         inference::types::{
             ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
-            StoredInputMessageContent, Text, Usage,
+            StoredInputMessageContent, Template, Text, Usage,
         },
     };
     use uuid::Uuid;
@@ -90,9 +90,9 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             dataset_name: "test".to_string(),
@@ -153,9 +153,9 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Hello, world!"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             name: None,
@@ -185,9 +185,10 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"foo": "bar"}),
-                    }],
+                    content: vec![StoredInputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
+                    })],
                 }],
             },
             dataset_name: "test".to_string(),
@@ -258,9 +259,10 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"foo": "bar"}),
-                    }],
+                    content: vec![StoredInputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
+                    })],
                 }],
             },
             dataset_name: "test".to_string(),
@@ -294,9 +296,10 @@ mod tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"foo": "bar"}),
-                    }],
+                    content: vec![StoredInputMessageContent::Template(Template {
+                        name: "user".to_string(),
+                        arguments: serde_json::from_value(json!({"foo": "bar"})).unwrap(),
+                    })],
                 }],
             },
             dataset_name: "test".to_string(),
