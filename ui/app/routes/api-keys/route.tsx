@@ -126,6 +126,7 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
     if (offset > 0) {
       const searchParams = new URLSearchParams(window.location.search);
       searchParams.set("offset", "0");
+      searchParams.set("pageSize", String(pageSize));
       navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
     }
   };
