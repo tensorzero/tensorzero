@@ -319,7 +319,12 @@ impl ClientBuilder {
                     )
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Arc::new(Config::default())
+                    Arc::new(Config::new_empty().await.map_err(|e| {
+                        ClientBuilderError::ConfigParsing {
+                            error: TensorZeroError::Other { source: e.into() },
+                            glob: ConfigFileGlob::new_empty(),
+                        }
+                    })?)
                 };
                 if !allow_batch_writes
                     && config.gateway.observability.batch_writes.enabled
@@ -1442,7 +1447,9 @@ pub async fn get_config_no_verify_credentials(
         )
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
-        None => Ok(Config::default()),
+        None => Ok(Config::new_empty()
+            .await
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?),
     }
 }
 

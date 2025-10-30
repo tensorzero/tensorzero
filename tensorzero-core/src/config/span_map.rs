@@ -62,7 +62,7 @@ impl SpanMap {
     /// As a result, almost all consumers of the returned `Table` shouldn't need to care
     /// about globbing (the exception being the fallback logic for `[gateway.template_filesystem_access]`,
     /// which needs to check if we globbed exactly one file)
-    pub fn from_glob(glob: &ConfigFileGlob) -> Result<(Self, Table), Error> {
+    pub fn from_glob(glob: &ConfigFileGlob, allow_empty: bool) -> Result<(Self, Table), Error> {
         let mut found_file = false;
         let mut range_to_file = Vec::new();
         let mut previous_range_end: usize = 0;
@@ -111,7 +111,7 @@ impl SpanMap {
             ));
             previous_range_end = whitespace_file_len;
         }
-        if !found_file {
+        if !found_file && !allow_empty {
             return Err(ErrorDetails::Glob {
                 glob: glob.glob.to_string(),
                 message: "No config files matched glob".to_string(),

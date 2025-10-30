@@ -77,9 +77,13 @@ pub fn skip_credential_validation() -> bool {
     SKIP_CREDENTIAL_VALIDATION.try_with(|()| ()).is_ok()
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+// Note - the `Default` impl only exists for convenience in tests
+// It might produce a completely broken config - if a test fails,
+// use one of the public `Config` constructors instead.
+#[cfg_attr(test, derive(Default))]
 pub struct Config {
     pub gateway: GatewayConfig,
     pub models: Arc<ModelTable>, // model name => model config
@@ -559,6 +563,14 @@ impl ConfigFileGlob {
         Self::new(path.display().to_string())
     }
 
+    pub fn new_empty() -> Self {
+        Self {
+            glob: String::new(),
+            paths: vec![],
+            _private: (),
+        }
+    }
+
     pub fn new(glob: String) -> Result<Self, Error> {
         // Build a matcher from the glob pattern
         let matcher = globset::Glob::new(&glob)
@@ -669,6 +681,45 @@ fn find_matching_files(base_path: &Path, matcher: &globset::GlobMatcher) -> Vec<
 }
 
 impl Config {
+    /// Constructs a new `Config`, as if from an empty config file.
+    /// This is the only way to construct an empty config file in production code,
+    /// as it ensures that things like TensorZero built-in functions will still exist in the config.
+    /// 
+    /// In test code, a `Default` impl is available, but the config it produces might
+    /// be completely broken (e.g. no builtin functions will be available).
+    pub async fn new_empty() -> Result<Config, Error> {
+        // Use an empty glob, and validate credentials
+        Self::load_from_path_optional_verify_credentials_allow_empty_glob(
+            &ConfigFileGlob::new_empty(),
+            false,
+            true,
+        )
+        .await
+    }
+
+    /// Constructs a dummy (possibly invalid) config.
+    /// The only purpose of this method is to be called by `Client::build_dummy` in pyo3 code,
+    /// where we are unable to use `.await`. We should never actually call any methods
+    /// on a client constructed with this config.
+    #[cfg(feature = "pyo3")]
+    pub fn new_dummy_for_pyo3() -> Config {
+        Config {
+            gateway: Default::default(),
+            models: Default::default(),
+            embedding_models: Default::default(),
+            functions: Default::default(),
+            metrics: Default::default(),
+            tools: Default::default(),
+            evaluations: Default::default(),
+            templates: Default::default(),
+            object_store_info: Default::default(),
+            provider_types: Default::default(),
+            optimizers: Default::default(),
+            postgres: Default::default(),
+            rate_limiting: Default::default(),
+        }
+    }
+
     pub async fn load_and_verify_from_path(config_glob: &ConfigFileGlob) -> Result<Config, Error> {
         Self::load_from_path_optional_verify_credentials(config_glob, true).await
     }
@@ -677,7 +728,20 @@ impl Config {
         config_glob: &ConfigFileGlob,
         validate_credentials: bool,
     ) -> Result<Config, Error> {
-        let globbed_config = UninitializedConfig::read_toml_config(config_glob)?;
+        Self::load_from_path_optional_verify_credentials_allow_empty_glob(
+            config_glob,
+            validate_credentials,
+            false,
+        )
+        .await
+    }
+
+    pub async fn load_from_path_optional_verify_credentials_allow_empty_glob(
+        config_glob: &ConfigFileGlob,
+        validate_credentials: bool,
+        allow_empty_glob: bool,
+    ) -> Result<Config, Error> {
+        let globbed_config = UninitializedConfig::read_toml_config(config_glob, allow_empty_glob)?;
         let config = if cfg!(feature = "e2e_tests") || !validate_credentials {
             SKIP_CREDENTIAL_VALIDATION
                 .scope(
@@ -1196,8 +1260,11 @@ struct UninitializedGlobbedConfig {
 
 impl UninitializedConfig {
     /// Read all of the globbed config files from disk, and merge them into a single `UninitializedGlobbedConfig`
-    fn read_toml_config(glob: &ConfigFileGlob) -> Result<UninitializedGlobbedConfig, Error> {
-        let (span_map, table) = SpanMap::from_glob(glob)?;
+    fn read_toml_config(
+        glob: &ConfigFileGlob,
+        allow_empty_glob: bool,
+    ) -> Result<UninitializedGlobbedConfig, Error> {
+        let (span_map, table) = SpanMap::from_glob(glob, allow_empty_glob)?;
         Ok(UninitializedGlobbedConfig { table, span_map })
     }
 }

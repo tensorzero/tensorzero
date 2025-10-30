@@ -102,7 +102,14 @@ async fn main() {
         }
         (true, None) => {
             tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-            (Arc::new(Config::default()), None)
+            (
+                Arc::new(
+                    Config::new_empty()
+                        .await
+                        .expect_pretty("Failed to load default config"),
+                ),
+                None,
+            )
         }
         (false, Some(path)) => {
             let glob = ConfigFileGlob::new_from_path(&path)
