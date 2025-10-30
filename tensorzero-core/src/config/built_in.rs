@@ -14,15 +14,24 @@
 //! (Dicl, MixtureOfN, BestOfNSampling) that require predefined variants
 //! are not supported.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::config::SchemaData;
 use crate::error::Error;
+use crate::function::FunctionConfig;
+
+#[cfg(feature = "e2e_tests")]
+use crate::config::SchemaData;
+#[cfg(feature = "e2e_tests")]
 use crate::experimentation::ExperimentationConfig;
-use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
+#[cfg(feature = "e2e_tests")]
+use crate::function::{FunctionConfigChat, FunctionConfigJson};
+#[cfg(feature = "e2e_tests")]
 use crate::jsonschema_util::{SchemaWithMetadata, StaticJSONSchema};
+#[cfg(feature = "e2e_tests")]
 use crate::tool::{create_implicit_tool_call_config, ToolChoice};
+#[cfg(feature = "e2e_tests")]
+use std::collections::HashSet;
 
 /// Returns the `tensorzero::hello_chat` function configuration.
 ///
@@ -99,6 +108,7 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
 /// the UI e2e test in `ui/e2e_tests/homePage.spec.ts` which checks the total
 /// function count displayed on the homepage.
 pub fn get_all_built_in_functions() -> Result<HashMap<String, Arc<FunctionConfig>>, Error> {
+    #[cfg_attr(not(feature = "e2e_tests"), allow(unused_mut))]
     let mut functions = HashMap::new();
     #[cfg(feature = "e2e_tests")]
     {
