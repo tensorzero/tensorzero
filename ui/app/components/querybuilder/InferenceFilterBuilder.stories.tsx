@@ -65,6 +65,9 @@ const mockConfig: Config = {
   gateway: {
     disable_pseudonymous_usage_analytics: false,
     fetch_and_encode_input_files_before_inference: false,
+    auth: {
+      enabled: false,
+    },
     observability: {
       enabled: true,
       async_writes: false,
