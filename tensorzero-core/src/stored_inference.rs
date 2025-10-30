@@ -21,6 +21,8 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
+use pyo3::types::{IntoPyDict, PyAnyMethods, PyDict};
+#[cfg(feature = "pyo3")]
 use pyo3::types::{PyAny, PyList};
 #[cfg(feature = "pyo3")]
 use pyo3::{prelude::*, IntoPyObjectExt};
@@ -184,8 +186,6 @@ impl StoredInference {
         parallel_tool_calls: Option<bool>,
         provider_tools: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
-        use pyo3::types::{IntoPyDict, PyAnyMethods, PyDict};
-
         // Build a Python dict with all the fields
         let dict = PyDict::new(py);
         dict.set_item("type", r#type.clone())?;
