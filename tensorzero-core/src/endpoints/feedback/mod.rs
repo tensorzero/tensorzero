@@ -757,12 +757,10 @@ async fn get_dynamic_demonstration_info(
             Ok(DynamicDemonstrationInfo::Chat(
                 // If the tool params are not present in the database, we use the default tool params (empty tools).
                 // This is consistent with how they are serialized at inference time.
-                match tool_params_result.tool_params {
-                    Some(db_insert) => db_insert
-                        .into_tool_call_config(function_config, static_tools)?
-                        .unwrap_or_default(),
-                    None => ToolCallConfig::default(),
-                },
+                tool_params_result
+                    .tool_params
+                    .unwrap_or_default()
+                    .into_tool_call_config(function_config, static_tools)?,
             ))
         }
         FunctionConfig::Json(..) => {

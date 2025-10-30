@@ -11,7 +11,7 @@ use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
-    error::{Error, ErrorDetails},
+    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
@@ -418,12 +418,15 @@ pub struct ToolCallConfigDatabaseInsert {
 
 impl ToolCallConfigDatabaseInsert {
     /// Converts this database representation back into a `ToolCallConfig`.
+    /// Errors if there are tools specified in the function that are not in the
+    /// static tools (shouldn't happen). Or if the function is a JSON function (no tools).
     ///
     /// This method performs the reverse transformation of the lossy conversion that occurs
     /// when storing `ToolCallConfig` in the database. It reconstructs the tool configuration
     /// by:
     /// 1. Converting the stored tools into `DynamicToolParams`
     /// 2. Using the function config to prepare a full `ToolCallConfig`
+    ///
     ///
     /// # Lossy Conversion
     /// Note that this conversion cannot fully restore the original `ToolCallConfig`:
@@ -448,9 +451,18 @@ impl ToolCallConfigDatabaseInsert {
         self,
         function_config: &crate::function::FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-    ) -> Result<Option<ToolCallConfig>, Error> {
+    ) -> Result<ToolCallConfig, Error> {
         let dynamic_params = function_config.database_insert_to_dynamic_tool_params(self);
-        let tool_call_config = function_config.prepare_tool_config(dynamic_params, static_tools)?;
+        let tool_call_config =
+            match function_config.prepare_tool_config(dynamic_params, static_tools)? {
+                Some(config) => config,
+                // This should't happen because JSON functions should not have ToolCallConfigDatabaseInsert
+                None => {
+                    return Err(ErrorDetails::InternalError {
+                        message: format!("ToolCallConfigDatabaseInsert::into_tool_call_config was called with a JSON function {IMPOSSIBLE_ERROR_MESSAGE}")
+                    }.into())
+                }
+            };
         Ok(tool_call_config)
     }
 }

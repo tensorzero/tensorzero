@@ -381,8 +381,7 @@ pub async fn update_datapoint_handler(
                 chat.tool_params
                     .clone()
                     .unwrap_or_default()
-                    .into_tool_call_config(&function_config, &app_state.config.tools)?
-                    .unwrap_or_default(),
+                    .into_tool_call_config(&function_config, &app_state.config.tools)?,
             );
 
             // Only validate and parse output if it exists
