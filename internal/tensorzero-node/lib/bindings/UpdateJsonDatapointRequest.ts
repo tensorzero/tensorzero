@@ -24,7 +24,8 @@ export type UpdateJsonDatapointRequest = {
   input?: Input;
   /**
    * JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-   * This will NOT be validated against output_schema, because we allow invalid outputs in datapoints by design.
+   * This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
+   * also be stored, because we allow invalid outputs in datapoints by design.
    */
   output?: JsonDatapointOutputUpdate | null;
   /**

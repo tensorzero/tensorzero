@@ -18,7 +18,7 @@ use crate::endpoints::datasets::{
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::{FetchContext, Input, JsonInferenceOutput};
+use crate::inference::types::{FetchContext, Input};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -305,8 +305,12 @@ async fn prepare_json_update(
     if let Some(new_output_schema) = update.output_schema {
         updated_datapoint.output_schema = new_output_schema;
     }
+
+    // Validate the output against the output schema. If the output is invalid, we only store the raw output.
     if let Some(new_output) = update.output {
-        updated_datapoint.output = new_output.map(JsonInferenceOutput::from);
+        updated_datapoint.output = new_output.map(|output| {
+            output.into_json_inference_output(updated_datapoint.output_schema.clone())
+        });
     }
 
     if let Some(new_tags) = update.tags {
@@ -1627,60 +1631,20 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn test_prepare_json_update_output_nonconformant_raw_value() {
+        async fn test_prepare_json_update_output_validation_failure() {
             let app_state = create_test_app_state();
             let fetch_context = create_fetch_context(&app_state.http_client);
             let dataset_name = "test_dataset";
             let existing = create_sample_json_datapoint(dataset_name);
 
-            let update = UpdateJsonDatapointRequest {
-                id: existing.id,
-                input: None,
-                output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: "\"intentionally nonconformant json\"".to_string(),
-                })),
-                output_schema: None,
-                tags: None,
-                metadata: None,
-            };
-
-            let result = prepare_json_update(
-                &app_state,
-                &fetch_context,
-                dataset_name,
-                update,
-                existing,
-                "2025-01-01 00:00:00",
-            )
-            .await
-            .unwrap();
-
-            let DatapointInsert::Json(updated) = result.updated else {
-                panic!("Expected Json insert");
-            };
-
-            assert_eq!(
-                updated.output.as_ref().unwrap().raw,
-                Some("\"intentionally nonconformant json\"".to_string())
-            );
-            assert_eq!(
-                updated.output.as_ref().unwrap().parsed,
-                Some(json!("intentionally nonconformant json"))
-            );
-        }
-
-        #[tokio::test]
-        async fn test_prepare_json_update_output_invalid_json() {
-            let app_state = create_test_app_state();
-            let fetch_context = create_fetch_context(&app_state.http_client);
-            let dataset_name = "test_dataset";
-            let existing = create_sample_json_datapoint(dataset_name);
+            // Output doesn't match the schema (expects {value: string}, providing {count: number})
+            let bad_output = json!({"count": 123});
 
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
                 output: Some(Some(JsonDatapointOutputUpdate {
-                    raw: "intentionally invalid \" json".to_string(),
+                    raw: serde_json::to_string(&bad_output).unwrap(),
                 })),
                 output_schema: None, // Will use existing schema which expects {value: string}
                 tags: None,
@@ -1702,11 +1666,6 @@ mod tests {
                 panic!("Expected Json insert");
             };
 
-            assert_eq!(
-                updated.output.as_ref().unwrap().raw,
-                Some("intentionally invalid \" json".to_string())
-            );
-            // JSON parsing failure should turn into a None parsed value.
             assert_eq!(updated.output.as_ref().unwrap().parsed, None);
         }
 

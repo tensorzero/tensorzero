@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput};
+use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
@@ -87,7 +88,8 @@ pub struct UpdateJsonDatapointRequest {
     pub input: Option<Input>,
 
     /// JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    /// This will NOT be validated against output_schema, because we allow invalid outputs in datapoints by design.
+    /// This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
+    /// also be stored, because we allow invalid outputs in datapoints by design.
     #[serde(default, deserialize_with = "deserialize_double_option")]
     pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
@@ -117,13 +119,31 @@ pub struct JsonDatapointOutputUpdate {
     pub raw: String,
 }
 
-impl From<JsonDatapointOutputUpdate> for JsonInferenceOutput {
-    fn from(update: JsonDatapointOutputUpdate) -> Self {
-        let parsed_value = serde_json::from_str(&update.raw).ok();
-        Self {
-            raw: Some(update.raw),
-            parsed: parsed_value,
-        }
+impl JsonDatapointOutputUpdate {
+    /// Converts this `JsonDatapointOutputUpdate` into a `JsonInferenceOutput`.
+    ///
+    /// This function parses and validates the `raw` output against the `output_schema`, and only
+    /// populates the `parsed` field if the output is valid.
+    pub fn into_json_inference_output(self, output_schema: Value) -> JsonInferenceOutput {
+        let parse_result = serde_json::from_str(self.raw.as_str());
+
+        let mut output = JsonInferenceOutput {
+            raw: Some(self.raw),
+            parsed: None,
+        };
+
+        let Ok(parsed_unvalidated_value) = parse_result else {
+            return output;
+        };
+        let Ok(schema) = StaticJSONSchema::from_value(output_schema) else {
+            return output;
+        };
+        let Ok(()) = schema.validate(&parsed_unvalidated_value) else {
+            return output;
+        };
+
+        output.parsed = Some(parsed_unvalidated_value);
+        output
     }
 }
 
@@ -296,4 +316,72 @@ pub struct DeleteDatapointsRequest {
 pub struct DeleteDatapointsResponse {
     /// The number of deleted datapoints.
     pub num_deleted_datapoints: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn test_json_datapoint_output_update_into_json_inference_output_valid() {
+        let update = JsonDatapointOutputUpdate {
+            raw: r#"{"key": "value"}"#.to_string(),
+        };
+        let schema = json!({"type": "object", "properties": {"key": {"type": "string"}}, });
+        let output = update.into_json_inference_output(schema);
+
+        assert_eq!(
+            output.raw,
+            Some(r#"{"key": "value"}"#.to_string()),
+            "Raw field should be the same as the input"
+        );
+        assert_eq!(
+            output.parsed,
+            Some(json!({"key": "value"})),
+            "Parsed field should be the same as the input because it conforms to the schema"
+        );
+    }
+
+    #[test]
+    fn test_json_datapoint_output_update_into_json_inference_output_nonconformant() {
+        let update = JsonDatapointOutputUpdate {
+            raw: r#"{"key": "nonconformant value"}"#.to_string(),
+        };
+        let schema = json!({"type": "object", "properties": {"key": {"type": "number"}}, });
+        let output = update.into_json_inference_output(schema);
+        assert_eq!(output.parsed, None);
+
+        assert_eq!(
+            output.raw,
+            Some(r#"{"key": "nonconformant value"}"#.to_string()),
+            "Raw field should be the same as the input"
+        );
+        assert_eq!(
+            output.parsed, None,
+            "Parsed field should be None because it does not conform to the schema"
+        );
+    }
+
+    #[test]
+    fn test_prepare_json_update_output_invalid_json() {
+        let update = JsonDatapointOutputUpdate {
+            raw: "intentionally invalid \" json".to_string(),
+        };
+
+        let schema = json!({"type": "object", "properties": {"value": {"type": "string"}}, });
+        let output = update.into_json_inference_output(schema);
+        assert_eq!(output.parsed, None);
+
+        assert_eq!(
+            output.raw,
+            Some("intentionally invalid \" json".to_string()),
+            "Raw field should be the same as the input"
+        );
+        assert_eq!(
+            output.parsed, None,
+            "Parsed field should be None because it is invalid JSON"
+        );
+    }
 }
