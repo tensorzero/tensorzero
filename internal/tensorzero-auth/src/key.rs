@@ -11,7 +11,7 @@ use thiserror::Error;
 /// This does not contain the original long key
 #[derive(Debug)]
 pub struct TensorZeroApiKey {
-    pub(crate) short_id: String,
+    pub public_id: String,
     pub(crate) hashed_long_key: SecretString,
 }
 
@@ -38,16 +38,16 @@ impl TensorZeroApiKey {
     }
 
     #[cfg(feature = "e2e_tests")]
-    pub fn new_for_testing(short_id: String, hashed_long_key: String) -> Self {
+    pub fn new_for_testing(public_id: String, hashed_long_key: String) -> Self {
         Self {
-            short_id,
+            public_id,
             hashed_long_key: SecretString::from(hashed_long_key),
         }
     }
 
     #[cfg(feature = "e2e_tests")]
-    pub fn get_short_id(&self) -> String {
-        self.short_id.clone()
+    pub fn get_public_id(&self) -> String {
+        self.public_id.clone()
     }
 
     #[cfg(feature = "e2e_tests")]
@@ -55,14 +55,14 @@ impl TensorZeroApiKey {
         self.hashed_long_key.clone()
     }
 
-    /// Validates that the provided key is of the format `sk-t0-<short_id>-<long_key>`,
-    /// where <short_id> is 12 alphanumeric characters and <long_key> is 48 alphanumeric characters.
+    /// Validates that the provided key is of the format `sk-t0-<public_id>-<long_key>`,
+    /// where <public_id> is 12 alphanumeric characters and <long_key> is 48 alphanumeric characters.
     /// Returns a `TensorZeroApiKey` containing the extracted short ID and long key.
     pub fn parse(key: &str) -> Result<Self, TensorZeroAuthError> {
         let parts = key.split('-').collect::<Vec<&str>>();
-        let [sk, t0, short_id, long_key] = parts.as_slice() else {
+        let [sk, t0, public_id, long_key] = parts.as_slice() else {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
-                "API key must be of the form `sk-t0-<short_id>-<long_key>`",
+                "API key must be of the form `sk-t0-<public_id>-<long_key>`",
             ));
         };
         if sk != &SK_PREFIX {
@@ -75,7 +75,7 @@ impl TensorZeroApiKey {
                 "API key must start with `sk-t0-`",
             ));
         }
-        if short_id.len() != SHORT_ID_LENGTH {
+        if public_id.len() != SHORT_ID_LENGTH {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
                 "Short ID must be 12 characters",
             ));
@@ -85,7 +85,7 @@ impl TensorZeroApiKey {
                 "Long key must be 48 characters",
             ));
         }
-        if !short_id.chars().all(char::is_alphanumeric) {
+        if !public_id.chars().all(char::is_alphanumeric) {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
                 "Short ID must be alphanumeric",
             ));
@@ -96,7 +96,7 @@ impl TensorZeroApiKey {
             ));
         }
         Ok(Self {
-            short_id: short_id.to_string(),
+            public_id: public_id.to_string(),
             hashed_long_key: Self::hash_long_key(long_key).into(),
         })
     }
@@ -121,13 +121,13 @@ mod tests {
             TensorZeroApiKey::parse("invalid-key")
                 .unwrap_err()
                 .to_string(),
-            "Invalid format for TensorZero API key: API key must be of the form `sk-t0-<short_id>-<long_key>`"
+            "Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`"
         );
         assert_eq!(
             TensorZeroApiKey::parse("too-many-dashes-in-my-api-key")
                 .unwrap_err()
                 .to_string(),
-            "Invalid format for TensorZero API key: API key must be of the form `sk-t0-<short_id>-<long_key>`"
+            "Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`"
         );
         assert_eq!(
             TensorZeroApiKey::parse("bad-with-four-components")
@@ -181,7 +181,7 @@ mod tests {
                 )
                 .unwrap()
             ),
-            "TensorZeroApiKey { short_id: \"123456789012\", hashed_long_key: SecretBox<str>([REDACTED]) }"
+            "TensorZeroApiKey { public_id: \"123456789012\", hashed_long_key: SecretBox<str>([REDACTED]) }"
         );
     }
 }
