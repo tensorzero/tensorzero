@@ -19,10 +19,20 @@ async fn test_config_from_toml_table_valid() {
         .expect("Failed to load config");
 
     // Ensure that removing the `[metrics]` section still parses the config
+    // Note: we also need to remove track-and-stop experimentation since it requires metrics
     let mut config = get_sample_valid_config();
     config
         .remove("metrics")
         .expect("Failed to remove `[metrics]` section");
+    // Remove experimentation from functions that use track-and-stop
+    if let Some(functions) = config.get_mut("functions").and_then(|v| v.as_table_mut()) {
+        if let Some(generate_draft) = functions
+            .get_mut("generate_draft")
+            .and_then(|v| v.as_table_mut())
+        {
+            generate_draft.remove("experimentation");
+        }
+    }
     let config = Config::load_from_toml(config, &SpanMap::new_empty())
         .await
         .expect("Failed to load config");
