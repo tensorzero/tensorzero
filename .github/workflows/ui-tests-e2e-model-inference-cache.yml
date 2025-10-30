@@ -224,7 +224,7 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
       - name: Upload Playwright artifacts (GitHub runner)
-        if: failure() && inputs.regen_cache == false
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: playwright-report-regen-${{ inputs.regen_cache }}
