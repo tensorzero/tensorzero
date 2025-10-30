@@ -284,16 +284,18 @@ pub async fn inference(
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
-    // If the function has no variants, return an error
-    if candidate_variants.is_empty() {
+    // If the function has no variants and no dynamic variant config, return an error
+    if candidate_variants.is_empty() && params.internal_dynamic_variant_config.is_none() {
         return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variants"),
         }
         .into());
     }
 
-    // Validate the input
-    function.validate_inference_params(&params)?;
+    // Validate the input (skip if using dynamic variant config)
+    if params.internal_dynamic_variant_config.is_none() {
+        function.validate_inference_params(&params)?;
+    }
 
     // Should we store the results?
     let dryrun = params.dryrun.unwrap_or(false);
