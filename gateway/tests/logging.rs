@@ -59,7 +59,7 @@ async fn test_logging_rust_log_debug_on() {
 async fn test_log_early_drop_streaming(model_name: &str) {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        Some("gateway=debug,tower_http::trace=debug"),
+        Some("gateway=debug,tower_http::trace=debug,warn"),
     )
     .await;
 
@@ -161,7 +161,7 @@ async fn test_log_early_drop_streaming_dummy_slow_delay_second_chunk() {
 async fn test_log_early_drop_non_streaming() {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        Some("gateway=debug,tower_http::trace=debug"),
+        Some("gateway=debug,tower_http::trace=debug,warn"),
     )
     .await;
     let response_fut = reqwest::Client::new()
