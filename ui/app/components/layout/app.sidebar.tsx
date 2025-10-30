@@ -12,6 +12,7 @@ import {
   Playground,
   Model,
 } from "~/components/icons/Icons";
+import { KeyRound } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
 import { TensorZeroLogo } from "~/components/icons/Icons";
@@ -79,6 +80,16 @@ const navigation: NavigationSection[] = [
         title: "Supervised Fine-Tuning",
         url: "/optimization/supervised-fine-tuning",
         icon: SupervisedFineTuning,
+      },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      {
+        title: "API Keys",
+        url: "/api-keys",
+        icon: KeyRound,
       },
     ],
   },

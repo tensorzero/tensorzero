@@ -26,6 +26,7 @@ use uuid::Uuid;
 #[macro_use]
 mod napi_bridge;
 mod database;
+mod postgres;
 
 #[macro_use]
 extern crate napi_derive;
