@@ -11,7 +11,9 @@ use tensorzero_core::{
     },
     endpoints::feedback::{feedback, Params},
     http::TensorzeroHttpClient,
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind},
+    inference::types::{
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+    },
     utils::gateway::GatewayHandle,
 };
 use tokio::time::{sleep, Duration};
@@ -1507,7 +1509,9 @@ async fn test_fast_inference_then_feedback() {
                     variant_name: None,
                     episode_id: None,
                     input: tensorzero::ClientInput {
-                        system: Some(System::Template(json!({"assistant_name": "Alfred Pennyworth"}).as_object().unwrap().clone())),
+                        system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                            ("assistant_name".to_string(), "Alfred Pennyworth".into()),
+                        ])))),
                         messages: vec![tensorzero::ClientInputMessage {
                             role: Role::User,
                             content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {

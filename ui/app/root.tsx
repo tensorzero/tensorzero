@@ -7,15 +7,17 @@ import {
   ScrollRestoration,
 } from "react-router";
 
-import { ConfigProvider } from "~/context/config";
+import { ConfigProvider } from "./context/config";
+import { ReadOnlyProvider } from "./context/read-only";
 import type { Route } from "./+types/root";
 import "./tailwind.css";
-import { getConfig } from "~/utils/config/index.server";
-import { AppSidebar } from "~/components/layout/app.sidebar";
-import { SidebarProvider } from "~/components/ui/sidebar";
-import { ContentLayout } from "~/components/layout/ContentLayout";
-import { startPeriodicCleanup } from "~/utils/evaluations.server";
-import { ReactQueryProvider } from "~/providers/react-query";
+import { getConfig } from "./utils/config/index.server";
+import { AppSidebar } from "./components/layout/app.sidebar";
+import { SidebarProvider } from "./components/ui/sidebar";
+import { ContentLayout } from "./components/layout/ContentLayout";
+import { startPeriodicCleanup } from "./utils/evaluations.server";
+import { ReactQueryProvider } from "./providers/react-query";
+import { isReadOnlyMode, readOnlyMiddleware } from "./utils/read-only.server";
 import { TooltipProvider } from "~/components/ui/tooltip";
 
 export const links: Route.LinksFunction = () => [
@@ -36,10 +38,14 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+export const middleware: Route.MiddlewareFunction[] = [readOnlyMiddleware];
+
 export async function loader() {
   // Initialize evaluation cleanup when the app loads
   startPeriodicCleanup();
-  return await getConfig();
+  const config = await getConfig();
+  const isReadOnly = isReadOnlyMode();
+  return { config, isReadOnly };
 }
 
 // Global Layout
@@ -61,21 +67,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App({ loaderData: config }: Route.ComponentProps) {
+export default function App({ loaderData }: Route.ComponentProps) {
+  const { config, isReadOnly } = loaderData;
   return (
     <ReactQueryProvider>
-      <ConfigProvider value={config}>
-        <SidebarProvider>
-          <TooltipProvider>
-            <div className="fixed inset-0 flex">
-              <AppSidebar />
-              <ContentLayout>
-                <Outlet />
-              </ContentLayout>
-            </div>
-          </TooltipProvider>
-        </SidebarProvider>
-      </ConfigProvider>
+      <ReadOnlyProvider value={isReadOnly}>
+        <ConfigProvider value={config}>
+          <SidebarProvider>
+            <TooltipProvider>
+              <div className="fixed inset-0 flex">
+                <AppSidebar />
+                <ContentLayout>
+                  <Outlet />
+                </ContentLayout>
+              </div>
+            </TooltipProvider>
+          </SidebarProvider>
+        </ConfigProvider>
+      </ReadOnlyProvider>
     </ReactQueryProvider>
   );
 }

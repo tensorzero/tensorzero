@@ -41,7 +41,7 @@ use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectRespo
 
 use tensorzero_core::inference::types::file::{Base64File, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
-use tensorzero_core::inference::types::{FinishReason, System, TextKind, Thought};
+use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -730,7 +730,7 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-3-5-sonnet-20241022"
+model = "anthropic::claude-sonnet-4-5-20250929"
 
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
@@ -2332,7 +2332,12 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                     || res["error"]
                         .as_str()
                         .unwrap()
-                        .contains("No auth credentials found"),
+                        .contains("No auth credentials found")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .to_lowercase()
+                        .contains("no cookie auth"),
                 "Unexpected error: {res}"
             );
         }
@@ -2389,12 +2394,10 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name.clone()),
             input: ClientInput {
-                system: Some(System::Template(
-                    serde_json::json!({"assistant_name": "Dr. Mehta"})
-                        .as_object()
-                        .unwrap()
-                        .clone(),
-                )),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![
                     ClientInputMessage {
                         role: Role::Assistant,
@@ -8695,7 +8698,10 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             variant_name: Some(provider.variant_name.clone()),
             episode_id: Some(episode_id),
             input: tensorzero::ClientInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![tensorzero::ClientInputMessage {
                     role: Role::User,
                     content: vec![tensorzero::ClientInputMessageContent::Text(
@@ -8816,7 +8822,10 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         episode_id: Some(episode_id),
         extra_headers: get_extra_headers(),
         input: tensorzero::ClientInput {
-            system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                "Dr. Mehta".into(),
+            )])))),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![
@@ -9121,7 +9130,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
         input: tensorzero::ClientInput {
-            system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                "Dr. Mehta".into(),
+            )])))),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],

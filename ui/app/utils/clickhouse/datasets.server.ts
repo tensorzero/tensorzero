@@ -9,14 +9,12 @@ import type {
   GetDatapointParams,
   Datapoint,
   AdjacentDatapointIds,
-  ToolCallConfigDatabaseInsert,
 } from "tensorzero-node";
 import type {
   ParsedDatasetRow,
   ParsedChatInferenceDatapointRow,
   ParsedJsonInferenceDatapointRow,
 } from "./datasets";
-import { displayInputToStoredInput } from "./common";
 import { getConfig, getFunctionConfig } from "../config/index.server";
 import { resolveStoredInput } from "../resolve.server";
 
@@ -114,56 +112,6 @@ export async function staleDatapoint(
     datapoint_id,
     function_type,
   });
-}
-
-export async function insertDatapoint(
-  datapoint: ParsedDatasetRow,
-): Promise<void> {
-  const dbClient = await getNativeDatabaseClient();
-
-  const input = displayInputToStoredInput(datapoint.input); // inputToStoredInput(displayInputToInput(datapoint.input));
-
-  if ("tool_params" in datapoint) {
-    // Chat inference datapoint
-    const chatDatapoint = datapoint as ParsedChatInferenceDatapointRow;
-    await dbClient.insertDatapoint({
-      type: "chat",
-      dataset_name: chatDatapoint.dataset_name,
-      function_name: chatDatapoint.function_name,
-      id: chatDatapoint.id,
-      name: chatDatapoint.name ?? undefined,
-      episode_id: chatDatapoint.episode_id ?? undefined,
-      input,
-      output: chatDatapoint.output,
-      // TODO(shuyangli): Fix this type conversion. This was serialized and deserialized across TypeScript and Rust boundaries with different types.
-      tool_params:
-        chatDatapoint.tool_params as unknown as ToolCallConfigDatabaseInsert,
-      tags: chatDatapoint.tags ?? undefined,
-      auxiliary: chatDatapoint.auxiliary ?? "",
-      staled_at: chatDatapoint.staled_at ?? undefined,
-      source_inference_id: chatDatapoint.source_inference_id ?? undefined,
-      is_custom: chatDatapoint.is_custom,
-    });
-  } else {
-    // JSON inference datapoint
-    const jsonDatapoint = datapoint as ParsedJsonInferenceDatapointRow;
-    await dbClient.insertDatapoint({
-      type: "json",
-      dataset_name: jsonDatapoint.dataset_name,
-      function_name: jsonDatapoint.function_name,
-      id: jsonDatapoint.id,
-      name: jsonDatapoint.name ?? undefined,
-      episode_id: jsonDatapoint.episode_id ?? undefined,
-      input,
-      output: jsonDatapoint.output,
-      output_schema: jsonDatapoint.output_schema,
-      tags: jsonDatapoint.tags ?? undefined,
-      auxiliary: jsonDatapoint.auxiliary ?? "",
-      staled_at: jsonDatapoint.staled_at ?? undefined,
-      source_inference_id: jsonDatapoint.source_inference_id ?? undefined,
-      is_custom: jsonDatapoint.is_custom,
-    });
-  }
 }
 
 export async function countDatapointsForDatasetFunction(

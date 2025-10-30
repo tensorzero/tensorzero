@@ -43,7 +43,7 @@ pub fn build_axum_router(
         .layer(axum::middleware::from_fn(add_version_header))
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
         .layer(axum::middleware::from_fn(
-            crate::warn_early_drop::warn_on_early_connection_drop,
+            tensorzero_core::observability::warn_early_drop::warn_on_early_connection_drop,
         ))
         // Note - this is intentionally *not* used by our OTEL exporter (it creates a span without any `http.` or `otel.` fields)
         // This is only used to output request/response information to our logs
@@ -166,15 +166,24 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         )
         .route(
             "/v1/datasets/{dataset_name}/datapoints",
-            patch(endpoints::datasets::v1::update_datapoints_handler),
+            patch(endpoints::datasets::v1::update_datapoints_handler)
+                .delete(endpoints::datasets::v1::delete_datapoints_handler),
         )
         .route(
             "/v1/datasets/{dataset_name}/datapoints/metadata",
             patch(endpoints::datasets::v1::update_datapoints_metadata_handler),
         )
         .route(
+            "/v1/datasets/{dataset_name}/from_inferences",
+            post(endpoints::datasets::v1::create_from_inferences_handler),
+        )
+        .route(
             "/v1/datasets/{dataset_name}/list_datapoints",
             post(endpoints::datasets::v1::list_datapoints_handler),
+        )
+        .route(
+            "/v1/datasets/{dataset_name}",
+            delete(endpoints::datasets::v1::delete_dataset_handler),
         )
         .route(
             "/v1/datasets/get_datapoints",

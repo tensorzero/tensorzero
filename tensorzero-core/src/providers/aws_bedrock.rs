@@ -137,8 +137,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -286,8 +285,7 @@ impl InferenceProvider for AWSBedrockProvider {
         if let Some(tool_config) = &request.tool_config {
             if !matches!(tool_config.tool_choice, ToolChoice::None) {
                 let tools: Vec<Tool> = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(Tool::try_from)
                     .collect::<Result<Vec<_>, _>>()?;
 

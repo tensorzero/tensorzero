@@ -38,10 +38,11 @@ use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
 use crate::inference::types::{
-    current_timestamp, Base64File, ContentBlockChatOutput, ContentBlockChunk, File, FinishReason,
-    Input, InputMessage, InputMessageContent, Role, System, TemplateInput, TextKind, UrlFile,
-    Usage,
+    current_timestamp, Arguments, Base64File, ContentBlockChatOutput, ContentBlockChunk, File,
+    FinishReason, Input, InputMessage, InputMessageContent, RawText, Role, System, Template, Text,
+    UrlFile, Usage,
 };
+
 use crate::tool::{
     DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
 };
@@ -620,7 +621,7 @@ enum OpenAICompatibleFinishReason {
     Length,
     ContentFilter,
     ToolCalls,
-    // FunctionCall, we never generate this and it is deprecated
+    // FunctionCall: we never generate this and it is deprecated
 }
 
 impl From<FinishReason> for OpenAICompatibleFinishReason {
@@ -779,7 +780,7 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
     fn try_from(
         openai_compatible_messages: Vec<OpenAICompatibleMessage>,
     ) -> Result<Self, Self::Error> {
-        let mut system_messages = Vec::new();
+        let mut system_message = None;
         let mut messages = Vec::new();
         let mut tool_call_id_to_name = HashMap::new();
         let first_system = matches!(
@@ -789,37 +790,67 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
         for message in openai_compatible_messages {
             match message {
                 OpenAICompatibleMessage::System(msg) => {
-                    let system_content = convert_openai_message_content(msg.content.clone())?;
+                    let had_prior_system = system_message.is_some();
+                    let system_content =
+                        convert_openai_message_content("system".to_string(), msg.content.clone())?;
+
                     for content in system_content {
-                        system_messages.push(match content {
-                            InputMessageContent::Text(TextKind::LegacyValue { value }) => value,
-                            InputMessageContent::Text(TextKind::Text { text }) => {
-                                Value::String(text)
+                        let text = match content {
+                            InputMessageContent::Text(t) => Some(t.text),
+                            InputMessageContent::RawText(rt) => Some(rt.value),
+                            InputMessageContent::Template(t) => {
+                                if system_message.is_some() {
+                                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                        message: "System message cannot contain template with other content".to_string(),
+                                    }.into());
+                                }
+                                system_message = Some(System::Template(t.arguments));
+                                None
                             }
-                            InputMessageContent::Text(TextKind::Arguments { arguments }) => {
-                                Value::Object(arguments)
-                            }
-                            InputMessageContent::RawText { value } => Value::String(value),
                             _ => {
                                 return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                                    message: "System message must be a text content block"
-                                        .to_string(),
-                                }
-                                .into())
+                                    message: "System message must contain only text or template content blocks".to_string(),
+                                }.into())
                             }
-                        });
+                        };
+
+                        if let Some(text) = text {
+                            match &mut system_message {
+                                None => system_message = Some(System::Text(text)),
+                                Some(System::Text(s)) => {
+                                    s.push('\n');
+                                    s.push_str(&text);
+                                }
+                                Some(System::Template(_)) => {
+                                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
+                                        message: "Cannot add text after template system message"
+                                            .to_string(),
+                                    }
+                                    .into());
+                                }
+                            }
+                        }
+                    }
+
+                    if had_prior_system {
+                        tracing::warn!("Multiple system messages provided. They will be concatenated and moved to the start of the conversation.");
+                    } else if !first_system {
+                        tracing::warn!("Moving system message to the start of the conversation.");
                     }
                 }
                 OpenAICompatibleMessage::User(msg) => {
                     messages.push(InputMessage {
                         role: Role::User,
-                        content: convert_openai_message_content(msg.content)?,
+                        content: convert_openai_message_content("user".to_string(), msg.content)?,
                     });
                 }
                 OpenAICompatibleMessage::Assistant(msg) => {
                     let mut message_content = Vec::new();
                     if let Some(content) = msg.content {
-                        message_content.extend(convert_openai_message_content(content)?);
+                        message_content.extend(convert_openai_message_content(
+                            "assistant".to_string(),
+                            content,
+                        )?);
                     }
                     if let Some(tool_calls) = msg.tool_calls {
                         for tool_call in tool_calls {
@@ -854,46 +885,10 @@ impl TryFrom<Vec<OpenAICompatibleMessage>> for Input {
             }
         }
 
-        if system_messages.len() <= 1 {
-            if system_messages.len() == 1 && !first_system {
-                tracing::warn!("Moving system message to the start of the conversation");
-            }
-
-            let system = system_messages
-                .pop()
-                .map(|v| match v {
-                    Value::String(s) => Ok::<System, Error>(System::Text(s)),
-                    Value::Object(map) => Ok::<System, Error>(System::Template(map)),
-                    _ => Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                        message: "System message content must be a string or an object".to_string(),
-                    }
-                    .into()),
-                })
-                .transpose()?;
-
-            Ok(Input { system, messages })
-        } else {
-            let mut output = String::new();
-            for (i, system_message) in system_messages.iter().enumerate() {
-                if let Value::String(msg) = system_message {
-                    if i > 0 {
-                        output.push('\n');
-                    }
-                    output.push_str(msg);
-                } else {
-                    return Err(ErrorDetails::InvalidOpenAICompatibleRequest {
-                        message: "Multiple system messages provided, but not all were strings"
-                            .to_string(),
-                    }
-                    .into());
-                }
-            }
-            tracing::warn!("Multiple system messages provided - they will be concatenated and moved to the start of the conversation");
-            Ok(Input {
-                system: Some(System::Text(output)),
-                messages,
-            })
-        }
+        Ok(Input {
+            system: system_message,
+            messages,
+        })
     }
 }
 
@@ -908,14 +903,9 @@ enum OpenAICompatibleContentBlock {
         file: OpenAICompatibleFile,
     },
     #[serde(rename = "tensorzero::raw_text")]
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     #[serde(rename = "tensorzero::template")]
-    Template {
-        name: String,
-        arguments: Map<String, Value>,
-    },
+    Template(Template),
 }
 
 #[derive(Deserialize, Debug)]
@@ -940,9 +930,7 @@ pub enum TextContent {
     /// A normal openai text content block: `{"type": "text", "text": "Some content"}`. The `type` key comes from the parent `OpenAICompatibleContentBlock`
     Text { text: String },
     /// A special TensorZero mode: `{"type": "text", "tensorzero::arguments": {"custom_key": "custom_val"}}`.
-    TensorZeroArguments {
-        tensorzero_arguments: Map<String, Value>,
-    },
+    TensorZeroArguments { tensorzero_arguments: Arguments },
 }
 
 impl<'de> Deserialize<'de> for TextContent {
@@ -961,7 +949,7 @@ impl<'de> Deserialize<'de> for TextContent {
             }),
             (None, Some(arguments)) => Ok(TextContent::TensorZeroArguments {
                 tensorzero_arguments: match arguments {
-                    Value::Object(arguments) => arguments,
+                    Value::Object(arguments) => Arguments(arguments),
                     _ => return Err(serde::de::Error::custom(
                         "`tensorzero::arguments` must be an object when using `\"type\": \"text\"`",
                     )),
@@ -996,18 +984,24 @@ fn parse_base64_image_data_url(url: &str) -> Result<(MediaType, &str), Error> {
     Ok((image_type, data))
 }
 
-fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageContent>, Error> {
+fn convert_openai_message_content(
+    role: String,
+    content: Value,
+) -> Result<Vec<InputMessageContent>, Error> {
     match content {
-        Value::String(s) => Ok(vec![InputMessageContent::Text(TextKind::Text { text: s })]),
+        Value::String(s) => Ok(vec![InputMessageContent::Text(Text { text: s })]),
         Value::Array(a) => {
             let mut outputs = Vec::with_capacity(a.len());
             for val in a {
                 let block = serde_json::from_value::<OpenAICompatibleContentBlock>(val.clone());
                 let output = match block {
-                    Ok(OpenAICompatibleContentBlock::RawText{ value }) => InputMessageContent::RawText { value },
-                    Ok(OpenAICompatibleContentBlock::Template { name, arguments }) => InputMessageContent::Template(TemplateInput { name, arguments }),
-                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(TextKind::Text {text }),
-                    Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => InputMessageContent::Text(TextKind::Arguments { arguments: tensorzero_arguments }),
+                    Ok(OpenAICompatibleContentBlock::RawText(raw_text)) => InputMessageContent::RawText(raw_text),
+                    Ok(OpenAICompatibleContentBlock::Template(template)) => InputMessageContent::Template(template),
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::Text { text })) => InputMessageContent::Text(Text { text }),
+                    Ok(OpenAICompatibleContentBlock::Text(TextContent::TensorZeroArguments { tensorzero_arguments })) => {
+                        tracing::warn!("Deprecation Warning: Using `tensorzero::arguments` in text content blocks is deprecated. Please use `{{\"type\": \"tensorzero::template\", \"name\": \"role\", \"arguments\": {{...}}}}` instead.");
+                        InputMessageContent::Template(Template { name: role.clone(), arguments: tensorzero_arguments })
+                    }
                     Ok(OpenAICompatibleContentBlock::ImageUrl { image_url }) => {
                         if image_url.url.scheme() == "data" {
                             let url_str = image_url.url.to_string();
@@ -1038,9 +1032,9 @@ fn convert_openai_message_content(content: Value) -> Result<Vec<InputMessageCont
                                 }));
                             }
                         }
-                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "text", "tensorzero::arguments": {{"custom": "data"}}` to pass arbitrary JSON values to TensorZero: {e}"#);
+                        tracing::warn!(r#"Deprecation Warning: Content block `{val}` was not a valid OpenAI content block. Please use `{{"type": "tensorzero::template", "name": "role", "arguments": {{"custom": "data"}}}}` to pass arbitrary JSON values to TensorZero: {e}"#);
                         if let Value::Object(obj) = val {
-                            InputMessageContent::Text(TextKind::Arguments { arguments: obj })
+                            InputMessageContent::Template(Template { name: role.clone(), arguments: Arguments(obj) })
                         } else {
                             return Err(Error::new(ErrorDetails::InvalidOpenAICompatibleRequest {
                                 message: format!("Content block `{val}` is not an object"),
@@ -1492,7 +1486,7 @@ mod tests {
         assert_eq!(params.input.messages[0].role, Role::User);
         assert_eq!(
             params.input.messages[0].content[0],
-            InputMessageContent::Text(TextKind::Text {
+            InputMessageContent::Text(Text {
                 text: "Hello, world!".to_string(),
             })
         );
@@ -1515,7 +1509,7 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::User);
         assert_eq!(
             input.messages[0].content[0],
-            InputMessageContent::Text(TextKind::Text {
+            InputMessageContent::Text(Text {
                 text: "Hello, world!".to_string(),
             })
         );
@@ -1590,14 +1584,17 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::Assistant);
         assert_eq!(
             input.messages[0].content[0],
-            InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "country": "Japan",
-                    "city": "Tokyo",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            InputMessageContent::Template(Template {
+                name: "assistant".to_string(),
+                arguments: Arguments(
+                    json!({
+                        "country": "Japan",
+                        "city": "Tokyo",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone()
+                ),
             })
         );
 
@@ -1620,7 +1617,7 @@ mod tests {
         assert_eq!(input.messages[0].role, Role::Assistant);
         assert_eq!(input.messages[0].content.len(), 2);
 
-        let expected_text = InputMessageContent::Text(TextKind::Text {
+        let expected_text = InputMessageContent::Text(Text {
             text: "Hello, world!".to_string(),
         });
         let expected_tool_call = InputMessageContent::ToolCall(ToolCallInput {
@@ -1658,10 +1655,190 @@ mod tests {
             result.messages,
             vec![InputMessage {
                 role: Role::Assistant,
-                content: vec![InputMessageContent::Text(TextKind::Text {
+                content: vec![InputMessageContent::Text(Text {
                     text: "Assistant message".to_string(),
                 })],
             }]
+        );
+
+        // Try a system message with legacy template format (tensorzero::arguments)
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Alfred Pennyworth"
+                    }
+                }]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(
+            input.system,
+            Some(System::Template(Arguments(
+                json!({"assistant_name": "Alfred Pennyworth"})
+                    .as_object()
+                    .unwrap()
+                    .clone()
+            )))
+        );
+        assert_eq!(input.messages.len(), 0);
+
+        // Try a system message with new template format
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "tensorzero::template",
+                    "name": "system",
+                    "arguments": {
+                        "assistant_name": "Jarvis"
+                    }
+                }]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(
+            input.system,
+            Some(System::Template(Arguments(
+                json!({"assistant_name": "Jarvis"})
+                    .as_object()
+                    .unwrap()
+                    .clone()
+            )))
+        );
+
+        // Error: system message with template and text content (multiple content blocks)
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([
+                    {"type": "text", "text": "Hello"},
+                    {
+                        "type": "text",
+                        "tensorzero::arguments": {
+                            "assistant_name": "Alfred"
+                        }
+                    }
+                ]),
+            },
+        )];
+        let result: Result<Input, Error> = messages.try_into();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "System message cannot contain template with other content".to_string(),
+            }
+        );
+
+        // Error: text system message followed by template system message
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("You are helpful.".to_string()),
+            }),
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Alfred"
+                    }
+                }]),
+            }),
+        ];
+        let result: Result<Input, Error> = messages.try_into();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "System message cannot contain template with other content".to_string(),
+            }
+        );
+
+        // Error: template system message followed by text system message
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Alfred"
+                    }
+                }]),
+            }),
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: Value::String("You are helpful.".to_string()),
+            }),
+        ];
+        let result: Result<Input, Error> = messages.try_into();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "Cannot add text after template system message".to_string(),
+            }
+        );
+
+        // Error: multiple template system messages
+        let messages = vec![
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "text",
+                    "tensorzero::arguments": {
+                        "assistant_name": "Alfred"
+                    }
+                }]),
+            }),
+            OpenAICompatibleMessage::System(OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "tensorzero::template",
+                    "name": "system",
+                    "arguments": {
+                        "assistant_name": "Jarvis"
+                    }
+                }]),
+            }),
+        ];
+        let result: Result<Input, Error> = messages.try_into();
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert_eq!(
+            *error.get_details(),
+            ErrorDetails::InvalidOpenAICompatibleRequest {
+                message: "System message cannot contain template with other content".to_string(),
+            }
+        );
+
+        // Success: system message with multiple text content blocks (should concatenate within single message)
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([
+                    {"type": "text", "text": "You are helpful."},
+                    {"type": "text", "text": "You are concise."}
+                ]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(
+            input.system,
+            Some(System::Text(
+                "You are helpful.\nYou are concise.".to_string()
+            ))
+        );
+
+        // Success: system message with tensorzero::raw_text
+        let messages = vec![OpenAICompatibleMessage::System(
+            OpenAICompatibleSystemMessage {
+                content: json!([{
+                    "type": "tensorzero::raw_text",
+                    "value": "Raw system text"
+                }]),
+            },
+        )];
+        let input: Input = messages.try_into().unwrap();
+        assert_eq!(
+            input.system,
+            Some(System::Text("Raw system text".to_string()))
         );
     }
 
@@ -1669,46 +1846,52 @@ mod tests {
     fn test_convert_openai_message_content() {
         // text content
         let content = "Hello, world!".to_string();
-        let value = convert_openai_message_content(Value::String(content.clone())).unwrap();
+        let value =
+            convert_openai_message_content("user".to_string(), Value::String(content.clone()))
+                .unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Text(TextKind::Text { text: content })]
+            vec![InputMessageContent::Text(Text { text: content })]
         );
         // tensorzero::raw_text
         let content = json!([{
             "type": "tensorzero::raw_text",
             "value": "This is raw text"
         }]);
-        let value = convert_openai_message_content(content.clone()).unwrap();
+        let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::RawText {
+            vec![InputMessageContent::RawText(RawText {
                 value: "This is raw text".to_string()
-            }]
+            })]
         );
         // tensorzero::arguments
         let content = json!([{
             "country": "Japan",
             "city": "Tokyo",
         }]);
-        let value = convert_openai_message_content(content.clone()).unwrap();
+        let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "country": "Japan",
-                    "city": "Tokyo",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            vec![InputMessageContent::Template(Template {
+                name: "user".to_string(),
+                arguments: Arguments(
+                    json!({
+                        "country": "Japan",
+                        "city": "Tokyo",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone()
+                ),
             })]
         );
         let content = json!({
             "country": "Japan",
             "city": "Tokyo",
         });
-        let error = convert_openai_message_content(content.clone()).unwrap_err();
+        let error =
+            convert_openai_message_content("user".to_string(), content.clone()).unwrap_err();
         let details = error.get_details();
         assert_eq!(
             *details,
@@ -1717,7 +1900,7 @@ mod tests {
             }
         );
         let content = json!([]);
-        let messages = convert_openai_message_content(content).unwrap();
+        let messages = convert_openai_message_content("user".to_string(), content).unwrap();
         assert_eq!(messages, vec![]);
 
         let arguments_block = json!([{
@@ -1726,16 +1909,19 @@ mod tests {
                 "custom_key": "custom_val"
             }
         }]);
-        let value = convert_openai_message_content(arguments_block).unwrap();
+        let value = convert_openai_message_content("user".to_string(), arguments_block).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "custom_key": "custom_val",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            vec![InputMessageContent::Template(Template {
+                name: "user".to_string(),
+                arguments: Arguments(
+                    json!({
+                        "custom_key": "custom_val",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone()
+                ),
             })]
         );
 
@@ -1746,15 +1932,17 @@ mod tests {
                 "custom_key": "custom_val",
             }
         }]);
-        let value = convert_openai_message_content(template_block).unwrap();
+        let value = convert_openai_message_content("user".to_string(), template_block).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Template(TemplateInput {
+            vec![InputMessageContent::Template(Template {
                 name: "my_template".to_string(),
-                arguments: json!({ "custom_key": "custom_val" })
-                    .as_object()
-                    .unwrap()
-                    .clone()
+                arguments: Arguments(
+                    json!({ "custom_key": "custom_val" })
+                        .as_object()
+                        .unwrap()
+                        .clone()
+                )
             })]
         );
     }
@@ -1766,17 +1954,20 @@ mod tests {
             "country": "Japan",
             "city": "Tokyo",
         }]);
-        let value = convert_openai_message_content(content.clone()).unwrap();
+        let value = convert_openai_message_content("user".to_string(), content.clone()).unwrap();
         assert_eq!(
             value,
-            vec![InputMessageContent::Text(TextKind::Arguments {
-                arguments: json!({
-                    "country": "Japan",
-                    "city": "Tokyo",
-                })
-                .as_object()
-                .unwrap()
-                .clone(),
+            vec![InputMessageContent::Template(Template {
+                name: "user".to_string(),
+                arguments: Arguments(
+                    json!({
+                        "country": "Japan",
+                        "city": "Tokyo",
+                    })
+                    .as_object()
+                    .unwrap()
+                    .clone()
+                ),
             })]
         );
         assert!(logs_contain(
@@ -1787,7 +1978,7 @@ mod tests {
             "type": "text",
             "my_custom_arg": 123
         }]);
-        let err = convert_openai_message_content(other_content.clone())
+        let err = convert_openai_message_content("user".to_string(), other_content.clone())
             .expect_err("Should not accept invalid block");
         assert_eq!(err.to_string(), "Invalid request to OpenAI-compatible endpoint: Invalid content block: Either `text` or `tensorzero::arguments` must be set when using `\"type\": \"text\"`");
     }

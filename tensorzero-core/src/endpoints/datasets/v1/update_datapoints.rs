@@ -311,14 +311,14 @@ async fn prepare_json_update(
             Some(value) => {
                 // Validate the output with schema before saving.
                 StaticJSONSchema::from_value(updated_datapoint.output_schema.clone())?
-            .validate(&value)
-            .map_err(|e| {
-                Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Provided output for datapoint {existing_datapoint_id} does not match function output schema: {e}",
-                    ),
-                })
-            })?;
+                    .validate(&value)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "Provided output for datapoint {existing_datapoint_id} does not match function output schema: {e}",
+                            ),
+                        })
+                    })?;
 
                 Some(JsonInferenceOutput {
                     raw: Some(serde_json::to_string(&value).map_err(|e| {
@@ -522,7 +522,7 @@ mod tests {
     use crate::inference::types::{
         Base64File, ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
         JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputMessage,
-        StoredInputMessageContent, Text, TextKind,
+        StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
@@ -972,7 +972,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new input text".into(),
                     })],
                 }],
@@ -1346,7 +1346,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new input".into(),
                     })],
                 }],
@@ -1718,7 +1718,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new json input".into(),
                     })],
                 }],

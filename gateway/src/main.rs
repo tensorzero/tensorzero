@@ -21,7 +21,6 @@ use tensorzero_core::observability::{self, LogFormat};
 use tensorzero_core::utils::gateway;
 
 mod routes;
-mod warn_early_drop;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -310,7 +309,9 @@ async fn main() {
 
     if let Some(tracer_wrapper) = delayed_log_config.otel_tracer {
         tracing::info!("Shutting down OpenTelemetry exporter");
-        tracer_wrapper.shutdown().await;
+        tracer_wrapper
+            .shutdown(delayed_log_config.leak_detector.as_ref())
+            .await;
         tracing::info!("OpenTelemetry exporter shut down");
     }
 }

@@ -5,7 +5,6 @@ import type {
   ClientInferenceParams,
   Config,
   CountDatapointsForDatasetFunctionParams,
-  DatapointInsert,
   DatasetDetailRow,
   DatasetMetadata,
   DatasetQueryParams,
@@ -386,11 +385,6 @@ export class DatabaseClient {
   async staleDatapoint(params: StaleDatapointParams): Promise<void> {
     const paramsString = safeStringify(params);
     await this.nativeDatabaseClient.staleDatapoint(paramsString);
-  }
-
-  async insertDatapoint(params: DatapointInsert): Promise<void> {
-    const paramsString = safeStringify(params);
-    await this.nativeDatabaseClient.insertDatapoint(paramsString);
   }
 
   async countDatapointsForDatasetFunction(
