@@ -29,7 +29,7 @@ use crate::common::get_gateway_endpoint;
 ///
 /// Creates a datapoint via ClickHouse with full DynamicToolParams, then retrieves
 /// it via the get_datapoints HTTP API to verify tool partitioning works correctly.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_full_tool_params_round_trip() {
     let clickhouse = get_clickhouse().await;
     let http_client = Client::new();
@@ -175,7 +175,7 @@ async fn test_datapoint_full_tool_params_round_trip() {
 ///
 /// Verifies that updating a datapoint with new tool_params creates a new ID,
 /// stales the old datapoint, and correctly converts the new tool_params.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_update_tool_params() {
     let clickhouse = get_clickhouse().await;
     let http_client = Client::new();
@@ -331,7 +331,7 @@ async fn test_datapoint_update_tool_params() {
 ///
 /// Creates multiple datapoints with different tool configurations and verifies
 /// they all appear correctly in the list_datapoints endpoint response.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_list_datapoints_with_tool_params() {
     let clickhouse = get_clickhouse().await;
     let http_client = Client::new();
@@ -528,7 +528,7 @@ async fn test_list_datapoints_with_tool_params() {
 /// Test 5.4: Datapoint with only static tools
 ///
 /// Mirrors test_inference_only_static_tools but for datapoints.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_only_static_tools() {
     let clickhouse = get_clickhouse().await;
     let http_client = Client::new();
@@ -611,7 +611,7 @@ async fn test_datapoint_only_static_tools() {
 /// Test 5.5: Datapoint with only dynamic tools
 ///
 /// Mirrors test_inference_only_dynamic_tools but for datapoints.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_only_dynamic_tools() {
     let clickhouse = get_clickhouse().await;
     let http_client = Client::new();
@@ -711,7 +711,7 @@ async fn test_datapoint_only_dynamic_tools() {
 /// - Omit field: no change
 /// - Set to null: removes tool_params
 /// - Set to value: updates tool_params
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_tool_params_three_states() {
     let clickhouse = get_clickhouse().await;
     let http_client = Client::new();
@@ -915,7 +915,7 @@ async fn test_datapoint_tool_params_three_states() {
 /// Test 5.7: Datapoint with no tool params
 ///
 /// Verifies handling when a datapoint has no tool_params at all.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_datapoint_no_tool_params() {
     let clickhouse = get_clickhouse().await;
     let http_client = Client::new();

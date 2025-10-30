@@ -32,7 +32,7 @@ use crate::common::get_gateway_endpoint;
 /// - Inference stores correctly in ClickHouse
 /// - Retrieved inference correctly reconstructs DynamicToolParams
 /// - Tool partitioning works: static tools in allowed_tools, dynamic in additional_tools
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_inference_full_tool_params_round_trip() {
     let episode_id = Uuid::now_v7();
 
@@ -187,7 +187,7 @@ async fn test_inference_full_tool_params_round_trip() {
 ///
 /// Tests the case where only static tools from function config are used,
 /// with no additional_tools.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_inference_only_static_tools() {
     let episode_id = Uuid::now_v7();
 
@@ -263,7 +263,7 @@ async fn test_inference_only_static_tools() {
 ///
 /// Tests the case where only dynamic tools are provided at inference time,
 /// with no allowed_tools restriction.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_inference_only_dynamic_tools() {
     let episode_id = Uuid::now_v7();
 
@@ -345,7 +345,7 @@ async fn test_inference_only_dynamic_tools() {
 /// Test 4: Empty tool params (None/default behavior)
 ///
 /// Tests what happens when no tool_params are provided - should use function config defaults.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_inference_no_tool_params() {
     let episode_id = Uuid::now_v7();
 
@@ -411,7 +411,7 @@ async fn test_inference_no_tool_params() {
 ///
 /// Documents that provider_tools are NOT persisted to database.
 /// This is a known limitation of the current implementation.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_provider_tools_not_persisted() {
     let episode_id = Uuid::now_v7();
 
@@ -479,7 +479,7 @@ async fn test_provider_tools_not_persisted() {
 /// Test 6: Tool strictness is preserved
 ///
 /// Verifies that the `strict` field on tools survives round-trip.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_tool_strict_flag_preserved() {
     let episode_id = Uuid::now_v7();
 
@@ -578,7 +578,7 @@ async fn test_tool_strict_flag_preserved() {
 /// Test 7: Multiple static tools with allowed_tools restriction
 ///
 /// Tests that allowed_tools can restrict which static tools are available.
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_allowed_tools_restriction() {
     let episode_id = Uuid::now_v7();
 
