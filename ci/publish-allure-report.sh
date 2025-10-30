@@ -1,9 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# cd to the directory of this script
-cd "$(dirname "${BASH_SOURCE[0]}")"
-
 # ------------------------------------------------------------------------------
 # Generate and publish Allure Report to testing-dashboard GitHub Pages
 # ------------------------------------------------------------------------------
@@ -20,9 +17,13 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # - TESTING_DASHBOARD_DEPLOY_KEY: SSH private key for pushing to testing-dashboard
 # ------------------------------------------------------------------------------
 
-JUNIT_XML_PATH="${1:-../target/nextest/e2e/junit.xml}"
+# Resolve this to an absolute path
+JUNIT_XML_PATH="$(realpath "${1:-../target/nextest/e2e/junit.xml}")"
 DASHBOARD_REPO_SSH="git@github.com:tensorzero/testing-dashboard.git"
 DASHBOARD_URL="https://tensorzero.github.io/testing-dashboard/"
+
+# cd to the directory of this script
+cd "$(dirname "${BASH_SOURCE[0]}")"
 
 if [ ! -f "$JUNIT_XML_PATH" ]; then
     echo "Warning: JUnit XML file not found at $JUNIT_XML_PATH"
