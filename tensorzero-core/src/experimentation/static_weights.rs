@@ -181,7 +181,7 @@ impl VariantSampler for StaticWeightsConfig {
     fn get_current_display_probabilities<'a>(
         &self,
         _function_name: &str,
-        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         // Compute the total weight of variants present in active_variants
@@ -789,7 +789,8 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_weighted() {
         // Test weighted probabilities
-        let active_variants = create_test_variants(&["A", "B", "C"]);
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["A", "B", "C"]).into_iter().collect();
         let mut candidate_variants = BTreeMap::new();
         candidate_variants.insert("A".to_string(), 1.0);
         candidate_variants.insert("B".to_string(), 2.0);
@@ -820,7 +821,8 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_fallback() {
         // Test fallback (uniform) probabilities
-        let active_variants = create_test_variants(&["A", "B", "C"]);
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["A", "B", "C"]).into_iter().collect();
 
         let config = StaticWeightsConfig {
             candidate_variants: BTreeMap::new(), // No weights
@@ -846,7 +848,8 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_partial_intersection() {
         // Test with only some active variants having weights
-        let active_variants = create_test_variants(&["A", "C"]);
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["A", "C"]).into_iter().collect();
         let mut candidate_variants = BTreeMap::new();
         candidate_variants.insert("A".to_string(), 1.0);
         candidate_variants.insert("B".to_string(), 2.0); // Not active
@@ -876,7 +879,8 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_fallback_partial() {
         // Test fallback with only some variants active
-        let active_variants = create_test_variants(&["B", "C"]);
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["B", "C"]).into_iter().collect();
 
         let config = StaticWeightsConfig {
             candidate_variants: BTreeMap::new(),
@@ -901,7 +905,8 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_no_fallback_error() {
         // Test error when no fallback variants match
-        let active_variants = create_test_variants(&["A", "B"]);
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["A", "B"]).into_iter().collect();
 
         let config = StaticWeightsConfig {
             candidate_variants: BTreeMap::new(),

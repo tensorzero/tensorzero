@@ -81,7 +81,7 @@ pub trait VariantSampler {
     fn get_current_display_probabilities<'a>(
         &self,
         function_name: &str,
-        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
         postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error>;
 }
@@ -181,7 +181,7 @@ impl ExperimentationConfig {
     pub fn get_current_display_probabilities<'a>(
         &self,
         function_name: &str,
-        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
         postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         match self {
@@ -318,7 +318,7 @@ impl VariantSampler for AlwaysFailsConfig {
     fn get_current_display_probabilities<'a>(
         &self,
         _function_name: &str,
-        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         // Find intersection of active_variants and allowed_variants
@@ -529,7 +529,7 @@ mod tests {
     // Tests for get_current_display_probabilities
     #[test]
     fn test_get_current_display_probabilities_uniform() {
-        let mut active_variants = BTreeMap::new();
+        let mut active_variants = HashMap::new();
         for name in ["A", "B", "C"] {
             active_variants.insert(
                 name.to_string(),
@@ -567,7 +567,7 @@ mod tests {
 
     #[test]
     fn test_get_current_display_probabilities_uniform_empty() {
-        let active_variants = BTreeMap::new();
+        let active_variants = HashMap::new();
 
         let config = ExperimentationConfig::Uniform;
         let postgres = PostgresConnectionInfo::new_disabled();

@@ -1,5 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::collections::HashMap;
 
 use axum::extract::{Query, State};
 use axum::{debug_handler, Json};
@@ -8,7 +7,6 @@ use tracing::instrument;
 
 use crate::error::{Error, ErrorDetails};
 use crate::utils::gateway::{AppState, AppStateData};
-use crate::variant::VariantInfo;
 
 /// Query parameters for the variant sampling probabilities endpoint
 #[derive(Debug, Deserialize)]
@@ -57,12 +55,8 @@ pub async fn get_variant_sampling_probabilities(
     // Get the function config
     let function = config.get_function(function_name)?;
 
-    // Get the active variants for this function (need to clone to make them mutable)
-    let active_variants: BTreeMap<String, Arc<VariantInfo>> =
-        function.variants().clone().into_iter().collect();
-
     // If the function has no variants, return an error
-    if active_variants.is_empty() {
+    if function.variants().is_empty() {
         return Err(ErrorDetails::InvalidFunctionVariants {
             message: format!("Function `{function_name}` has no variants"),
         }
@@ -74,7 +68,7 @@ pub async fn get_variant_sampling_probabilities(
         .experimentation()
         .get_current_display_probabilities(
             function_name,
-            &active_variants,
+            function.variants(),
             &postgres_connection_info,
         )?;
 
@@ -93,6 +87,7 @@ mod tests {
     use crate::config::{Config, ConfigFileGlob};
     use crate::testing::get_unit_test_gateway_handle;
     use std::io::Write;
+    use std::sync::Arc;
     use tempfile::NamedTempFile;
 
     #[tokio::test]

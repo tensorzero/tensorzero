@@ -2257,8 +2257,7 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let active_variants: HashMap<_, _> =
-            create_test_variants(&["A", "B"]).into_iter().collect();
+        let active_variants = create_test_variants(&["A", "B"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
@@ -2288,8 +2287,7 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let active_variants: HashMap<_, _> =
-            create_test_variants(&["A", "B", "C"]).into_iter().collect();
+        let active_variants = create_test_variants(&["A", "B", "C"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
@@ -2329,8 +2327,7 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let active_variants: HashMap<_, _> =
-            create_test_variants(&["A", "B"]).into_iter().collect();
+        let active_variants = create_test_variants(&["A", "B"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
@@ -2371,8 +2368,7 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let active_variants: HashMap<_, _> =
-            create_test_variants(&["A", "B", "C"]).into_iter().collect();
+        let active_variants = create_test_variants(&["A", "B", "C"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
@@ -2438,8 +2434,7 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let active_variants: HashMap<_, _> =
-            create_test_variants(&["A", "C"]).into_iter().collect();
+        let active_variants = create_test_variants(&["A", "C"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
@@ -2482,7 +2477,7 @@ mod tests {
         };
 
         // Only A is active, B is not
-        let active_variants: HashMap<_, _> = create_test_variants(&["A"]).into_iter().collect();
+        let active_variants = create_test_variants(&["A"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
