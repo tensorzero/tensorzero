@@ -20,7 +20,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # - TESTING_DASHBOARD_DEPLOY_KEY: SSH private key for pushing to testing-dashboard
 # ------------------------------------------------------------------------------
 
-JUNIT_XML_PATH="${1:-target/nextest/e2e/junit.xml}"
+JUNIT_XML_PATH="${1:-../target/nextest/e2e/junit.xml}"
 DASHBOARD_REPO_SSH="git@github.com:tensorzero/testing-dashboard.git"
 DASHBOARD_URL="https://tensorzero.github.io/testing-dashboard/"
 
