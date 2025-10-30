@@ -1433,6 +1433,7 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
+    // `tool_params` are always flattened to match the convention of LLM APIs
     #[serde(flatten)]
     #[serde(default)]
     pub tool_params: DynamicToolParams,
