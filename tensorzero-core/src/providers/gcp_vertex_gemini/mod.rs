@@ -846,7 +846,7 @@ impl GCPVertexCredentials {
                     Ok(headers) => return Ok(headers),
                     Err(e) => {
                         e.log_at_level(
-                            "Using fallback credential, as default credential for {} is unavailable: ",
+                            format!("Using fallback credential, as default credential for {PROVIDER_NAME} is unavailable: ").as_str(),
                             tracing::Level::WARN,
                         );
                         return Box::pin(fallback.get_auth_headers(audience, dynamic_api_keys))
