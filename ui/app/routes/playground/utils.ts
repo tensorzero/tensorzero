@@ -160,7 +160,8 @@ export function preparePlaygroundInferenceRequest(
     input,
     functionName,
     variant: variantInferenceInfo.variant,
-    allowed_tools: datapoint?.type === "chat" ? datapoint.allowed_tools : null,
+    allowed_tools:
+      datapoint?.type === "chat" ? datapoint.allowed_tools : undefined,
     additional_tools:
       datapoint?.type === "chat" ? datapoint.additional_tools : null,
     tool_choice: datapoint?.type === "chat" ? datapoint.tool_choice : null,

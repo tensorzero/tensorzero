@@ -305,7 +305,7 @@ interface ClickHouseDatapointActionArgs {
   source: "clickhouse_datapoint";
   input: DisplayInput;
   functionName: string;
-  allowed_tools?: string[] | null;
+  allowed_tools?: string[];
   additional_tools?: Array<Tool> | null;
   tool_choice?: ToolChoice | null;
   parallel_tool_calls?: boolean | null;
