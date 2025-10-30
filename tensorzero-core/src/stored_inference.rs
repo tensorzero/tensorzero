@@ -11,7 +11,7 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
-use crate::tool::{DynamicToolParams, StaticToolConfig};
+use crate::tool::{DynamicToolParams, ProviderTool, StaticToolConfig, Tool, ToolChoice};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -21,11 +21,9 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
-use pyo3::types::{IntoPyDict, PyAnyMethods, PyDict};
+use pyo3::types::PyList;
 #[cfg(feature = "pyo3")]
-use pyo3::types::{PyAny, PyList};
-#[cfg(feature = "pyo3")]
-use pyo3::{prelude::*, IntoPyObjectExt};
+use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -186,60 +184,95 @@ impl StoredInference {
         parallel_tool_calls: Option<bool>,
         provider_tools: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
-        // Build a Python dict with all the fields
-        let dict = PyDict::new(py);
-        dict.set_item("type", r#type.clone())?;
-        dict.set_item("function_name", function_name)?;
-        dict.set_item("variant_name", variant_name)?;
-        dict.set_item("input", input)?;
-        dict.set_item("output", output)?;
-        dict.set_item("episode_id", episode_id)?;
-        dict.set_item("inference_id", inference_id)?;
-        dict.set_item("timestamp", timestamp)?;
+        use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
 
-        if let Some(schema) = output_schema {
-            dict.set_item("output_schema", schema)?;
-        }
-        if let Some(dispreferred) = dispreferred_outputs {
-            dict.set_item("dispreferred_outputs", dispreferred)?;
-        }
-        if let Some(t) = tags {
-            dict.set_item("tags", t)?;
-        }
+        // Deserialize common fields
+        let input: StoredInput = deserialize_from_pyobj(py, &input)?;
+        let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
+        let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
+        let timestamp: DateTime<Utc> = deserialize_from_pyobj(py, &timestamp)?;
+        let tags: HashMap<String, String> = tags
+            .as_ref()
+            .map(|x| deserialize_from_pyobj(py, x))
+            .transpose()?
+            .unwrap_or_default();
 
-        // Add flattened DynamicToolParams fields for chat type
-        if r#type == "chat" {
-            if let Some(tools) = allowed_tools {
-                dict.set_item("allowed_tools", tools)?;
+        match r#type.as_str() {
+            "chat" => {
+                let output: Vec<ContentBlockChatOutput> = deserialize_from_pyobj(py, &output)?;
+                let dispreferred_outputs: Option<Vec<Vec<ContentBlockChatOutput>>> =
+                    dispreferred_outputs
+                        .as_ref()
+                        .map(|x| deserialize_from_pyobj(py, x))
+                        .transpose()?;
+
+                // Build DynamicToolParams from flattened fields
+                let additional_tools: Option<Vec<Tool>> = additional_tools
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .transpose()?;
+                let tool_choice: Option<ToolChoice> = tool_choice
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .transpose()?;
+                let provider_tools: Option<Vec<ProviderTool>> = provider_tools
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .transpose()?;
+
+                let tool_params = DynamicToolParams {
+                    allowed_tools,
+                    additional_tools,
+                    tool_choice,
+                    parallel_tool_calls,
+                    provider_tools,
+                };
+
+                Ok(Self::Chat(StoredChatInference {
+                    function_name,
+                    variant_name,
+                    input,
+                    output,
+                    dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
+                    episode_id,
+                    inference_id,
+                    tool_params,
+                    tags,
+                    timestamp,
+                }))
             }
-            if let Some(tools) = additional_tools {
-                dict.set_item("additional_tools", tools)?;
+            "json" => {
+                let output: JsonInferenceOutput = deserialize_from_pyobj(py, &output)?;
+                let dispreferred_outputs: Option<Vec<JsonInferenceOutput>> = dispreferred_outputs
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .transpose()?;
+                let Some(output_schema) = output_schema
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                else {
+                    return Err(PyValueError::new_err(
+                        "output_schema is required for json inferences",
+                    ));
+                };
+                let output_schema: Value = output_schema?;
+                Ok(Self::Json(StoredJsonInference {
+                    function_name,
+                    variant_name,
+                    input,
+                    output,
+                    dispreferred_outputs: dispreferred_outputs.unwrap_or_default(),
+                    episode_id,
+                    inference_id,
+                    output_schema,
+                    tags,
+                    timestamp,
+                }))
             }
-            if let Some(choice) = tool_choice {
-                dict.set_item("tool_choice", choice)?;
-            }
-            if let Some(parallel) = parallel_tool_calls {
-                dict.set_item("parallel_tool_calls", parallel)?;
-            }
-            if let Some(provider) = provider_tools {
-                dict.set_item("provider_tools", provider)?;
-            }
+            _ => Err(PyValueError::new_err(format!(
+                "Invalid inference type: {type}. Must be 'chat' or 'json'",
+            ))),
         }
-
-        // Convert to JSON string and then deserialize to Rust
-        // Use TensorZeroTypeEncoder to handle custom types like Text, Tool, etc.
-        let json_module = py.import("json")?;
-        let tensorzero_module = py.import("tensorzero.types")?;
-        let encoder_class = tensorzero_module.getattr("TensorZeroTypeEncoder")?;
-        let kwargs = [("cls", encoder_class)].into_py_dict(py)?;
-        let json_str = json_module
-            .getattr("dumps")?
-            .call((dict,), Some(&kwargs))?
-            .extract::<String>()?;
-
-        serde_json::from_str(&json_str).map_err(|e| {
-            pyo3::exceptions::PyValueError::new_err(format!("Failed to deserialize: {e}"))
-        })
     }
 
     pub fn __repr__(&self) -> String {
