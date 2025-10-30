@@ -17,7 +17,6 @@ import { getPostgresClient } from "~/utils/postgres.server";
 import AuthTable from "./AuthTable";
 import { AuthActions } from "./AuthActions";
 import { GenerateApiKeyModal } from "./GenerateApiKeyModal";
-import type { KeyInfo } from "tensorzero-node";
 
 export const handle: RouteHandle = {
   crumb: () => ["TensorZero API Keys"],
@@ -35,10 +34,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   const postgresClient = await getPostgresClient();
   // Assume listApiKeys now accepts offset and limit, and returns { apiKeys, total }
-  const { apiKeys, total } = await postgresClient.listApiKeys({ offset, limit: pageSize });
+  const apiKeys = await postgresClient.listApiKeys(offset, pageSize);
 
   return {
-    totalApiKeys: total,
     apiKeys,
     offset,
     pageSize,
@@ -101,7 +99,7 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function AuthPage({ loaderData }: Route.ComponentProps) {
   const navigate = useNavigate();
-  const { totalApiKeys, apiKeys, offset, pageSize } = loaderData;
+  const { apiKeys, offset, pageSize } = loaderData;
 
   const handleNextPage = () => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -135,7 +133,7 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
 
   return (
     <PageLayout>
-      <PageHeader heading="TensorZero API Keys" count={totalApiKeys} />
+      <PageHeader heading="TensorZero API Keys" />
       <SectionLayout>
         <AuthActions onGenerateKey={handleOpenModal} />
         <AuthTable apiKeys={apiKeys} />
@@ -143,7 +141,9 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          disableNext={offset + pageSize >= totalApiKeys}
+          // TODO: should we query length?
+          // disableNext={offset + pageSize >= totalApiKeys}
+          disableNext={false}
         />
       </SectionLayout>
       <GenerateApiKeyModal

@@ -37,6 +37,7 @@ import type {
   GetDatapointParams,
   Datapoint,
   GetCumulativeFeedbackTimeseriesParams,
+  KeyInfo,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -452,8 +453,9 @@ export class PostgresClient {
     return this.nativePostgresClient.createApiKey(description);
   }
 
-  async listApiKeys(): Promise<string> {
-    return this.nativePostgresClient.listApiKeys();
+  async listApiKeys(offset?: number, limit?: number): Promise<KeyInfo[]> {
+    const result = await this.nativePostgresClient.listApiKeys(offset, limit);
+    return JSON.parse(result) as KeyInfo[];
   }
 
   async disableApiKey(publicId: string): Promise<void> {

@@ -45,16 +45,19 @@ impl PostgresClient {
     }
 
     #[napi]
-    pub async fn list_api_keys(&self) -> Result<String, napi::Error> {
+    pub async fn list_api_keys(
+        &self,
+        offset: Option<u32>,
+        limit: Option<u32>,
+    ) -> Result<String, napi::Error> {
         let pool = self
             .connection_info
             .get_alpha_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
-        let keys =
-            tensorzero_auth::postgres::list_key_info(Some("default".to_string()), None, None, pool)
-                .await
-                .map_err(|e| napi::Error::from_reason(format!("Failed to list API keys: {e}")))?;
+        let keys = tensorzero_auth::postgres::list_key_info(None, offset, limit, pool)
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Failed to list API keys: {e}")))?;
 
         serde_json::to_string(&keys).map_err(|e| {
             napi::Error::from_reason(format!("Failed to serialize API keys list: {e}"))
