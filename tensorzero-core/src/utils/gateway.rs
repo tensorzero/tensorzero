@@ -1,13 +1,16 @@
 use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
+use moka::sync::Cache;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
+use tensorzero_auth::postgres::AuthResult;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
@@ -111,12 +114,40 @@ pub struct AppStateData {
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
     pub deferred_tasks: TaskTracker,
+    /// Optional cache for TensorZero API key authentication
+    pub auth_cache: Option<Arc<Cache<String, AuthResult>>>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
     _private: (),
 }
 pub type AppState = axum::extract::State<AppStateData>;
+
+/// Creates an auth cache based on the configuration.
+/// Returns None if auth is disabled or cache is disabled.
+fn create_auth_cache_from_config(config: &Config) -> Option<Arc<Cache<String, AuthResult>>> {
+    if !config.gateway.auth.required {
+        return None;
+    }
+
+    let default_cache_config = Default::default();
+    let cache_config = config
+        .gateway
+        .auth
+        .cache
+        .as_ref()
+        .unwrap_or(&default_cache_config);
+
+    if !cache_config.enabled {
+        return None;
+    }
+
+    Some(Arc::new(
+        Cache::builder()
+            .time_to_live(Duration::from_millis(cache_config.ttl_ms))
+            .build(),
+    ))
+}
 
 impl GatewayHandle {
     pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
@@ -152,6 +183,7 @@ impl GatewayHandle {
         let postgres_connection_info =
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
+        let auth_cache = create_auth_cache_from_config(&config);
         Self {
             app_state: AppStateData {
                 config,
@@ -159,6 +191,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
+                auth_cache,
                 _private: (),
             },
             cancel_token,
@@ -175,6 +208,7 @@ impl GatewayHandle {
         #[cfg(not(test))]
         let postgres_connection_info = PostgresConnectionInfo::new_disabled();
         let cancel_token = CancellationToken::new();
+        let auth_cache = create_auth_cache_from_config(&config);
         Self {
             app_state: AppStateData {
                 config,
@@ -182,6 +216,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
+                auth_cache,
                 _private: (),
             },
             cancel_token,
@@ -213,6 +248,7 @@ impl GatewayHandle {
                 )
                 .await?;
         }
+        let auth_cache = create_auth_cache_from_config(&config);
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -220,6 +256,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
+                auth_cache,
                 _private: (),
             },
             cancel_token,

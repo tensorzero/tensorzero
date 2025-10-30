@@ -8,12 +8,42 @@ use crate::{
 
 use super::ObjectStoreInfo;
 
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(deny_unknown_fields)]
+pub struct GatewayAuthCacheConfig {
+    #[serde(default = "default_gateway_auth_cache_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_gateway_auth_cache_ttl_ms")]
+    pub ttl_ms: u64,
+}
+
+impl Default for GatewayAuthCacheConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_gateway_auth_cache_enabled(),
+            ttl_ms: default_gateway_auth_cache_ttl_ms(),
+        }
+    }
+}
+
+fn default_gateway_auth_cache_enabled() -> bool {
+    true
+}
+
+fn default_gateway_auth_cache_ttl_ms() -> u64 {
+    1000
+}
+
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
-    pub enabled: bool,
+    pub required: bool,
+    #[serde(default)]
+    pub cache: Option<GatewayAuthCacheConfig>,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
