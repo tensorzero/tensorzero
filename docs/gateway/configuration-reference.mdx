@@ -3489,8 +3489,8 @@ variants uniformly at random, `static_weights` sample variants according to user
 experiments sample variants according to probabilities that dynamically update in a principled way as the experiment
 proceeds. See below for more info.
 
-Note that if this section is present, it overrides any weights that are specified within individual function variant config
-blocks. TODO: give example
+Note that if this section is present, it overrides any `weight` values that are specified within individual function variant config
+blocks.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3513,7 +3513,7 @@ the variants in `candidate_variants` will be sampled according to provided weigh
 documentation below.) The provided weights will be normalized to sum to 1 so that they can be treated as sampling probabilities.
 If the type is `track_and_stop`, then the variants will be sampled according to probabilities that periodically update in response
 to the accumulating data in a way that is designed to maximize the efficiency of the experiment, or in other words to minimize
-the number of inferences required to draw conclusions from the experiment. See XXX for more info.
+the number of inferences required to draw conclusions from the experiment.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.experimentation]
@@ -3607,7 +3607,7 @@ variant is used exclusively going forward. The value `delta` instantiates a trad
 identification and the confidence in the identified variant. The smaller the value of `delta`, the higher the
 chance that the algorithm will correctly identify an epsilon-best variant and the more data required to do so.
 A commonly used value in experimentation settings is `0.05`, which caps the probability that an epsilon-best
-variant is not chosen as the winner at 5%. See XXX for more information.
+variant is not chosen as the winner at 5%.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.experimentation]
