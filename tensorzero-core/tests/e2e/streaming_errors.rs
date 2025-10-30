@@ -4,7 +4,7 @@ use tensorzero::{
     Client, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     InferenceOutput, InferenceResponseChunk, Role,
 };
-use tensorzero_core::inference::types::{System, TextKind};
+use tensorzero_core::inference::types::{Arguments, System, TextKind};
 
 use crate::common::get_gateway_endpoint;
 use reqwest_eventsource::{Event, RequestBuilderExt};
@@ -25,14 +25,10 @@ async fn test_client_stream_with_error(client: Client) {
             function_name: Some("basic_test".to_string()),
             variant_name: Some("err_in_stream".to_string()),
             input: ClientInput {
-                system: Some(System::Template(
-                    json!({
-                        "assistant_name": "AskJeeves",
-                    })
-                    .as_object()
-                    .unwrap()
-                    .clone(),
-                )),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "AskJeeves".into(),
+                )])))),
                 messages: vec![ClientInputMessage {
                     role: Role::User,
                     content: vec![ClientInputMessageContent::Text(TextKind::Text {

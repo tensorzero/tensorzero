@@ -57,10 +57,12 @@ async fn test_key_lifecycle(pool: PgPool) {
     let list_keys_res = list_key_info(None, None, None, &pool).await.unwrap();
     assert_eq!(
         list_keys_res,
-        vec![first_key_info.clone(), second_key_info.clone()]
+        vec![second_key_info.clone(), first_key_info.clone()]
     );
 
-    disable_key(&parsed_first_key, &pool).await.unwrap();
+    disable_key(&parsed_first_key.public_id, &pool)
+        .await
+        .unwrap();
     let now = Utc::now();
 
     let new_first_key_info = check_key(&parsed_first_key, &pool).await.unwrap();
@@ -84,13 +86,13 @@ async fn test_key_lifecycle(pool: PgPool) {
     // Check that the first key shows up as disabled in 'list_key_info'
     let new_list_keys_res = list_key_info(None, None, None, &pool).await.unwrap();
     let disabled_first_key = KeyInfo {
-        id: first_key_info.id,
+        public_id: first_key_info.public_id,
         organization: first_key_info.organization,
         workspace: first_key_info.workspace,
         description: first_key_info.description,
         disabled_at: Some(disabled_at),
     };
-    assert_eq!(new_list_keys_res, vec![disabled_first_key, second_key_info]);
+    assert_eq!(new_list_keys_res, vec![second_key_info, disabled_first_key]);
 }
 
 fn unwrap_success(result: Result<AuthResult, TensorZeroAuthError>) -> KeyInfo {
@@ -168,19 +170,19 @@ async fn test_list_keys(pool: PgPool) {
     assert_eq!(
         list_key_info(None, None, None, &pool).await.unwrap(),
         vec![
-            first_key_info.clone(),
-            second_key_info.clone(),
-            same_org_different_workspace_info.clone(),
+            collide_workspace_name_info.clone(),
             different_org_info.clone(),
-            collide_workspace_name_info.clone()
+            same_org_different_workspace_info.clone(),
+            second_key_info.clone(),
+            first_key_info.clone()
         ]
     );
 
     assert_eq!(
         list_key_info(None, Some(3), None, &pool).await.unwrap(),
         vec![
-            first_key_info.clone(),
-            second_key_info.clone(),
+            collide_workspace_name_info.clone(),
+            different_org_info.clone(),
             same_org_different_workspace_info.clone()
         ]
     );
@@ -188,19 +190,19 @@ async fn test_list_keys(pool: PgPool) {
     assert_eq!(
         list_key_info(None, None, Some(1), &pool).await.unwrap(),
         vec![
-            second_key_info.clone(),
-            same_org_different_workspace_info.clone(),
             different_org_info.clone(),
-            collide_workspace_name_info.clone()
+            same_org_different_workspace_info.clone(),
+            second_key_info.clone(),
+            first_key_info.clone()
         ]
     );
 
     assert_eq!(
         list_key_info(None, Some(3), Some(1), &pool).await.unwrap(),
         vec![
-            second_key_info.clone(),
-            same_org_different_workspace_info.clone(),
             different_org_info.clone(),
+            same_org_different_workspace_info.clone(),
+            second_key_info.clone(),
         ]
     );
 
@@ -209,9 +211,9 @@ async fn test_list_keys(pool: PgPool) {
             .await
             .unwrap(),
         vec![
-            first_key_info.clone(),
-            second_key_info.clone(),
             same_org_different_workspace_info.clone(),
+            second_key_info.clone(),
+            first_key_info.clone(),
         ]
     );
 
@@ -220,8 +222,8 @@ async fn test_list_keys(pool: PgPool) {
             .await
             .unwrap(),
         vec![
-            different_org_info.clone(),
             collide_workspace_name_info.clone(),
+            different_org_info.clone(),
         ]
     );
 
@@ -249,14 +251,14 @@ async fn test_check_bad_key(pool: PgPool) {
     // Construct a key with a short id and long key hash from two different (valid) keys,
     // and verify that this is rejected by 'check_key'
     let bad_key_1 = TensorZeroApiKey::new_for_testing(
-        first_parsed_key.get_short_id(),
+        first_parsed_key.get_public_id(),
         second_parsed_key
             .get_hashed_long_key()
             .expose_secret()
             .to_string(),
     );
     let bad_key_2 = TensorZeroApiKey::new_for_testing(
-        second_parsed_key.get_short_id(),
+        second_parsed_key.get_public_id(),
         first_parsed_key
             .get_hashed_long_key()
             .expose_secret()
@@ -272,4 +274,51 @@ async fn test_check_bad_key(pool: PgPool) {
     let AuthResult::MissingKey = result else {
         panic!("Second bad key should be missing: {result:?}");
     };
+}
+
+#[sqlx::test]
+async fn test_disable_key_workflow(pool: PgPool) {
+    // Create an API key and keep it for later verification
+    let api_key = create_key("test_org", "test_workspace", Some("Test key"), &pool)
+        .await
+        .unwrap();
+    let parsed_key = TensorZeroApiKey::parse(api_key.expose_secret()).unwrap();
+
+    // Use list_key_info to get information about the key
+    let key_list = list_key_info(None, None, None, &pool).await.unwrap();
+    assert_eq!(key_list.len(), 1);
+    let key_info = &key_list[0];
+    assert_eq!(key_info.organization, "test_org");
+    assert_eq!(key_info.workspace, "test_workspace");
+    assert_eq!(key_info.description, Some("Test key".to_string()));
+    assert_eq!(key_info.disabled_at, None);
+
+    // Disable the key using the public_id from list_key_info
+    disable_key(&key_info.public_id, &pool).await.unwrap();
+    let now = Utc::now();
+
+    // Run list_key_info again and verify the key shows as disabled
+    let key_list_after_disable = list_key_info(None, None, None, &pool).await.unwrap();
+    assert_eq!(key_list_after_disable.len(), 1);
+    let disabled_key_info = &key_list_after_disable[0];
+    assert_eq!(disabled_key_info.public_id, key_info.public_id);
+    assert!(
+        disabled_key_info.disabled_at.is_some(),
+        "Key should have a disabled_at timestamp"
+    );
+    let disabled_at = disabled_key_info.disabled_at.unwrap();
+    assert!(
+        now - disabled_at < Duration::new(1, 0).unwrap(),
+        "disabled_at ({disabled_at:?}) should be within 1 second of now ({now:?})"
+    );
+
+    // Try to check the API key from the first step and verify it returns Disabled
+    let check_result = check_key(&parsed_key, &pool).await.unwrap();
+    let AuthResult::Disabled(check_disabled_at) = check_result else {
+        panic!("Key should be disabled after calling disable_key: {check_result:?}");
+    };
+    assert_eq!(
+        check_disabled_at, disabled_at,
+        "Timestamps should match between list_key_info and check_key"
+    );
 }
