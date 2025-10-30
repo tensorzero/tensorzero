@@ -2472,6 +2472,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
 
@@ -2602,6 +2603,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(tags.clone()),
+                api_key_public_id: None,
             },
         };
 
@@ -2687,6 +2689,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         // Try inferring the good model only
@@ -2841,6 +2844,7 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
                 },
                 "my_model",
@@ -2913,6 +2917,7 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
                 },
                 "my_model",
@@ -3032,6 +3037,7 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
                 },
                 "my_model",
@@ -3113,6 +3119,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
 
@@ -3173,6 +3180,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let response = model_config
@@ -3235,6 +3243,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
 
@@ -3294,6 +3303,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let response = model_config

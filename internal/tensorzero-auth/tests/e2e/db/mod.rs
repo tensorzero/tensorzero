@@ -252,14 +252,14 @@ async fn test_check_bad_key(pool: PgPool) {
     // Construct a key with a short id and long key hash from two different (valid) keys,
     // and verify that this is rejected by 'check_key'
     let bad_key_1 = TensorZeroApiKey::new_for_testing(
-        first_parsed_key.get_public_id(),
+        first_parsed_key.get_public_id().to_string(),
         second_parsed_key
             .get_hashed_long_key()
             .expose_secret()
             .to_string(),
     );
     let bad_key_2 = TensorZeroApiKey::new_for_testing(
-        second_parsed_key.get_public_id(),
+        second_parsed_key.get_public_id().to_string(),
         first_parsed_key
             .get_hashed_long_key()
             .expose_secret()

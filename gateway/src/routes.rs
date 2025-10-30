@@ -10,6 +10,7 @@ use axum::{
 };
 use metrics_exporter_prometheus::PrometheusHandle;
 use tensorzero_auth::{key::TensorZeroApiKey, postgres::AuthResult};
+use tensorzero_core::endpoints::RequestApiKeyExtension;
 use tensorzero_core::{endpoints, utils::gateway::AppStateData};
 use tensorzero_core::{
     endpoints::openai_compatible::build_openai_compatible_routes,
@@ -97,7 +98,7 @@ const UNAUTHENTICATED_ROUTES: &[&str] = &["/status", "/health"];
 #[axum::debug_middleware]
 async fn tensorzero_auth_middleware(
     State(app_state): State<AppStateData>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Response {
     let route = request
@@ -149,7 +150,7 @@ async fn tensorzero_auth_middleware(
             let cache_key = parsed_key.cache_key();
             if let Some(cached_result) = cache.get(&cache_key) {
                 return match cached_result {
-                    AuthResult::Success(key_info) => Ok(key_info),
+                    AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
                     AuthResult::Disabled(disabled_at) => {
                         Err(Error::new(ErrorDetails::TensorZeroAuth {
                             message: format!("API key was disabled at: {disabled_at}"),
@@ -179,7 +180,7 @@ async fn tensorzero_auth_middleware(
         }
 
         match postgres_key {
-            AuthResult::Success(key_info) => Ok(key_info),
+            AuthResult::Success(key_info) => Ok((parsed_key, key_info)),
             AuthResult::Disabled(disabled_at) => Err(Error::new(ErrorDetails::TensorZeroAuth {
                 message: format!("API key was disabled at: {disabled_at}"),
             })),
@@ -194,7 +195,12 @@ async fn tensorzero_auth_middleware(
     ));
 
     match do_auth.await {
-        Ok(_key_info) => next.run(request).await,
+        Ok((parsed_key, _key_info)) => {
+            request.extensions_mut().insert(RequestApiKeyExtension {
+                api_key: Arc::new(parsed_key),
+            });
+            next.run(request).await
+        }
         Err(e) => e.into_response(),
     }
 }

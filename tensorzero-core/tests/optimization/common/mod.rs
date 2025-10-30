@@ -194,6 +194,7 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
                     tags: Arc::new(HashMap::new()),
+                    api_key_public_id: None,
                 },
             };
             // We didn't produce a real model, so there's nothing to test

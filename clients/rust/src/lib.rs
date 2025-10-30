@@ -289,6 +289,9 @@ impl ClientExt for Client {
                     tensorzero_core::endpoints::batch_inference::start_batch_inference(
                         gateway.handle.app_state.clone(),
                         params,
+                        // We currently ban auth-enabled configs in embedded gateway mode,
+                        // so we don't have an API key here
+                        None,
                     )
                     .await
                     .map_err(err_to_http)

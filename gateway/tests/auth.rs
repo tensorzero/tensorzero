@@ -646,3 +646,294 @@ async fn test_create_api_key_cli() {
         "Created API key should work for authentication"
     );
 }
+
+#[tokio::test]
+async fn test_rate_limit_auth_single_key() {
+    let pool = get_postgres_pool_for_testing().await;
+    let first_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let parsed_first_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
+    let first_key_public_id = parsed_first_key.public_id;
+
+    let second_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let child_data = start_gateway_on_random_port(
+        &format!(
+            r#"
+    [gateway.auth]
+    enabled = true
+    
+    [rate_limiting]
+    enabled = true
+
+    [[rate_limiting.rules]]
+    model_inferences_per_minute = 1
+    always = true
+    scope = [
+        {{ api_key_public_id = "{first_key_public_id}" }}
+    ]
+    "#,
+        ),
+        None,
+    )
+    .await;
+
+    // The first request with 'first_key' should succeed
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", first_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // The next request with 'first_key' should fail, since we've exceeded the rate limit
+    let first_key_failure = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", first_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = first_key_failure.status();
+    let text = first_key_failure.text().await.unwrap();
+    assert!(text.contains("TensorZero rate limit"));
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+
+    // The request with 'second_key' should succeed, since it's a different key
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", second_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // A second request with 'second_key' should succeed, since we're not rate-limiting by this key
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", second_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_rate_limit_auth_each_key() {
+    let pool = get_postgres_pool_for_testing().await;
+    let first_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let parsed_first_key = TensorZeroApiKey::parse(first_key.expose_secret()).unwrap();
+
+    let second_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
+        .unwrap();
+
+    let parsed_second_key = TensorZeroApiKey::parse(second_key.expose_secret()).unwrap();
+
+    let child_data = start_gateway_on_random_port(
+        r#"
+    [gateway.auth]
+    enabled = true
+    
+    [rate_limiting]
+    enabled = true
+
+    [[rate_limiting.rules]]
+    model_inferences_per_minute = 1
+    always = true
+    scope = [
+        {{ api_key_public_id = "tensorzero::each" }}
+    ]
+    "#,
+        None,
+    )
+    .await;
+
+    // The first request with 'first_key' should succeed
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", first_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // The next request with 'first_key' should fail, since we've exceeded the rate limit
+    let first_key_failure = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", first_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = first_key_failure.status();
+    let text = first_key_failure.text().await.unwrap();
+    assert!(
+        text.contains("TensorZero rate limit"),
+        "Missing rate limit error in response: {text}"
+    );
+    assert!(
+        text.contains(&parsed_first_key.public_id),
+        "Missing public ID in response: {text}"
+    );
+    assert!(
+        !text.contains(&parsed_second_key.public_id),
+        "Public ID of second key should not be in response: {text}"
+    );
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+
+    // The request with 'second_key' should succeed, since it's a different key
+    reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", second_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // A second request with 'second_key' should fail, we've exceeded the rate limit for this key
+    let first_key_failure = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", second_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    let status = first_key_failure.status();
+    let text = first_key_failure.text().await.unwrap();
+    assert!(
+        text.contains("TensorZero rate limit"),
+        "Missing rate limit error in response: {text}"
+    );
+    assert!(
+        text.contains(&parsed_second_key.public_id),
+        "Missing public ID in response: {text}"
+    );
+    assert!(
+        !text.contains(&parsed_first_key.public_id),
+        "Public ID of first key should not be in response: {text}"
+    );
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+}

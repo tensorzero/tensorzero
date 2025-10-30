@@ -1,10 +1,11 @@
 use serde::{Deserialize, Deserializer};
 use std::sync::Arc;
+use tensorzero_auth::key::PUBLIC_ID_LENGTH;
 
 use crate::rate_limiting::{
-    RateLimit, RateLimitInterval, RateLimitResource, RateLimitingConfigPriority,
-    RateLimitingConfigRule, RateLimitingConfigScope, RateLimitingConfigScopes,
-    TagRateLimitingConfigScope, TagValueScope,
+    ApiKeyPublicIdConfigScope, ApiKeyPublicIdValueScope, RateLimit, RateLimitInterval,
+    RateLimitResource, RateLimitingConfigPriority, RateLimitingConfigRule, RateLimitingConfigScope,
+    RateLimitingConfigScopes, TagRateLimitingConfigScope, TagValueScope,
 };
 
 /*
@@ -184,6 +185,28 @@ impl<'de> Deserialize<'de> for TagValueScope {
     }
 }
 
+impl<'de> Deserialize<'de> for ApiKeyPublicIdValueScope {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s == "tensorzero::each" {
+            Ok(ApiKeyPublicIdValueScope::Each)
+        } else if s.starts_with("tensorzero::") {
+            Err(serde::de::Error::custom(
+                r#"Api key public id values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
+            ))
+        } else if s.len() != PUBLIC_ID_LENGTH {
+            Err(serde::de::Error::custom(format!(
+                "API key public id `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public id."
+            )))
+        } else {
+            Ok(ApiKeyPublicIdValueScope::Concrete(s))
+        }
+    }
+}
+
 // We use a custom deserializer for RateLimitingConfigScope
 // so that we can handle the error messages gracefully for TagValueScope
 impl<'de> Deserialize<'de> for RateLimitingConfigScope {
@@ -200,6 +223,11 @@ impl<'de> Deserialize<'de> for RateLimitingConfigScope {
                 // If this fails, the specific error will be propagated.
                 return TagRateLimitingConfigScope::deserialize(value)
                     .map(RateLimitingConfigScope::Tag)
+                    .map_err(serde::de::Error::custom);
+            }
+            if table.contains_key("api_key_public_id") {
+                return ApiKeyPublicIdConfigScope::deserialize(value)
+                    .map(RateLimitingConfigScope::ApiKeyPublicId)
                     .map_err(serde::de::Error::custom);
             }
             // As we add other variants, we will add impls here
@@ -360,7 +388,9 @@ mod tests {
         assert_eq!(config.rules()[0].scope.len(), 1);
 
         // Check scope filter with All value
-        let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[0];
+        let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[0] else {
+            panic!("Expected Tag scope");
+        };
         assert_eq!(tag_scope.tag_key(), "user_id");
         assert_eq!(tag_scope.tag_value(), &TagValueScope::Total);
     }
@@ -386,12 +416,16 @@ mod tests {
             assert_eq!(config.rules()[0].scope.len(), 2);
 
             // Check first scope filter
-            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[0];
+            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[0] else {
+                panic!("Expected Tag scope");
+            };
             assert_eq!(tag_scope.tag_key(), "application_id");
             assert_eq!(tag_scope.tag_value(), &TagValueScope::Each);
 
             // Check second scope filter with special value
-            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[1];
+            let RateLimitingConfigScope::Tag(tag_scope) = &config.rules()[0].scope[1] else {
+                panic!("Expected Tag scope");
+            };
             assert_eq!(tag_scope.tag_key(), "user_id");
             assert_eq!(
                 tag_scope.tag_value(),
@@ -549,7 +583,9 @@ mod tests {
         assert_eq!(app2_token_limit.capacity, 5000);
 
         // Check Application 1 scope details
-        let RateLimitingConfigScope::Tag(app1_scope) = &config.rules()[1].scope[0];
+        let RateLimitingConfigScope::Tag(app1_scope) = &config.rules()[1].scope[0] else {
+            panic!("Expected Tag scope");
+        };
         assert_eq!(app1_scope.tag_key(), "application_id");
         assert_eq!(
             app1_scope.tag_value(),
@@ -557,12 +593,16 @@ mod tests {
         );
 
         // Check Users rule scope details
-        let RateLimitingConfigScope::Tag(users_scope) = &config.rules()[2].scope[0];
+        let RateLimitingConfigScope::Tag(users_scope) = &config.rules()[2].scope[0] else {
+            panic!("Expected Tag scope");
+        };
         assert_eq!(users_scope.tag_key(), "user_id");
         assert_eq!(users_scope.tag_value(), &TagValueScope::Each);
 
         // Check Application 2 scope details (first scope: application_id = "2")
-        let RateLimitingConfigScope::Tag(app2_scope_0) = &app2_rule.scope[0];
+        let RateLimitingConfigScope::Tag(app2_scope_0) = &app2_rule.scope[0] else {
+            panic!("Expected Tag scope");
+        };
         assert_eq!(app2_scope_0.tag_key(), "application_id");
         assert_eq!(
             app2_scope_0.tag_value(),
@@ -570,7 +610,9 @@ mod tests {
         );
 
         // Check Application 2 scope details (second scope: user_id = wildcard)
-        let RateLimitingConfigScope::Tag(app2_scope_1) = &app2_rule.scope[1];
+        let RateLimitingConfigScope::Tag(app2_scope_1) = &app2_rule.scope[1] else {
+            panic!("Expected Tag scope");
+        };
         assert_eq!(app2_scope_1.tag_key(), "user_id");
         assert_eq!(app2_scope_1.tag_value(), &TagValueScope::Each);
     }
@@ -822,6 +864,27 @@ mod tests {
 
         let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_api_key_public_id_value() {
+        let toml_str = "
+            [[rules]]
+            tokens_per_minute = 10
+            always = true
+            scope = [
+                { api_key_public_id = \"my_bad_public_id\" }
+            ]
+        ";
+
+        let result: Result<UninitializedRateLimitingConfig, _> = toml::from_str(toml_str);
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("API key public id `my_bad_public_id` must be 12 characters long."),
+            "Unexpected error message: {}",
+            err.to_string()
+        );
     }
 
     #[test]
@@ -1078,6 +1141,11 @@ mod tests {
                             tag.tag_value(),
                             &crate::rate_limiting::TagValueScope::Concrete("123".to_string())
                         );
+                    }
+                    crate::rate_limiting::RateLimitingConfigScope::ApiKeyPublicId(
+                        _api_key_public_id,
+                    ) => {
+                        panic!("Expected RateLimitingConfigScope");
                     }
                 }
             }

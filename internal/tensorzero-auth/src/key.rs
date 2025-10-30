@@ -17,7 +17,7 @@ pub struct TensorZeroApiKey {
 
 const SK_PREFIX: &str = "sk";
 const T0_PREFIX: &str = "t0";
-const SHORT_ID_LENGTH: usize = 12;
+pub const PUBLIC_ID_LENGTH: usize = 12;
 const LONG_KEY_LENGTH: usize = 48;
 
 /// Securely generates a fresh API key
@@ -25,7 +25,7 @@ const LONG_KEY_LENGTH: usize = 48;
 pub(crate) fn secure_fresh_api_key() -> SecretString {
     // Use a cryptographically secure RNG, seeded from the OS
     let mut rng = StdRng::from_os_rng();
-    let short_key = Alphanumeric.sample_string(&mut rng, SHORT_ID_LENGTH);
+    let short_key = Alphanumeric.sample_string(&mut rng, PUBLIC_ID_LENGTH);
     let long_key = Alphanumeric.sample_string(&mut rng, LONG_KEY_LENGTH);
     let key = format!("{SK_PREFIX}-{T0_PREFIX}-{short_key}-{long_key}");
     SecretString::from(key)
@@ -45,9 +45,8 @@ impl TensorZeroApiKey {
         }
     }
 
-    #[cfg(feature = "e2e_tests")]
-    pub fn get_public_id(&self) -> String {
-        self.public_id.clone()
+    pub fn get_public_id(&self) -> &str {
+        &self.public_id
     }
 
     #[cfg(feature = "e2e_tests")]
@@ -75,7 +74,7 @@ impl TensorZeroApiKey {
                 "API key must start with `sk-t0-`",
             ));
         }
-        if public_id.len() != SHORT_ID_LENGTH {
+        if public_id.len() != PUBLIC_ID_LENGTH {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
                 "Short ID must be 12 characters",
             ));
