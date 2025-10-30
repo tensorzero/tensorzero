@@ -2742,6 +2742,7 @@ async fn test_config_schema_missing_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
