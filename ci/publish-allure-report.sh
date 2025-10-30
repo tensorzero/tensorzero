@@ -141,10 +141,9 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
 
     if [ -d "gh-pages-repo/allure-history" ]; then
         echo "Found existing Allure history"
-        cp -r gh-pages-repo/allure-history allure-history
+        cp -r gh-pages-repo/allure-history allure-results/allure-history
     else
         echo "No existing Allure history found, starting fresh"
-        mkdir -p allure-history
     fi
 
     # ------------------------------------------------------------------------------
@@ -153,7 +152,7 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     echo "Generating Allure HTML report..."
     # Set ALLURE_RESULTS_LIMIT to keep more history (default is 20)
     export ALLURE_RESULTS_LIMIT=99999
-    if ! allure generate --clean allure-results -o allure-report --history-dir allure-history; then
+    if ! allure generate --clean allure-results -o allure-report; then
         echo "Failed to generate Allure report"
         ATTEMPT=$((ATTEMPT + 1))
         continue
