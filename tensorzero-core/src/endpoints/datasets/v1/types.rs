@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput};
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
@@ -124,7 +124,10 @@ impl JsonDatapointOutputUpdate {
     ///
     /// This function parses and validates the `raw` output against the `output_schema`, and only
     /// populates the `parsed` field if the output is valid.
-    pub fn into_json_inference_output(self, output_schema: Value) -> JsonInferenceOutput {
+    pub async fn into_json_inference_output(
+        self,
+        output_schema: &DynamicJSONSchema,
+    ) -> JsonInferenceOutput {
         let parse_result = serde_json::from_str(self.raw.as_str());
 
         let mut output = JsonInferenceOutput {
@@ -135,10 +138,7 @@ impl JsonDatapointOutputUpdate {
         let Ok(parsed_unvalidated_value) = parse_result else {
             return output;
         };
-        let Ok(schema) = StaticJSONSchema::from_value(output_schema) else {
-            return output;
-        };
-        let Ok(()) = schema.validate(&parsed_unvalidated_value) else {
+        let Ok(()) = output_schema.validate(&parsed_unvalidated_value).await else {
             return output;
         };
 
@@ -324,13 +324,14 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_json_datapoint_output_update_into_json_inference_output_valid() {
+    #[tokio::test]
+    async fn test_json_datapoint_output_update_into_json_inference_output_valid() {
         let update = JsonDatapointOutputUpdate {
             raw: r#"{"key": "value"}"#.to_string(),
         };
-        let schema = json!({"type": "object", "properties": {"key": {"type": "string"}}, });
-        let output = update.into_json_inference_output(schema);
+        let schema_value = json!({"type": "object", "properties": {"key": {"type": "string"}}, });
+        let schema = DynamicJSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
 
         assert_eq!(
             output.raw,
@@ -344,13 +345,14 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_json_datapoint_output_update_into_json_inference_output_nonconformant() {
+    #[tokio::test]
+    async fn test_json_datapoint_output_update_into_json_inference_output_nonconformant() {
         let update = JsonDatapointOutputUpdate {
             raw: r#"{"key": "nonconformant value"}"#.to_string(),
         };
-        let schema = json!({"type": "object", "properties": {"key": {"type": "number"}}, });
-        let output = update.into_json_inference_output(schema);
+        let schema_value = json!({"type": "object", "properties": {"key": {"type": "number"}}, });
+        let schema = DynamicJSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
         assert_eq!(output.parsed, None);
 
         assert_eq!(
@@ -364,14 +366,15 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_prepare_json_update_output_invalid_json() {
+    #[tokio::test]
+    async fn test_prepare_json_update_output_invalid_json() {
         let update = JsonDatapointOutputUpdate {
             raw: "intentionally invalid \" json".to_string(),
         };
 
-        let schema = json!({"type": "object", "properties": {"value": {"type": "string"}}, });
-        let output = update.into_json_inference_output(schema);
+        let schema_value = json!({"type": "object", "properties": {"value": {"type": "string"}}, });
+        let schema = DynamicJSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
         assert_eq!(output.parsed, None);
 
         assert_eq!(
