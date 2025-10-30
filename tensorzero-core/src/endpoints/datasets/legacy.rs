@@ -380,7 +380,8 @@ pub async fn update_datapoint_handler(
             let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
                 chat.tool_params
                     .clone()
-                    .map(ToolCallConfigDatabaseInsert::into)
+                    .unwrap_or_default()
+                    .into_tool_call_config(&function_config, &app_state.config.tools)?
                     .unwrap_or_default(),
             );
 

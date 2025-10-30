@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
@@ -22,7 +22,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
-use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
+use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -335,6 +335,7 @@ async fn write_demonstration(
         inference_id,
         &function_info.name,
         &function_config,
+        &config.tools,
     )
     .await?;
     let parsed_value =
@@ -731,6 +732,7 @@ async fn get_dynamic_demonstration_info(
     inference_id: Uuid,
     function_name: &str,
     function_config: &FunctionConfig,
+    static_tools: &HashMap<String, Arc<StaticToolConfig>>,
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
@@ -755,10 +757,12 @@ async fn get_dynamic_demonstration_info(
             Ok(DynamicDemonstrationInfo::Chat(
                 // If the tool params are not present in the database, we use the default tool params (empty tools).
                 // This is consistent with how they are serialized at inference time.
-                tool_params_result
-                    .tool_params
-                    .map(ToolCallConfigDatabaseInsert::into)
-                    .unwrap_or_default(),
+                match tool_params_result.tool_params {
+                    Some(db_insert) => db_insert
+                        .into_tool_call_config(function_config, static_tools)?
+                        .unwrap_or_default(),
+                    None => ToolCallConfig::default(),
+                },
             ))
         }
         FunctionConfig::Json(..) => {

@@ -1020,8 +1020,16 @@ pub async fn write_completed_batch_inference<'a>(
             cached: false,
             finish_reason,
         };
-        let tool_config: Option<ToolCallConfig> =
-            tool_params.map(ToolCallConfigDatabaseInsert::into);
+        let tool_config: Option<ToolCallConfig> = match tool_params {
+            Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {
+                Ok(config) => config,
+                Err(_) => {
+                    // Skip this inference if we can't convert the tool config
+                    continue;
+                }
+            },
+            None => None,
+        };
         let output_schema = match output_schema
             .map(|s| DynamicJSONSchema::parse_from_str(&s))
             .transpose()

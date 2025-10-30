@@ -35,8 +35,8 @@ services:
     env_file:
       - .env
       - .env-gateway
-    ports:
-      - "3000:3000"
+    # ports:
+    #   - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "howdy.tensorzero.com:127.0.0.1"
@@ -45,9 +45,17 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-    command: [ "--config-file", "/app/config/tensorzero.toml" ]
+    command: ["--config-file", "/app/config/tensorzero.toml"]
     healthcheck:
-      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health" ]
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000/health",
+        ]
       start_period: 30s
       start_interval: 1s
       timeout: 1s
@@ -73,9 +81,9 @@ services:
         condition: service_healthy
       gateway-postgres-migrations:
         condition: service_healthy
-    command: [ "bash", "-c", "cd /fixtures && ./load_fixtures.sh" ]
+    command: ["bash", "-c", "cd /fixtures && ./load_fixtures.sh"]
     healthcheck:
-      test: [ "CMD", "test", "-f", "/load_complete.marker" ]
+      test: ["CMD", "test", "-f", "/load_complete.marker"]
       interval: 5s
       timeout: 1s
       retries: 48 # Retry for up to 4 minutes

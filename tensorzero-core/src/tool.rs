@@ -400,6 +400,7 @@ impl ToolCallConfig {
 /// # Conversion
 /// - **From wire type**: Use `FunctionConfig::dynamic_tool_params_to_database_insert()` to convert `DynamicToolParams` → `ToolCallConfigDatabaseInsert`
 /// - **To wire type**: Use `FunctionConfig::database_insert_to_dynamic_tool_params()` to convert `ToolCallConfigDatabaseInsert` → `DynamicToolParams`
+/// - **To ToolCallConfig**: Use the `into_tool_call_config()` method for a direct conversion to `ToolCallConfig`
 ///
 /// See also: [`DynamicToolParams`] for the wire/API format
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -413,6 +414,45 @@ pub struct ToolCallConfigDatabaseInsert {
     // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
     /// Whether parallel tool calls are enabled
     pub parallel_tool_calls: Option<bool>,
+}
+
+impl ToolCallConfigDatabaseInsert {
+    /// Converts this database representation back into a `ToolCallConfig`.
+    ///
+    /// This method performs the reverse transformation of the lossy conversion that occurs
+    /// when storing `ToolCallConfig` in the database. It reconstructs the tool configuration
+    /// by:
+    /// 1. Converting the stored tools into `DynamicToolParams`
+    /// 2. Using the function config to prepare a full `ToolCallConfig`
+    ///
+    /// # Lossy Conversion
+    /// Note that this conversion cannot fully restore the original `ToolCallConfig`:
+    /// - `provider_tools` are not stored in the database and will be `None`
+    /// - The distinction between static/dynamic tools is reconstructed based on function config
+    ///
+    /// # Parameters
+    /// - `function_config`: The function configuration containing static tool definitions
+    /// - `static_tools`: Map of static tool names to their compiled configurations
+    ///
+    /// # Returns
+    /// - `Ok(Some(ToolCallConfig))` if tools were configured
+    /// - `Ok(None)` if no tools were available (e.g., JSON functions)
+    /// - `Err(Error)` if reconstruction fails (e.g., tool not found, duplicate tools)
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let db_insert = get_tool_config_from_database();
+    /// let tool_config = db_insert.into_tool_call_config(&function_config, &static_tools)?;
+    /// ```
+    pub fn into_tool_call_config(
+        self,
+        function_config: &crate::function::FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<Option<ToolCallConfig>, Error> {
+        let dynamic_params = function_config.database_insert_to_dynamic_tool_params(self);
+        let tool_call_config = function_config.prepare_tool_config(dynamic_params, static_tools)?;
+        Ok(tool_call_config)
+    }
 }
 
 /// Wire/API representation of dynamic tool parameters for inference requests.
@@ -1009,31 +1049,31 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
     }
 }
 
-impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
-    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
-        // TODO(Viraj): Come back and look at this - should these be static or dynamic tools?
-        Self {
-            static_tools_available: db_insert
-                .tools_available
-                .into_iter()
-                .map(|tool| {
-                    ToolConfig::Dynamic(DynamicToolConfig {
-                        description: tool.description,
-                        parameters: DynamicJSONSchema::new(tool.parameters),
-                        name: tool.name,
-                        strict: tool.strict,
-                    })
-                })
-                .collect(),
-            dynamic_tools_available: vec![],
-            tool_choice: db_insert.tool_choice,
-            parallel_tool_calls: db_insert.parallel_tool_calls,
-            // TODO(Viraj): address this once we start storing provider tools
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
-        }
-    }
-}
+// impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
+//     fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
+//         // TODO(Viraj): Come back and look at this - should these be static or dynamic tools?
+//         Self {
+//             static_tools_available: db_insert
+//                 .tools_available
+//                 .into_iter()
+//                 .map(|tool| {
+//                     ToolConfig::Dynamic(DynamicToolConfig {
+//                         description: tool.description,
+//                         parameters: DynamicJSONSchema::new(tool.parameters),
+//                         name: tool.name,
+//                         strict: tool.strict,
+//                     })
+//                 })
+//                 .collect(),
+//             dynamic_tools_available: vec![],
+//             tool_choice: db_insert.tool_choice,
+//             parallel_tool_calls: db_insert.parallel_tool_calls,
+//             // TODO(Viraj): address this once we start storing provider tools
+//             provider_tools: vec![],
+//             allowed_tools: AllowedTools::default(),
+//         }
+//     }
+// }
 
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
