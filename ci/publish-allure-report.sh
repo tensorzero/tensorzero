@@ -64,9 +64,9 @@ allure --version
 # ------------------------------------------------------------------------------
 # Prepare Allure results
 # ------------------------------------------------------------------------------
-echo "Preparing Allure results..."
+echo "Preparing Allure results with process_flaky_tests.py..."
 mkdir -p allure-results
-cp "$JUNIT_XML_PATH" allure-results/
+python3 ./process_flaky_tests.py $JUNIT_XML_PATH -o allure-results/processed_junit.xml
 
 # ------------------------------------------------------------------------------
 # Set up SSH authentication
