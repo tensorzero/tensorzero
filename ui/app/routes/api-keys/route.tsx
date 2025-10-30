@@ -70,6 +70,29 @@ export async function action({ request }: Route.ActionArgs) {
     }
   }
 
+  if (actionType === "delete") {
+    try {
+      const publicId = formData.get("publicId");
+      if (typeof publicId !== "string") {
+        return {
+          error: "Public ID is required",
+        };
+      }
+
+      const postgresClient = await getPostgresClient();
+      await postgresClient.disableApiKey(publicId);
+
+      return {
+        success: true,
+      };
+    } catch (error) {
+      logger.error("Failed to disable API key", error);
+      return {
+        error: "Failed to disable API key. Please try again.",
+      };
+    }
+  }
+
   return {
     error: "Invalid action",
   };

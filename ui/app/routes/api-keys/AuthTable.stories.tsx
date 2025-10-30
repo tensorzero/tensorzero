@@ -3,7 +3,7 @@ import AuthTable from "./AuthTable";
 import type { KeyInfo } from "tensorzero-node";
 
 const meta = {
-  title: "Auth/AuthTable",
+  title: "API Keys/AuthTable",
   component: AuthTable,
   render: (args) => (
     <div className="w-[80vw] p-4">

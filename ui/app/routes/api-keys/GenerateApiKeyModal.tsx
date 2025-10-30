@@ -40,12 +40,17 @@ export function GenerateApiKeyModal({
   const apiKey = fetcher.data?.apiKey;
   const error = fetcher.data?.error;
 
-  // Reset state when modal closes
+  // Reset state when modal closes (after animation completes)
   useEffect(() => {
     if (!isOpen) {
-      fetcher.reset();
-      setDescription("");
+      // Wait for closing animation to complete (duration-200 = 200ms)
+      const timer = setTimeout(() => {
+        fetcher.reset();
+        setDescription("");
+      }, 250);
+      return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isOpen, fetcher]);
 
   const handleCopy = async () => {
@@ -54,13 +59,9 @@ export function GenerateApiKeyModal({
     }
   };
 
-  const handleClose = () => {
-    onClose();
-  };
-
   return (
     <ReadOnlyGuard>
-      <Dialog open={isOpen} onOpenChange={handleClose}>
+      <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
@@ -153,7 +154,7 @@ export function GenerateApiKeyModal({
 
           <DialogFooter>
             {apiKey ? (
-              <Button type="button" onClick={handleClose}>
+              <Button type="button" onClick={onClose}>
                 Close
               </Button>
             ) : (
@@ -161,7 +162,7 @@ export function GenerateApiKeyModal({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleClose}
+                  onClick={onClose}
                   disabled={isSubmitting}
                 >
                   Cancel

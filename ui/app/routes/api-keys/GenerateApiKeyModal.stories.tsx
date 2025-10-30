@@ -22,11 +22,11 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const FormView: Story = {
+export const Form: Story = {
   args: {
     open: true,
   },
-  render: function FormView(args) {
+  render: function Form(args) {
     const [{ open }, updateArgs] = useArgs<{ open: boolean }>();
     return (
       <Dialog
@@ -42,7 +42,7 @@ export const FormView: Story = {
             </DialogDescription>
           </DialogHeader>
 
-          <DialogBody className="overflow-hidden px-1">
+          <DialogBody>
             <div className="space-y-4 px-1">
               <div className="space-y-2">
                 <Label htmlFor="description">
@@ -51,7 +51,7 @@ export const FormView: Story = {
                 </Label>
                 <Textarea
                   id="description"
-                  placeholder="e.g., Production API key for mobile app"
+                  placeholder="Example: Production API key for web app"
                   maxLength={255}
                   rows={3}
                   className="resize-none focus-visible:ring-offset-0"
@@ -79,11 +79,11 @@ export const FormView: Story = {
   },
 };
 
-export const SuccessView: Story = {
+export const Success: Story = {
   args: {
     open: true,
   },
-  render: function SuccessView(args) {
+  render: function Success(args) {
     const [{ open }, updateArgs] = useArgs<{ open: boolean }>();
     const apiKey =
       "sk-tz-a1b2c3d4e5f6-9876543210abcdefghijklmnopqrstuvwxyz1234567890";
@@ -103,7 +103,7 @@ export const SuccessView: Story = {
             </DialogDescription>
           </DialogHeader>
 
-          <DialogBody className="overflow-hidden px-1">
+          <DialogBody>
             <div className="space-y-4 px-1">
               <div className="space-y-2">
                 <Label>Your API Key</Label>
@@ -114,18 +114,20 @@ export const SuccessView: Story = {
                   <Button
                     type="button"
                     size="iconSm"
-                    variant="ghost"
-                    className="absolute top-2 right-2"
+                    variant="secondary"
+                    className="absolute top-2 right-2 border"
                     title="Copy to clipboard"
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <p className="text-muted-foreground text-sm">{description}</p>
-              </div>
+              {description && (
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <p className="text-muted-foreground text-sm">{description}</p>
+                </div>
+              )}
               <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-950">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
                   <strong>Warning:</strong> Make sure to copy your API key now.
