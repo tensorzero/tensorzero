@@ -108,7 +108,7 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
 /// the UI e2e test in `ui/e2e_tests/homePage.spec.ts` which checks the total
 /// function count displayed on the homepage.
 pub fn get_all_built_in_functions() -> Result<HashMap<String, Arc<FunctionConfig>>, Error> {
-    #[cfg_attr(not(feature = "e2e_tests"), allow(unused_mut))]
+    #[cfg_attr(not(feature = "e2e_tests"), expect(unused_mut))]
     let mut functions = HashMap::new();
     #[cfg(feature = "e2e_tests")]
     {
