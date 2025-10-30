@@ -7,6 +7,7 @@ export * from "./AnthropicDefaults";
 export * from "./AnthropicProvider";
 export * from "./AnthropicProviderTypeConfig";
 export * from "./Arguments";
+export * from "./AuthConfig";
 export * from "./AzureDefaults";
 export * from "./AzureProvider";
 export * from "./AzureProviderTypeConfig";
