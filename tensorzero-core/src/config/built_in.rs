@@ -48,7 +48,7 @@ fn get_hello_chat_function() -> Result<Arc<FunctionConfig>, Error> {
         "system".to_string(),
         SchemaWithMetadata {
             schema: system_schema,
-            legacy_definition: false, // Use modern definition to allow template variables
+            legacy_definition: true,
         },
     );
 
