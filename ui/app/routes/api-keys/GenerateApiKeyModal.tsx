@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useFetcher } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -11,7 +12,6 @@ import {
 } from "~/components/ui/dialog";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
-import { useFetcherWithReset } from "~/hooks/use-fetcher-with-reset";
 import { useCopy } from "~/hooks/use-copy";
 import { useReadOnly } from "~/context/read-only";
 import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
@@ -31,7 +31,7 @@ export function GenerateApiKeyModal({
   isOpen,
   onClose,
 }: GenerateApiKeyModalProps) {
-  const fetcher = useFetcherWithReset<ActionData>();
+  const fetcher = useFetcher<ActionData>();
   const { copy, didCopy, isCopyAvailable } = useCopy();
   const isReadOnly = useReadOnly();
   const [description, setDescription] = useState("");
@@ -39,19 +39,6 @@ export function GenerateApiKeyModal({
   const isSubmitting = fetcher.state === "submitting";
   const apiKey = fetcher.data?.apiKey;
   const error = fetcher.data?.error;
-
-  // Reset state when modal closes (after animation completes)
-  useEffect(() => {
-    if (!isOpen) {
-      // Wait for closing animation to complete (duration-200 = 200ms)
-      const timer = setTimeout(() => {
-        fetcher.reset();
-        setDescription("");
-      }, 250);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [isOpen, fetcher]);
 
   const handleCopy = async () => {
     if (apiKey) {
@@ -112,9 +99,8 @@ export function GenerateApiKeyModal({
                 )}
                 <div className="rounded-md border border-yellow-200 bg-yellow-50 p-3 dark:border-yellow-800 dark:bg-yellow-950">
                   <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                    <strong>Warning:</strong> Make sure to copy your API key
-                    now. For security reasons, you won't be able to see it
-                    again.
+                    Make sure to copy your API key now. For security reasons,
+                    you won't be able to see it again.
                   </p>
                 </div>
               </div>

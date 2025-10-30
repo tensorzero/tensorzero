@@ -15,7 +15,7 @@ export function GenerateKeyButton({
   const isReadOnly = useReadOnly();
 
   return (
-    <ReadOnlyGuard>
+    <ReadOnlyGuard asChild>
       <Button
         variant="outline"
         size="sm"

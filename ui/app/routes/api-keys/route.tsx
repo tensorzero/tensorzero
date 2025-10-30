@@ -1,5 +1,6 @@
 import type { Route } from "./+types/route";
 import {
+  data,
   isRouteErrorResponse,
   useNavigate,
   type RouteHandle,
@@ -27,6 +28,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   const searchParams = new URLSearchParams(url.search);
   const offset = parseInt(searchParams.get("offset") || "0");
   const pageSize = parseInt(searchParams.get("pageSize") || "100");
+
+  if (pageSize > 10000) {
+    throw data("Page size cannot exceed 10,000", { status: 400 });
+  }
 
   const postgresClient = await getPostgresClient();
   const apiKeysJson = await postgresClient.listApiKeys();
@@ -115,12 +120,28 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
   };
 
   const [generateModalIsOpen, setGenerateModalIsOpen] = useState(false);
+  const [modalKey, setModalKey] = useState(0);
+
+  const handleOpenModal = () => {
+    setModalKey((prev) => prev + 1);
+    setGenerateModalIsOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setGenerateModalIsOpen(false);
+    // Reset to first page after creating API key
+    if (offset > 0) {
+      const searchParams = new URLSearchParams(window.location.search);
+      searchParams.set("offset", "0");
+      navigate(`?${searchParams.toString()}`, { preventScrollReset: true });
+    }
+  };
 
   return (
     <PageLayout>
       <PageHeader heading="TensorZero API Keys" count={totalApiKeys} />
       <SectionLayout>
-        <AuthActions onGenerateKey={() => setGenerateModalIsOpen(true)} />
+        <AuthActions onGenerateKey={handleOpenModal} />
         <AuthTable apiKeys={apiKeys} />
         <PageButtons
           onPreviousPage={handlePreviousPage}
@@ -130,8 +151,9 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
         />
       </SectionLayout>
       <GenerateApiKeyModal
+        key={modalKey}
         isOpen={generateModalIsOpen}
-        onClose={() => setGenerateModalIsOpen(false)}
+        onClose={handleCloseModal}
       />
     </PageLayout>
   );

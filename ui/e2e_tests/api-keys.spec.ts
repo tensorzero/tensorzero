@@ -21,7 +21,11 @@ test("should create, display, delete, and persist API key states", async ({
   ).toBeVisible();
 
   // Submit without filling description
-  await page.getByRole("button", { name: "Generate Key" }).click();
+  const generateButton = page.getByRole("button", { name: "Generate Key" });
+  await expect(generateButton).toBeVisible();
+  await expect(generateButton).toBeEnabled();
+  await page.waitForTimeout(300); // wait for modal animation to complete
+  await generateButton.click();
 
   // Wait for success state
   await expect(
@@ -75,7 +79,13 @@ test("should create, display, delete, and persist API key states", async ({
   ).toBeVisible();
 
   // Submit form
-  await page.getByRole("button", { name: "Generate Key" }).click();
+  const secondGenerateButton = page.getByRole("button", {
+    name: "Generate Key",
+  });
+  await expect(secondGenerateButton).toBeVisible();
+  await expect(secondGenerateButton).toBeEnabled();
+  await page.waitForTimeout(300); // wait for modal animation to complete
+  await secondGenerateButton.click();
 
   // Wait for success state
   await expect(
@@ -226,4 +236,84 @@ test("should create, display, delete, and persist API key states", async ({
     .last()
     .locator("button");
   await expect(refreshedActiveButton).not.toBeDisabled();
+});
+
+test("should paginate API keys with custom page size", async ({ page }) => {
+  // 1. Navigate to API Keys page with small pageSize
+  await page.goto("/api-keys?pageSize=2");
+  await page.waitForLoadState("networkidle");
+
+  // Verify page loaded
+  await expect(
+    page.getByRole("heading", { name: "TensorZero API Keys" }),
+  ).toBeVisible();
+
+  // 2. Create 5 API keys (more than pageSize)
+  for (let i = 0; i < 5; i++) {
+    await page.getByRole("button", { name: "Generate API Key" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Generate API Key" }),
+    ).toBeVisible();
+    await page.waitForLoadState("networkidle");
+
+    await page.locator("#description").waitFor({ state: "visible" });
+    await page.locator("#description").fill(`Pagination test ${uuidv7()}`);
+
+    const generateButton = page.getByRole("button", { name: "Generate Key" });
+    await expect(generateButton).toBeVisible();
+    await expect(generateButton).toBeEnabled();
+    await generateButton.click();
+    await page.waitForLoadState("networkidle");
+
+    await expect(
+      page.getByRole("heading", { name: "API Key Generated" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).first().click();
+    await page.waitForLoadState("networkidle");
+  }
+
+  // 3. Verify only 2 keys are visible on first page (pageSize=2)
+  const tableRows = page.locator("tbody tr");
+  await expect(tableRows).toHaveCount(2);
+
+  // 4. Get pagination buttons
+  const paginationContainer = page.locator(
+    "div.mt-4.flex.items-center.justify-center.gap-2",
+  );
+  const prevButton = paginationContainer.locator("button").first();
+  const nextButton = paginationContainer.locator("button").last();
+
+  // 5. Verify initial pagination state (first page)
+  await expect(prevButton).toBeDisabled(); // Can't go back from first page
+  await expect(nextButton).not.toBeDisabled(); // Can go forward
+
+  // 6. Click Next button to go to page 2
+  await nextButton.click();
+
+  // Wait for URL to change with offset parameter
+  await page.waitForURL("**/api-keys?*offset=2*");
+  await page.waitForLoadState("networkidle");
+
+  // 7. Verify URL changed (offset should be 2)
+  expect(page.url()).toContain("offset=2");
+  expect(page.url()).toContain("pageSize=2");
+
+  // 8. Verify still showing 2 rows on page 2
+  await expect(tableRows).toHaveCount(2);
+
+  // 9. Verify both buttons are now enabled (middle page)
+  await expect(prevButton).not.toBeDisabled(); // Can go back
+  await expect(nextButton).not.toBeDisabled(); // Can go forward
+
+  // 10. Click Previous button to go back to page 1
+  await prevButton.click();
+
+  // Wait for URL to change back to offset=0
+  await page.waitForURL("**/api-keys?*offset=0*");
+  await page.waitForLoadState("networkidle");
+
+  // 11. Verify we're back to first page (offset=0)
+  expect(page.url()).toContain("offset=0");
+  await expect(prevButton).toBeDisabled(); // Can't go back
+  await expect(nextButton).not.toBeDisabled(); // Can go forward
 });
