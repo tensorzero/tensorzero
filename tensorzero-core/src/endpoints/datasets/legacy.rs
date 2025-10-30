@@ -879,29 +879,25 @@ pub async fn list_datapoints_handler(
     let datapoints = list_datapoints(
         path_params.dataset_name,
         &app_state.clickhouse_connection_info,
+        &app_state.config,
         query_params.function_name,
         query_params.limit,
         query_params.offset,
     )
     .await?;
 
-    // Convert all storage types to wire types
-    let wires: Vec<Datapoint> = datapoints
-        .into_iter()
-        .map(|dp| dp.into_datapoint(&app_state.config))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(Json(wires))
+    Ok(Json(datapoints))
 }
 
 #[tracing::instrument(name = "list_datapoints", skip(clickhouse))]
 pub async fn list_datapoints(
     dataset_name: String,
     clickhouse: &ClickHouseConnectionInfo,
+    config: &Config,
     function_name: Option<String>,
     limit: Option<u32>,
     offset: Option<u32>,
-) -> Result<Vec<StoredDatapoint>, Error> {
+) -> Result<Vec<Datapoint>, Error> {
     let mut query = r"
     WITH dataset as (
         SELECT
@@ -994,9 +990,9 @@ pub async fn list_datapoints(
     }
     let result_lines = result.response.trim().split("\n").collect::<Vec<&str>>();
 
-    let datapoints: Result<Vec<StoredDatapoint>, _> = result_lines
+    let datapoints: Result<Vec<Datapoint>, _> = result_lines
         .iter()
-        .map(|line| serde_json::from_str(line))
+        .map(|line| serde_json::from_str::<StoredDatapoint>(line)?.into_datapoint(config))
         .collect();
     let datapoints = match datapoints {
         Ok(datapoints) => datapoints,
@@ -1327,6 +1323,7 @@ impl Datapoint {
 }
 
 /// Storage variant of Datapoint enum for database operations (no Python/TypeScript bindings)
+/// Convert to Datapoint with `.into_datapoint(config)`
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StoredDatapoint {

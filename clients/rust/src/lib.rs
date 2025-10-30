@@ -923,10 +923,11 @@ impl Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                let datapoints = with_embedded_timeout(*timeout, async {
+                with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
                         &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.config,
                         function_name,
                         limit,
                         offset,
@@ -934,15 +935,7 @@ impl Client {
                     .await
                     .map_err(err_to_http)
                 })
-                .await?;
-
-                // Convert storage types to wire types
-                let wire_datapoints: Result<Vec<Datapoint>, _> = datapoints
-                    .into_iter()
-                    .map(|dp| dp.into_datapoint(&gateway.handle.app_state.config))
-                    .collect();
-
-                wire_datapoints.map_err(|e| TensorZeroError::Other { source: e.into() })
+                .await
             }
         }
     }
