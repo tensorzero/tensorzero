@@ -684,7 +684,7 @@ impl Config {
     /// Constructs a new `Config`, as if from an empty config file.
     /// This is the only way to construct an empty config file in production code,
     /// as it ensures that things like TensorZero built-in functions will still exist in the config.
-    /// 
+    ///
     /// In test code, a `Default` impl is available, but the config it produces might
     /// be completely broken (e.g. no builtin functions will be available).
     pub async fn new_empty() -> Result<Config, Error> {
