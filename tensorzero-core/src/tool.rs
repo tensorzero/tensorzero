@@ -1066,32 +1066,6 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
     }
 }
 
-// impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
-//     fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
-//         // TODO(Viraj): Come back and look at this - should these be static or dynamic tools?
-//         Self {
-//             static_tools_available: db_insert
-//                 .tools_available
-//                 .into_iter()
-//                 .map(|tool| {
-//                     ToolConfig::Dynamic(DynamicToolConfig {
-//                         description: tool.description,
-//                         parameters: DynamicJSONSchema::new(tool.parameters),
-//                         name: tool.name,
-//                         strict: tool.strict,
-//                     })
-//                 })
-//                 .collect(),
-//             dynamic_tools_available: vec![],
-//             tool_choice: db_insert.tool_choice,
-//             parallel_tool_calls: db_insert.parallel_tool_calls,
-//             // TODO(Viraj): address this once we start storing provider tools
-//             provider_tools: vec![],
-//             allowed_tools: AllowedTools::default(),
-//         }
-//     }
-// }
-
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
 pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
