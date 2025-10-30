@@ -527,7 +527,7 @@ impl VariantSampler for TrackAndStopConfig {
     fn get_current_display_probabilities<'a>(
         &self,
         _function_name: &str,
-        active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         let state = self.state.load();
@@ -2257,11 +2257,11 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let mut active_variants = create_test_variants(&["A", "B"]);
+        let active_variants = create_test_variants(&["A", "B"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Only the winner should have probability 1.0
@@ -2287,11 +2287,11 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let mut active_variants = create_test_variants(&["A", "B", "C"]);
+        let active_variants = create_test_variants(&["A", "B", "C"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Should have uniform probabilities
@@ -2327,11 +2327,11 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let mut active_variants = create_test_variants(&["A", "B"]);
+        let active_variants = create_test_variants(&["A", "B"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         assert_eq!(probs.len(), 2);
@@ -2368,11 +2368,11 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let mut active_variants = create_test_variants(&["A", "B", "C"]);
+        let active_variants = create_test_variants(&["A", "B", "C"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         assert_eq!(probs.len(), 3);
@@ -2434,11 +2434,11 @@ mod tests {
             task_spawned: AtomicBool::new(false),
         };
 
-        let mut active_variants = create_test_variants(&["A", "C"]);
+        let active_variants = create_test_variants(&["A", "C"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         assert_eq!(probs.len(), 2);
@@ -2477,11 +2477,11 @@ mod tests {
         };
 
         // Only A is active, B is not
-        let mut active_variants = create_test_variants(&["A"]);
+        let active_variants = create_test_variants(&["A"]);
         let postgres = PostgresConnectionInfo::new_disabled();
 
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Only A should appear

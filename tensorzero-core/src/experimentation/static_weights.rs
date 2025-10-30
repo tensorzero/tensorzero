@@ -181,7 +181,7 @@ impl VariantSampler for StaticWeightsConfig {
     fn get_current_display_probabilities<'a>(
         &self,
         _function_name: &str,
-        active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         // Compute the total weight of variants present in active_variants
@@ -789,7 +789,7 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_weighted() {
         // Test weighted probabilities
-        let mut active_variants = create_test_variants(&["A", "B", "C"]);
+        let active_variants = create_test_variants(&["A", "B", "C"]);
         let mut candidate_variants = BTreeMap::new();
         candidate_variants.insert("A".to_string(), 1.0);
         candidate_variants.insert("B".to_string(), 2.0);
@@ -802,7 +802,7 @@ mod tests {
 
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Total weight = 6.0
@@ -820,7 +820,7 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_fallback() {
         // Test fallback (uniform) probabilities
-        let mut active_variants = create_test_variants(&["A", "B", "C"]);
+        let active_variants = create_test_variants(&["A", "B", "C"]);
 
         let config = StaticWeightsConfig {
             candidate_variants: BTreeMap::new(), // No weights
@@ -829,7 +829,7 @@ mod tests {
 
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Should have uniform probabilities
@@ -846,7 +846,7 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_partial_intersection() {
         // Test with only some active variants having weights
-        let mut active_variants = create_test_variants(&["A", "C"]);
+        let active_variants = create_test_variants(&["A", "C"]);
         let mut candidate_variants = BTreeMap::new();
         candidate_variants.insert("A".to_string(), 1.0);
         candidate_variants.insert("B".to_string(), 2.0); // Not active
@@ -859,7 +859,7 @@ mod tests {
 
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Only A and C should appear, with normalized weights
@@ -876,7 +876,7 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_fallback_partial() {
         // Test fallback with only some variants active
-        let mut active_variants = create_test_variants(&["B", "C"]);
+        let active_variants = create_test_variants(&["B", "C"]);
 
         let config = StaticWeightsConfig {
             candidate_variants: BTreeMap::new(),
@@ -885,7 +885,7 @@ mod tests {
 
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Only B and C are active and in fallback
@@ -901,7 +901,7 @@ mod tests {
     #[test]
     fn test_get_current_display_probabilities_no_fallback_error() {
         // Test error when no fallback variants match
-        let mut active_variants = create_test_variants(&["A", "B"]);
+        let active_variants = create_test_variants(&["A", "B"]);
 
         let config = StaticWeightsConfig {
             candidate_variants: BTreeMap::new(),
@@ -909,8 +909,7 @@ mod tests {
         };
 
         let postgres = PostgresConnectionInfo::new_disabled();
-        let result =
-            config.get_current_display_probabilities("test", &mut active_variants, &postgres);
+        let result = config.get_current_display_probabilities("test", &active_variants, &postgres);
 
         assert!(result.is_err());
     }

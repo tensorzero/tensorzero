@@ -58,7 +58,7 @@ pub async fn get_variant_sampling_probabilities(
     let function = config.get_function(function_name)?;
 
     // Get the active variants for this function (need to clone to make them mutable)
-    let mut active_variants: BTreeMap<String, Arc<VariantInfo>> =
+    let active_variants: BTreeMap<String, Arc<VariantInfo>> =
         function.variants().clone().into_iter().collect();
 
     // If the function has no variants, return an error
@@ -74,7 +74,7 @@ pub async fn get_variant_sampling_probabilities(
         .experimentation()
         .get_current_display_probabilities(
             function_name,
-            &mut active_variants,
+            &active_variants,
             &postgres_connection_info,
         )?;
 

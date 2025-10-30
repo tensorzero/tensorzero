@@ -81,7 +81,7 @@ pub trait VariantSampler {
     fn get_current_display_probabilities<'a>(
         &self,
         function_name: &str,
-        active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
         postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error>;
 }
@@ -181,7 +181,7 @@ impl ExperimentationConfig {
     pub fn get_current_display_probabilities<'a>(
         &self,
         function_name: &str,
-        active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
         postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         match self {
@@ -318,7 +318,7 @@ impl VariantSampler for AlwaysFailsConfig {
     fn get_current_display_probabilities<'a>(
         &self,
         _function_name: &str,
-        active_variants: &'a mut BTreeMap<String, Arc<VariantInfo>>,
+        active_variants: &'a BTreeMap<String, Arc<VariantInfo>>,
         _postgres: &PostgresConnectionInfo,
     ) -> Result<HashMap<&'a str, f64>, Error> {
         // Find intersection of active_variants and allowed_variants
@@ -345,6 +345,8 @@ impl VariantSampler for AlwaysFailsConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{ErrorContext, SchemaData};
+    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
     use uuid::Uuid;
 
     #[test]
@@ -527,9 +529,6 @@ mod tests {
     // Tests for get_current_display_probabilities
     #[test]
     fn test_get_current_display_probabilities_uniform() {
-        use crate::config::{ErrorContext, SchemaData};
-        use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
-
         let mut active_variants = BTreeMap::new();
         for name in ["A", "B", "C"] {
             active_variants.insert(
@@ -552,7 +551,7 @@ mod tests {
         let config = ExperimentationConfig::Uniform;
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Should have uniform probabilities
@@ -568,12 +567,12 @@ mod tests {
 
     #[test]
     fn test_get_current_display_probabilities_uniform_empty() {
-        let mut active_variants = BTreeMap::new();
+        let active_variants = BTreeMap::new();
 
         let config = ExperimentationConfig::Uniform;
         let postgres = PostgresConnectionInfo::new_disabled();
         let probs = config
-            .get_current_display_probabilities("test", &mut active_variants, &postgres)
+            .get_current_display_probabilities("test", &active_variants, &postgres)
             .unwrap();
 
         // Should return empty map
