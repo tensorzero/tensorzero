@@ -20,6 +20,8 @@ use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
+pub mod delayed_error;
+
 /// Controls whether to include raw request/response details in error output
 ///
 /// When true:
@@ -153,6 +155,10 @@ impl Error {
 
     pub fn log(&self) {
         self.0.log();
+    }
+
+    pub fn log_at_level(&self, prefix: &str, level: tracing::Level) {
+        self.0.log_at_level(prefix, level);
     }
 
     pub fn is_retryable(&self) -> bool {
@@ -841,15 +847,19 @@ impl ErrorDetails {
         }
     }
 
+    pub fn log_at_level(&self, prefix: &str, level: tracing::Level) {
+        match level {
+            tracing::Level::ERROR => tracing::error!("{prefix}{self}"),
+            tracing::Level::WARN => tracing::warn!("{prefix}{self}"),
+            tracing::Level::INFO => tracing::info!("{prefix}{self}"),
+            tracing::Level::DEBUG => tracing::debug!("{prefix}{self}"),
+            tracing::Level::TRACE => tracing::trace!("{prefix}{self}"),
+        }
+    }
+
     /// Log the error using the `tracing` library
     pub fn log(&self) {
-        match self.level() {
-            tracing::Level::ERROR => tracing::error!("{self}"),
-            tracing::Level::WARN => tracing::warn!("{self}"),
-            tracing::Level::INFO => tracing::info!("{self}"),
-            tracing::Level::DEBUG => tracing::debug!("{self}"),
-            tracing::Level::TRACE => tracing::trace!("{self}"),
-        }
+        self.log_at_level("", self.level());
     }
 
     pub fn is_retryable(&self) -> bool {
