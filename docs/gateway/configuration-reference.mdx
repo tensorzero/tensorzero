@@ -3483,7 +3483,7 @@ Please refer to that documentation to see what options are available.
 
 ## `[functions.function_name.experimentation]`
 
-The `[functions.function_name.experimentation]` section sets up an experiment over a set of `candidate_variants`.
+The `[functions.function_name.experimentation]` section sets up an experiment over a set of function.
 An experiment is a procedure for sampling function variants at inference time in order to learn about the relative
 performance of the variants. There are currently three types of experiment available: `uniform` experiments sample
 variants uniformly at random, `static_weights` sample variants according to user-chosen weights, and `track_and_stop`
@@ -3546,7 +3546,7 @@ candidate_variants = ["prompt-v1", "prompt-v2", "prompt-v3"]
 An optional set of function variants to use as fallback options. Each variant must be defined via
 `[functions.function_name.variants.variant_name]` in the the `variants` sub-section (see above). If inference fails
 with all of the `candidate_variants`, then variants will be sampled uniformly at random from `fallback_variants`.
-Feedback for these variants will not be used to guide the experiment; for example, if the experiment type is
+Feedback for these variants will not be used in the experiment itself; for example, if the experiment type is
 `track_and_stop`, the sampling probabilities will be dynamically updated based only on feedback for the
 `candidate_variants`.
 
@@ -3646,11 +3646,11 @@ epsilon = 0.03
 
 The frequency, in seconds, with which sampling probabilities are updated. Updating the sampling probabilities requires
 reading the latest feedback data from ClickHouse. This is accomplished by a background task that interacts with the
-gateway instance. More frequent updates relative to the feedback throughput enable the algorithm to more quickly guide the
-sampling probabilities toward their theoretical optimum, which allows it to more quickly label the "winner" variant. For
-example, updating the sampling probabilities every ~100 inferences should lead to faster convergence than updating them
-every ~500 inferences. If you notice that the computational overhead is too great, you can reduce the update frequency to
-reduce database reads.
+gateway instance. More frequent updates (smaller values of `update_period_s`) relative to the feedback throughput enable
+the algorithm to more quickly guide the sampling probabilities toward their theoretical optimum, which allows it to more
+quickly label the "winner" variant. For example, updating the sampling probabilities every ~100 inferences should lead to
+faster convergence than updating them every ~500 inferences. If you notice that the computational overhead is too great,
+you can reduce the update frequency to reduce database reads.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3664,14 +3664,13 @@ update_period_s = 60
 - **Type:** float
 - **Required:** no
 
-The minimum sampling probability for each candidate variant. Must be nonnegative. Note that
-`min_prob * number_of_candidate_variants` must not exceed 1.0, since the minimum probabilities for all candidate variants
-must sum to at most 1.0.
+The minimum sampling probability for each candidate variant. Must be nonnegative. Note that `min_prob` times the number
+of candidate_variants` must not exceed 1.0, since the minimum probabilities for all candidate variants must sum to at most 1.0.
 
 The aim of a `track_and_stop` experiment is to identify an epsilon-best variant, without necessarily differentiating
-sub-optimal variants, so the primary use for this field is to enable the user to learn about the performance of
-sub-optimal variants. Note that this field has no effect once `track_and_stop` picks a winner arm, since at that point
-random sampling ceases and the winner variant is used exclusively.
+sub-optimal variants, so the primary use for this field is to enable the user to ensure that sufficient data is
+gather to learn about the performance of sub-optimal variants. Note that this field has no effect once `track_and_stop`
+picks a winner arm, since at that point random sampling ceases and the winner variant is used exclusively.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
