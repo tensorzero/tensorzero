@@ -110,7 +110,11 @@ pub async fn check_key(
 }
 
 /// Marks an API key as disabled in the database by its public_id
-pub async fn disable_key(public_id: &str, pool: &PgPool) -> Result<DateTime<Utc>, TensorZeroAuthError> {
+/// Returns the `disabled_at` timestamp that was set in the database.
+pub async fn disable_key(
+    public_id: &str,
+    pool: &PgPool,
+) -> Result<DateTime<Utc>, TensorZeroAuthError> {
     // Round to microseconds, since postgres only has microsecond precision
     // This ensures that the value we return matches the value we set in the database.
     let now = Utc::now().round_subsecs(6);

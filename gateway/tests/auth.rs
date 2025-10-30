@@ -70,7 +70,7 @@ async fn test_tensorzero_auth_enabled() {
 
     // The key should stop working after we disable it
     let disabled_at = tensorzero_auth::postgres::disable_key(
-        &TensorZeroApiKey::parse(key.expose_secret()).unwrap(),
+        &TensorZeroApiKey::parse(key.expose_secret()).unwrap().public_id,
         postgres_pool,
     )
     .await
@@ -176,7 +176,7 @@ async fn test_tensorzero_missing_auth() {
             .unwrap();
 
     let disabled_at = tensorzero_auth::postgres::disable_key(
-        &TensorZeroApiKey::parse(disabled_key.expose_secret()).unwrap(),
+        &TensorZeroApiKey::parse(disabled_key.expose_secret()).unwrap().public_id,
         postgres_pool,
     )
     .await
