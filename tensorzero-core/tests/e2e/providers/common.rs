@@ -730,7 +730,7 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-3-5-sonnet-20241022"
+model = "anthropic::claude-sonnet-4-5-20250929"
 
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"

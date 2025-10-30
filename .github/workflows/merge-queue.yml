@@ -218,6 +218,10 @@ jobs:
         run: |
           ./ci/run-provider-proxy.sh ci
 
+      # TODO - get rid of this when the merge queue has a freshly-build gateway image available
+      - name: Manually run the latest postgres migrations
+        run: cargo run-e2e --run-postgres-migrations
+
       - name: Launch the gateway for E2E tests
         timeout-minutes: 2
         run: |
