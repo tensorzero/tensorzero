@@ -82,11 +82,9 @@ function ApiKeyRow({
       </TableCell>
       <TableCell className="w-0">
         <div className="text-right">
-          <ReadOnlyGuard
-            asChild
-            onClick={() => !isDisabled && onDelete(apiKey.public_id)}
-          >
+          <ReadOnlyGuard asChild>
             <Button
+              onClick={() => !isDisabled && onDelete(apiKey.public_id)}
               variant="ghost"
               size="icon"
               className="opacity-60 transition-opacity hover:opacity-100"
