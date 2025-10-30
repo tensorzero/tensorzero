@@ -250,11 +250,11 @@ pub enum CreateDatapointsFromInferenceRequestParams {
     },
 }
 
-/// Response from creating datapoints from inferences.
+/// Response from creating datapoints.
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct CreateDatapointsFromInferenceResponse {
+pub struct CreateDatapointsResponse {
     /// The IDs of the newly-generated datapoints.
     pub ids: Vec<Uuid>,
 }
