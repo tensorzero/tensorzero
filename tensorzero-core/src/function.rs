@@ -402,6 +402,7 @@ impl FunctionConfig {
             },
             tool_choice: Some(db_insert.tool_choice),
             parallel_tool_calls: db_insert.parallel_tool_calls,
+            // TODO(#4271): store and restore the provider_tools from DB
             provider_tools: None,
         }
     }

@@ -1025,6 +1025,7 @@ pub async fn write_completed_batch_inference<'a>(
                 Ok(config) => config,
                 Err(_) => {
                     // Skip this inference if we can't convert the tool config
+                    // Error will be logged on construction in `into_tool_call_config`
                     continue;
                 }
             },
