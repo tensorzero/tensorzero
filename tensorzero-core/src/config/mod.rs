@@ -691,8 +691,8 @@ impl Config {
         // Use an empty glob, and validate credentials
         Self::load_from_path_optional_verify_credentials_allow_empty_glob(
             &ConfigFileGlob::new_empty(),
-            false,
             true,
+            false,
         )
         .await
     }
