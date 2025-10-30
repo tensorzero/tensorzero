@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+# cd to the directory of this script
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
 # ------------------------------------------------------------------------------
 # Generate and publish Allure Report to testing-dashboard GitHub Pages
 # ------------------------------------------------------------------------------
