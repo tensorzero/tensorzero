@@ -21,6 +21,7 @@ use crate::inference::types::Thought;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
 pub mod delayed_error;
+pub use delayed_error::DelayedError;
 
 /// Controls whether to include raw request/response details in error output
 ///
