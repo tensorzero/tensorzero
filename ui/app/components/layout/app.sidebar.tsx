@@ -84,16 +84,6 @@ const navigation: NavigationSection[] = [
     ],
   },
   {
-    title: "Operations",
-    items: [
-      {
-        title: "API Keys",
-        url: "/api-keys",
-        icon: KeyRound,
-      },
-    ],
-  },
-  {
     title: "Workflows",
     items: [
       {
@@ -115,6 +105,16 @@ const navigation: NavigationSection[] = [
         title: "Workflow Evaluations",
         url: "/workflow_evaluations",
         icon: SequenceChecks,
+      },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      {
+        title: "TensorZero API Keys",
+        url: "/api-keys",
+        icon: KeyRound,
       },
     ],
   },
