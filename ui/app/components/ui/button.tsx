@@ -49,7 +49,7 @@ const ButtonContext = React.createContext<ButtonContextValue | null>(null);
 ButtonContext.displayName = "ButtonContext";
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+  extends React.ComponentPropsWithRef<"button">,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean;
   /**
@@ -60,45 +60,39 @@ export interface ButtonProps
   slotRight?: React.ReactNode;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  (
-    {
-      className,
-      variant = "default",
-      size = "default",
-      asChild = false,
-      children,
-      slotLeft,
-      slotRight,
-      ...props
-    },
-    ref,
-  ) => {
-    const Comp = asChild ? Slot.Root : "button";
-    const child = asChild ? (
-      <Slot.Slottable>{children}</Slot.Slottable>
-    ) : (
-      children
-    );
+const Button: React.FC<ButtonProps> = ({
+  className,
+  variant = "default",
+  size = "default",
+  asChild = false,
+  children,
+  slotLeft,
+  slotRight,
+  ...props
+}) => {
+  const Comp = asChild ? Slot.Root : "button";
+  const child = asChild ? (
+    <Slot.Slottable>{children}</Slot.Slottable>
+  ) : (
+    children
+  );
 
-    return (
-      <Comp
-        className={cn(
-          "cursor-pointer",
-          buttonVariants({ variant, size, className }),
-        )}
-        ref={ref}
-        {...props}
-      >
-        <ButtonContext value={{ variant, size }}>
-          {slotLeft}
-          {child}
-          {slotRight}
-        </ButtonContext>
-      </Comp>
-    );
-  },
-);
+  return (
+    <Comp
+      className={cn(
+        "cursor-pointer",
+        buttonVariants({ variant, size, className }),
+      )}
+      {...props}
+    >
+      <ButtonContext value={{ variant, size }}>
+        {slotLeft}
+        {child}
+        {slotRight}
+      </ButtonContext>
+    </Comp>
+  );
+};
 Button.displayName = "Button";
 
 const buttonIconVariants = cva(null, {

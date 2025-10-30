@@ -12,5 +12,6 @@ export default {
   // https://github.com/remix-run/react-router/issues/12786#issuecomment-2634033513
   future: {
     unstable_optimizeDeps: true,
+    v8_middleware: true,
   },
 } satisfies Config;

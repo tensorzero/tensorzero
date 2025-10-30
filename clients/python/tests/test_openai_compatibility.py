@@ -963,8 +963,9 @@ async def test_async_json_invalid_system(async_openai_client):
             messages=messages,
             model="tensorzero::function_name::json_success",
         )
-    assert "Invalid request to OpenAI-compatible endpoint: System message must be a text content block" in str(
-        exc_info.value
+    assert (
+        "Invalid request to OpenAI-compatible endpoint: System message must contain only text or template content blocks"
+        in str(exc_info.value)
     )
 
 

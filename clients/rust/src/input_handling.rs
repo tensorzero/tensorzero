@@ -52,8 +52,8 @@ fn resolved_input_message_content_to_client_input_message_content(
         ResolvedInputMessageContent::ToolResult(tool_result) => {
             ClientInputMessageContent::ToolResult(tool_result)
         }
-        ResolvedInputMessageContent::RawText { value } => {
-            ClientInputMessageContent::RawText { value }
+        ResolvedInputMessageContent::RawText(raw_text) => {
+            ClientInputMessageContent::RawText(raw_text)
         }
         ResolvedInputMessageContent::Thought(thought) => {
             ClientInputMessageContent::Thought(thought)
@@ -68,13 +68,9 @@ fn resolved_input_message_content_to_client_input_message_content(
                 data,
             }))
         }
-        ResolvedInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => ClientInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        },
+        ResolvedInputMessageContent::Unknown(unknown) => {
+            ClientInputMessageContent::Unknown(unknown)
+        }
     }
 }
 

@@ -20,17 +20,11 @@ use crate::tool::ToolCallConfigDatabaseInsert;
 /// Datapoint types that are directly serialized and inserted into ClickHouse.
 /// These should be internal-only types but are exposed to tensorzero-node.
 #[derive(Debug, Deserialize, Clone)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
 pub enum DatapointInsert {
-    #[serde(rename = "chat")]
     Chat(ChatInferenceDatapointInsert),
-    #[serde(rename = "json")]
     Json(JsonInferenceDatapointInsert),
 }
 
-#[cfg(any(test, feature = "e2e_tests"))]
 impl DatapointInsert {
     pub fn id(&self) -> Uuid {
         match self {
@@ -44,8 +38,6 @@ impl DatapointInsert {
 /// the structure of the ChatInferenceDatapoint table in ClickHouse.
 /// Theis should be an internal-only type, but it's exposed to tensorzero-node.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
 pub struct ChatInferenceDatapointInsert {
     /// Name of the dataset to write to. Required.
     pub dataset_name: String,
@@ -106,8 +98,6 @@ pub struct ChatInferenceDatapointInsert {
 /// the structure of the JsonInferenceDatapoint table in ClickHouse.
 /// Theis should be an internal-only type, but it's exposed to tensorzero-node.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export, optional_fields))]
 pub struct JsonInferenceDatapointInsert {
     /// Name of the dataset to write to. Required.
     pub dataset_name: String,
@@ -346,10 +336,6 @@ pub trait DatasetQueries {
     /// Marks a datapoint as stale by inserting a new row with staled_at set to now
     async fn stale_datapoint(&self, params: &StaleDatapointParams) -> Result<(), Error>;
 
-    /// Inserts a single new datapoint into the dataset
-    /// TODO(shuyangli): To deprecate in favor of `insert_datapoints`
-    async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error>;
-
     /// Inserts a batch of datapoints into the database
     /// Internally separates chat and JSON datapoints and writes them to the appropriate tables
     /// Returns the number of rows written.
@@ -373,4 +359,17 @@ pub trait DatasetQueries {
 
     /// Gets multiple datapoints with various filters and pagination
     async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error>;
+
+    /// Deletes datapoints or datasets by marking specified datapoints as stale.
+    /// This is a soft deletion, so evaluation runs will still refer to it.
+    ///
+    /// If `datapoint_ids` is None, all datapoints in the dataset will be deleted.
+    /// Otherwise, it's required to be non-empty, and only those datapoints with the given IDs will be deleted.
+    ///
+    /// Returns the number of datapoints that were deleted.
+    async fn delete_datapoints(
+        &self,
+        dataset_name: &str,
+        datapoint_ids: Option<&[Uuid]>,
+    ) -> Result<u64, Error>;
 }

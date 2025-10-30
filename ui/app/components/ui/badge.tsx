@@ -13,6 +13,7 @@ const badgeVariants = cva(
         destructive:
           "border-transparent bg-destructive text-destructive-foreground",
         outline: "text-foreground",
+        warning: "bg-yellow-600 text-white",
       },
       shadow: {
         true: "shadow-sm",

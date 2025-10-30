@@ -49,6 +49,7 @@ use tokio_stream::wrappers::IntervalStream;
 use tracing::field::Empty;
 
 use crate::observability::exporter_wrapper::TensorZeroExporterWrapper;
+use crate::observability::span_leak_detector::SpanLeakDetector;
 use axum::extract::MatchedPath;
 use axum::extract::State;
 use axum::middleware::Next;
@@ -88,7 +89,9 @@ use crate::error::{Error, ErrorDetails};
 use crate::observability::tracing_bug::apply_filter_fixing_tracing_bug;
 
 mod exporter_wrapper;
+mod span_leak_detector;
 pub mod tracing_bug;
+pub mod warn_early_drop;
 
 #[derive(Clone, Debug, Default, ValueEnum)]
 pub enum LogFormat {
@@ -408,9 +411,9 @@ async fn shutdown_otel(provider: SdkTracerProvider) -> Result<(), Error> {
 /// all emitted spans.
 ///
 /// If `override_exporter` is `None`, the default OTLP exporter will be used,
-/// which is configured via environment variables (e..g `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`):
+/// which is configured via environment variables (e.g. `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`):
 /// https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/protocol/exporter.md#endpoint-urls-for-otlphttp
-pub fn build_opentelemetry_layer<T: SpanExporter + 'static>(
+fn build_opentelemetry_layer<T: SpanExporter + 'static>(
     override_exporter: Option<T>,
 ) -> Result<(DelayedOtelEnableHandle, impl Layer<Registry>, TracerWrapper), Error> {
     let (otel_reload_filter, reload_handle) = tracing_subscriber::reload::Layer::new(Box::new(
@@ -952,6 +955,8 @@ pub struct ObservabilityHandle {
     pub delayed_otel: Result<DelayedOtelEnableHandle, Error>,
     pub delayed_debug_logs: DelayedDebugLogs,
     pub otel_tracer: Option<Arc<TracerWrapper>>,
+    // In `e2e_tests` mode, we enable a `SpanLeakDetector` to detect spans that were not closed when the gateway finished shutting down.
+    pub leak_detector: Option<SpanLeakDetector>,
 }
 
 impl TracerWrapper {
@@ -980,9 +985,10 @@ impl TracerWrapper {
     ///
     /// This method will correctly wait for any processing related to *previous* requests to finish
     /// (e.g. rate-limiting `return_tickets` calls) to finish before shutting down the exporters.
-    pub async fn shutdown(&self) {
+    pub async fn shutdown(&self, leak_detector: Option<&SpanLeakDetector>) {
         // See the docs on `InFlightSpan` for more information.
-        wait_for_tasks_with_logging(&self.in_flight_spans, "request processing").await;
+        wait_for_tasks_with_logging(&self.in_flight_spans, "request processing", leak_detector)
+            .await;
         // Now that all of our OpenTelemetry spans have closed (including spans in background tasks),
         // shut down all of our custom tracers.
         // This might happen in parallel for the same custom tracer (if moka evicts its cache entry), but opentelemetry
@@ -996,12 +1002,21 @@ impl TracerWrapper {
         self.shutdown_tasks
             .spawn(shutdown_otel(self.default_provider.clone()));
         // Then, wait for all all of the shutdown tasks to finish.
-        wait_for_tasks_with_logging(&self.shutdown_tasks, "trace exporter shutdown").await;
+        wait_for_tasks_with_logging(
+            &self.shutdown_tasks,
+            "trace exporter shutdown",
+            leak_detector,
+        )
+        .await;
     }
 }
 
 // Helper function that waits for a TaskTracker to finish, logging the current task count every 5 seconds.
-async fn wait_for_tasks_with_logging(tasks: &TaskTracker, name: &str) {
+async fn wait_for_tasks_with_logging(
+    tasks: &TaskTracker,
+    name: &str,
+    leak_detector: Option<&SpanLeakDetector>,
+) {
     tasks.close();
     IntervalStream::new(tokio::time::interval(Duration::from_secs(5)))
         .take_until(tasks.wait())
@@ -1010,6 +1025,9 @@ async fn wait_for_tasks_with_logging(tasks: &TaskTracker, name: &str) {
                 "Waiting for {name} tasks to finish: {} tasks remaining",
                 tasks.len()
             );
+            if let Some(leak_detector) = leak_detector {
+                leak_detector.print_active_spans();
+            }
         })
         .await;
     tracing::info!("{name} tasks finished");
@@ -1099,6 +1117,12 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
         LogFormat::Json => Box::new(tracing_subscriber::fmt::layer().json()),
     };
 
+    let leak_detector = if cfg!(feature = "e2e_tests") {
+        Some(SpanLeakDetector::new())
+    } else {
+        None
+    };
+
     let otel_data = build_opentelemetry_layer(exporter_override);
     let (delayed_otel, otel_layer, tracer_wrapper) = match otel_data {
         Ok((delayed_otel, otel_layer, tracer_wrapper)) => (
@@ -1108,12 +1132,14 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
         ),
         Err(e) => (Err(e), None, None),
     };
+
     // IMPORTANT: If you add any new layers here that have per-layer filtering applied
     // you *MUST* call `apply_filter_fixing_tracing_bug` instead of `layer.with_filter(filter)`
     // See the docs for `apply_filter_fixing_tracing_bug` for more details.
     tracing_subscriber::registry()
         .with(otel_layer)
         .with(apply_filter_fixing_tracing_bug(log_layer, log_level))
+        .with(leak_detector.clone())
         .init();
 
     // If `RUST_LOG` is explicitly set, it takes precedence over `gateway.debug`,
@@ -1141,6 +1167,7 @@ pub async fn setup_observability_with_exporter_override<T: SpanExporter + 'stati
         delayed_otel,
         delayed_debug_logs,
         otel_tracer: tracer_wrapper,
+        leak_detector,
     })
 }
 

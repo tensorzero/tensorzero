@@ -37,7 +37,7 @@ async fn test_bad_text_input() {
                 ]},
 
         }),
-        "input.messages[0].content[0]: Unknown key 'bad_field' in text content",
+        "input.messages[0].content[0]: Unknown key `bad_field` in text content",
     )
     .await;
 
@@ -100,7 +100,7 @@ async fn test_bad_text_input() {
                 ]},
 
         }),
-        "input.messages[0].content[0]: Error deserializing 'text': invalid type: sequence, expected a string",
+        "input.messages[0].content[0]: Error deserializing `text`: invalid type: sequence, expected a string",
     )
     .await;
 
@@ -121,7 +121,7 @@ async fn test_bad_text_input() {
                 ]},
 
         }),
-        "input.messages[0].content[0]: Error deserializing 'arguments': invalid type: string \"Not an object\", expected a map",
+        "input.messages[0].content[0]: Error deserializing `arguments`: invalid type: string \"Not an object\", expected a map",
     )
     .await;
 }

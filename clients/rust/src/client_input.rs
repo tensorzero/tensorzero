@@ -1,9 +1,11 @@
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_json::Value;
 use serde_untagged::UntaggedEnumVisitor;
 use tensorzero_core::{
     error::Error,
-    inference::types::{File, InputMessageContent, Role, System, TemplateInput, TextKind, Thought},
+    inference::types::{
+        File, InputMessageContent, RawText, Role, System, Template, Text, TextKind, Thought,
+        Unknown,
+    },
     tool::{ToolCallInput, ToolResult},
 };
 use tensorzero_derive::TensorZeroDeserialize;
@@ -39,32 +41,35 @@ pub struct ClientInputMessage {
 #[ts(export)]
 pub enum ClientInputMessageContent {
     Text(TextKind),
-    Template(TemplateInput),
+    Template(Template),
     ToolCall(ToolCallInput),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(File),
     /// An unknown content block type, used to allow passing provider-specific
     /// content blocks (e.g. Anthropic's "redacted_thinking") in and out
     /// of TensorZero.
-    /// The 'data' field hold the original content block from the provider,
+    /// The `data` field holds the original content block from the provider,
     /// without any validation or transformation by TensorZero.
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
-    // We may extend this in the future to include other types of content
+    Unknown(Unknown),
 }
 
-impl TryFrom<ClientInputMessageContent> for InputMessageContent {
-    type Error = Error;
-    fn try_from(this: ClientInputMessageContent) -> Result<Self, Error> {
-        Ok(match this {
-            ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
+impl ClientInputMessageContent {
+    pub fn to_input_message_content(self, role: &Role) -> Result<InputMessageContent, Error> {
+        use tensorzero_core::inference::types::Text;
+
+        Ok(match self {
+            ClientInputMessageContent::Text(TextKind::Text { text }) => {
+                InputMessageContent::Text(Text { text })
+            }
+            ClientInputMessageContent::Text(TextKind::Arguments { arguments }) => {
+                InputMessageContent::Template(Template {
+                    name: role.implicit_template_name().to_string(),
+                    arguments,
+                })
+            }
             ClientInputMessageContent::Template(template) => {
                 InputMessageContent::Template(template)
             }
@@ -74,16 +79,10 @@ impl TryFrom<ClientInputMessageContent> for InputMessageContent {
             ClientInputMessageContent::ToolResult(tool_result) => {
                 InputMessageContent::ToolResult(tool_result)
             }
-            ClientInputMessageContent::RawText { value } => InputMessageContent::RawText { value },
+            ClientInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
             ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
             ClientInputMessageContent::File(image) => InputMessageContent::File(image),
-            ClientInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => InputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            ClientInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
         })
     }
 }
@@ -124,7 +123,7 @@ pub(super) fn test_client_input_to_input(
                     role,
                     content: content
                         .into_iter()
-                        .map(test_client_to_message_content)
+                        .map(|content| test_client_to_message_content(role, content))
                         .collect(),
                 }
             })
@@ -133,10 +132,19 @@ pub(super) fn test_client_input_to_input(
 }
 
 pub(super) fn test_client_to_message_content(
+    role: Role,
     content: ClientInputMessageContent,
 ) -> InputMessageContent {
     match content {
-        ClientInputMessageContent::Text(text) => InputMessageContent::Text(text),
+        ClientInputMessageContent::Text(TextKind::Text { text }) => {
+            InputMessageContent::Text(Text { text })
+        }
+        ClientInputMessageContent::Text(TextKind::Arguments { arguments }) => {
+            InputMessageContent::Template(Template {
+                name: role.to_string(),
+                arguments,
+            })
+        }
         ClientInputMessageContent::Template(template) => InputMessageContent::Template(template),
         ClientInputMessageContent::ToolCall(ToolCallInput {
             id,
@@ -154,15 +162,9 @@ pub(super) fn test_client_to_message_content(
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)
         }
-        ClientInputMessageContent::RawText { value } => InputMessageContent::RawText { value },
+        ClientInputMessageContent::RawText(raw_text) => InputMessageContent::RawText(raw_text),
         ClientInputMessageContent::Thought(thought) => InputMessageContent::Thought(thought),
         ClientInputMessageContent::File(image) => InputMessageContent::File(image),
-        ClientInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => InputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        },
+        ClientInputMessageContent::Unknown(unknown) => InputMessageContent::Unknown(unknown),
     }
 }
