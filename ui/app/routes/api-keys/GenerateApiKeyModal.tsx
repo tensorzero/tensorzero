@@ -154,7 +154,7 @@ export function GenerateApiKeyModal({
 
           <DialogFooter>
             {apiKey ? (
-              <Button type="button" onClick={onClose}>
+              <Button type="button" variant="outline" onClick={onClose}>
                 Close
               </Button>
             ) : (
