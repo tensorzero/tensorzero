@@ -33,8 +33,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const postgresClient = await getPostgresClient();
-  // Assume listApiKeys now accepts offset and limit, and returns { apiKeys, total }
-  const apiKeys = await postgresClient.listApiKeys(offset, pageSize);
+  const apiKeys = await postgresClient.listApiKeys(pageSize, offset);
 
   return {
     apiKeys,
@@ -141,9 +140,7 @@ export default function AuthPage({ loaderData }: Route.ComponentProps) {
           onPreviousPage={handlePreviousPage}
           onNextPage={handleNextPage}
           disablePrevious={offset <= 0}
-          // TODO: should we query length?
-          // disableNext={offset + pageSize >= totalApiKeys}
-          disableNext={false}
+          disableNext={apiKeys.length < pageSize}
         />
       </SectionLayout>
       <GenerateApiKeyModal

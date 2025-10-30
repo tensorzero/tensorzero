@@ -1,6 +1,4 @@
 use secrecy::ExposeSecret;
-use serde_json;
-use tensorzero_auth;
 use tensorzero_core::{
     config::Config, db::postgres::PostgresConnectionInfo, utils::gateway::setup_postgres,
 };
@@ -47,15 +45,15 @@ impl PostgresClient {
     #[napi]
     pub async fn list_api_keys(
         &self,
-        offset: Option<u32>,
         limit: Option<u32>,
+        offset: Option<u32>,
     ) -> Result<String, napi::Error> {
         let pool = self
             .connection_info
             .get_alpha_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
-        let keys = tensorzero_auth::postgres::list_key_info(None, offset, limit, pool)
+        let keys = tensorzero_auth::postgres::list_key_info(None, limit, offset, pool)
             .await
             .map_err(|e| napi::Error::from_reason(format!("Failed to list API keys: {e}")))?;
 
