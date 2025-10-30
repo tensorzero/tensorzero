@@ -487,14 +487,20 @@ async fn throttled_get_function_info(
 
     // Poll every 500ms until the deadline is reached.
     loop {
-        match get_function_info(connection_info, metric_config_level, target_id).await {
-            Ok(identifier) => return Ok(identifier),
-            Err(err) => {
+        // If an error occurs during lookup (distinct from the target_id not existing), we bail out immediately.
+        match get_function_info(connection_info, metric_config_level, target_id).await? {
+            Some(identifier) => return Ok(identifier),
+            None => {
                 if Instant::now() >= deadline {
+                    let identifier_type = match metric_config_level {
+                        MetricConfigLevel::Inference => "Inference",
+                        MetricConfigLevel::Episode => "Episode",
+                    };
                     // We log here since this means we were not able to find the target_id in the database
                     // and are timing out.
-                    err.log();
-                    return Err(err);
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("{identifier_type} ID: {target_id} does not exist"),
+                    }));
                 } else {
                     tracing::info!(
                         "Failed to find function name for target_id: {target_id}. Retrying..."
@@ -518,18 +524,14 @@ async fn throttled_get_function_info(
 ///
 /// * On success:
 ///   - Returns a `FunctionInfo` containing the function name and type.
+///   - Returns `None` if the `target_id` does not exist.
 /// * On failure:
-///   - Returns an `Error` if the `target_id` is invalid or does not exist.
+///   - Returns an `Error` if the `target_id` exists, but is invalid
 async fn get_function_info(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<FunctionInfo, Error> {
-    let identifier_type = match metric_config_level {
-        MetricConfigLevel::Inference => "Inference",
-        MetricConfigLevel::Episode => "Episode",
-    };
-
+) -> Result<Option<FunctionInfo>, Error> {
     let query = match metric_config_level {
         MetricConfigLevel::Inference => format!(
             "SELECT function_name as name, function_type, variant_name, episode_id
@@ -552,16 +554,15 @@ async fn get_function_info(
         .run_query_synchronous_no_params(query)
         .await?;
     if response.response.is_empty() {
-        // We don't want to log here since this can happen if we send feedback immediately after the target is created.
-        return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
-            message: format!("{identifier_type} ID: {target_id} does not exist"),
-        }));
+        return Ok(None);
     };
-    serde_json::from_str(&response.response).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: e.to_string(),
-        })
-    })
+    Ok(Some(serde_json::from_str(&response.response).map_err(
+        |e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        },
+    )?))
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
