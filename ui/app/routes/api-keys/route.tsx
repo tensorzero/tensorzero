@@ -34,15 +34,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const postgresClient = await getPostgresClient();
-  const apiKeysJson = await postgresClient.listApiKeys();
-  const allApiKeys: KeyInfo[] = JSON.parse(apiKeysJson);
-
-  // Paginate the results
-  const apiKeys = allApiKeys.slice(offset, offset + pageSize);
-  const totalApiKeys = allApiKeys.length;
+  // Assume listApiKeys now accepts offset and limit, and returns { apiKeys, total }
+  const { apiKeys, total } = await postgresClient.listApiKeys({ offset, limit: pageSize });
 
   return {
-    totalApiKeys,
+    totalApiKeys: total,
     apiKeys,
     offset,
     pageSize,
