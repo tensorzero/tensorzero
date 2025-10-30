@@ -15,7 +15,7 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsFromInferenceResponse,
+    CreateDatapointsResponse,
 };
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/from_inferences` endpoint.
@@ -26,7 +26,7 @@ pub async fn create_from_inferences_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<CreateDatapointsFromInferenceRequest>,
-) -> Result<Json<CreateDatapointsFromInferenceResponse>, Error> {
+) -> Result<Json<CreateDatapointsResponse>, Error> {
     let response = create_from_inferences(
         &app_state.config,
         &app_state.clickhouse_connection_info,
@@ -47,7 +47,7 @@ async fn create_from_inferences(
     clickhouse: &(impl InferenceQueries + DatasetQueries),
     dataset_name: String,
     request: CreateDatapointsFromInferenceRequest,
-) -> Result<CreateDatapointsFromInferenceResponse, Error> {
+) -> Result<CreateDatapointsResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
     // If output_source is not specified, default to Inference.
@@ -130,7 +130,7 @@ async fn create_from_inferences(
         clickhouse.insert_datapoints(&datapoints_to_insert).await?;
     }
 
-    Ok(CreateDatapointsFromInferenceResponse { ids })
+    Ok(CreateDatapointsResponse { ids })
 }
 
 #[cfg(test)]

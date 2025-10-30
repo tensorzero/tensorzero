@@ -315,14 +315,14 @@ async fn prepare_json_update(
             Some(value) => {
                 // Validate the output with schema before saving.
                 StaticJSONSchema::from_value(updated_datapoint.output_schema.clone())?
-            .validate(&value)
-            .map_err(|e| {
-                Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Provided output for datapoint {existing_datapoint_id} does not match function output schema: {e}",
-                    ),
-                })
-            })?;
+                    .validate(&value)
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "Provided output for datapoint {existing_datapoint_id} does not match function output schema: {e}",
+                            ),
+                        })
+                    })?;
 
                 Some(JsonInferenceOutput {
                     raw: Some(serde_json::to_string(&value).map_err(|e| {
