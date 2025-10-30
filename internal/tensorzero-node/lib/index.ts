@@ -436,8 +436,10 @@ export class DatabaseClient {
   }
 }
 
-/// Wrapper class for type safety and convenience
-/// around the native PostgresClient
+/**
+ * Wrapper class for type safety and convenience
+ * around the native PostgresClient
+ */
 export class PostgresClient {
   private nativePostgresClient: NativePostgresClientType;
 
