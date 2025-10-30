@@ -136,6 +136,10 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         .route("/status", get(endpoints::status::status_handler))
         .route("/health", get(endpoints::status::health_handler))
         .route(
+            "/variant_sampling_probabilities",
+            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_handler),
+        )
+        .route(
             "/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::create_datapoints_handler),
         )
