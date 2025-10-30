@@ -30,6 +30,7 @@ use crate::tool::{create_implicit_tool_call_config, ToolChoice};
 /// example of a built-in chat function with template variable support.
 ///
 /// Supports system template with a `greeting` variable.
+#[cfg(feature = "e2e_tests")]
 fn get_hello_chat_function() -> Result<Arc<FunctionConfig>, Error> {
     // Define a simple schema that accepts a "greeting" variable
     let system_schema = StaticJSONSchema::from_value(serde_json::json!({
@@ -70,6 +71,7 @@ fn get_hello_chat_function() -> Result<Arc<FunctionConfig>, Error> {
 ///
 /// This is a simple variant-less JSON function that serves as a basic
 /// example of a built-in JSON function.
+#[cfg(feature = "e2e_tests")]
 fn get_hello_json_function() -> Arc<FunctionConfig> {
     // Use default schema (no validation)
     let output_schema = StaticJSONSchema::default();
@@ -98,18 +100,21 @@ fn get_hello_json_function() -> Arc<FunctionConfig> {
 /// function count displayed on the homepage.
 pub fn get_all_built_in_functions() -> Result<HashMap<String, Arc<FunctionConfig>>, Error> {
     let mut functions = HashMap::new();
-    functions.insert(
-        "tensorzero::hello_chat".to_string(),
-        get_hello_chat_function()?,
-    );
-    functions.insert(
-        "tensorzero::hello_json".to_string(),
-        get_hello_json_function(),
-    );
+    #[cfg(feature = "e2e_tests")]
+    {
+        functions.insert(
+            "tensorzero::hello_chat".to_string(),
+            get_hello_chat_function()?,
+        );
+        functions.insert(
+            "tensorzero::hello_json".to_string(),
+            get_hello_json_function(),
+        );
+    }
     Ok(functions)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "e2e_tests"))]
 mod tests {
     use super::*;
 
