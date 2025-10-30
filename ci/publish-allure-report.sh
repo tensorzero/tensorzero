@@ -139,9 +139,9 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
         continue
     fi
 
-    if [ -d "gh-pages-repo/allure-history" ]; then
+    if [ -d "gh-pages-repo/history" ]; then
         echo "Found existing Allure history"
-        cp -r gh-pages-repo/allure-history allure-results/allure-history
+        cp -r gh-pages-repo/history allure-results/history
     else
         echo "No existing Allure history found, starting fresh"
     fi
@@ -157,11 +157,6 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
         ATTEMPT=$((ATTEMPT + 1))
         continue
     fi
-
-    # Copy history for next run
-    echo "Copying history for next run..."
-    mkdir -p allure-report/allure-history
-    cp -r allure-report/history/* allure-report/allure-history/ 2>/dev/null || true
 
     # ------------------------------------------------------------------------------
     # Update gh-pages branch in testing-dashboard
