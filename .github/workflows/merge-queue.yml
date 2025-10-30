@@ -373,8 +373,7 @@ jobs:
 
       - name: Launch ClickHouse container for E2E tests
         run: |
-          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
 
       - name: Set up .env file for production deployment tests
         run: |
