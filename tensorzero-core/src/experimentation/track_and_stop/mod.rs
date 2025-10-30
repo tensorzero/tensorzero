@@ -256,12 +256,29 @@ impl Nursery {
 pub struct UninitializedTrackAndStopConfig {
     metric: String,
     candidate_variants: Vec<String>,
+    #[serde(default)]
     fallback_variants: Vec<String>,
+    #[serde(default = "default_min_samples_per_variant")]
     min_samples_per_variant: u64,
+    #[serde(default = "default_delta")]
     delta: f64,
+    #[serde(default)]
     epsilon: f64,
+    #[serde(default = "default_update_period_s")]
     update_period_s: u64,
     min_prob: Option<f64>,
+}
+
+fn default_min_samples_per_variant() -> u64 {
+    10
+}
+
+fn default_delta() -> f64 {
+    0.05
+}
+
+fn default_update_period_s() -> u64 {
+    60
 }
 
 impl UninitializedTrackAndStopConfig {

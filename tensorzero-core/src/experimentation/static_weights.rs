@@ -93,9 +93,11 @@ pub(crate) fn sample_static_weights(
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct StaticWeightsConfig {
-    // Map from variant name to weight. We enforce that weights are positive at construction time.
+    // Map from variant name to weight. Zero weights exclude variants from weighted sampling.
+    // We enforce that weights are non-negative during setup validation.
     candidate_variants: BTreeMap<String, f64>,
     // list of fallback variants (we will uniformly sample from these at inference time)
+    #[serde(default)]
     fallback_variants: Vec<String>,
 }
 
@@ -130,7 +132,7 @@ impl VariantSampler for StaticWeightsConfig {
         _postgres: &PostgresConnectionInfo,
         _cancel_token: CancellationToken,
     ) -> Result<(), Error> {
-        // We just assert that all weights are non-negative
+        // Validate that all weights are non-negative
         for weight in self.candidate_variants.values() {
             if *weight < 0.0 {
                 return Err(Error::new(ErrorDetails::Config {
@@ -138,6 +140,25 @@ impl VariantSampler for StaticWeightsConfig {
                 }));
             }
         }
+
+        // Check if there are any candidate variants with positive weight
+        let has_positive_weight = self.candidate_variants.values().any(|&w| w > 0.0);
+
+        if !has_positive_weight {
+            if self.fallback_variants.is_empty() {
+                return Err(Error::new(ErrorDetails::Config {
+                    message: format!(
+                        "Static weights config for function '{_function_name}' has no candidate variants with positive weight and no fallback variants. At least one is required."
+                    ),
+                }));
+            } else {
+                tracing::warn!(
+                    function_name = %_function_name,
+                    "Static weights config has no candidate variants with positive weight. Will use uniform sampling from fallback variants."
+                );
+            }
+        }
+
         Ok(())
     }
 
@@ -317,6 +338,77 @@ mod tests {
             .sample("test_function", episode_id, &mut active_variants, &postgres)
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_setup_error_no_positive_weights_no_fallbacks() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::new(),
+            fallback_variants: Vec::new(),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("no candidate variants with positive weight"));
+        assert!(err.to_string().contains("no fallback variants"));
+    }
+
+    #[tokio::test]
+    async fn test_setup_warning_no_positive_weights_with_fallbacks() {
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::new(),
+            fallback_variants: vec!["A".to_string(), "B".to_string()],
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        // Should succeed but log a warning
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_setup_error_zero_weights_no_fallbacks() {
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 0.0);
+        candidate_variants.insert("B".to_string(), 0.0);
+
+        let config = StaticWeightsConfig {
+            candidate_variants,
+            fallback_variants: Vec::new(),
+        };
+
+        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
+            as Arc<dyn FeedbackQueries + Send + Sync>;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let cancel_token = CancellationToken::new();
+
+        let result = config
+            .setup(db, "test_function", &postgres, cancel_token)
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("no candidate variants with positive weight"));
     }
 
     #[tokio::test]
