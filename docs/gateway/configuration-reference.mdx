@@ -3542,7 +3542,7 @@ candidate_variants = ["prompt-v1", "prompt-v2", "prompt-v3"]
 - **Required:** no
 
 An optional set of function variants to use as fallback options. Each variant must be defined via `[functions.function_name.variants.variant_name]`
-in the the `variants` sub-section (see above). If the set of `candidate_variants` is empty, or if inference fails with all of the
+in the the `variants` sub-section (see above). If inference fails with all of the
 `candidate_variants`, then variants will be sampled uniformly at random from `fallback_variants`.
 Feedback for these variants will not be used to guide the experiment; for example, if the experiment type is
 `track_and_stop`, the sampling probabilities will be dynamically updated based only on feedback for the `candidate_variants`.
@@ -3579,7 +3579,7 @@ metric = "task-completed"
 - **Type:** integer
 - **Required:** no (default: 10)
 
-The minimum number of samples per variant required before random sampling begins. Sampling from the `candidate_variants` will proceed
+The minimum number of samples per variant required before random sampling begins. Must be >= 1. Sampling from the `candidate_variants` will proceed
 round-robin (deterministically) until each variant has at least `min_samples_per_variant` feedback data points, at which point
 random sampling will begin. It is strongly recommended to set this value to at least 10 so that the feedback sample statistics can stabilize before they are used to guide the sampling probabilities.
 
@@ -3663,7 +3663,9 @@ update_period_s = 60
 - **Type:** float
 - **Required:** no
 
-The minimum sampling probability for each candidate variant. The aim of a `track_and_stop` experiment is to identify
+The minimum sampling probability for each candidate variant. Must be nonnegative. Note that `min_prob * number_of_candidate_variants` must not exceed 1.0, since the minimum probabilities for all candidate variants must sum to at most 1.0.
+
+The aim of a `track_and_stop` experiment is to identify
 an epsilon-best variant, without necessarily differentiating sub-optimal variants, so the primary use for this field is to enable the user
 to learn about the performance of sub-optimal variants. Note that this field has no effect once `track_and_stop` picks a winner arm,
 since at that point random sampling ceases and the winner variant is used exclusively.
