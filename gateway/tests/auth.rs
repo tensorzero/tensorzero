@@ -255,7 +255,7 @@ async fn test_tensorzero_missing_auth() {
         let text = bad_key_format_response.text().await.unwrap();
         assert_eq!(
             text,
-            "{\"error\":\"TensorZero authentication error: Invalid API key: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<short_id>-<long_key>`\"}"
+            "{\"error\":\"TensorZero authentication error: Invalid API key: Invalid format for TensorZero API key: API key must be of the form `sk-t0-<public_id>-<long_key>`\"}"
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
 
