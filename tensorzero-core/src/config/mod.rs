@@ -708,7 +708,7 @@ impl Config {
         let mut templates = TemplateConfig::new();
 
         // Load built-in functions first
-        let mut functions = built_in::get_all_built_in_functions();
+        let mut functions = built_in::get_all_built_in_functions()?;
 
         // Load user-defined functions and ensure they don't use tensorzero:: prefix
         let user_functions = uninitialized_config

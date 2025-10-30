@@ -2883,18 +2883,29 @@ async fn test_built_in_functions_loaded() {
         .await
         .expect("Failed to load config");
 
-    // Check that tensorzero::hello is available
-    assert!(config.functions.contains_key("tensorzero::hello"));
+    // Check that both built-in functions are available
+    assert!(config.functions.contains_key("tensorzero::hello_chat"));
+    assert!(config.functions.contains_key("tensorzero::hello_json"));
 
-    // Verify it's a Chat function with no variants
-    let hello_function = config.functions.get("tensorzero::hello").unwrap();
-    match &**hello_function {
+    // Verify hello_chat is a Chat function with no variants
+    let hello_chat = config.functions.get("tensorzero::hello_chat").unwrap();
+    match &**hello_chat {
         FunctionConfig::Chat(chat_config) => {
             assert!(chat_config.variants.is_empty());
             assert!(chat_config.tools.is_empty());
             assert!(chat_config.description.is_some());
         }
-        FunctionConfig::Json(_) => panic!("Expected tensorzero::hello to be a Chat function"),
+        FunctionConfig::Json(_) => panic!("Expected tensorzero::hello_chat to be a Chat function"),
+    }
+
+    // Verify hello_json is a JSON function with no variants
+    let hello_json = config.functions.get("tensorzero::hello_json").unwrap();
+    match &**hello_json {
+        FunctionConfig::Json(json_config) => {
+            assert!(json_config.variants.is_empty());
+            assert!(json_config.description.is_some());
+        }
+        FunctionConfig::Chat(_) => panic!("Expected tensorzero::hello_json to be a JSON function"),
     }
 }
 
@@ -2906,9 +2917,9 @@ async fn test_get_built_in_function() {
         .await
         .expect("Failed to load config");
 
-    // Should be able to get the built-in function
-    let result = config.get_function("tensorzero::hello");
-    assert!(result.is_ok());
+    // Should be able to get both built-in functions
+    assert!(config.get_function("tensorzero::hello_chat").is_ok());
+    assert!(config.get_function("tensorzero::hello_json").is_ok());
 }
 
 /// Test that built-in functions work alongside user-defined functions
@@ -2921,6 +2932,7 @@ async fn test_built_in_and_user_functions_coexist() {
         .expect("Failed to load config");
 
     // Check that both built-in and user functions exist
-    assert!(config.functions.contains_key("tensorzero::hello"));
+    assert!(config.functions.contains_key("tensorzero::hello_chat"));
+    assert!(config.functions.contains_key("tensorzero::hello_json"));
     assert!(config.functions.contains_key("generate_draft"));
 }
