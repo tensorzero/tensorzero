@@ -479,6 +479,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -541,6 +542,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -570,6 +572,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -601,6 +604,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,
