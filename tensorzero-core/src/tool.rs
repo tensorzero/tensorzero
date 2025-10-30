@@ -16,6 +16,20 @@ use crate::{
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
 
+/*  Key tool types in TensorZero
+ * - DynamicToolParams: the wire format for tool configuration info (flattened into struct body)
+ *       contains a disjoint set of information from that specified in FunctionConfig and config.tools
+ * - ToolCallConfig: the representation at inference time of what tool calls are possible
+ * - ToolCallConfigDatabaseInsert: the storage format for tool call configuration info
+ *     In a close-following PR @viraj will refactor this type.
+ * All of these types are convertible given access to the current Config. The conversion from ToolCallConfig
+ * to ToolCallConfigDatabaseInsert is temporarily lossy because we don't yet stored dynamic provider tools.
+ *
+ * Tool: represents a single Tool that could be called by an LLM. This will be generalized soon to an enum.
+ * ToolCall: represents a request by an LLM to call a tool.
+ * ToolResult: the response from a tool call.
+ */
+
 /* A Tool is a function that can be called by an LLM
  * We represent them in various ways depending on how they are configured by the user.
  * The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
