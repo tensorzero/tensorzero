@@ -692,7 +692,7 @@ impl Config {
         Self::load_from_path_optional_verify_credentials_allow_empty_glob(
             &ConfigFileGlob::new_empty(),
             true,
-            false,
+            true,
         )
         .await
     }
