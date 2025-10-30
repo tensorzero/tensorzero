@@ -453,8 +453,8 @@ export class PostgresClient {
     return this.nativePostgresClient.createApiKey(description);
   }
 
-  async listApiKeys(offset?: number, limit?: number): Promise<KeyInfo[]> {
-    const result = await this.nativePostgresClient.listApiKeys(offset, limit);
+  async listApiKeys(limit?: number, offset?: number): Promise<KeyInfo[]> {
+    const result = await this.nativePostgresClient.listApiKeys(limit, offset);
     return JSON.parse(result) as KeyInfo[];
   }
 
