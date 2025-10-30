@@ -3482,6 +3482,7 @@ Besides the type parameter, this variant has the same configuration options as t
 Please refer to that documentation to see what options are available.
 
 ## `[functions.function_name.experimentation]`
+
 The `[functions.function_name.experimentation]` section sets up an experiment over a set of `candidate_variants`.
 An experiment is a procedure for sampling function variants at inference time in order to learn about the relative
 performance of the variants. There are currently three types of experiment available: `uniform` experiments sample
@@ -3489,8 +3490,8 @@ variants uniformly at random, `static_weights` sample variants according to user
 experiments sample variants according to probabilities that dynamically update in a principled way as the experiment
 proceeds. See below for more info.
 
-Note that if this section is present, it overrides any `weight` values that are specified within individual function variant config
-blocks.
+Note that if this section is present, it overrides any `weight` values that are specified within individual function
+variant config blocks.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3526,8 +3527,9 @@ type = "track_and_stop"
 - **Type:** array of strings
 - **Required:** yes
 
-The set of function variants to include in the experiment. Each variant must be defined via `[functions.function_name.variants.variant_name]`
-in the the `variants` sub-section (see above). Variants that are not included in `candidate_variants` will not be sampled.
+The set of function variants to include in the experiment. Each variant must be defined via
+`[functions.function_name.variants.variant_name]` in the the `variants` sub-section (see above). Variants that are not
+included in `candidate_variants` will not be sampled.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3541,11 +3543,12 @@ candidate_variants = ["prompt-v1", "prompt-v2", "prompt-v3"]
 - **Type:** array of string
 - **Required:** no
 
-An optional set of function variants to use as fallback options. Each variant must be defined via `[functions.function_name.variants.variant_name]`
-in the the `variants` sub-section (see above). If inference fails with all of the
-`candidate_variants`, then variants will be sampled uniformly at random from `fallback_variants`.
+An optional set of function variants to use as fallback options. Each variant must be defined via
+`[functions.function_name.variants.variant_name]` in the the `variants` sub-section (see above). If inference fails
+with all of the `candidate_variants`, then variants will be sampled uniformly at random from `fallback_variants`.
 Feedback for these variants will not be used to guide the experiment; for example, if the experiment type is
-`track_and_stop`, the sampling probabilities will be dynamically updated based only on feedback for the `candidate_variants`.
+`track_and_stop`, the sampling probabilities will be dynamically updated based only on feedback for the
+`candidate_variants`.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3561,11 +3564,11 @@ fallback_variants = ["generic-prompt-v1"]
 - **Type:** string
 - **Required:** yes
 
-The metric that should be tracked during the experiment. This must be one of the metrics defined in the `[metrics]` section.
-`track_and_stop` can handle both inference-level and episode-level metrics. Plots based on the chosen metric are displayed in
-the `Experimentation` section of the `Functions` tab in the User Interface,
-and the metric is used to dynamically update the sampling probabilities for the variants in a way that is designed to
-quickly identify high performing variants.
+The metric that should be tracked during the experiment. This must be one of the metrics defined in the `[metrics]`
+section. `track_and_stop` can handle both inference-level and episode-level metrics. Plots based on the chosen metric
+are displayed in the `Experimentation` section of the `Functions` tab in the User Interface, and the metric is used to
+dynamically update the sampling probabilities for the variants in a way that is designed to quickly identify high
+performing variants.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3579,9 +3582,10 @@ metric = "task-completed"
 - **Type:** integer
 - **Required:** no (default: 10)
 
-The minimum number of samples per variant required before random sampling begins. Must be >= 1. Sampling from the `candidate_variants` will proceed
-round-robin (deterministically) until each variant has at least `min_samples_per_variant` feedback data points, at which point
-random sampling will begin. It is strongly recommended to set this value to at least 10 so that the feedback sample statistics can stabilize before they are used to guide the sampling probabilities.
+The minimum number of samples per variant required before random sampling begins. Must be >= 1. Sampling from the
+`candidate_variants` will proceed round-robin (deterministically) until each variant has at least `min_samples_per_variant`
+feedback data points, at which point random sampling will begin. It is strongly recommended to set this value to at least
+10 so that the feedback sample statistics can stabilize before they are used to guide the sampling probabilities.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3595,16 +3599,14 @@ min_samples_per_variant = 10
 - **Type:** float
 - **Required:** no (default: 0.05)
 
-The error tolerance. Must be a value in `(0, 1)`.
-The `track_and_stop` algorithm aims to identify a "winner" variant that has the
-best average value for the chosen metric, or nearly the best (where "best" means highest if `optimize = "max"` or lowest if
-`optimize = "min"` for the chosen metric, and "nearly" is determined by a tolerance `epsilon`,
-defined below). Once this variant is identified, random sampling ceases and the winner
-variant is used exclusively going forward. The value `delta` instantiates a trade-off between the speed of
-identification and the confidence in the identified variant. The smaller the value of `delta`, the higher the
-chance that the algorithm will correctly identify an epsilon-best variant, and the more data required to do so.
-A commonly used value in experimentation settings is `0.05`, which caps the probability that an epsilon-best
-variant is not chosen as the winner at 5%.
+The error tolerance. Must be a value in `(0, 1)`. The `track_and_stop` algorithm aims to identify a "winner" variant
+that has the best average value for the chosen metric, or nearly the best (where "best" means highest if
+`optimize = "max"` or lowest if `optimize = "min"` for the chosen metric, and "nearly" is determined by a tolerance
+`epsilon`, defined below). Once this variant is identified, random sampling ceases and the winner variant is used
+exclusively going forward. The value `delta` instantiates a trade-off between the speed of identification and the
+confidence in the identified variant. The smaller the value of `delta`, the higher the chance that the algorithm will
+correctly identify an epsilon-best variant, and the more data required to do so. A commonly used value in experimentation
+settings is `0.05`, which caps the probability that an epsilon-best variant is not chosen as the winner at 5%.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3618,15 +3620,14 @@ delta = 0.05
 - **Type:** float
 - **Required:** no (default: 0.0)
 
-The sub-optimality tolerance. Must be nonnegative.
-The `track_and_stop` algorithm aims to identify a "winner" variant whose
-average metric value is either the highest, or within epsilon of the highest. Larger values of `epsilon`
-allow the algorithm to label a winner more quickly. As an example, consider an experiment over three function variants with underlying
-(unknown) mean metric values of `[0.6, 0.8, 0.85]` for a metric with `optimize = "max"`. If `delta = 0.05` and `epsilon = 0.05`,
-then the algorithm will label either the second or third variant as the winner with probability at least `1 - delta = 95%`.
-If `delta = 0.05` and `epsilon = 0`, then the experiment will run longer and the algorithm will label the third variant as the winner
-with probability at least `95%`. If `delta = 0.01` and `epsilon = 0`, then the experiment will run for even longer, and the
-algorithm will label the third variant as the winner with probability at least 99%.
+The sub-optimality tolerance. Must be nonnegative. The `track_and_stop` algorithm aims to identify a "winner" variant
+whose average metric value is either the highest, or within epsilon of the highest. Larger values of `epsilon` allow the
+algorithm to label a winner more quickly. As an example, consider an experiment over three function variants with underlying
+(unknown) mean metric values of `[0.6, 0.8, 0.85]` for a metric with `optimize = "max"`. If `delta = 0.05` and
+`epsilon = 0.05`, then the algorithm will label either the second or third variant as the winner with probability at least
+`1 - delta = 95%`. If `delta = 0.05` and `epsilon = 0`, then the experiment will run longer and the algorithm will label
+the third variant as the winner with probability at least `95%`. If `delta = 0.01` and `epsilon = 0`, then the experiment
+will run for even longer, and the algorithm will label the third variant as the winner with probability at least 99%.
 
 It is always possible to set `epsilon = 0` to insist on identifying the strictly best variant with high probability.
 Reasonable nonzero values of `epsilon` depend on the scale of the chosen metric.
@@ -3643,13 +3644,13 @@ epsilon = 0.03
 - **Type:** integer
 - **Required:** no (default: 60)
 
-The frequency, in seconds, with which sampling probabilities are updated. Updating the
-sampling probabilities requires reading the latest feedback data from ClickHouse. This is accomplished by a background
-task that interacts with the gateway instance. More frequent updates relative to the feedback throughput enable the
-algorithm to more quickly guide the sampling probabilities toward their theoretical optimum, which allows it to more
-quickly label the "winner" variant. For example, updating the sampling probabilities every ~100 inferences should lead to
-faster convergence than updating them every ~500 inferences. If you notice that the computational overhead is too great,
-you can reduce the update frequency to reduce database reads.
+The frequency, in seconds, with which sampling probabilities are updated. Updating the sampling probabilities requires
+reading the latest feedback data from ClickHouse. This is accomplished by a background task that interacts with the
+gateway instance. More frequent updates relative to the feedback throughput enable the algorithm to more quickly guide the
+sampling probabilities toward their theoretical optimum, which allows it to more quickly label the "winner" variant. For
+example, updating the sampling probabilities every ~100 inferences should lead to faster convergence than updating them
+every ~500 inferences. If you notice that the computational overhead is too great, you can reduce the update frequency to
+reduce database reads.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
@@ -3663,12 +3664,14 @@ update_period_s = 60
 - **Type:** float
 - **Required:** no
 
-The minimum sampling probability for each candidate variant. Must be nonnegative. Note that `min_prob * number_of_candidate_variants` must not exceed 1.0, since the minimum probabilities for all candidate variants must sum to at most 1.0.
+The minimum sampling probability for each candidate variant. Must be nonnegative. Note that
+`min_prob * number_of_candidate_variants` must not exceed 1.0, since the minimum probabilities for all candidate variants
+must sum to at most 1.0.
 
-The aim of a `track_and_stop` experiment is to identify
-an epsilon-best variant, without necessarily differentiating sub-optimal variants, so the primary use for this field is to enable the user
-to learn about the performance of sub-optimal variants. Note that this field has no effect once `track_and_stop` picks a winner arm,
-since at that point random sampling ceases and the winner variant is used exclusively.
+The aim of a `track_and_stop` experiment is to identify an epsilon-best variant, without necessarily differentiating
+sub-optimal variants, so the primary use for this field is to enable the user to learn about the performance of
+sub-optimal variants. Note that this field has no effect once `track_and_stop` picks a winner arm, since at that point
+random sampling ceases and the winner variant is used exclusively.
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.experimentation]
