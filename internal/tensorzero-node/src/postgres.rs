@@ -63,14 +63,18 @@ impl PostgresClient {
     }
 
     #[napi]
-    pub async fn disable_api_key(&self, public_id: String) -> Result<(), napi::Error> {
+    pub async fn disable_api_key(&self, public_id: String) -> Result<String, napi::Error> {
         let pool = self
             .connection_info
             .get_alpha_pool()
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
-        tensorzero_auth::postgres::disable_key(&public_id, pool)
+        let disabled_at = tensorzero_auth::postgres::disable_key(&public_id, pool)
             .await
-            .map_err(|e| napi::Error::from_reason(format!("Failed to disable API key: {e}")))
+            .map_err(|e| napi::Error::from_reason(format!("Failed to disable API key: {e}")))?;
+
+        serde_json::to_string(&disabled_at).map_err(|e| {
+            napi::Error::from_reason(format!("Failed to serialize disabled_at timestamp: {e}"))
+        })
     }
 }

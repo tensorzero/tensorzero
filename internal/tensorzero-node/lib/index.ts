@@ -458,7 +458,7 @@ export class PostgresClient {
     return JSON.parse(result) as KeyInfo[];
   }
 
-  async disableApiKey(publicId: string): Promise<void> {
+  async disableApiKey(publicId: string): Promise<string> {
     return this.nativePostgresClient.disableApiKey(publicId);
   }
 }
