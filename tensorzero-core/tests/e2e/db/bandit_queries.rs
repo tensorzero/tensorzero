@@ -681,3 +681,239 @@ async fn test_clickhouse_get_cumulative_feedback_timeseries_with_variant_filter(
         "Empty variant list should return empty result"
     );
 }
+
+#[tokio::test]
+async fn test_clickhouse_get_cumulative_feedback_timeseries_includes_baseline_values() {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "extract_entities".to_string();
+    let metric_name =
+        "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
+
+    // Use a small max_periods (2) to create a window that starts after some data
+    // The fixture data spans from 2025-04-14 22:46 to 2025-04-16 02:35
+    // With daily granularity and max_periods=2, we should only see:
+    // - 2025-04-15 (most recent - 1)
+    // - 2025-04-16 (most recent)
+    let feedback_timeseries = clickhouse
+        .get_cumulative_feedback_timeseries(
+            function_name,
+            metric_name,
+            None,
+            TimeWindow::Day,
+            2, // Only last 2 days
+        )
+        .await
+        .unwrap();
+
+    println!("Baseline test - data points: {}", feedback_timeseries.len());
+    for point in &feedback_timeseries {
+        println!(
+            "Point: period={}, variant={}, count={}",
+            point.period_end, point.variant_name, point.count
+        );
+    }
+
+    // We expect baseline entries at the window start (2025-04-15) for all 3 variants
+    // PLUS the actual data points that fall within the window
+    // Expected structure:
+    // - 2025-04-15: 3 baseline entries (one per variant) + actual data for all 3 variants
+    // - 2025-04-16: actual data for 1 variant (gpt4o_mini)
+
+    // Count data points at the earliest period (window start)
+    let earliest_period = feedback_timeseries
+        .iter()
+        .map(|p| &p.period_end)
+        .min()
+        .unwrap();
+
+    let window_start_points: Vec<_> = feedback_timeseries
+        .iter()
+        .filter(|p| p.period_end == *earliest_period)
+        .collect();
+
+    println!("Window start period: {earliest_period}");
+    println!("Points at window start: {}", window_start_points.len());
+
+    // All 3 variants should have data at the window start
+    // This ensures we have baseline values for all variants
+    assert_eq!(
+        window_start_points.len(),
+        3,
+        "Should have baseline data for all 3 variants at window start"
+    );
+
+    // Verify each variant has a baseline value
+    let variant_names_at_start: std::collections::HashSet<_> = window_start_points
+        .iter()
+        .map(|p| p.variant_name.as_str())
+        .collect();
+
+    assert!(variant_names_at_start.contains("gpt4o_initial_prompt"));
+    assert!(variant_names_at_start.contains("gpt4o_mini_initial_prompt"));
+    assert!(variant_names_at_start.contains("llama_8b_initial_prompt"));
+
+    // All baseline values should have non-zero counts
+    // (because all variants had data before the window)
+    for point in &window_start_points {
+        assert!(
+            point.count > 0,
+            "Baseline count for {} should be > 0, got {}",
+            point.variant_name,
+            point.count
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_clickhouse_get_cumulative_feedback_timeseries_includes_silent_variants() {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "extract_entities".to_string();
+    let metric_name =
+        "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
+
+    // Use a window that only includes 2025-04-16
+    // On this day, only gpt4o_mini_initial_prompt has new data
+    // But llama_8b_initial_prompt and gpt4o_initial_prompt should still appear
+    // with their baseline values from 2025-04-14
+    let feedback_timeseries = clickhouse
+        .get_cumulative_feedback_timeseries(
+            function_name,
+            metric_name,
+            None,
+            TimeWindow::Day,
+            1, // Only last 1 day (2025-04-16)
+        )
+        .await
+        .unwrap();
+
+    println!(
+        "Silent variants test - data points: {}",
+        feedback_timeseries.len()
+    );
+    for point in &feedback_timeseries {
+        println!(
+            "Point: period={}, variant={}, count={}",
+            point.period_end, point.variant_name, point.count
+        );
+    }
+
+    // We should have all 3 variants in the result
+    let variant_names: std::collections::HashSet<_> = feedback_timeseries
+        .iter()
+        .map(|p| p.variant_name.as_str())
+        .collect();
+
+    assert_eq!(
+        variant_names.len(),
+        3,
+        "Should include all 3 variants even though only 1 has new data in window"
+    );
+
+    assert!(
+        variant_names.contains("gpt4o_initial_prompt"),
+        "Should include gpt4o_initial_prompt even with no new data"
+    );
+    assert!(
+        variant_names.contains("llama_8b_initial_prompt"),
+        "Should include llama_8b_initial_prompt even with no new data"
+    );
+    assert!(
+        variant_names.contains("gpt4o_mini_initial_prompt"),
+        "Should include gpt4o_mini_initial_prompt with new data"
+    );
+
+    // Variants with no new data should have baseline counts
+    let gpt4o_initial_prompt_count = feedback_timeseries
+        .iter()
+        .filter(|p| p.variant_name == "gpt4o_initial_prompt")
+        .map(|p| p.count)
+        .max()
+        .unwrap();
+
+    let llama_8b_initial_prompt_count = feedback_timeseries
+        .iter()
+        .filter(|p| p.variant_name == "llama_8b_initial_prompt")
+        .map(|p| p.count)
+        .max()
+        .unwrap();
+
+    // These should have their full historical counts (from before the window)
+    assert_eq!(
+        gpt4o_initial_prompt_count, 42,
+        "gpt4o_initial_prompt should have baseline count of 42"
+    );
+    assert_eq!(
+        llama_8b_initial_prompt_count, 38,
+        "llama_8b_initial_prompt should have baseline count of 38"
+    );
+}
+
+#[tokio::test]
+async fn test_clickhouse_get_cumulative_feedback_timeseries_baseline_continuity() {
+    let clickhouse = get_clickhouse().await;
+    let function_name = "extract_entities".to_string();
+    let metric_name =
+        "tensorzero::evaluation_name::entity_extraction::evaluator_name::exact_match".to_string();
+
+    // Get a narrow window (hourly with max_periods=3)
+    // This should show proper cumulative progression
+    let feedback_timeseries = clickhouse
+        .get_cumulative_feedback_timeseries(
+            function_name,
+            metric_name,
+            None,
+            TimeWindow::Hour,
+            3, // Only last 3 hours
+        )
+        .await
+        .unwrap();
+
+    println!(
+        "Baseline continuity test - data points: {}",
+        feedback_timeseries.len()
+    );
+    for point in &feedback_timeseries {
+        println!(
+            "Point: period={}, variant={}, count={}",
+            point.period_end, point.variant_name, point.count
+        );
+    }
+
+    // For each variant, verify cumulative counts are monotonically increasing
+    let variants = [
+        "gpt4o_initial_prompt",
+        "gpt4o_mini_initial_prompt",
+        "llama_8b_initial_prompt",
+    ];
+
+    for variant in variants {
+        let mut variant_points: Vec<_> = feedback_timeseries
+            .iter()
+            .filter(|p| p.variant_name == variant)
+            .collect();
+
+        // Sort by period
+        variant_points.sort_by(|a, b| a.period_end.cmp(&b.period_end));
+
+        if variant_points.len() > 1 {
+            // Verify counts are non-decreasing (cumulative)
+            for window in variant_points.windows(2) {
+                assert!(
+                    window[1].count >= window[0].count,
+                    "Cumulative count for {} should be non-decreasing: {} -> {}",
+                    variant,
+                    window[0].count,
+                    window[1].count
+                );
+            }
+
+            // First point should have baseline count (not zero)
+            assert!(
+                variant_points[0].count > 0,
+                "First point for {} should have non-zero baseline count, got {}",
+                variant,
+                variant_points[0].count
+            );
+        }
+    }
+}

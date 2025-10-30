@@ -7,11 +7,13 @@ pub trait Migration {
     // so that `&self` is the underlying type. This ensures that
     // calling `name()` on a `dyn Migration` will get the name of the erased type.
     fn name(&self) -> String {
-        std::any::type_name_of_val(&self)
+        let name = std::any::type_name_of_val(&self)
             .split("::")
             .last()
-            .unwrap_or("Unknown migration")
-            .to_string()
+            .unwrap_or("Unknown migration");
+        // Remove the any lifetime parameter from the struct name (added in Rust 1.91)
+        let name = name.strip_suffix("<'_>").unwrap_or(name);
+        name.to_string()
     }
     fn migration_num(&self) -> Result<u32, Error> {
         let name = self.name();
