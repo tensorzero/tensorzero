@@ -664,7 +664,7 @@ pub async fn validate_parse_demonstration(
                 .into_iter()
                 .map(DemonstrationContentBlock::try_into)
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
-            let parsed_value = parse_chat_output(content_blocks, Some(&tool_call_config)).await;
+            let parsed_value = parse_chat_output(content_blocks, tool_call_config.as_ref()).await;
             for block in &parsed_value {
                 if let ContentBlockChatOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
@@ -710,7 +710,7 @@ pub async fn validate_parse_demonstration(
 /// Represents the different types of dynamic demonstration information that can be retrieved
 #[derive(Debug)]
 pub enum DynamicDemonstrationInfo {
-    Chat(ToolCallConfig),
+    Chat(Option<ToolCallConfig>),
     Json(Value),
 }
 
@@ -1329,10 +1329,10 @@ mod tests {
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
                 function_config_chat_tools,
@@ -1353,10 +1353,10 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
                 function_config_chat_tools,
@@ -1385,10 +1385,10 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_humidity_123", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
             &value,
@@ -1408,10 +1408,10 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
             &value,
@@ -1506,10 +1506,10 @@ mod tests {
             "age": 30
         });
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();

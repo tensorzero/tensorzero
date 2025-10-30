@@ -11,7 +11,7 @@ use serde_json::Value;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
-    error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
+    error::{Error, ErrorDetails},
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
@@ -432,6 +432,7 @@ impl ToolCallConfigDatabaseInsert {
     /// Note that this conversion cannot fully restore the original `ToolCallConfig`:
     /// - `provider_tools` are not stored in the database and will be `None`
     /// - The distinction between static/dynamic tools is reconstructed based on function config
+    /// This will be fixed in a follow-up PR.
     ///
     /// # Parameters
     /// - `function_config`: The function configuration containing static tool definitions
@@ -451,19 +452,9 @@ impl ToolCallConfigDatabaseInsert {
         self,
         function_config: &crate::function::FunctionConfig,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-    ) -> Result<ToolCallConfig, Error> {
+    ) -> Result<Option<ToolCallConfig>, Error> {
         let dynamic_params = function_config.database_insert_to_dynamic_tool_params(self);
-        let tool_call_config =
-            match function_config.prepare_tool_config(dynamic_params, static_tools)? {
-                Some(config) => config,
-                // This should't happen because JSON functions should not have ToolCallConfigDatabaseInsert
-                None => {
-                    return Err(ErrorDetails::InternalError {
-                        message: format!("ToolCallConfigDatabaseInsert::into_tool_call_config was called with a JSON function {IMPOSSIBLE_ERROR_MESSAGE}")
-                    }.into())
-                }
-            };
-        Ok(tool_call_config)
+        function_config.prepare_tool_config(dynamic_params, static_tools)
     }
 }
 

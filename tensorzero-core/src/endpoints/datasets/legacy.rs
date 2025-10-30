@@ -629,7 +629,7 @@ pub async fn insert_datapoint(
                 let tool_config =
                     function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools)?;
                 let dynamic_demonstration_info =
-                    DynamicDemonstrationInfo::Chat(tool_config.clone().unwrap_or_default());
+                    DynamicDemonstrationInfo::Chat(tool_config.clone());
                 // Validate the output
                 let output = if let Some(output) = chat.output {
                     let validated_output = validate_parse_demonstration(
