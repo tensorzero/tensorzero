@@ -11,7 +11,7 @@ use tensorzero_core::db::datasets::{
     JsonInferenceDatapointInsert,
 };
 use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsResponse;
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, Text,
@@ -125,10 +125,10 @@ async fn test_delete_dataset_with_single_datapoint() {
     assert_eq!(stale_datapoints.len(), 1);
     // Verify staled_at is set
     match &stale_datapoints[0] {
-        Datapoint::Chat(dp) => {
+        StoredDatapoint::Chat(dp) => {
             assert!(dp.staled_at.is_some());
         }
-        Datapoint::Json(_) => {
+        StoredDatapoint::Json(_) => {
             panic!("Expected chat datapoint")
         }
     }
@@ -265,10 +265,10 @@ async fn test_delete_dataset_with_multiple_mixed_datapoints() {
     assert_eq!(stale_datapoints.len(), 5);
     for dp in &stale_datapoints {
         match dp {
-            Datapoint::Chat(chat_dp) => {
+            StoredDatapoint::Chat(chat_dp) => {
                 assert!(chat_dp.staled_at.is_some());
             }
-            Datapoint::Json(json_dp) => {
+            StoredDatapoint::Json(json_dp) => {
                 assert!(json_dp.staled_at.is_some());
             }
         }

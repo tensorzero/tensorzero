@@ -1503,6 +1503,7 @@ async fn test_config_load_shorthand_models_only() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     env::set_var("OPENAI_API_KEY", "sk-something");
@@ -1935,31 +1936,6 @@ async fn test_config_s3_allow_http_env_var() {
     assert!(!logs_contain("HTTPS"));
 }
 
-#[traced_test]
-#[tokio::test]
-async fn test_deprecated_enable_template_filesystem_access() {
-    let config_str = r"
-        [gateway]
-        enable_template_filesystem_access = true
-        ";
-    let config_toml = toml::from_str(config_str).expect("Failed to parse sample config");
-
-    let config = Config::load_from_toml(
-        config_toml,
-        &SpanMap::new_single_file(PathBuf::from("fake_path.toml")),
-    )
-    .await
-    .unwrap();
-    assert!(config.gateway.template_filesystem_access.enabled);
-    assert!(config
-        .gateway
-        .template_filesystem_access
-        .base_path
-        .is_none());
-    // TODO - also test error when we match multiple files
-    assert!(logs_contain("Deprecation Warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access.enabled]` instead."));
-}
-
 #[tokio::test]
 async fn test_missing_json_mode_chat() {
     let config_str = r#"
@@ -2205,6 +2181,7 @@ async fn test_config_duplicate_user_schema() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2243,6 +2220,7 @@ async fn test_config_named_schema_no_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2279,6 +2257,7 @@ async fn test_config_duplicate_user_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2311,6 +2290,7 @@ async fn test_config_invalid_template_no_schema() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2737,6 +2717,7 @@ async fn test_config_schema_missing_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)

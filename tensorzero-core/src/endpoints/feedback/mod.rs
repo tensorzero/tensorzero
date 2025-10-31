@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
@@ -22,7 +22,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
-use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
+use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -335,6 +335,7 @@ async fn write_demonstration(
         inference_id,
         &function_info.name,
         &function_config,
+        &config.tools,
     )
     .await?;
     let parsed_value =
@@ -664,7 +665,7 @@ pub async fn validate_parse_demonstration(
                 .into_iter()
                 .map(DemonstrationContentBlock::try_into)
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
-            let parsed_value = parse_chat_output(content_blocks, Some(&tool_call_config)).await;
+            let parsed_value = parse_chat_output(content_blocks, tool_call_config.as_ref()).await;
             for block in &parsed_value {
                 if let ContentBlockChatOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
@@ -710,7 +711,7 @@ pub async fn validate_parse_demonstration(
 /// Represents the different types of dynamic demonstration information that can be retrieved
 #[derive(Debug)]
 pub enum DynamicDemonstrationInfo {
-    Chat(ToolCallConfig),
+    Chat(Option<ToolCallConfig>),
     Json(Value),
 }
 
@@ -732,6 +733,7 @@ async fn get_dynamic_demonstration_info(
     inference_id: Uuid,
     function_name: &str,
     function_config: &FunctionConfig,
+    static_tools: &HashMap<String, Arc<StaticToolConfig>>,
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
@@ -758,8 +760,8 @@ async fn get_dynamic_demonstration_info(
                 // This is consistent with how they are serialized at inference time.
                 tool_params_result
                     .tool_params
-                    .map(ToolCallConfigDatabaseInsert::into)
-                    .unwrap_or_default(),
+                    .unwrap_or_default()
+                    .into_tool_call_config(function_config, static_tools)?,
             ))
         }
         FunctionConfig::Json(..) => {
@@ -1328,10 +1330,10 @@ mod tests {
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
                 function_config_chat_tools,
@@ -1352,10 +1354,10 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
                 function_config_chat_tools,
@@ -1384,10 +1386,10 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_humidity_123", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
             &value,
@@ -1407,10 +1409,10 @@ mod tests {
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
             &value,
@@ -1505,10 +1507,10 @@ mod tests {
             "age": 30
         });
         let dynamic_demonstration_info =
-            DynamicDemonstrationInfo::Chat(ToolCallConfig::with_tools_available(
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
                 tools.values().cloned().map(ToolConfig::Static).collect(),
                 vec![],
-            ));
+            )));
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();
