@@ -15,7 +15,7 @@ const config: Config = {
     disable_pseudonymous_usage_analytics: false,
     fetch_and_encode_input_files_before_inference: false,
     auth: {
-      required: false,
+      enabled: false,
       cache: null,
     },
     observability: {

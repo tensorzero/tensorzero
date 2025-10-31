@@ -115,7 +115,7 @@ pub struct AppStateData {
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
     pub deferred_tasks: TaskTracker,
     /// Optional cache for TensorZero API key authentication
-    pub auth_cache: Option<Arc<Cache<String, AuthResult>>>,
+    pub auth_cache: Option<Cache<String, AuthResult>>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
@@ -125,8 +125,8 @@ pub type AppState = axum::extract::State<AppStateData>;
 
 /// Creates an auth cache based on the configuration.
 /// Returns None if auth is disabled or cache is disabled.
-fn create_auth_cache_from_config(config: &Config) -> Option<Arc<Cache<String, AuthResult>>> {
-    if !config.gateway.auth.required {
+fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthResult>> {
+    if !config.gateway.auth.enabled {
         return None;
     }
 
@@ -142,11 +142,11 @@ fn create_auth_cache_from_config(config: &Config) -> Option<Arc<Cache<String, Au
         return None;
     }
 
-    Some(Arc::new(
+    Some(
         Cache::builder()
             .time_to_live(Duration::from_millis(cache_config.ttl_ms))
             .build(),
-    ))
+    )
 }
 
 impl GatewayHandle {

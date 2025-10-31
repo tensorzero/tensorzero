@@ -44,7 +44,7 @@ pub fn build_axum_router(
 
     router = router.fallback(endpoints::fallback::handle_404);
 
-    if app_state.config.gateway.auth.required {
+    if app_state.config.gateway.auth.enabled {
         router = router.layer(middleware::from_fn_with_state(
             app_state.clone(),
             tensorzero_auth_middleware,

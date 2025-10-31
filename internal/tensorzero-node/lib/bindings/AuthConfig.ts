@@ -2,6 +2,6 @@
 import type { GatewayAuthCacheConfig } from "./GatewayAuthCacheConfig";
 
 export type AuthConfig = {
-  required: boolean;
+  enabled: boolean;
   cache: GatewayAuthCacheConfig | null;
 };

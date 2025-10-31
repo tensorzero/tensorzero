@@ -41,7 +41,7 @@ fn default_gateway_auth_cache_ttl_ms() -> u64 {
 #[cfg_attr(test, ts(export))]
 #[serde(deny_unknown_fields)]
 pub struct AuthConfig {
-    pub required: bool,
+    pub enabled: bool,
     #[serde(default)]
     pub cache: Option<GatewayAuthCacheConfig>,
 }
