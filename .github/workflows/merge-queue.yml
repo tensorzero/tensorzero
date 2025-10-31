@@ -55,7 +55,7 @@ env:
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://localhost:4316
   SQLX_OFFLINE: 1
   TENSORZERO_E2E_PROXY: http://localhost:3003
-  TENSORZERO_COMMIT_TAG: ${{ github.sha }}
+  TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
   TENSORZERO_CI: 1
 
 jobs:
