@@ -14,6 +14,7 @@ class EnvironmentVariableError extends Error {
 
 interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
+  TENSORZERO_POSTGRES_URL: string | null;
   TENSORZERO_UI_CONFIG_PATH: string | null;
   TENSORZERO_UI_DEFAULT_CONFIG: boolean;
   TENSORZERO_UI_READ_ONLY: boolean;
@@ -69,6 +70,7 @@ export function getEnv(): Env {
 
   _env = {
     TENSORZERO_CLICKHOUSE_URL,
+    TENSORZERO_POSTGRES_URL: process.env.TENSORZERO_POSTGRES_URL || null,
     TENSORZERO_UI_CONFIG_PATH,
     TENSORZERO_UI_DEFAULT_CONFIG,
     TENSORZERO_UI_READ_ONLY: process.env.TENSORZERO_UI_READ_ONLY === "1",

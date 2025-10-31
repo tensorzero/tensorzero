@@ -145,6 +145,7 @@ export * from "./JsonInferenceOutput";
 export * from "./JsonInferenceResponse";
 export * from "./JsonMode";
 export * from "./JsonSchemaInfo";
+export * from "./KeyInfo";
 export * from "./LLMJudgeConfig";
 export * from "./LLMJudgeIncludeConfig";
 export * from "./LLMJudgeInputFormat";
