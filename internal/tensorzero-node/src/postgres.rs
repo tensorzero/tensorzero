@@ -15,11 +15,13 @@ impl PostgresClient {
     pub async fn from_postgres_url(postgres_url: String) -> Result<Self, napi::Error> {
         // Create a minimal config just for postgres connection pool size
         // The default pool size is 10 which should be reasonable
-        let config = Config::default();
+        let config = Config::new_empty()
+            .await
+            .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?;
 
         let connection_info = setup_postgres(&config, Some(postgres_url))
             .await
-            .map_err(|e| napi::Error::from_reason(format!("Failed to setup postgres: {e}")))?;
+            .map_err(|e| napi::Error::from_reason(format!("Failed to setup Postgres: {e}")))?;
 
         Ok(Self { connection_info })
     }
