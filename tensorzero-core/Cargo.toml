@@ -103,7 +103,6 @@ aws-sdk-sagemakerruntime = { version = "1.88.0", features = [
 ], default-features = false }
 aws-smithy-runtime-api = "1.9.1"
 eventsource-stream = "0.2.3"
-scoped-tls = "1.0.1"
 opentelemetry_sdk = "0.31.0"
 opentelemetry = "0.31.0"
 tracing-opentelemetry = "0.32.0"

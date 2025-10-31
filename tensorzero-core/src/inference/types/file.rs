@@ -48,9 +48,7 @@ use std::borrow::Cow;
 
 use futures::FutureExt;
 use mime::MediaType;
-use scoped_tls::scoped_thread_local;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use url::Url;
 
 use super::{ContentBlock, RequestMessage};
@@ -62,8 +60,6 @@ use crate::{
 use aws_smithy_types::base64;
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-
-scoped_thread_local!(static SERIALIZE_FILE_DATA: ());
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -206,16 +202,6 @@ impl Base64File {
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
-}
-
-pub fn serialize_with_file_data<T: Serialize>(value: &T) -> Result<Value, Error> {
-    SERIALIZE_FILE_DATA.set(&(), || {
-        serde_json::to_value(value).map_err(|e| {
-            Error::new(ErrorDetails::Serialization {
-                message: format!("Error serializing value: {e}"),
-            })
-        })
-    })
 }
 
 /// A file that can be located at a URL
