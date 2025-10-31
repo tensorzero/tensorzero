@@ -14,7 +14,6 @@ import {
   toWorkflowEvaluationRunUrl,
   toWorkflowEvaluationProjectUrl,
 } from "~/utils/urls";
-import { TableItemShortUuid } from "~/components/ui/TableItems";
 
 export default function WorkflowEvaluationRunsTable({
   workflowEvaluationRuns,
