@@ -32,9 +32,24 @@ export type ClientInferenceParams = {
    */
   include_original_response: boolean;
   internal_dynamic_variant_config: UninitializedVariantInfo | null;
-  allowed_tools: Array<string> | null;
-  additional_tools: Array<Tool> | null;
-  tool_choice: ToolChoice | null;
-  parallel_tool_calls: boolean | null;
-  provider_tools: Array<ProviderTool> | null;
+  /**
+   * Names of static tools (from function config) to use. If None, all static tools are available.
+   */
+  allowed_tools?: Array<string>;
+  /**
+   * Additional tools provided at runtime (not in function config)
+   */
+  additional_tools?: Array<Tool>;
+  /**
+   * Override the function's tool choice strategy
+   */
+  tool_choice?: ToolChoice;
+  /**
+   * Override whether parallel tool calls are enabled
+   */
+  parallel_tool_calls?: boolean;
+  /**
+   * Provider-specific tool configurations (not persisted to database)
+   */
+  provider_tools?: Array<ProviderTool>;
 };
