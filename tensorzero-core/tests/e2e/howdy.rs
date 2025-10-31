@@ -18,7 +18,7 @@ use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::postgres::PostgresConnectionInfo;
 use tensorzero_core::howdy::{get_deployment_id, get_howdy_report};
 use tensorzero_core::http::TensorzeroHttpClient;
-use tensorzero_core::inference::types::TextKind;
+use tensorzero_core::inference::types::{Arguments, System, TextKind};
 use tensorzero_core::utils::gateway::GatewayHandle;
 use tokio::time::Duration;
 
@@ -80,7 +80,12 @@ async fn test_get_howdy_report() {
     let params = ClientInferenceParams {
         function_name: Some("basic_test".to_string()),
         input: ClientInput {
-            system: Some(json!({"assistant_name": "AskJeeves"})),
+            system: Some(System::Template(Arguments(
+                json!({"assistant_name": "AskJeeves"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ))),
             messages: vec![ClientInputMessage {
                 role: Role::User,
                 content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -106,16 +111,23 @@ async fn test_get_howdy_report() {
     let params = ClientInferenceParams {
         function_name: Some("json_success".to_string()),
         input: ClientInput {
-            system: Some(json!({"assistant_name": "AskJeeves"})),
-            messages: vec![ClientInputMessage {
-                role: Role::User,
-                content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
-                    arguments: json!({
-                        "country": "Japan",
-                    })
+            system: Some(System::Template(Arguments(
+                json!({"assistant_name": "AskJeeves"})
                     .as_object()
                     .unwrap()
                     .clone(),
+            ))),
+            messages: vec![ClientInputMessage {
+                role: Role::User,
+                content: vec![ClientInputMessageContent::Text(TextKind::Arguments {
+                    arguments: Arguments(
+                        json!({
+                            "country": "Japan",
+                        })
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                    ),
                 })],
             }],
         },

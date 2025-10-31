@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::collections::HashMap;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use axum::extract::State;
@@ -22,7 +22,7 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::serde_util::deserialize_optional_json_string;
-use crate::tool::{ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
+use crate::tool::{StaticToolConfig, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert};
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::utils::uuid::uuid_elapsed;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -335,6 +335,7 @@ async fn write_demonstration(
         inference_id,
         &function_info.name,
         &function_config,
+        &config.tools,
     )
     .await?;
     let parsed_value =
@@ -487,14 +488,20 @@ async fn throttled_get_function_info(
 
     // Poll every 500ms until the deadline is reached.
     loop {
-        match get_function_info(connection_info, metric_config_level, target_id).await {
-            Ok(identifier) => return Ok(identifier),
-            Err(err) => {
+        // If an error occurs during lookup (distinct from the target_id not existing), we bail out immediately.
+        match get_function_info(connection_info, metric_config_level, target_id).await? {
+            Some(identifier) => return Ok(identifier),
+            None => {
                 if Instant::now() >= deadline {
+                    let identifier_type = match metric_config_level {
+                        MetricConfigLevel::Inference => "Inference",
+                        MetricConfigLevel::Episode => "Episode",
+                    };
                     // We log here since this means we were not able to find the target_id in the database
                     // and are timing out.
-                    err.log();
-                    return Err(err);
+                    return Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: format!("{identifier_type} ID: {target_id} does not exist"),
+                    }));
                 } else {
                     tracing::info!(
                         "Failed to find function name for target_id: {target_id}. Retrying..."
@@ -518,18 +525,14 @@ async fn throttled_get_function_info(
 ///
 /// * On success:
 ///   - Returns a `FunctionInfo` containing the function name and type.
+///   - Returns `None` if the `target_id` does not exist.
 /// * On failure:
-///   - Returns an `Error` if the `target_id` is invalid or does not exist.
+///   - Returns an `Error` if the `target_id` exists, but is invalid
 async fn get_function_info(
     connection_info: &ClickHouseConnectionInfo,
     metric_config_level: &MetricConfigLevel,
     target_id: &Uuid,
-) -> Result<FunctionInfo, Error> {
-    let identifier_type = match metric_config_level {
-        MetricConfigLevel::Inference => "Inference",
-        MetricConfigLevel::Episode => "Episode",
-    };
-
+) -> Result<Option<FunctionInfo>, Error> {
     let query = match metric_config_level {
         MetricConfigLevel::Inference => format!(
             "SELECT function_name as name, function_type, variant_name, episode_id
@@ -552,16 +555,15 @@ async fn get_function_info(
         .run_query_synchronous_no_params(query)
         .await?;
     if response.response.is_empty() {
-        // We don't want to log here since this can happen if we send feedback immediately after the target is created.
-        return Err(Error::new_without_logging(ErrorDetails::InvalidRequest {
-            message: format!("{identifier_type} ID: {target_id} does not exist"),
-        }));
+        return Ok(None);
     };
-    serde_json::from_str(&response.response).map_err(|e| {
-        Error::new(ErrorDetails::ClickHouseDeserialization {
-            message: e.to_string(),
-        })
-    })
+    Ok(Some(serde_json::from_str(&response.response).map_err(
+        |e| {
+            Error::new(ErrorDetails::ClickHouseDeserialization {
+                message: e.to_string(),
+            })
+        },
+    )?))
 }
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -663,7 +665,7 @@ pub async fn validate_parse_demonstration(
                 .into_iter()
                 .map(DemonstrationContentBlock::try_into)
                 .collect::<Result<Vec<ContentBlockOutput>, Error>>()?;
-            let parsed_value = parse_chat_output(content_blocks, Some(&tool_call_config)).await;
+            let parsed_value = parse_chat_output(content_blocks, tool_call_config.as_ref()).await;
             for block in &parsed_value {
                 if let ContentBlockChatOutput::ToolCall(tool_call) = block {
                     if tool_call.name.is_none() {
@@ -709,7 +711,7 @@ pub async fn validate_parse_demonstration(
 /// Represents the different types of dynamic demonstration information that can be retrieved
 #[derive(Debug)]
 pub enum DynamicDemonstrationInfo {
-    Chat(ToolCallConfig),
+    Chat(Option<ToolCallConfig>),
     Json(Value),
 }
 
@@ -731,6 +733,7 @@ async fn get_dynamic_demonstration_info(
     inference_id: Uuid,
     function_name: &str,
     function_config: &FunctionConfig,
+    static_tools: &HashMap<String, Arc<StaticToolConfig>>,
 ) -> Result<DynamicDemonstrationInfo, Error> {
     match function_config {
         FunctionConfig::Chat(..) => {
@@ -757,8 +760,8 @@ async fn get_dynamic_demonstration_info(
                 // This is consistent with how they are serialized at inference time.
                 tool_params_result
                     .tool_params
-                    .map(ToolCallConfigDatabaseInsert::into)
-                    .unwrap_or_default(),
+                    .unwrap_or_default()
+                    .into_tool_call_config(function_config, static_tools)?,
             ))
         }
         FunctionConfig::Json(..) => {
@@ -911,7 +914,7 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
-    use crate::tool::{AllowedTools, StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
+    use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -1326,13 +1329,11 @@ mod tests {
 
         // Case 1: a string passed to a chat function
         let value = json!("Hello, world!");
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+            )));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
                 function_config_chat_tools,
@@ -1352,13 +1353,11 @@ mod tests {
         // Case 2: a tool call to get_temperature, which exists
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+            )));
         let parsed_value = serde_json::to_string(
             &validate_parse_demonstration(
                 function_config_chat_tools,
@@ -1386,13 +1385,11 @@ mod tests {
         // Case 3: a tool call to get_humidity, which does not exist
         let value = json!([{"type": "tool_call", "id": "get_humidity_123", "name": "get_humidity", "arguments": {"location": "London", "unit": "celsius"}}]
         );
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+            )));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
             &value,
@@ -1411,13 +1408,11 @@ mod tests {
         // Case 4: a tool call to get_temperature, which exists but has bad arguments (place instead of location)
         let value = json!([{"type": "tool_call", "id": "get_temperature_123", "name": "get_temperature", "arguments": {"place": "London", "unit": "celsius"}}]
         );
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+            )));
         let err = validate_parse_demonstration(
             function_config_chat_tools,
             &value,
@@ -1511,13 +1506,11 @@ mod tests {
             "name": "John",
             "age": 30
         });
-        let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(ToolCallConfig {
-            tools_available: tools.values().cloned().map(ToolConfig::Static).collect(),
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        });
+        let dynamic_demonstration_info =
+            DynamicDemonstrationInfo::Chat(Some(ToolCallConfig::with_tools_available(
+                tools.values().cloned().map(ToolConfig::Static).collect(),
+                vec![],
+            )));
         let err = validate_parse_demonstration(function_config, &value, dynamic_demonstration_info)
             .await
             .unwrap_err();

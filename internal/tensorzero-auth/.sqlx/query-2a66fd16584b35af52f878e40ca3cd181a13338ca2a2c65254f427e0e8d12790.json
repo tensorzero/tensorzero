@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT public_id, organization, workspace, description, disabled_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_id",
+        "type_info": "Bpchar",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "public_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "organization",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "organization"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "workspace",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "workspace"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "disabled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "disabled_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "2a66fd16584b35af52f878e40ca3cd181a13338ca2a2c65254f427e0e8d12790"
+}

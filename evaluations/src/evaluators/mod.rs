@@ -5,7 +5,7 @@ use anyhow::Result;
 use serde_json::Value;
 use tensorzero::{ClientInput, FeedbackParams, InferenceResponse};
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::error::IMPOSSIBLE_ERROR_MESSAGE;
 use tensorzero_core::evaluations::{get_evaluator_metric_name, EvaluationConfig, EvaluatorConfig};
 
@@ -23,7 +23,7 @@ pub type EvaluationResult = HashMap<String, Result<Option<Value>>>;
 
 pub struct EvaluateInferenceParams {
     pub inference_response: Arc<InferenceResponse>,
-    pub datapoint: Arc<Datapoint>,
+    pub datapoint: Arc<StoredDatapoint>,
     pub input: Arc<ClientInput>,
     pub evaluation_config: Arc<EvaluationConfig>,
     pub evaluation_name: Arc<String>,
@@ -169,7 +169,7 @@ struct RunEvaluatorParams<'a> {
     evaluator_name: String,
     inference_response: &'a InferenceResponse,
     clients: &'a Clients,
-    datapoint: &'a Datapoint,
+    datapoint: &'a StoredDatapoint,
     evaluation_name: &'a str,
     evaluation_run_id: Uuid,
     input: &'a ClientInput,

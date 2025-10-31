@@ -1,5 +1,5 @@
-use serde_json::json;
 use std::collections::HashMap;
+use tensorzero::DynamicToolParams;
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::inference::types::{
     ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
@@ -30,9 +30,9 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!(input),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: input.to_string(),
+                })],
             }],
         },
         output: Some(output_vec.clone()),
@@ -41,7 +41,7 @@ fn create_test_rendered_sample(input: &str, output: &str) -> RenderedSample {
         )),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         output_schema: None,
         dispreferred_outputs: vec![],
         tags: HashMap::new(),

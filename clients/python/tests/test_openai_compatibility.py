@@ -963,8 +963,9 @@ async def test_async_json_invalid_system(async_openai_client):
             messages=messages,
             model="tensorzero::function_name::json_success",
         )
-    assert "Invalid request to OpenAI-compatible endpoint: System message must be a text content block" in str(
-        exc_info.value
+    assert (
+        "Invalid request to OpenAI-compatible endpoint: System message must contain only text or template content blocks"
+        in str(exc_info.value)
     )
 
 
@@ -1479,7 +1480,7 @@ async def test_async_multi_block_file_base64(async_openai_client):
     )
     assert result.choices[0].message.content is not None
     json_content = json.loads(result.choices[0].message.content)
-    assert json_content[0]["FileWithPath"]["storage_path"] == {
+    assert json_content[0]["Base64"]["storage_path"] == {
         "kind": {"type": "disabled"},
         "path": "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf",
     }

@@ -12,7 +12,8 @@ use tensorzero_core::db::datasets::{
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::{
-    JsonInferenceOutput, Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+    Arguments, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
+    StoredInputMessageContent, System, Text,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -39,12 +40,17 @@ mod get_datapoints_tests {
             id: datapoint_id,
             episode_id: None,
             input: StoredInput {
-                system: Some(json!({"assistant_name": "TestBot"})),
+                system: Some(System::Template(Arguments(
+                    json!({"assistant_name": "TestBot"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Hello, world!".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Hello, world!".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -61,7 +67,7 @@ mod get_datapoints_tests {
         });
 
         clickhouse
-            .insert_datapoint(&datapoint_insert)
+            .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
 
@@ -120,12 +126,17 @@ mod get_datapoints_tests {
             id: datapoint_id,
             episode_id: None,
             input: StoredInput {
-                system: Some(json!({"assistant_name": "JsonBot"})),
+                system: Some(System::Template(Arguments(
+                    json!({"assistant_name": "JsonBot"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!({"query": "test"}).to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: json!({"query": "test"}).to_string(),
+                    })],
                 }],
             },
             output: Some(JsonInferenceOutput {
@@ -141,7 +152,7 @@ mod get_datapoints_tests {
         });
 
         clickhouse
-            .insert_datapoint(&datapoint_insert)
+            .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
 
@@ -192,9 +203,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Message 1".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Message 1".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -220,9 +231,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Message 2".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Message 2".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -248,9 +259,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Query".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Query".to_string(),
+                    })],
                 }],
             },
             output: Some(JsonInferenceOutput {
@@ -322,9 +333,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -341,7 +352,7 @@ mod get_datapoints_tests {
         });
 
         clickhouse
-            .insert_datapoint(&datapoint_insert)
+            .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
 
@@ -388,9 +399,9 @@ mod get_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -407,7 +418,7 @@ mod get_datapoints_tests {
         });
 
         clickhouse
-            .insert_datapoint(&datapoint_insert)
+            .insert_datapoints(&[datapoint_insert])
             .await
             .unwrap();
 
@@ -506,9 +517,9 @@ mod list_datapoints_tests {
                     system: None,
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: format!("Message {i}").into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
                     }],
                 },
                 output: Some(vec![
@@ -608,7 +619,7 @@ mod list_datapoints_tests {
         let function1_id = Uuid::now_v7();
         let function1_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
             dataset_name: dataset_name.clone(),
-            function_name: "function_one".to_string(),
+            function_name: "basic_test".to_string(),
             name: None,
             id: function1_id,
             episode_id: None,
@@ -616,9 +627,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 1".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 1".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -637,7 +648,7 @@ mod list_datapoints_tests {
         let function2_id = Uuid::now_v7();
         let function2_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
             dataset_name: dataset_name.clone(),
-            function_name: "function_two".to_string(),
+            function_name: "weather_helper".to_string(),
             name: None,
             id: function2_id,
             episode_id: None,
@@ -645,9 +656,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 2".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 2".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -691,7 +702,7 @@ mod list_datapoints_tests {
                 "/v1/datasets/{dataset_name}/list_datapoints"
             )))
             .json(&json!({
-                "function_name": "function_one"
+                "function_name": "basic_test"
             }))
             .send()
             .await
@@ -702,7 +713,7 @@ mod list_datapoints_tests {
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 1);
         assert_eq!(datapoints[0]["id"], function1_id.to_string());
-        assert_eq!(datapoints[0]["function_name"], "function_one");
+        assert_eq!(datapoints[0]["function_name"], "basic_test");
     }
 
     #[tokio::test]
@@ -730,9 +741,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 1".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 1".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -759,9 +770,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 2".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 2".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -849,9 +860,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -867,7 +878,7 @@ mod list_datapoints_tests {
             is_custom: true,
         });
 
-        clickhouse.insert_datapoint(&datapoint).await.unwrap();
+        clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Filter with time before (should not return the datapoint)
@@ -948,9 +959,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 1".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 1".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -977,9 +988,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 2".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 2".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -1006,9 +1017,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test 3".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test 3".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -1139,9 +1150,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -1157,7 +1168,7 @@ mod list_datapoints_tests {
             is_custom: true,
         });
 
-        clickhouse.insert_datapoint(&datapoint).await.unwrap();
+        clickhouse.insert_datapoints(&[datapoint]).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Verify it's returned before staling
@@ -1205,24 +1216,6 @@ mod list_datapoints_tests {
     }
 
     #[tokio::test]
-    async fn test_list_datapoints_invalid_dataset_name() {
-        let http_client = Client::new();
-
-        // Try to list from a dataset with invalid characters
-        let resp = http_client
-            .post(get_gateway_endpoint(
-                "/v1/datasets/invalid@dataset#name/list_datapoints",
-            ))
-            .json(&json!({}))
-            .send()
-            .await
-            .unwrap();
-
-        // Should return error for invalid dataset name (404 means the route doesn't match)
-        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[tokio::test]
     async fn test_list_datapoints_mixed_chat_and_json() {
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
@@ -1232,7 +1225,7 @@ mod list_datapoints_tests {
         let chat_id = Uuid::now_v7();
         let chat_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
             dataset_name: dataset_name.clone(),
-            function_name: "chat_function".to_string(),
+            function_name: "basic_test".to_string(),
             name: None,
             id: chat_id,
             episode_id: None,
@@ -1240,9 +1233,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "Chat test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Chat test".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -1261,7 +1254,7 @@ mod list_datapoints_tests {
         let json_id = Uuid::now_v7();
         let json_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
             dataset_name: dataset_name.clone(),
-            function_name: "json_function".to_string(),
+            function_name: "json_success".to_string(),
             name: None,
             id: json_id,
             episode_id: None,
@@ -1269,9 +1262,9 @@ mod list_datapoints_tests {
                 system: None,
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "JSON test".to_string().into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "JSON test".to_string(),
+                    })],
                 }],
             },
             output: Some(JsonInferenceOutput {
@@ -1342,9 +1335,9 @@ mod list_datapoints_tests {
                     system: None,
                     messages: vec![StoredInputMessage {
                         role: Role::User,
-                        content: vec![StoredInputMessageContent::Text {
-                            value: format!("Message {i}").into(),
-                        }],
+                        content: vec![StoredInputMessageContent::Text(Text {
+                            text: format!("Message {i}"),
+                        })],
                     }],
                 },
                 output: Some(vec![

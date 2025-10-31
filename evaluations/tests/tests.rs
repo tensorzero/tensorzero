@@ -13,11 +13,11 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_core::inference::types::{
-    StoredInput, StoredInputMessage, StoredInputMessageContent, TemplateInput, Text,
+    StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
 use tokio::time::sleep;
 use url::Url;
@@ -39,7 +39,7 @@ use tensorzero_core::{
 };
 use tensorzero_core::{
     endpoints::{
-        datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
+        datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint},
         inference::{ChatInferenceResponse, JsonInferenceResponse},
     },
     evaluations::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
@@ -386,22 +386,8 @@ async fn run_exact_match_evaluation_chat() {
         };
         let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
-        // The fixture is parsed from the old-style template, so convert it in place
-        let mut parsed_input = parsed.datapoint.input().clone();
-        for message in &mut parsed_input.messages {
-            for content in &mut message.content {
-                if let StoredInputMessageContent::Text { value } = content {
-                    if value.is_object() {
-                        *content = StoredInputMessageContent::Template(TemplateInput {
-                            name: message.role.implicit_template_name().to_string(),
-                            arguments: value.as_object().unwrap().clone(),
-                        });
-                    }
-                }
-            }
-        }
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, &parsed_input);
+        assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
             serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
         // Check the output to the inference is the same as the output in the response
@@ -525,22 +511,8 @@ async fn run_llm_judge_evaluation_chat() {
         };
         let clickhouse_input: StoredInput =
             serde_json::from_str(clickhouse_inference["input"].as_str().unwrap()).unwrap();
-        // The fixture is parsed from the old-style template, so convert it in place
-        let mut parsed_input = parsed.datapoint.input().clone();
-        for message in &mut parsed_input.messages {
-            for content in &mut message.content {
-                if let StoredInputMessageContent::Text { value } = content {
-                    if value.is_object() {
-                        *content = StoredInputMessageContent::Template(TemplateInput {
-                            name: message.role.implicit_template_name().to_string(),
-                            arguments: value.as_object().unwrap().clone(),
-                        });
-                    }
-                }
-            }
-        }
         // Check the input to the inference is the same as the input to the datapoint
-        assert_eq!(&clickhouse_input, &parsed_input);
+        assert_eq!(&clickhouse_input, parsed.datapoint.input());
         let clickhouse_output: Vec<ContentBlockChatOutput> =
             serde_json::from_str(clickhouse_inference["output"].as_str().unwrap()).unwrap();
         // Check the output to the inference is the same as the output in the response
@@ -1306,14 +1278,14 @@ async fn test_run_llm_judge_evaluator_chat() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         auxiliary: String::new(),
@@ -1415,14 +1387,14 @@ async fn test_run_llm_judge_evaluator_chat() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         auxiliary: String::new(),
@@ -1481,14 +1453,14 @@ async fn test_run_llm_judge_evaluator_json() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = Datapoint::Json(JsonInferenceDatapoint {
+    let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         auxiliary: String::new(),
@@ -1591,14 +1563,14 @@ async fn test_run_llm_judge_evaluator_json() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
                 role: Role::User,
-                content: vec![StoredInputMessageContent::Text {
-                    value: json!("Hello, world!"),
-                }],
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Hello, world!".to_string(),
+                })],
             }],
         },
         auxiliary: String::new(),

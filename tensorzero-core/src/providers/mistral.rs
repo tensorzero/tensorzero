@@ -440,8 +440,7 @@ fn prepare_mistral_tools<'a>(
         Some(tool_config) => match &tool_config.tool_choice {
             ToolChoice::Specific(tool_name) => {
                 let tool = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .find(|t| t.name() == tool_name)
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ToolNotFound {
@@ -453,8 +452,7 @@ fn prepare_mistral_tools<'a>(
             }
             ToolChoice::Auto | ToolChoice::Required => {
                 let tools = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(|t| MistralTool::from(OpenAITool::from(t)))
                     .collect();
                 let tool_choice = match tool_config.tool_choice {
@@ -554,7 +552,6 @@ impl<'a> MistralRequest<'a> {
 struct MistralUsage {
     prompt_tokens: u32,
     completion_tokens: u32,
-    total_tokens: u32,
 }
 
 impl From<MistralUsage> for Usage {
@@ -869,7 +866,6 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             },
         };
 
@@ -966,7 +962,6 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
-                total_tokens: 40,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1049,7 +1044,6 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
-                total_tokens: 5,
             },
         };
         let request_body = MistralRequest {
@@ -1102,7 +1096,6 @@ mod tests {
             usage: MistralUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
-                total_tokens: 20,
             },
         };
         let request_body = MistralRequest {

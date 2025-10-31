@@ -11,11 +11,12 @@ use mockall::automock;
 
 use crate::config::Config;
 use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
-use crate::db::clickhouse::ClickhouseFormat;
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
 use crate::serde_util::{deserialize_defaulted_string, deserialize_json_string};
-use crate::stored_inference::{StoredChatInference, StoredInference, StoredJsonInference};
+use crate::stored_inference::{
+    StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
+};
 use crate::tool::ToolCallConfigDatabaseInsert;
 
 #[derive(Debug, Deserialize)]
@@ -36,7 +37,7 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub tags: HashMap<String, String>,
 }
 
-impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredChatInference {
+impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredChatInferenceDatabase {
     type Error = Error;
 
     fn try_from(
@@ -54,7 +55,7 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             })
             .collect::<Result<Vec<Vec<ContentBlockChatOutput>>, Error>>()?;
 
-        Ok(StoredChatInference {
+        Ok(StoredChatInferenceDatabase {
             function_name: value.function_name,
             variant_name: value.variant_name,
             input: value.input,
@@ -129,7 +130,7 @@ pub(super) enum ClickHouseStoredInferenceWithDispreferredOutputs {
     Chat(ClickHouseStoredChatInferenceWithDispreferredOutputs),
 }
 
-impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInference {
+impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferenceDatabase {
     type Error = Error;
 
     fn try_from(
@@ -137,10 +138,10 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
     ) -> Result<Self, Self::Error> {
         Ok(match value {
             ClickHouseStoredInferenceWithDispreferredOutputs::Json(inference) => {
-                StoredInference::Json(inference.try_into()?)
+                StoredInferenceDatabase::Json(inference.try_into()?)
             }
             ClickHouseStoredInferenceWithDispreferredOutputs::Chat(inference) => {
-                StoredInference::Chat(inference.try_into()?)
+                StoredInferenceDatabase::Chat(inference.try_into()?)
             }
         })
     }
@@ -171,17 +172,42 @@ impl TryFrom<&str> for InferenceOutputSource {
         }
     }
 }
-/// Parameters for a ListInferences request.
+/// Parameters for a ListInferences query.
 #[derive(Debug, Clone)]
 pub struct ListInferencesParams<'a> {
-    pub function_name: &'a str,
+    /// Function name to query. If provided, only inferences from this function will be returned.
+    pub function_name: Option<&'a str>,
+    /// Inference IDs. If provided, only inferences with these IDs will be returned.
+    pub ids: Option<&'a [Uuid]>,
+    /// Variant name to query.
     pub variant_name: Option<&'a str>,
+    /// Episode ID to query.
+    pub episode_id: Option<&'a Uuid>,
+    /// Filters to apply to the query.
     pub filters: Option<&'a InferenceFilter>,
+    /// Source of the inference output to query.
     pub output_source: InferenceOutputSource,
+    /// Maximum number of inferences to return.
     pub limit: Option<u64>,
+    /// Number of inferences to skip.
     pub offset: Option<u64>,
     pub order_by: Option<&'a [OrderBy]>,
-    pub format: ClickhouseFormat,
+}
+
+impl Default for ListInferencesParams<'_> {
+    fn default() -> Self {
+        Self {
+            function_name: None,
+            ids: None,
+            variant_name: None,
+            episode_id: None,
+            filters: None,
+            output_source: InferenceOutputSource::Inference,
+            limit: None,
+            offset: None,
+            order_by: None,
+        }
+    }
 }
 
 #[async_trait]
@@ -192,5 +218,5 @@ pub trait InferenceQueries {
         // config is used for identifying the type of the function.
         config: &Config,
         params: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error>;
+    ) -> Result<Vec<StoredInferenceDatabase>, Error>;
 }

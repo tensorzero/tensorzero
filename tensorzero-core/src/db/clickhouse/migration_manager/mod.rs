@@ -10,6 +10,7 @@ use crate::config::BatchWritesConfig;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, Rows, TableName};
 use crate::db::HealthCheckable;
 use crate::endpoints::status::TENSORZERO_VERSION;
+use crate::error::delayed_error::DelayedError;
 use crate::error::{Error, ErrorDetails};
 use crate::serde_util::deserialize_u64;
 use migration_trait::Migration;
@@ -154,10 +155,12 @@ pub async fn check_migrations_state(
         Err(e) => {
             if let ErrorDetails::ClickHouseMigration { message, .. } = e.get_details() {
                 if message.contains("UNKNOWN_DATABASE") {
+                    e.suppress_logging_of_error_message();
                     tracing::info!("Database not found, assuming clean start");
                     return Ok(MigrationTableState::TooFew);
                 }
                 if message.contains("UNKNOWN_TABLE") {
+                    e.suppress_logging_of_error_message();
                     tracing::info!(
                         "TensorZeroMigration table not found, we should run migrations."
                     );
@@ -165,8 +168,8 @@ pub async fn check_migrations_state(
                 }
             }
             // Fall back to running all migrations as normal, and hopefully produce a better error message
-            tracing::warn!("Attempted to check whether required migrations have been run but was unable to parse the message from ClickHouse.
-            We should proceed to run migrations: {e}");
+            e.log_at_level("Attempted to check whether required migrations have been run but was unable to parse the message from ClickHouse.
+            We should proceed to run migrations: ", tracing::Level::WARN);
             return Ok(MigrationTableState::UnableToParse);
         }
     };
@@ -385,11 +388,11 @@ pub struct MigrationRecordDatabaseInsert {
 }
 
 /// Attempts to get all migration records from the `TensorZeroMigration` table.
-/// We do not log any `Error`s that we return, as the caller may want to ignore them.
+/// We produce a `DelayedError` rather than an `Error`, as the caller may want to ignore errors.
 /// Returns at most one record per migration ID.
 pub async fn get_all_migration_records(
     clickhouse: &ClickHouseConnectionInfo,
-) -> Result<Vec<MigrationRecordDatabaseInsert>, Error> {
+) -> Result<Vec<MigrationRecordDatabaseInsert>, DelayedError> {
     let mut rows = Vec::new();
     for row in clickhouse
         .run_query_synchronous_with_err_logging(
@@ -400,7 +403,7 @@ pub async fn get_all_migration_records(
         )
         .await
         .map_err(|e| {
-            Error::new_without_logging(ErrorDetails::ClickHouseMigration {
+            DelayedError::new(ErrorDetails::ClickHouseMigration {
                 id: "0000".to_string(),
                 message: format!("Failed to get migration records: {e}"),
             })
@@ -410,7 +413,7 @@ pub async fn get_all_migration_records(
     {
         rows.push(
             serde_json::from_str::<MigrationRecordDatabaseInsert>(row).map_err(|e| {
-                Error::new_without_logging(ErrorDetails::ClickHouseMigration {
+                DelayedError::new(ErrorDetails::ClickHouseMigration {
                     id: "0000".to_string(),
                     message: format!("Failed to parse migration record: {e}"),
                 })

@@ -5,10 +5,10 @@ use pyo3::types::{IntoPyDict, PyDict};
 use pyo3::{intern, prelude::*};
 use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult, Python};
 use serde::Deserialize;
-use serde_json::Value;
 use uuid::Uuid;
 
-use crate::endpoints::datasets::Datapoint;
+use crate::config::Config;
+use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
@@ -21,7 +21,7 @@ use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
-    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
+    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredInferenceDatabase, StoredSample,
 };
 use pyo3::types::PyNone;
 
@@ -122,11 +122,11 @@ pub fn resolved_content_block_to_python(
             let text_content_block = import_text_content_block(py)?;
             text_content_block.call1(py, (text.text.clone(),))
         }
-        ResolvedContentBlock::File(file) => {
+        ResolvedContentBlock::File(resolved) => {
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(
                 py,
-                (file.file.data.clone(), file.file.mime_type.to_string()),
+                (resolved.data.clone(), resolved.file.mime_type.to_string()),
             )
         }
         ResolvedContentBlock::ToolCall(tool_call) => {
@@ -210,19 +210,10 @@ pub fn stored_input_message_content_to_python(
     content: StoredInputMessageContent,
 ) -> PyResult<Py<PyAny>> {
     match content {
-        StoredInputMessageContent::Text { value } => {
+        StoredInputMessageContent::Text(text) => {
             let text_content_block = import_text_content_block(py)?;
-            match value {
-                Value::String(s) => {
-                    let kwargs = [(intern!(py, "text"), s)].into_py_dict(py)?;
-                    text_content_block.call(py, (), Some(&kwargs))
-                }
-                _ => {
-                    let value = serialize_to_dict(py, value)?;
-                    let kwargs = [(intern!(py, "arguments"), value)].into_py_dict(py)?;
-                    text_content_block.call(py, (), Some(&kwargs))
-                }
-            }
+            let kwargs = [(intern!(py, "text"), text.text)].into_py_dict(py)?;
+            text_content_block.call(py, (), Some(&kwargs))
         }
         StoredInputMessageContent::Template(template) => {
             let template_content_block = import_template_content_block(py)?;
@@ -260,21 +251,18 @@ pub fn stored_input_message_content_to_python(
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        StoredInputMessageContent::RawText { value } => {
+        StoredInputMessageContent::RawText(raw_text) => {
             let raw_text_content_block = import_raw_text_content_block(py)?;
-            raw_text_content_block.call1(py, (value,))
+            raw_text_content_block.call1(py, (raw_text.value,))
         }
         StoredInputMessageContent::File(file) => {
             let file_content_block = import_file_content_block(py)?;
-            file_content_block.call1(py, (PyNone::get(py), file.file.mime_type.to_string()))
+            file_content_block.call1(py, (PyNone::get(py), file.mime_type.to_string()))
         }
-        StoredInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => {
+        StoredInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
-            let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+            let serialized_data = serialize_to_dict(py, &unknown.data)?;
+            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
         }
     }
 }
@@ -284,9 +272,9 @@ pub fn resolved_input_message_content_to_python(
     content: ResolvedInputMessageContent,
 ) -> PyResult<Py<PyAny>> {
     match content {
-        ResolvedInputMessageContent::Text { text } => {
+        ResolvedInputMessageContent::Text(text) => {
             let text_content_block = import_text_content_block(py)?;
-            let kwargs = [(intern!(py, "text"), text)].into_py_dict(py)?;
+            let kwargs = [(intern!(py, "text"), text.text)].into_py_dict(py)?;
             text_content_block.call(py, (), Some(&kwargs))
         }
         ResolvedInputMessageContent::Template(template) => {
@@ -325,24 +313,21 @@ pub fn resolved_input_message_content_to_python(
             let thought_content_block = import_thought_content_block(py)?;
             thought_content_block.call1(py, (thought.text,))
         }
-        ResolvedInputMessageContent::RawText { value } => {
+        ResolvedInputMessageContent::RawText(raw_text) => {
             let raw_text_content_block = import_raw_text_content_block(py)?;
-            raw_text_content_block.call1(py, (value,))
+            raw_text_content_block.call1(py, (raw_text.value,))
         }
-        ResolvedInputMessageContent::File(file) => {
+        ResolvedInputMessageContent::File(resolved) => {
             let file_content_block = import_file_content_block(py)?;
             file_content_block.call1(
                 py,
-                (file.file.data.clone(), file.file.mime_type.to_string()),
+                (resolved.data.clone(), resolved.file.mime_type.to_string()),
             )
         }
-        ResolvedInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => {
+        ResolvedInputMessageContent::Unknown(unknown) => {
             let unknown_content_block = import_unknown_content_block(py)?;
-            let serialized_data = serialize_to_dict(py, data)?;
-            unknown_content_block.call1(py, (serialized_data, model_provider_name))
+            let serialized_data = serialize_to_dict(py, &unknown.data)?;
+            unknown_content_block.call1(py, (serialized_data, &unknown.model_provider_name))
         }
     }
 }
@@ -374,11 +359,37 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
 pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
+    config: &Config,
 ) -> PyResult<StoredSampleItem> {
     if obj.is_instance_of::<StoredInference>() {
-        Ok(StoredSampleItem::StoredInference(obj.extract()?))
+        // Extract wire type and convert to storage type
+        let wire: StoredInference = obj.extract()?;
+        let storage = match wire.to_storage(config) {
+            Ok(s) => s,
+            Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+        };
+        Ok(StoredSampleItem::StoredInference(storage))
     } else if obj.is_instance_of::<Datapoint>() {
-        Ok(StoredSampleItem::Datapoint(obj.extract()?))
+        // Extract wire type and convert to storage type
+        let wire: Datapoint = obj.extract()?;
+        match wire {
+            Datapoint::Chat(chat_wire) => {
+                let function_config = match config.get_function(&chat_wire.function_name) {
+                    Ok(f) => f,
+                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                };
+                let datapoint = match chat_wire.into_storage(&function_config, &config.tools) {
+                    Ok(d) => d,
+                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                };
+                Ok(StoredSampleItem::Datapoint(StoredDatapoint::Chat(
+                    datapoint,
+                )))
+            }
+            Datapoint::Json(json_wire) => Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
+                json_wire,
+            ))),
+        }
     } else {
         deserialize_from_pyobj(py, obj)
     }
@@ -422,8 +433,8 @@ pub fn deserialize_optimization_config(
 
 #[derive(Clone, Debug, Deserialize)]
 pub enum StoredSampleItem {
-    StoredInference(StoredInference),
-    Datapoint(Datapoint),
+    StoredInference(StoredInferenceDatabase),
+    Datapoint(StoredDatapoint),
 }
 
 impl StoredSample for StoredSampleItem {

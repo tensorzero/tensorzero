@@ -39,9 +39,9 @@ use tracing_test::traced_test;
 
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
 
-use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::file::{Base64File, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
-use tensorzero_core::inference::types::{FinishReason, TextKind, Thought};
+use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
 use tensorzero_core::{
     cache::CacheEnabledMode,
@@ -730,7 +730,7 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-3-5-sonnet-20241022"
+model = "anthropic::claude-sonnet-4-5-20250929"
 
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
@@ -1634,10 +1634,10 @@ pub async fn test_url_image_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the image".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Url {
+                            ClientInputMessageContent::File(File::Url(UrlFile {
                                 url: image_url.clone(),
                                 mime_type: None,
-                            }),
+                            })),
                         ],
                     }],
                 },
@@ -1695,10 +1695,11 @@ pub async fn test_base64_pdf_inference_with_provider_and_store(
                             ClientInputMessageContent::Text(TextKind::Text {
                                 text: "Describe the contents of the PDF".to_string(),
                             }),
-                            ClientInputMessageContent::File(File::Base64 {
+                            ClientInputMessageContent::File(File::Base64(Base64File {
+                                source_url: None,
                                 mime_type: mime::APPLICATION_PDF,
                                 data: pdf_data.clone(),
-                            }),
+                            })),
                         ],
                     }],
                 },
@@ -1755,10 +1756,11 @@ pub async fn test_base64_image_inference_with_provider_and_store(
                     ClientInputMessageContent::Text(TextKind::Text {
                         text: "Describe the contents of the image".to_string(),
                     }),
-                    ClientInputMessageContent::File(File::Base64 {
+                    ClientInputMessageContent::File(File::Base64(Base64File {
+                        source_url: None,
                         mime_type: mime::IMAGE_PNG,
                         data: image_data.clone(),
-                    }),
+                    })),
                 ],
             }],
         },
@@ -1814,10 +1816,12 @@ pub async fn test_base64_image_inference_with_provider_and_store(
 
     let updated_base64 = BASE64_STANDARD.encode(updated_image.into_inner());
 
-    params.input.messages[0].content[1] = ClientInputMessageContent::File(File::Base64 {
-        mime_type: mime::IMAGE_PNG,
-        data: updated_base64,
-    });
+    params.input.messages[0].content[1] =
+        ClientInputMessageContent::File(File::Base64(Base64File {
+            source_url: None,
+            mime_type: mime::IMAGE_PNG,
+            data: updated_base64,
+        }));
 
     let response = client.inference(params.clone()).await.unwrap();
 
@@ -2328,7 +2332,12 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                     || res["error"]
                         .as_str()
                         .unwrap()
-                        .contains("No auth credentials found"),
+                        .contains("No auth credentials found")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .to_lowercase()
+                        .contains("no cookie auth"),
                 "Unexpected error: {res}"
             );
         }
@@ -2385,7 +2394,10 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
             function_name: Some("basic_test".to_string()),
             variant_name: Some(provider.variant_name.clone()),
             input: ClientInput {
-                system: Some(serde_json::json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![
                     ClientInputMessage {
                         role: Role::Assistant,
@@ -2584,13 +2596,11 @@ pub async fn check_base64_pdf_response(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Describe the contents of the PDF"},
+                    {"type": "text", "text": "Describe the contents of the PDF"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": null,
-                            "mime_type": "application/pdf",
-                        },
+                        "source_url": null,
+                        "mime_type": "application/pdf",
                         "storage_path": {
                             "kind": kind_json,
                             "path": format!("{prefix}observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf"),
@@ -2627,13 +2637,11 @@ pub async fn check_base64_pdf_response(
                 StoredContentBlock::Text(Text {
                     text: "Describe the contents of the PDF".to_string(),
                 }),
-                StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
-                        url: None,
-                        mime_type: mime::APPLICATION_PDF,
-                    },
+                StoredContentBlock::File(Box::new(StoredFile(ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::APPLICATION_PDF,
                     storage_path: expected_storage_path.clone(),
-                }))
+                },)))
             ]
         },]
     );
@@ -2739,13 +2747,11 @@ pub async fn check_base64_image_response(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Describe the contents of the image"},
+                    {"type": "text", "text": "Describe the contents of the image"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": null,
-                            "mime_type": "image/png",
-                        },
+                        "source_url": null,
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": kind_json,
                             "path": format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
@@ -2782,13 +2788,11 @@ pub async fn check_base64_image_response(
                 StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
                 }),
-                StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
-                        url: None,
-                        mime_type: mime::IMAGE_PNG,
-                    },
+                StoredContentBlock::File(Box::new(StoredFile(ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
-                }))
+                },)))
             ]
         },]
     );
@@ -2894,13 +2898,11 @@ pub async fn check_url_image_response(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "Describe the contents of the image"},
+                    {"type": "text", "text": "Describe the contents of the image"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": image_url.to_string(),
-                            "mime_type": "image/png",
-                        },
+                        "source_url": image_url.to_string(),
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": kind_json,
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
@@ -2931,16 +2933,16 @@ pub async fn check_url_image_response(
                 role: Role::User,
                 content: vec![StoredContentBlock::Text(Text {
                     text: "Describe the contents of the image".to_string(),
-                }), StoredContentBlock::File(Box::new(StoredFile {
-                    file: Base64FileMetadata {
-                        url: Some(image_url.clone()),
+                }), StoredContentBlock::File(Box::new(StoredFile(
+                    ObjectStoragePointer {
+                        source_url: Some(image_url.clone()),
                         mime_type: mime::IMAGE_PNG,
+                        storage_path: StoragePath {
+                            kind: kind.clone(),
+                            path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
+                        },
                     },
-                    storage_path: StoragePath {
-                        kind: kind.clone(),
-                        path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
-                    }
-                }))]
+                )))]
             },
         ]
     );
@@ -3058,7 +3060,7 @@ pub async fn check_simple_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -3263,13 +3265,11 @@ pub async fn check_simple_image_inference_response(
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "value": "What kind of animal is in this image?"},
+                    {"type": "text", "text": "What kind of animal is in this image?"},
                     {
                         "type": "file",
-                        "file": {
-                            "url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-                            "mime_type": "image/png",
-                        },
+                        "source_url": "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+                        "mime_type": "image/png",
                         "storage_path": {
                             "kind": {"type": "disabled"},
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
@@ -3644,7 +3644,7 @@ pub async fn test_simple_streaming_inference_request_with_provider_cache(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -4151,7 +4151,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan?"}]
             }
         ]
     });
@@ -4419,7 +4419,7 @@ pub async fn check_tool_use_tool_choice_auto_used_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -4736,7 +4736,7 @@ pub async fn test_tool_use_tool_choice_auto_used_streaming_inference_request_wit
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -5028,7 +5028,7 @@ pub async fn check_tool_use_tool_choice_auto_unused_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is your name?"}]
+                    "content": [{"type": "text", "text": "What is your name?"}]
                 }
             ]
         }
@@ -5324,7 +5324,7 @@ pub async fn test_tool_use_tool_choice_auto_unused_streaming_inference_request_w
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is your name?"}]
+                    "content": [{"type": "text", "text": "What is your name?"}]
                 }
             ]
         }
@@ -5639,7 +5639,7 @@ pub async fn check_tool_use_tool_choice_required_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is your name?"}]
+                    "content": [{"type": "text", "text": "What is your name?"}]
                 }
             ]
         }
@@ -5957,7 +5957,7 @@ pub async fn test_tool_use_tool_choice_required_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is your name?"}]
+                    "content": [{"type": "text", "text": "What is your name?"}]
                 }
             ]
         }
@@ -6269,7 +6269,7 @@ pub async fn check_tool_use_tool_choice_none_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -6546,7 +6546,7 @@ pub async fn test_tool_use_tool_choice_none_streaming_inference_request_with_pro
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -6862,7 +6862,7 @@ pub async fn check_tool_use_tool_choice_specific_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                    "content": [{"type": "text", "text": "What is the temperature like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
                 }
             ]
         }
@@ -7240,7 +7240,7 @@ pub async fn test_tool_use_tool_choice_specific_streaming_inference_request_with
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": prompt}]
+                    "content": [{"type": "text", "text": prompt}]
                 }
             ]
         }
@@ -7596,7 +7596,7 @@ pub async fn check_tool_use_tool_choice_allowed_tools_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
+                    "content": [{"type": "text", "text": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -7921,7 +7921,7 @@ pub async fn test_tool_use_allowed_tools_streaming_inference_request_with_provid
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
+                    "content": [{"type": "text", "text": "What can you tell me about the weather in Tokyo (e.g. temperature, humidity, wind)? Use the provided tools and return what you can (not necessarily everything)."}]
                 }
             ]
         }
@@ -8228,7 +8228,7 @@ pub async fn check_tool_use_multi_turn_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
             },
             {
                 "role": "assistant",
@@ -8526,7 +8526,7 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
+                "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the `get_temperature` tool."}]
             },
             {
                 "role": "assistant",
@@ -8698,7 +8698,10 @@ pub async fn test_stop_sequences_inference_request_with_provider(
             variant_name: Some(provider.variant_name.clone()),
             episode_id: Some(episode_id),
             input: tensorzero::ClientInput {
-                system: Some(json!({"assistant_name": "Dr. Mehta"})),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "Dr. Mehta".into(),
+                )])))),
                 messages: vec![tensorzero::ClientInputMessage {
                     role: Role::User,
                     content: vec![tensorzero::ClientInputMessageContent::Text(
@@ -8819,7 +8822,10 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         episode_id: Some(episode_id),
         extra_headers: get_extra_headers(),
         input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                "Dr. Mehta".into(),
+            )])))),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![
@@ -8980,7 +8986,7 @@ pub async fn check_dynamic_tool_use_inference_response(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
                 }
             ]
         }
@@ -9124,7 +9130,10 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         variant_name: Some(provider.variant_name.clone()),
         episode_id: Some(episode_id),
         input: tensorzero::ClientInput {
-            system: Some(json!({"assistant_name": "Dr. Mehta"})),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "assistant_name".to_string(),
+                "Dr. Mehta".into(),
+            )])))),
             messages: vec![tensorzero::ClientInputMessage {
                 role: Role::User,
                 content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text { text: "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function.".to_string() })],
@@ -9296,7 +9305,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use the provided `get_temperature` tool. Do not say anything else, just call the function."}]
                 }
             ]
         }
@@ -9647,7 +9656,7 @@ pub async fn check_parallel_tool_use_inference_response(
                     "role": "user",
                     "content": [{
                         "type": "text",
-                        "value": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
+                        "text": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."
                     }]
                 }
             ]
@@ -10032,7 +10041,7 @@ pub async fn test_parallel_tool_use_streaming_inference_request_with_provider(
             "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "value": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
+                    "content": [{"type": "text", "text": "What is the weather like in Tokyo (in Celsius)? Use both the provided `get_temperature` and `get_humidity` tools. Do not say anything else, just call the two functions."}]
                 }
             ]
         }
@@ -10286,7 +10295,7 @@ pub async fn test_json_mode_inference_request_with_provider(provider: E2ETestPro
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -10544,7 +10553,7 @@ pub async fn test_dynamic_json_mode_inference_request_with_provider(provider: E2
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -10802,7 +10811,7 @@ pub async fn test_json_mode_streaming_inference_request_with_provider(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,
@@ -11253,7 +11262,7 @@ async fn check_short_inference_response(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the name of the capital city of Japan? Explain your answer."}]
+                "content": [{"type": "text", "text": "What is the name of the capital city of Japan? Explain your answer."}]
             }
         ]
     });
@@ -12063,7 +12072,7 @@ pub async fn test_json_mode_off_inference_request_with_provider(provider: E2ETes
                "messages": [
                    {
                        "role": "user",
-                       "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                       "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                    }
                ]
             },

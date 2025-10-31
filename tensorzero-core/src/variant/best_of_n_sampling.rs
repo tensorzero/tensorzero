@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
+use std::future::Future;
 use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
@@ -19,13 +20,13 @@ use crate::inference::types::resolved_input::LazyResolvedInput;
 use crate::inference::types::ContentBlockOutput;
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, FunctionType, ModelInferenceRequest,
-    ModelInferenceResponseWithMetadata, RequestMessage, Role,
+    ModelInferenceResponseWithMetadata, RequestMessage, Role, System,
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::{
-    AllowedTools, AllowedToolsChoice, ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
-};
+use crate::tool::create_implicit_tool_call_config_with_allowed_tools;
+use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
+use crate::utils::unbounded_recursion_wrapper;
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
 use crate::{
     endpoints::inference::InferenceParams,
@@ -127,6 +128,9 @@ impl UninitializedBestOfNSamplingConfig {
         })
     }
 }
+
+const IMPLICIT_TOOL_NAME: &str = "respond";
+
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
         #[expect(clippy::expect_used)]
@@ -141,22 +145,22 @@ lazy_static! {
         }))
         .expect("Failed to create schema for evaluator output")
     };
-    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = ToolCallConfig {
-        tools_available: vec![ToolConfig::Implicit(ImplicitToolConfig {
-            parameters: EVALUATOR_OUTPUT_SCHEMA.clone(),
-        })],
-        tool_choice: ToolChoice::Specific("respond".to_string()),
-        parallel_tool_calls: None,
-        provider_tools: None,
-        allowed_tools: AllowedTools {
-            tools: vec!["respond".to_string()],
-            choice: AllowedToolsChoice::FunctionDefault,
-        }
+    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = {
+        create_implicit_tool_call_config_with_allowed_tools(
+            EVALUATOR_OUTPUT_SCHEMA.clone(),
+            AllowedTools {
+                tools: vec![IMPLICIT_TOOL_NAME.to_string()],
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+        )
     };
 }
 
 impl Variant for BestOfNSamplingConfig {
-    async fn infer(
+    // The compiler gives us 'cycle detected when looking up the hidden types stored across await points in a coroutine'
+    // if we try to use 'async fn' here
+    #[expect(refining_impl_trait, clippy::manual_async_fn)]
+    fn infer(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
@@ -164,24 +168,26 @@ impl Variant for BestOfNSamplingConfig {
         inference_config: Arc<InferenceConfig>,
         clients: InferenceClients,
         _inference_params: InferenceParams,
-    ) -> Result<InferenceResult, Error> {
-        let candidate_inference_results = self
-            .infer_candidates(
+    ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
+        async move {
+            let candidate_inference_results = self
+                .infer_candidates(
+                    &input,
+                    &models,
+                    &function,
+                    Arc::clone(&inference_config),
+                    &clients,
+                )
+                .await?;
+            self.select_best_candidate(
                 &input,
-                &models,
-                &function,
-                Arc::clone(&inference_config),
+                &models.models,
+                &inference_config,
                 &clients,
+                candidate_inference_results,
             )
-            .await?;
-        self.select_best_candidate(
-            &input,
-            &models.models,
-            &inference_config,
-            &clients,
-            candidate_inference_results,
-        )
-        .await
+            .await
+        }
     }
 
     async fn infer_stream(
@@ -331,25 +337,33 @@ impl BestOfNSamplingConfig {
                     extra_cache_key: Some(format!("candidate_{i}")),
                     ..inference_config.as_ref().clone()
                 };
-                Ok((candidate.to_string(), variant, Arc::new(config)))
+                Ok((candidate.to_string(), variant.clone(), Arc::new(config)))
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
         // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
-        for (candidate_name, candidate_variant, config) in &candidate_variants {
+        for (candidate_name, candidate_variant, config) in candidate_variants {
+            let models = models.clone();
+            let clients = clients.clone();
+            let function = Arc::clone(function);
+            let input = Arc::new(input.clone());
             inference_futures.push((
                 candidate_name.clone(),
                 timeout(
                     Duration::from_secs_f64(self.timeout_s),
-                    candidate_variant.infer(
-                        Arc::new(input.clone()),
-                        models.clone(),
-                        Arc::clone(function),
-                        Arc::clone(config),
-                        clients.clone(),
-                        InferenceParams::default(),
-                    ),
+                    unbounded_recursion_wrapper(async move {
+                        candidate_variant
+                            .infer(
+                                input,
+                                models,
+                                function,
+                                config,
+                                clients,
+                                InferenceParams::default(),
+                            )
+                            .await
+                    }),
                 ),
             ));
         }
@@ -592,7 +606,7 @@ impl BestOfNEvaluatorConfig {
     fn prepare_system_message(
         &self,
         templates: &TemplateConfig,
-        system: Option<&Value>,
+        system: Option<&System>,
         max_index: usize,
     ) -> Result<String, Error> {
         let inner_system_message = self.inner.prepare_system_message(templates, system)?;
@@ -808,11 +822,10 @@ fn map_evaluator_to_actual_index(evaluator_idx: usize, skipped_indices: &[usize]
 
 #[cfg(test)]
 mod tests {
-    use crate::rate_limiting::ScopeInfo;
     use std::collections::HashMap;
-
     use uuid::Uuid;
 
+    use crate::rate_limiting::ScopeInfo;
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         config::{provider_types::ProviderTypesConfig, UninitializedSchemas},
@@ -820,7 +833,7 @@ mod tests {
         endpoints::inference::{InferenceCredentials, InferenceIds},
         http::TensorzeroHttpClient,
         inference::types::{
-            ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
+            Arguments, ChatInferenceResult, FinishReason, JsonInferenceResult, Latency,
             RequestMessagesOrBatch, Usage,
         },
         minijinja_util::tests::{
@@ -869,7 +882,7 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap(),
         };
-        let input_message = Value::String("You are a helpful assistant.".to_string());
+        let input_message = System::Text("You are a helpful assistant.".to_string());
         let max_index = 2;
         let result =
             evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
@@ -892,15 +905,24 @@ mod tests {
             .load(&SchemaData::default(), &ErrorContext::new_test())
             .unwrap(),
         };
-        let input_message = json!({"message": "You are a helpful assistant."});
+        let input_message = System::Template(Arguments(
+            json!({"message": "You are a helpful assistant."})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ));
         let max_index = 3;
         let result =
             evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
         assert!(result.is_err());
         let prepared_message = result.unwrap_err();
         assert_eq!(
-        prepared_message,
-        ErrorDetails::InvalidMessage { message: "System message content {\"message\":\"You are a helpful assistant.\"} is not a string but there is no variant template".to_string() }.into()
+            prepared_message,
+            ErrorDetails::InvalidMessage {
+                message: "System message content is a template but there is no variant template"
+                    .to_string()
+            }
+            .into()
         );
 
         // Test without templates, no message
@@ -955,7 +977,12 @@ mod tests {
         };
 
         let max_index = 6;
-        let input_message = serde_json::json!({"assistant_name": "ChatGPT"});
+        let input_message = System::Template(Arguments(
+            serde_json::json!({"assistant_name": "ChatGPT"})
+                .as_object()
+                .unwrap()
+                .clone(),
+        ));
         let result =
             evaluator_config.prepare_system_message(&templates, Some(&input_message), max_index);
         let prepared_message = result.unwrap();

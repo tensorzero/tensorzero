@@ -5,7 +5,7 @@ use std::{
 };
 
 use tensorzero::{
-    ChatInferenceDatapoint, Client, ClientBuilder, ClientBuilderMode, JsonInferenceDatapoint,
+    Client, ClientBuilder, ClientBuilderMode, JsonInferenceDatapoint, StoredChatInferenceDatapoint,
 };
 use tensorzero_core::db::clickhouse::{
     test_helpers::{get_clickhouse, CLICKHOUSE_URL},
@@ -23,10 +23,10 @@ pub async fn write_chat_fixture_to_dataset(
 ) {
     let fixture = std::fs::read_to_string(fixture_path).unwrap();
     let fixture = fixture.trim();
-    let mut datapoints: Vec<ChatInferenceDatapoint> = Vec::new();
+    let mut datapoints: Vec<StoredChatInferenceDatapoint> = Vec::new();
     // Iterate over the lines in the string
     for line in fixture.lines() {
-        let mut datapoint: ChatInferenceDatapoint = serde_json::from_str(line).unwrap();
+        let mut datapoint: StoredChatInferenceDatapoint = serde_json::from_str(line).unwrap();
         datapoint.id = Uuid::now_v7();
         if let Some(dataset_name) = dataset_name_mapping.get(&datapoint.dataset_name) {
             datapoint.dataset_name = dataset_name.to_string();

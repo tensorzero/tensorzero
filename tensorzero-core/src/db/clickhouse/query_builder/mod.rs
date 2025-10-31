@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::HashMap,
     fmt::{self, Display},
 };
 
@@ -14,6 +14,9 @@ use crate::{
 mod datapoint_queries;
 pub(super) mod parameters;
 pub use datapoint_queries::DatapointFilter;
+
+#[cfg(test)]
+pub mod test_util;
 
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -262,13 +265,27 @@ pub struct TimeFilter {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
 #[serde(tag = "type", rename_all = "snake_case")]
+/// Filters for querying inferences.
 pub enum InferenceFilter {
+    /// Filter by the value of a float metric
     FloatMetric(FloatMetricFilter),
+
+    /// Filter by the value of a boolean metric
     BooleanMetric(BooleanMetricFilter),
+
+    /// Filter by tag key-value pair
     Tag(TagFilter),
+
+    /// Filter by the timestamp of an inference.
     Time(TimeFilter),
+
+    /// Logical AND of multiple filters
     And { children: Vec<InferenceFilter> },
+
+    /// Logical OR of multiple filters
     Or { children: Vec<InferenceFilter> },
+
+    /// Logical NOT of a filter
     Not { child: Box<InferenceFilter> },
 }
 
@@ -290,7 +307,7 @@ impl InferenceFilter {
         &self,
         config: &Config,
         params_map: &mut Vec<QueryParameter>,
-        _select_clauses: &mut BTreeSet<String>,
+        _select_clauses: &mut Vec<String>,
         joins: &mut JoinRegistry,
         param_idx_counter: &mut usize,
     ) -> Result<String, Error> {
@@ -522,13 +539,15 @@ mod tests {
     use uuid::Uuid;
 
     use crate::db::clickhouse::inference_queries::generate_list_inferences_sql;
-    use crate::db::clickhouse::ClickhouseFormat;
+    use crate::db::clickhouse::query_builder::test_util::assert_query_equals;
     use crate::db::inferences::{
         ClickHouseStoredInferenceWithDispreferredOutputs, InferenceOutputSource,
         ListInferencesParams,
     };
-    use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
-    use crate::stored_inference::StoredInference;
+    use crate::inference::types::{
+        ContentBlockChatOutput, JsonInferenceOutput, StoredInput, System,
+    };
+    use crate::stored_inference::StoredInferenceDatabase;
     use crate::tool::ToolCallConfigDatabaseInsert;
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
@@ -549,14 +568,8 @@ mod tests {
     async fn test_simple_query_json_function() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
-            filters: None,
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            function_name: Some("extract_entities"),
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -564,19 +577,20 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
             value: "extract_entities".to_string(),
@@ -588,14 +602,8 @@ FORMAT JSONEachRow";
     async fn test_simple_query_chat_function() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "write_haiku",
-            variant_name: None,
-            filters: None,
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            function_name: Some("write_haiku"),
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -603,19 +611,20 @@ SELECT
     'chat' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
+    '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
             value: "write_haiku".to_string(),
@@ -632,14 +641,9 @@ FORMAT JSONEachRow";
             comparison_operator: FloatComparisonOperator::GreaterThan,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -647,13 +651,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -667,7 +672,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND j0.value > {p2:Float64}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -689,14 +694,8 @@ FORMAT JSONEachRow";
     async fn test_unknown_function_name() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "unknown_function_name",
-            variant_name: None,
-            filters: None,
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            function_name: Some("unknown_function_name"),
+            ..Default::default()
         };
         let result = generate_list_inferences_sql(&config, &opts);
         assert!(result.is_err());
@@ -715,14 +714,9 @@ FORMAT JSONEachRow";
             comparison_operator: FloatComparisonOperator::GreaterThan,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let result = generate_list_inferences_sql(&config, &opts);
         assert!(result.is_err());
@@ -736,36 +730,32 @@ FORMAT JSONEachRow";
     async fn test_demonstration_output_source() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
-            filters: None,
+            function_name: Some("extract_entities"),
             output_source: InferenceOutputSource::Demonstration,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
     'json' as type,
-    [i.output] as dispreferred_outputs,
-    demo_f.value AS output,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    demo_f.value AS output,
+    [i.output] as dispreferred_outputs
 FROM
     JsonInference AS i
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
 WHERE
     i.function_name = {p0:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
             value: "extract_entities".to_string(),
@@ -781,14 +771,9 @@ FORMAT JSONEachRow";
             value: true,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -796,13 +781,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -816,7 +802,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -842,14 +828,9 @@ FORMAT JSONEachRow";
             value: false,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -857,13 +838,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -877,7 +859,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND j0.value = {p2:Bool}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -919,14 +901,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -934,13 +911,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -963,7 +941,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value > {p2:Float64}, 0) AND COALESCE(j0.value < {p3:Float64}, 0) AND COALESCE(j1.value < {p5:Float64}, 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1015,14 +993,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1030,13 +1003,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1068,7 +1042,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(j0.value >= {p2:Float64}, 0) OR COALESCE(j1.value = {p4:Bool}, 0) OR COALESCE(j2.value = {p6:Bool}, 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1120,14 +1094,9 @@ FORMAT JSONEachRow";
             }),
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1135,13 +1104,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1155,7 +1125,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND NOT (COALESCE((COALESCE(j0.value = {p2:Bool}, 0) OR COALESCE(j0.value = {p3:Bool}, 0)), 1))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1205,14 +1175,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1220,13 +1185,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1258,7 +1224,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE((COALESCE(j0.value > {p2:Float64}, 0) OR COALESCE(j1.value <= {p4:Float64}, 0)), 0) AND COALESCE(NOT (COALESCE(j2.value = {p6:Bool}, 1)), 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         assert_eq!(params.len(), 7); // p0 (function) + 6 metric-related params
     }
 
@@ -1297,14 +1263,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1312,13 +1273,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1332,7 +1294,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp > parseDateTimeBestEffort({p1:String}), 0) AND COALESCE((COALESCE(i.timestamp < parseDateTimeBestEffort({p2:String}), 0) OR COALESCE((COALESCE(j0.value >= {p4:Float64}, 0) AND COALESCE(i.tags[{p5:String}] = {p6:String}, 0)), 0)), 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         assert_eq!(params.len(), 7); // p0 (function) + 6 filter-related params
     }
 
@@ -1340,14 +1302,10 @@ FORMAT JSONEachRow";
     async fn test_variant_name_filter() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: Some("extract_entities"),
             variant_name: Some("v1"),
             filters: None,
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1355,19 +1313,20 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.variant_name = {p1:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1385,14 +1344,10 @@ FORMAT JSONEachRow";
     async fn test_limit_and_offset() {
         let config = get_e2e_config().await;
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
-            filters: None,
-            output_source: InferenceOutputSource::Inference,
+            function_name: Some("extract_entities"),
             limit: Some(50),
             offset: Some(100),
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1400,13 +1355,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
@@ -1414,7 +1370,7 @@ WHERE
 LIMIT {p1:UInt64}
 OFFSET {p2:UInt64}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1451,14 +1407,9 @@ FORMAT JSONEachRow";
                 comparison_operator: op,
             });
             let opts = ListInferencesParams {
-                function_name: "extract_entities",
-                variant_name: None,
+                function_name: Some("extract_entities"),
                 filters: Some(&filter_node),
-                output_source: InferenceOutputSource::Inference,
-                limit: None,
-                offset: None,
-                order_by: None,
-                format: ClickhouseFormat::JsonEachRow,
+                ..Default::default()
             };
             let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
             let expected_sql = format!(
@@ -1467,13 +1418,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {{p0:String}} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1488,7 +1440,7 @@ WHERE
     i.function_name = {{p0:String}} AND j0.value {expected_op_str} {{p2:Float64}}
 FORMAT JSONEachRow",
             );
-            assert_eq!(sql, expected_sql);
+            assert_query_equals(&sql, &expected_sql);
             let expected_params = vec![
                 QueryParameter {
                     name: "p0".to_string(),
@@ -1516,14 +1468,9 @@ FORMAT JSONEachRow",
             comparison_operator: TagComparisonOperator::Equal,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1531,19 +1478,20 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] = {p2:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1570,14 +1518,9 @@ FORMAT JSONEachRow";
             comparison_operator: TagComparisonOperator::NotEqual,
         });
         let opts = ListInferencesParams {
-            function_name: "write_haiku",
-            variant_name: None,
+            function_name: Some("write_haiku"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1585,19 +1528,20 @@ SELECT
     'chat' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
+    '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     ChatInference AS i
 WHERE
     i.function_name = {p0:String} AND i.tags[{p1:String}] != {p2:String}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1633,14 +1577,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1648,19 +1587,20 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(i.tags[{p3:String}] = {p4:String}, 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1704,14 +1644,9 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1719,13 +1654,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -1739,7 +1675,7 @@ LEFT JOIN (
 WHERE
     i.function_name = {p0:String} AND (COALESCE(i.tags[{p1:String}] = {p2:String}, 0) AND COALESCE(j0.value > {p4:Float64}, 0))
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1782,29 +1718,29 @@ FORMAT JSONEachRow";
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
+            function_name: Some("extract_entities"),
             variant_name: Some("production"),
             filters: Some(&filter_node),
             output_source: InferenceOutputSource::Demonstration,
             limit: Some(25),
             offset: Some(50),
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
 SELECT
     'json' as type,
-    [i.output] as dispreferred_outputs,
-    demo_f.value AS output,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    demo_f.value AS output,
+    [i.output] as dispreferred_outputs
 FROM
     JsonInference AS i
 JOIN (SELECT inference_id, argMax(value, timestamp) as value FROM DemonstrationFeedback GROUP BY inference_id ) AS demo_f ON i.id = demo_f.inference_id
@@ -1831,7 +1767,7 @@ WHERE
 LIMIT {p6:UInt64}
 OFFSET {p7:UInt64}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
 
         let expected_params = vec![
             QueryParameter {
@@ -1878,14 +1814,9 @@ FORMAT JSONEachRow";
             comparison_operator: TimeComparisonOperator::GreaterThan,
         });
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -1893,19 +1824,20 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String} AND i.timestamp > parseDateTimeBestEffort({p1:String})
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -1937,14 +1869,9 @@ FORMAT JSONEachRow";
                 comparison_operator: op,
             });
             let opts = ListInferencesParams {
-                function_name: "write_haiku",
-                variant_name: None,
+                function_name: Some("write_haiku"),
                 filters: Some(&filter_node),
-                output_source: InferenceOutputSource::Inference,
-                limit: None,
-                offset: None,
-                order_by: None,
-                format: ClickhouseFormat::JsonEachRow,
+                ..Default::default()
             };
             let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
             let expected_sql = format!(
@@ -1953,20 +1880,21 @@ SELECT
     'chat' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
+    '' as output_schema,
     i.tags as tags,
     i.tool_params as tool_params,
     i.variant_name as variant_name,
-    {{p0:String}} as function_name
+    i.output as output
 FROM
     ChatInference AS i
 WHERE
     i.function_name = {{p0:String}} AND i.timestamp {expected_op_str} parseDateTimeBestEffort({{p1:String}})
 FORMAT JSONEachRow",
             );
-            assert_eq!(sql, expected_sql);
+            assert_query_equals(&sql, &expected_sql);
             let expected_params = vec![
                 QueryParameter {
                     name: "p0".to_string(),
@@ -2003,14 +1931,10 @@ FORMAT JSONEachRow",
             ],
         };
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
+            function_name: Some("extract_entities"),
             filters: Some(&filter_node),
-            output_source: InferenceOutputSource::Inference,
             limit: Some(10),
-            offset: None,
-            order_by: None,
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         let expected_sql = r"
@@ -2018,13 +1942,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -2039,7 +1964,7 @@ WHERE
     i.function_name = {p0:String} AND (COALESCE(i.timestamp >= parseDateTimeBestEffort({p1:String}), 0) AND COALESCE(i.tags[{p2:String}] = {p3:String}, 0) AND COALESCE(j0.value > {p5:Float64}, 0))
 LIMIT {p6:UInt64}
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
         let expected_params = vec![
             QueryParameter {
                 name: "p0".to_string(),
@@ -2092,7 +2017,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Chat(chat_inference) = inference.try_into().unwrap() else {
             panic!("Expected a chat inference");
         };
         assert_eq!(chat_inference.function_name, "test_function");
@@ -2100,7 +2025,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             chat_inference.input,
             StoredInput {
-                system: Some(json!("you are a helpful assistant")),
+                system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
             }
         );
@@ -2133,8 +2058,8 @@ FORMAT JSONEachRow";
             "timestamp": "2023-01-01T00:00:00Z"
         }
     "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Chat(chat_inference) = inference else {
             panic!("Expected a chat inference");
         };
         assert_eq!(chat_inference.function_name, "test_function");
@@ -2142,7 +2067,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             chat_inference.input,
             StoredInput {
-                system: Some(json!("you are a helpful assistant")),
+                system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
             }
         );
@@ -2181,7 +2106,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Chat(chat_inference) = inference.try_into().unwrap() else {
             panic!("Expected a chat inference");
         };
         assert_eq!(
@@ -2212,8 +2137,8 @@ FORMAT JSONEachRow";
             "timestamp": "2023-01-01T00:00:00Z"
         }
     "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Chat(chat_inference) = inference else {
             panic!("Expected a chat inference");
         };
         assert_eq!(
@@ -2243,7 +2168,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Json(json_inference) = inference.try_into().unwrap() else {
             panic!("Expected a json inference");
         };
         assert_eq!(json_inference.function_name, "test_function");
@@ -2251,7 +2176,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             json_inference.input,
             StoredInput {
-                system: Some(json!("you are a helpful assistant")),
+                system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
             }
         );
@@ -2291,8 +2216,8 @@ FORMAT JSONEachRow";
              "timestamp": "2023-01-01T00:00:00Z"
          }
      "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Json(json_inference) = inference else {
             panic!("Expected a json inference");
         };
         assert_eq!(json_inference.function_name, "test_function");
@@ -2300,7 +2225,7 @@ FORMAT JSONEachRow";
         assert_eq!(
             json_inference.input,
             StoredInput {
-                system: Some(json!("you are a helpful assistant")),
+                system: Some(System::Text("you are a helpful assistant".to_string())),
                 messages: vec![],
             }
         );
@@ -2346,7 +2271,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Json(json_inference) = inference.try_into().unwrap() else {
             panic!("Expected a json inference");
         };
         assert_eq!(
@@ -2375,8 +2300,8 @@ FORMAT JSONEachRow";
              "timestamp": "2023-01-01T00:00:00Z"
          }
      "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Json(json_inference) = inference else {
             panic!("Expected a json inference");
         };
 
@@ -2397,14 +2322,9 @@ FORMAT JSONEachRow";
             direction: OrderDirection::Desc,
         }];
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
-            filters: None,
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
+            function_name: Some("extract_entities"),
             order_by: Some(&order_by),
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
@@ -2413,20 +2333,21 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 WHERE
     i.function_name = {p0:String}
 ORDER BY i.timestamp DESC NULLS LAST
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
 
         let expected_params = vec![QueryParameter {
             name: "p0".to_string(),
@@ -2445,14 +2366,9 @@ FORMAT JSONEachRow";
             direction: OrderDirection::Asc,
         }];
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
-            filters: None,
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
+            function_name: Some("extract_entities"),
             order_by: Some(&order_by),
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
         // NOTE: This test case enforces that the joins account for metrics that are only used in the order by clause.
@@ -2461,13 +2377,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -2482,7 +2399,7 @@ WHERE
     i.function_name = {p0:String}
 ORDER BY j0.value ASC NULLS LAST
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
 
         let expected_params = vec![
             QueryParameter {
@@ -2513,14 +2430,9 @@ FORMAT JSONEachRow";
             },
         ];
         let opts = ListInferencesParams {
-            function_name: "extract_entities",
-            variant_name: None,
-            filters: None,
-            output_source: InferenceOutputSource::Inference,
-            limit: None,
-            offset: None,
+            function_name: Some("extract_entities"),
             order_by: Some(&order_by),
-            format: ClickhouseFormat::JsonEachRow,
+            ..Default::default()
         };
         let (sql, params) = generate_list_inferences_sql(&config, &opts).unwrap();
 
@@ -2529,13 +2441,14 @@ SELECT
     'json' as type,
     formatDateTime(i.timestamp, '%Y-%m-%dT%H:%i:%SZ') as timestamp,
     i.episode_id as episode_id,
+    i.function_name as function_name,
     i.id as inference_id,
     i.input as input,
-    i.output as output,
     i.output_schema as output_schema,
     i.tags as tags,
+    '' as tool_params,
     i.variant_name as variant_name,
-    {p0:String} as function_name
+    i.output as output
 FROM
     JsonInference AS i
 LEFT JOIN (
@@ -2550,7 +2463,7 @@ WHERE
     i.function_name = {p0:String}
 ORDER BY j0.value DESC NULLS LAST, i.timestamp ASC NULLS LAST
 FORMAT JSONEachRow";
-        assert_eq!(sql, expected_sql);
+        assert_query_equals(&sql, expected_sql);
 
         let expected_params = vec![
             QueryParameter {

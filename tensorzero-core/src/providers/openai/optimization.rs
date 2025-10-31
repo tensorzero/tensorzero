@@ -337,13 +337,16 @@ pub struct OpenAISupervisedRow<'a> {
 
 impl<'a> OpenAISupervisedRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        let (parallel_tool_calls, tools) = match &inference.tool_params {
-            Some(tool_params) => (
-                tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params.tools_available.iter().map(Into::into).collect(),
-            ),
-            None => (false, vec![]),
-        };
+        let parallel_tool_calls = inference
+            .tool_params
+            .parallel_tool_calls
+            .unwrap_or_default();
+        let tools = inference
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| tools.iter().map(Into::into).collect())
+            .unwrap_or_default();
         let mut messages = prepare_openai_messages(
             inference
                 .system_input
@@ -411,13 +414,16 @@ pub struct OpenAIReinforcementRow<'a> {
 
 impl<'a> OpenAIReinforcementRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        let (parallel_tool_calls, tools) = match &inference.tool_params {
-            Some(tool_params) => (
-                tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params.tools_available.iter().map(Into::into).collect(),
-            ),
-            None => (false, vec![]),
-        };
+        let parallel_tool_calls = inference
+            .tool_params
+            .parallel_tool_calls
+            .unwrap_or_default();
+        let tools = inference
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| tools.iter().map(Into::into).collect())
+            .unwrap_or_default();
         let messages = prepare_openai_messages(
             inference
                 .system_input
@@ -603,17 +609,18 @@ pub enum OpenAIFineTuningJobStatus {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use serde_json::json;
+
     use crate::{
         inference::types::{
             ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
-            StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
+        tool::{DynamicToolParams, ToolCallOutput},
     };
-    use serde_json::json;
-
-    use super::*;
 
     #[tokio::test]
     async fn test_convert_to_sft_row() {
@@ -632,19 +639,21 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                system: Some(System::Text(
+                    "You are a helpful assistant named Dr. M.M. Patel.".to_string(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: "What is the capital of France?".into(),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
                 }],
             },
             output: output.clone(),
             stored_output: output.map(StoredOutput::Chat),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
-            tool_params: None,
+            tool_params: DynamicToolParams::default(),
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -683,8 +692,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_rft_row() {
-        use crate::stored_inference::StoredOutput;
-
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
@@ -697,12 +704,14 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant named Dr. M.M. Patel.")),
+                system: Some(System::Text(
+                    "You are a helpful assistant named Dr. M.M. Patel.".to_string(),
+                )),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What is the capital of France?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What is the capital of France?".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -715,7 +724,7 @@ mod tests {
             )])),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
-            tool_params: None,
+            tool_params: DynamicToolParams::default(),
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -752,9 +761,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_convert_to_rft_row_with_tool_calls() {
-        use crate::stored_inference::StoredOutput;
-        use crate::tool::ToolCallOutput;
-
         let inference = RenderedSample {
             function_name: "test".to_string(),
             input: ModelInput {
@@ -767,12 +773,12 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("You are a helpful assistant.")),
+                system: Some(System::Text("You are a helpful assistant.".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("What's the weather like?"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "What's the weather like?".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![
@@ -801,7 +807,7 @@ mod tests {
             ])),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
-            tool_params: None,
+            tool_params: DynamicToolParams::default(),
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),

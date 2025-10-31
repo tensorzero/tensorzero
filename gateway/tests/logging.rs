@@ -4,8 +4,10 @@ mod common;
 
 use common::start_gateway_on_random_port;
 use futures::StreamExt;
+use http::StatusCode;
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use std::time::Duration;
+use tokio::time::error::Elapsed;
 
 /// Test the gateway does not log '/health' requests when RUST_LOG and [gateway.debug] are not set
 #[tokio::test]
@@ -59,7 +61,7 @@ async fn test_logging_rust_log_debug_on() {
 async fn test_log_early_drop_streaming(model_name: &str) {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        Some("gateway=debug,tower_http::trace=debug"),
+        Some("gateway=debug,tower_http::trace=debug,warn"),
     )
     .await;
 
@@ -161,7 +163,7 @@ async fn test_log_early_drop_streaming_dummy_slow_delay_second_chunk() {
 async fn test_log_early_drop_non_streaming() {
     let mut child_data = start_gateway_on_random_port(
         r"debug = true",
-        Some("gateway=debug,tower_http::trace=debug"),
+        Some("gateway=debug,tower_http::trace=debug,warn"),
     )
     .await;
     let response_fut = reqwest::Client::new()
@@ -209,4 +211,49 @@ async fn test_log_early_drop_non_streaming() {
         next_line.contains("WARN"),
         "Log line missing WARN: {next_line}"
     );
+}
+
+/// Test that the gateway does not log a warning for HEAD requests..
+#[tokio::test]
+async fn test_no_early_drop_warning_on_head() {
+    let mut child_data = start_gateway_on_random_port(
+        r"debug = true",
+        Some("gateway=debug,tower_http::trace=debug,warn"),
+    )
+    .await;
+    let response = reqwest::Client::new()
+        .head(format!("http://{}/health", child_data.addr))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let start_line = child_data
+        .stdout
+        .next_line()
+        .await
+        .unwrap()
+        .expect("Didn't find a log line after sending HEAD request");
+    assert!(
+        start_line.contains("started processing request"),
+        "Log line missing start: {start_line}"
+    );
+
+    let next_line = child_data
+        .stdout
+        .next_line()
+        .await
+        .unwrap()
+        .expect("Didn't find a log line after HEAD request finished");
+    assert!(
+        next_line.contains("finished processing request"),
+        "Unexpected log line: {next_line}"
+    );
+
+    // We should not get any more lines
+    let _: Elapsed =
+        tokio::time::timeout(Duration::from_millis(100), child_data.stdout.next_line())
+            .await
+            .unwrap_err();
 }

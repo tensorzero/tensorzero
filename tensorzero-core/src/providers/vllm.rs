@@ -501,7 +501,6 @@ mod tests {
             },
             test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG},
         },
-        tool::AllowedTools,
     };
 
     use crate::tool::{ToolCallConfig, ToolChoice};
@@ -639,7 +638,6 @@ mod tests {
             usage: OpenAIUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -777,11 +775,9 @@ mod tests {
         let parallel_tool_calls = vllm_request.parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
         let tool_config = ToolCallConfig {
-            tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None

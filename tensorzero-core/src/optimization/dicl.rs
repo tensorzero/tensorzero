@@ -1,10 +1,10 @@
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
+use futures::future::try_join_all;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::{collections::HashMap, sync::Arc};
+use tokio::sync::Semaphore;
+use uuid::Uuid;
 
-#[cfg(feature = "pyo3")]
-use crate::model::CredentialLocation;
 use crate::{
     cache::CacheOptions,
     config::{Config, UninitializedVariantConfig},
@@ -19,6 +19,7 @@ use crate::{
     error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE},
     function::FunctionConfig,
     http::TensorzeroHttpClient,
+    inference::types::StoredInputMessageContent,
     model::CredentialLocationWithFallback,
     model_table::{OpenAIKind, ProviderKind, ProviderTypeDefaultCredentials},
     optimization::{JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput},
@@ -28,10 +29,11 @@ use crate::{
     utils::retries::RetryConfig,
     variant::dicl::UninitializedDiclConfig,
 };
-use futures::future::try_join_all;
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::Semaphore;
-use uuid::Uuid;
+
+#[cfg(feature = "pyo3")]
+use crate::model::CredentialLocation;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
 
 fn default_batch_size() -> usize {
     128
@@ -433,12 +435,17 @@ fn validate_function_config(
         }
         FunctionConfig::Json(json_config) => {
             // JSON functions should have exactly one implicit tool for schema validation
-            if json_config.implicit_tool_call_config.tools_available.len() != 1 {
+            if json_config
+                .implicit_tool_call_config
+                .tools_available()
+                .count()
+                != 1
+            {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "DICL optimization expected JSON function '{}' to have exactly 1 implicit tool, but found {}. This indicates a configuration issue.",
                         function_name,
-                        json_config.implicit_tool_call_config.tools_available.len()
+                        json_config.implicit_tool_call_config.tools_available().count()
                     ),
                 }));
             }
@@ -468,24 +475,41 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
                 ),
             }));
         }
-        // Check if tools_available contains actual tools
-        if let Some(tool_params) = &example.tool_params {
-            if !tool_params.tools_available.is_empty() {
-                return Err(Error::new(ErrorDetails::InvalidRequest {
+        // Check if tools are available
+        let has_additional_tools = example
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| !tools.is_empty())
+            .unwrap_or(false);
+        let has_allowed_tools = example
+            .tool_params
+            .allowed_tools
+            .as_ref()
+            .map(|tools| !tools.is_empty())
+            .unwrap_or(false);
+
+        if has_additional_tools || has_allowed_tools {
+            let num_tools = example
+                .tool_params
+                .additional_tools
+                .as_ref()
+                .map(std::vec::Vec::len)
+                .unwrap_or(0);
+            return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "DICL optimization does not support tool calls. Training example {} contains {} available tools.",
                         i + 1,
-                        tool_params.tools_available.len()
+                        num_tools
                     ),
                 }));
-            }
         }
 
         // Check stored_input messages for ToolCall or ToolResult content
         for message in &example.stored_input.messages {
             for content in &message.content {
                 match content {
-                    crate::inference::types::StoredInputMessageContent::ToolCall(_) => {
+                    StoredInputMessageContent::ToolCall(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool call in message content.",
@@ -493,7 +517,7 @@ fn validate_train_examples(train_examples: &[RenderedSample]) -> Result<(), Erro
                             ),
                         }));
                     }
-                    crate::inference::types::StoredInputMessageContent::ToolResult(_) => {
+                    StoredInputMessageContent::ToolResult(_) => {
                         return Err(Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
                                 "DICL optimization does not support tool calls. Training example {} contains a tool result in message content.",
@@ -806,18 +830,34 @@ pub async fn dicl_examples_exist(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
+
     use crate::{
-        config::provider_types::ProviderTypesConfig,
+        config::{provider_types::ProviderTypesConfig, SchemaData},
         embeddings::{
             EmbeddingModelConfig, EmbeddingModelTable, EmbeddingProviderConfig,
             EmbeddingProviderInfo,
         },
         endpoints::inference::InferenceCredentials,
         experimentation::ExperimentationConfig,
-        tool::AllowedTools,
+        function::{FunctionConfigChat, FunctionConfigJson},
     };
-    use std::collections::{HashMap, HashSet};
-    use std::sync::Arc;
+    use crate::{
+        inference::types::{
+            ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage, Role,
+            StoredInput, StoredInputMessage, StoredInputMessageContent, System, Text,
+        },
+        jsonschema_util::StaticJSONSchema,
+        stored_inference::StoredOutput,
+        tool::{
+            create_implicit_tool_call_config, DynamicToolParams, Tool, ToolCall, ToolCallConfig,
+            ToolChoice, ToolResult,
+        },
+    };
+
+    #[cfg(any(test, feature = "e2e_tests"))]
+    use crate::providers::dummy::DummyProvider;
 
     // Helper functions to create test embedding models using the Dummy provider
 
@@ -832,7 +872,6 @@ mod tests {
     fn create_test_embedding_model_with_name(model_name: &str) -> Config {
         #[cfg(any(test, feature = "e2e_tests"))]
         {
-            use crate::providers::dummy::DummyProvider;
             let mut providers = HashMap::new();
             providers.insert(
                 Arc::from("dummy"),
@@ -1004,17 +1043,6 @@ mod tests {
 
     // Helper function to create a basic RenderedSample for testing
     fn create_test_rendered_sample() -> RenderedSample {
-        use crate::{
-            inference::types::{
-                ContentBlockChatOutput, ModelInput, ResolvedContentBlock, ResolvedRequestMessage,
-                Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
-            },
-            stored_inference::StoredOutput,
-        };
-        use serde_json::json;
-        use std::collections::HashMap;
-        use uuid::Uuid;
-
         RenderedSample {
             function_name: "test_function".to_string(),
             input: ModelInput {
@@ -1027,12 +1055,12 @@ mod tests {
                 }],
             },
             stored_input: StoredInput {
-                system: Some(json!("Test system")),
+                system: Some(System::Text("Test system".to_string())),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Text {
-                        value: json!("Test message"),
-                    }],
+                    content: vec![StoredInputMessageContent::Text(Text {
+                        text: "Test message".to_string(),
+                    })],
                 }],
             },
             output: Some(vec![ContentBlockChatOutput::Text(Text {
@@ -1045,32 +1073,26 @@ mod tests {
             )])),
             episode_id: Some(Uuid::now_v7()),
             inference_id: Some(Uuid::now_v7()),
-            tool_params: None,
+            tool_params: DynamicToolParams::default(),
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
         }
     }
 
-    fn create_test_rendered_sample_with_tools(tools: Vec<crate::tool::Tool>) -> RenderedSample {
-        use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
-
+    fn create_test_rendered_sample_with_tools(tools: Vec<Tool>) -> RenderedSample {
         let mut sample = create_test_rendered_sample();
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
-            tools_available: tools,
-            tool_choice: ToolChoice::Auto,
+        sample.tool_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(tools),
+            tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: Some(true),
-        });
+            provider_tools: None,
+        };
         sample
     }
 
     fn create_test_rendered_sample_with_tool_content() -> RenderedSample {
-        use crate::{
-            inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
-            tool::{ToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
-        };
-        use serde_json::json;
-
         let mut sample = create_test_rendered_sample();
 
         // Add a message with tool call content
@@ -1079,26 +1101,23 @@ mod tests {
             content: vec![StoredInputMessageContent::ToolCall(ToolCall {
                 id: "test_call".to_string(),
                 name: "test_tool".to_string(),
-                arguments: json!({"arg": "value"}).to_string(),
+                arguments: serde_json::json!({"arg": "value"}).to_string(),
             })],
         });
 
         // Also add empty tool params to make it realistic
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![],
-            tool_choice: ToolChoice::None,
+        sample.tool_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: None,
+            tool_choice: Some(ToolChoice::None),
             parallel_tool_calls: Some(false),
-        });
+            provider_tools: None,
+        };
 
         sample
     }
 
     fn create_test_rendered_sample_with_tool_result() -> RenderedSample {
-        use crate::{
-            inference::types::{Role, StoredInputMessage, StoredInputMessageContent},
-            tool::{ToolCallConfigDatabaseInsert, ToolChoice, ToolResult},
-        };
-
         let mut sample = create_test_rendered_sample();
 
         // Add a message with tool result content
@@ -1112,11 +1131,13 @@ mod tests {
         });
 
         // Also add empty tool params to make it realistic
-        sample.tool_params = Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![],
-            tool_choice: ToolChoice::None,
+        sample.tool_params = DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: None,
+            tool_choice: Some(ToolChoice::None),
             parallel_tool_calls: Some(false),
-        });
+            provider_tools: None,
+        };
 
         sample
     }
@@ -1148,13 +1169,10 @@ mod tests {
 
     #[test]
     fn test_validate_train_examples_rejects_tools_available() {
-        use crate::tool::Tool;
-        use serde_json::json;
-
         let tool = Tool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
-            parameters: json!({"type": "object", "properties": {}}),
+            parameters: serde_json::json!({"type": "object", "properties": {}}),
             strict: false,
         };
 
@@ -1195,15 +1213,12 @@ mod tests {
 
     #[test]
     fn test_validate_train_examples_multiple_samples() {
-        use crate::tool::Tool;
-        use serde_json::json;
-
         let valid_sample = create_test_rendered_sample();
 
         let tool = Tool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
-            parameters: json!({"type": "object", "properties": {}}),
+            parameters: serde_json::json!({"type": "object", "properties": {}}),
             strict: false,
         };
         let invalid_sample = create_test_rendered_sample_with_tools(vec![tool]);
@@ -1242,9 +1257,6 @@ mod tests {
     }
 
     fn create_test_chat_function_config_no_tools() -> FunctionConfig {
-        use crate::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
-        use std::collections::HashMap;
-
         FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1259,9 +1271,6 @@ mod tests {
     }
 
     fn create_test_chat_function_config_with_tools() -> FunctionConfig {
-        use crate::{config::SchemaData, function::FunctionConfigChat, tool::ToolChoice};
-        use std::collections::HashMap;
-
         FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -1275,14 +1284,7 @@ mod tests {
     }
 
     fn create_test_json_function_config() -> FunctionConfig {
-        use crate::{
-            config::SchemaData, function::FunctionConfigJson, jsonschema_util::StaticJSONSchema,
-            tool::create_implicit_tool_call_config,
-        };
-        use serde_json::json;
-        use std::collections::HashMap;
-
-        let output_schema = StaticJSONSchema::from_value(json!({
+        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}
@@ -1305,16 +1307,7 @@ mod tests {
     }
 
     fn create_test_json_function_config_invalid_tools() -> FunctionConfig {
-        use crate::{
-            config::SchemaData,
-            function::FunctionConfigJson,
-            jsonschema_util::StaticJSONSchema,
-            tool::{ToolCallConfig, ToolChoice},
-        };
-        use serde_json::json;
-        use std::collections::HashMap;
-
-        let output_schema = StaticJSONSchema::from_value(json!({
+        let output_schema = StaticJSONSchema::from_value(serde_json::json!({
             "type": "object",
             "properties": {
                 "answer": {"type": "string"}
@@ -1324,13 +1317,7 @@ mod tests {
         .unwrap();
 
         // Create an invalid config with no tools (should have exactly 1)
-        let invalid_tool_call_config = ToolCallConfig {
-            tools_available: vec![], // Invalid: should have exactly 1 implicit tool
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
-        };
+        let invalid_tool_call_config = ToolCallConfig::default();
 
         FunctionConfig::Json(FunctionConfigJson {
             variants: HashMap::new(),

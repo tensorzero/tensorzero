@@ -22,7 +22,7 @@ use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, E
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::file::require_image;
-use crate::inference::types::resolved_input::FileWithPath;
+use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -613,10 +613,10 @@ pub(super) fn prepare_openrouter_tools<'a>(
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {
-            if tool_config.tools_available.is_empty() {
+            if !tool_config.any_tools_available() {
                 return (None, None, None);
             }
-            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
+            let tools = Some(tool_config.tools_available().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -712,16 +712,13 @@ async fn tensorzero_to_openrouter_user_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64Image` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
+                        url: format!("data:{};base64,{}", file.mime_type, data),
                     },
                 });
             }
@@ -784,16 +781,13 @@ async fn tensorzero_to_openrouter_assistant_messages(
             }
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
-                let FileWithPath {
-                    file,
-                    storage_path: _,
-                } = &*resolved_file;
+                let ObjectStorageFile { file, data } = &*resolved_file;
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64File` (with missing image data)
-                        url: format!("data:{};base64,{}", file.mime_type, file.data()?),
+                        url: format!("data:{};base64,{}", file.mime_type, data),
                     },
                 });
             }
@@ -1054,7 +1048,6 @@ pub(super) struct OpenRouterUsage {
     pub prompt_tokens: u32,
     #[serde(default)]
     pub completion_tokens: u32,
-    pub total_tokens: u32,
 }
 
 impl From<OpenRouterUsage> for Usage {
@@ -1351,7 +1344,7 @@ mod tests {
         providers::test_helpers::{
             MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
         },
-        tool::{AllowedTools, ToolCallConfig},
+        tool::ToolCallConfig,
     };
 
     use super::*;
@@ -1781,7 +1774,6 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1879,7 +1871,6 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: 15,
                 completion_tokens: 25,
-                total_tokens: 40,
             },
         };
         let generic_request = ModelInferenceRequest {
@@ -1969,7 +1960,6 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: 5,
                 completion_tokens: 0,
-                total_tokens: 5,
             },
         };
         let request_body = OpenRouterRequest {
@@ -2026,7 +2016,6 @@ mod tests {
             usage: OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 10,
-                total_tokens: 20,
             },
         };
 
@@ -2101,11 +2090,9 @@ mod tests {
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
         let tool_config = ToolCallConfig {
-            tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            provider_tools: None,
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None
@@ -2354,7 +2341,6 @@ mod tests {
             usage: Some(OpenRouterUsage {
                 prompt_tokens: 10,
                 completion_tokens: 20,
-                total_tokens: 30,
             }),
         };
         let message = openrouter_to_tensorzero_chunk(

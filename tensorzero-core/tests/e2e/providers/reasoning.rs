@@ -126,7 +126,7 @@ pub async fn test_reasoning_inference_request_simple_with_provider(provider: E2E
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital city of Japan?"}]
             }
         ]
     });
@@ -391,7 +391,7 @@ pub async fn test_streaming_reasoning_inference_request_simple_with_provider(
         "messages": [
             {
                 "role": "user",
-                "content": [{"type": "text", "value": "What is the capital city of Japan?"}]
+                "content": [{"type": "text", "text": "What is the capital city of Japan?"}]
             }
         ]
     });
@@ -546,7 +546,7 @@ pub async fn test_reasoning_inference_request_with_provider_json_mode(provider: 
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": false,
@@ -757,7 +757,7 @@ pub async fn test_streaming_reasoning_inference_request_with_provider_json_mode(
                "messages": [
                 {
                     "role": "user",
-                    "content": [{"type": "text", "arguments": {"country": "Japan"}}]
+                    "content": [{"type": "template", "name": "user", "arguments": {"country": "Japan"}}]
                 }
             ]},
         "stream": true,

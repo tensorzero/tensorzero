@@ -23,6 +23,9 @@ pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::endpoints::variant_probabilities::{
+    GetVariantSamplingProbabilitiesParams, GetVariantSamplingProbabilitiesResponse,
+};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
@@ -53,7 +56,8 @@ mod git;
 #[cfg(feature = "e2e_tests")]
 pub mod test_helpers;
 pub use tensorzero_core::stored_inference::{
-    RenderedSample, StoredChatInference, StoredInference, StoredJsonInference,
+    RenderedSample, StoredChatInferenceDatabase, StoredInference, StoredInferenceDatabase,
+    StoredJsonInference,
 };
 pub mod input_handling;
 pub use client_inference_params::{ClientInferenceParams, ClientSecretString};
@@ -67,6 +71,7 @@ pub use tensorzero_core::db::clickhouse::query_builder::{
 pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesParams};
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
+    StoredChatInferenceDatapoint, StoredDatapoint,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
@@ -78,9 +83,9 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunParams, WorkflowEvaluationRunResponse,
 };
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
-pub use tensorzero_core::inference::types::File;
+pub use tensorzero_core::inference::types::{Base64File, File, ObjectStoragePointer, UrlFile};
 pub use tensorzero_core::inference::types::{
-    ContentBlockChunk, Input, InputMessage, InputMessageContent, Role,
+    ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System, Unknown,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 
@@ -502,6 +507,15 @@ impl Client {
         }
     }
 
+    /// Gets the config from the embedded gateway
+    /// Returns None for HTTP gateway mode
+    pub fn config(&self) -> Option<&Config> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(_) => None,
+            ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state.config),
+        }
+    }
+
     /// Assigns feedback for a TensorZero inference.
     /// See https://www.tensorzero.com/docs/gateway/api-reference#post-feedback
     pub async fn feedback(
@@ -912,10 +926,11 @@ impl Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
                         &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.config,
                         function_name,
                         limit,
                         offset,
@@ -923,7 +938,7 @@ impl Client {
                     .await
                     .map_err(err_to_http)
                 })
-                .await?)
+                .await
             }
         }
     }
@@ -945,7 +960,7 @@ impl Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                let datapoint = with_embedded_timeout(*timeout, async {
                     gateway
                         .handle
                         .app_state
@@ -959,7 +974,12 @@ impl Client {
                         .await
                         .map_err(err_to_http)
                 })
-                .await?)
+                .await?;
+
+                // Convert storage type to wire type
+                datapoint
+                    .into_datapoint(&gateway.handle.app_state.config)
+                    .map_err(|e| TensorZeroError::Other { source: e.into() })
             }
         }
     }
@@ -1030,7 +1050,14 @@ impl Client {
             .list_inferences(&gateway.handle.app_state.config, &params)
             .await
             .map_err(err_to_http)?;
-        Ok(inferences)
+
+        // Convert storage types to wire types
+        let wire_inferences: Result<Vec<StoredInference>, _> = inferences
+            .into_iter()
+            .map(|inf| inf.into_stored_inference(&gateway.handle.app_state.config))
+            .collect();
+
+        wire_inferences.map_err(|e| TensorZeroError::Other { source: e.into() })
     }
 
     /// There are two things that need to happen in this function:
@@ -1198,6 +1225,48 @@ impl Client {
                 })
                 .into(),
             }),
+        }
+    }
+
+    pub async fn get_variant_sampling_probabilities(
+        &self,
+        function_name: &str,
+    ) -> Result<HashMap<String, f64>, TensorZeroError> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client
+                    .base_url
+                    .join("variant_sampling_probabilities")
+                    .map_err(|e| TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /variant_sampling_probabilities endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    })?;
+                let builder = client
+                    .http_client
+                    .get(url)
+                    .query(&[("function_name", function_name)]);
+                let response: GetVariantSamplingProbabilitiesResponse =
+                    self.parse_http_response(builder.send().await).await?;
+                Ok(response.probabilities)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    let response = tensorzero_core::endpoints::variant_probabilities::get_variant_sampling_probabilities(
+                        gateway.handle.app_state.clone(),
+                        GetVariantSamplingProbabilitiesParams {
+                            function_name: function_name.to_string(),
+                        },
+                    )
+                    .await
+                    .map_err(err_to_http)?;
+                    Ok(response.probabilities)
+                })
+                .await?)
+            }
         }
     }
 
