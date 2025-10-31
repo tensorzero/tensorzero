@@ -55,8 +55,7 @@ def test_explicit_api_key_sync(httpserver: HTTPServer) -> None:
                 input={"messages": [{"role": "user", "content": "test"}]},
             )
         except Exception:
-            # We expect this to fail due to response parsing, but that's ok
-            # We're just checking if the Authorization header was sent
+            # This can fail; we only care that the HTTP header was sent
             pass
 
     # Verify the Authorization header was sent with correct Bearer token
@@ -103,7 +102,7 @@ async def test_explicit_api_key_async(httpserver: HTTPServer) -> None:
                 input={"messages": [{"role": "user", "content": "test"}]},
             )
         except Exception:
-            # We expect this to fail due to response parsing, but that's ok
+            # This can fail; we only care that the HTTP header was sent
             pass
 
     # Verify the Authorization header was sent
@@ -143,6 +142,7 @@ def test_env_var_api_key_sync(httpserver: HTTPServer, monkeypatch: MonkeyPatch) 
                 input={"messages": [{"role": "user", "content": "test"}]},
             )
         except Exception:
+            # This can fail; we only care that the HTTP header was sent
             pass
 
     # Verify the Authorization header was sent from env var
@@ -189,6 +189,7 @@ async def test_env_var_api_key_async(httpserver: HTTPServer, monkeypatch: Monkey
                 input={"messages": [{"role": "user", "content": "test"}]},
             )
         except Exception:
+            # This can fail; we only care that the HTTP header was sent
             pass
 
     # Verify the Authorization header was sent from env var
@@ -226,6 +227,7 @@ def test_api_key_with_timeout(httpserver: HTTPServer) -> None:
                 input={"messages": [{"role": "user", "content": "test"}]},
             )
         except Exception:
+            # This can fail; we only care that the HTTP header was sent
             pass
 
     # Verify the Authorization header was sent
@@ -264,6 +266,7 @@ def test_no_auth_when_no_key(httpserver: HTTPServer, monkeypatch: MonkeyPatch) -
                 input={"messages": [{"role": "user", "content": "test"}]},
             )
         except Exception:
+            # This can fail; we only care that the HTTP header was not sent
             pass
 
     # Verify NO Authorization header was sent
