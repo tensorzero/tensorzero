@@ -55,6 +55,8 @@ env:
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://localhost:4316
   SQLX_OFFLINE: 1
   TENSORZERO_E2E_PROXY: http://localhost:3003
+  TENSORZERO_COMMIT_TAG: ${{ github.sha }}
+  TENSORZERO_CI: 1
 
 jobs:
   batch-tests:
@@ -102,9 +104,6 @@ jobs:
       - name: Run live tests container via Docker Compos
         run: |
           docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 live-tests
-        env:
-          TENSORZERO_CI: 1
-          TENSORZERO_COMMIT_TAG: ${{ github.sha }}
 
       # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
       # # For now, we only check for deprecation warnings after running the Rust e2e tests
