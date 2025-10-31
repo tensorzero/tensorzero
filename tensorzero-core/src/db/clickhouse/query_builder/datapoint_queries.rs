@@ -5,10 +5,10 @@ use crate::db::clickhouse::query_builder::{ClickhouseType, QueryParameter, TagFi
 
 /// Filter tree for querying datapoints.
 /// This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum DatapointFilter {
     /// Filter by tag key-value pair
     Tag(TagFilter),

@@ -27,13 +27,6 @@ use python_helpers::{
 use tensorzero_core::{
     config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
-    endpoints::datasets::v1::types::{
-        CreateDatapointsFromInferenceOutputSource, CreateDatapointsFromInferenceRequest,
-        DatapointMetadataUpdate, DeleteDatapointsRequest, GetDatapointsRequest,
-        ListDatapointsRequest, UpdateChatDatapointRequest, UpdateDatapointMetadataRequest,
-        UpdateDatapointRequest, UpdateDatapointsMetadataRequest, UpdateDatapointsRequest,
-        UpdateJsonDatapointRequest,
-    },
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
         pyo3_helpers::{
@@ -130,12 +123,6 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<OptimizationJobHandle>()?;
     m.add_class::<OptimizationJobInfoPyClass>()?;
     m.add_class::<OptimizationJobStatus>()?;
-    m.add_class::<UpdateDatapointRequest>()?;
-    m.add_class::<UpdateChatDatapointRequest>()?;
-    m.add_class::<UpdateJsonDatapointRequest>()?;
-    m.add_class::<DatapointMetadataUpdate>()?;
-    m.add_class::<UpdateDatapointMetadataRequest>()?;
-    m.add_class::<CreateDatapointsFromInferenceOutputSource>()?;
 
     let py_json = PyModule::import(m.py(), "json")?;
     let json_loads = py_json.getattr("loads")?;
@@ -1030,183 +1017,6 @@ impl TensorZeroGateway {
         PyList::new(this.py(), uuids).map(Bound::unbind)
     }
 
-    /// Update one or more datapoints in a dataset.
-    ///
-    /// Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset containing the datapoints to update.
-    /// :param requests: A list of `UpdateDatapointRequest`` objects.
-    /// :return: A list of UUIDs of the updated datapoints.
-    #[pyo3(signature = (*, dataset_name, requests))]
-    fn update_datapoints(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        requests: Vec<Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let requests = requests
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let request = UpdateDatapointsRequest {
-            datapoints: requests,
-        };
-        let fut = client.update_datapoints(dataset_name, request);
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let uuids = res
-            .ids
-            .iter()
-            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
-            .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(Bound::unbind)
-    }
-
-    /// Get specific datapoints by their IDs.
-    ///
-    /// Make a POST request to the /v1/datasets/get_datapoints endpoint.
-    ///
-    /// :param ids: A list of datapoint IDs to retrieve.
-    /// :return: A list of `Datapoint` objects.
-    #[pyo3(signature = (*, ids))]
-    fn get_datapoints(this: PyRef<'_, Self>, ids: Vec<Bound<'_, PyAny>>) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let ids: Vec<uuid::Uuid> = ids
-            .iter()
-            .map(|id| {
-                let id_str: String = id.extract()?;
-                uuid::Uuid::parse_str(&id_str).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid UUID: {e}"))
-                })
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        let request = GetDatapointsRequest { ids };
-        let fut = client.get_datapoints(request);
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-
-        PyList::new(this.py(), res.datapoints).map(Bound::unbind)
-    }
-
-    /// Update metadata for one or more datapoints.
-    ///
-    /// Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints/metadata endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset containing the datapoints.
-    /// :param datapoints: A list of datapoint metadata update requests.
-    /// :return: A list of UUIDs of the updated datapoints.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    fn update_datapoints_metadata(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let request = UpdateDatapointsMetadataRequest { datapoints };
-        let fut = client.update_datapoints_metadata(dataset_name, request);
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let uuids = res
-            .ids
-            .iter()
-            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
-            .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(Bound::unbind)
-    }
-
-    /// Delete multiple datapoints from a dataset.
-    ///
-    /// Make a DELETE request to the /v1/datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to delete datapoints from.
-    /// :param ids: A list of datapoint IDs to delete.
-    /// :return: The number of deleted datapoints.
-    #[pyo3(signature = (*, dataset_name, ids))]
-    fn delete_datapoints(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        ids: Vec<Bound<'_, PyAny>>,
-    ) -> PyResult<u64> {
-        let client = this.as_super().client.clone();
-        let ids: Vec<uuid::Uuid> = ids
-            .iter()
-            .map(|id| {
-                let id_str: String = id.extract()?;
-                uuid::Uuid::parse_str(&id_str).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid UUID: {e}"))
-                })
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        let request = DeleteDatapointsRequest { ids };
-        let fut = client.delete_datapoints(dataset_name, request);
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        Ok(res.num_deleted_datapoints)
-    }
-
-    /// Delete an entire dataset.
-    ///
-    /// Make a DELETE request to the /v1/datasets/{dataset_name} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to delete.
-    /// :return: The number of deleted datapoints.
-    #[pyo3(signature = (*, dataset_name))]
-    fn delete_dataset(this: PyRef<'_, Self>, dataset_name: String) -> PyResult<u64> {
-        let client = this.as_super().client.clone();
-        let fut = client.delete_dataset(dataset_name);
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        Ok(res.num_deleted_datapoints)
-    }
-
-    /// Create datapoints from inferences.
-    ///
-    /// Make a POST request to the /v1/datasets/{dataset_name}/from_inferences endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to create datapoints in.
-    /// :param params: The parameters specifying which inferences to convert to datapoints.
-    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
-    ///                         If not provided, by default we will use the original inference output as the datapoint's output
-    ///                         (equivalent to `inference`).
-    /// :return: A list of UUIDs of the created datapoints.
-    #[pyo3(signature = (*, dataset_name, params, output_source=None))]
-    fn create_from_inferences(
-        this: PyRef<'_, Self>,
-        dataset_name: String,
-        params: Bound<'_, PyAny>,
-        output_source: Option<Bound<'_, PyAny>>,
-    ) -> PyResult<Py<PyList>> {
-        let client = this.as_super().client.clone();
-        let params = deserialize_from_pyobj(this.py(), &params)?;
-        let output_source = output_source
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
-            .transpose()?;
-        let request = CreateDatapointsFromInferenceRequest {
-            params,
-            output_source,
-        };
-        let fut = client.create_from_inferences(dataset_name, request);
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        let res =
-            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
-        let uuids = res
-            .ids
-            .iter()
-            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
-            .collect::<Result<Vec<_>, _>>()?;
-        PyList::new(this.py(), uuids).map(Bound::unbind)
-    }
-
     /// DEPRECATED: Use `create_datapoints` instead.
     ///
     /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
@@ -1270,49 +1080,36 @@ impl TensorZeroGateway {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-
-        tokio_block_on_without_gil(this.py(), fut)
-            .map(|x| x.into_pyobject(this.py()))
-            .map_err(|e| convert_error(this.py(), e))?
+        let wire: Datapoint =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        wire.into_pyobject(this.py())
     }
 
-    /// List datapoints from a dataset with filters and pagination.
+    /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
-    /// Make a POST request to the /v1/datasets/{dataset_name}/list_datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to list datapoints from.
-    /// :param function_name: The name of the function to list datapoints from.
-    /// :param limit: The maximum number of datapoints to return.
-    /// :param offset: The offset to start the list from.
-    /// :param filter: The filter to apply to the list of datapoints.
+    /// :param dataset_name: The name of the dataset to get the datapoints from.
     /// :return: A list of `Datapoint` objects.
-    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None, filter=None))]
-    fn list_datapoints<'py>(
-        this: PyRef<'py, Self>,
+    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
+    fn list_datapoints(
+        this: PyRef<'_, Self>,
         dataset_name: String,
         function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
-        filter: Option<Bound<'_, PyAny>>,
-    ) -> PyResult<Bound<'py, PyAny>> {
+    ) -> PyResult<Bound<'_, PyList>> {
         let client = this.as_super().client.clone();
-
-        let filter = filter
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
-            .transpose()?;
-
-        let request: ListDatapointsRequest = ListDatapointsRequest {
-            function_name,
-            page_size: limit,
-            offset,
-            filter,
-        };
-
-        let fut = client.list_datapoints(dataset_name, request);
-        tokio_block_on_without_gil(this.py(), fut)
-            .map(|x| x.datapoints.into_pyobject(this.py()))
-            .map_err(|e| convert_error(this.py(), e))?
+        let fut = client.list_datapoints(dataset_name, function_name, limit, offset);
+        let resp = tokio_block_on_without_gil(this.py(), fut);
+        match resp {
+            Ok(datapoints) => {
+                let py_datapoints = datapoints
+                    .into_iter()
+                    .map(|x| x.into_pyobject(this.py()))
+                    .collect::<Result<Vec<_>, _>>()?;
+                PyList::new(this.py(), py_datapoints)
+            }
+            Err(e) => Err(convert_error(this.py(), e)),
+        }
     }
 
     /// Run a tensorzero Evaluation
@@ -2081,208 +1878,6 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    /// Update one or more datapoints in a dataset.
-    ///
-    /// Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset containing the datapoints to update.
-    /// :param requests: A list of `UpdateDatapointRequest` objects.
-    /// :return: A list of UUIDs of the updated datapoints.
-    #[pyo3(signature = (*, dataset_name, requests))]
-    fn update_datapoints<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        requests: Vec<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoints = requests
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let request = UpdateDatapointsRequest { datapoints };
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.update_datapoints(dataset_name, request).await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(
-                    py,
-                    response
-                        .ids
-                        .iter()
-                        .map(|id| uuid.call(py, (id.to_string(),), None))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )?
-                .unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Get specific datapoints by their IDs.
-    ///
-    /// Make a POST request to the /v1/datasets/get_datapoints endpoint.
-    ///
-    /// :param ids: A list of datapoint IDs to retrieve.
-    /// :return: A list of `Datapoint` objects.
-    #[pyo3(signature = (*, ids))]
-    fn get_datapoints<'a>(
-        this: PyRef<'a, Self>,
-        ids: Vec<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let ids: Vec<uuid::Uuid> = ids
-            .into_iter()
-            .map(|id| python_uuid_to_uuid("id", id))
-            .collect::<Result<Vec<_>, _>>()?;
-        let request = GetDatapointsRequest { ids };
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.get_datapoints(request).await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(py, response.datapoints.into_iter())?.unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Update metadata for one or more datapoints.
-    ///
-    /// Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints/metadata endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset containing the datapoints.
-    /// :param datapoints: A list of datapoint metadata update requests.
-    /// :return: A list of UUIDs of the updated datapoints.
-    #[pyo3(signature = (*, dataset_name, datapoints))]
-    fn update_datapoints_metadata<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        datapoints: Vec<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let datapoints = datapoints
-            .iter()
-            .map(|dp| deserialize_from_pyobj(this.py(), dp))
-            .collect::<Result<Vec<_>, _>>()?;
-        let request = UpdateDatapointsMetadataRequest { datapoints };
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client
-                .update_datapoints_metadata(dataset_name, request)
-                .await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(
-                    py,
-                    response
-                        .ids
-                        .iter()
-                        .map(|id| uuid.call(py, (id.to_string(),), None))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )?
-                .unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Delete multiple datapoints from a dataset.
-    ///
-    /// Make a DELETE request to the /v1/datasets/{dataset_name}/datapoints endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to delete datapoints from.
-    /// :param ids: A list of datapoint IDs to delete.
-    /// :return: The number of deleted datapoints.
-    #[pyo3(signature = (*, dataset_name, ids))]
-    fn delete_datapoints<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        ids: Vec<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let ids: Vec<uuid::Uuid> = ids
-            .into_iter()
-            .map(|id| python_uuid_to_uuid("id", id))
-            .collect::<Result<Vec<_>, _>>()?;
-        let request = DeleteDatapointsRequest { ids };
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.delete_datapoints(dataset_name, request).await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(response.num_deleted_datapoints),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Delete an entire dataset.
-    ///
-    /// Make a DELETE request to the /v1/datasets/{dataset_name} endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to delete.
-    /// :return: The number of deleted datapoints.
-    #[pyo3(signature = (*, dataset_name))]
-    fn delete_dataset<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.delete_dataset(dataset_name).await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(response
-                    .num_deleted_datapoints
-                    .into_pyobject(py)
-                    .map(Bound::unbind)?),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
-    /// Create datapoints from inferences.
-    ///
-    /// Make a POST request to the /v1/datasets/{dataset_name}/from_inferences endpoint.
-    ///
-    /// :param dataset_name: The name of the dataset to create datapoints in.
-    /// :param params: The parameters specifying which inferences to convert to datapoints.
-    /// :param output_source: The source of the output to create datapoints from. "none", "inference", or "demonstration"
-    ///                         If not provided, by default we will use the original inference output as the datapoint's output
-    ///                         (equivalent to `inference`).
-    /// :return: A list of UUIDs of the created datapoints.
-    #[pyo3(signature = (*, dataset_name, params, output_source=None))]
-    fn create_from_inferences<'a>(
-        this: PyRef<'a, Self>,
-        dataset_name: String,
-        params: Bound<'a, PyAny>,
-        output_source: Option<Bound<'a, PyAny>>,
-    ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
-        let params = deserialize_from_pyobj(this.py(), &params)?;
-        let output_source = output_source
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
-            .transpose()?;
-        let request = CreateDatapointsFromInferenceRequest {
-            params,
-            output_source,
-        };
-        let self_module = PyModule::import(this.py(), "uuid")?;
-        let uuid = self_module.getattr("UUID")?.unbind();
-        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.create_from_inferences(dataset_name, request).await;
-            Python::attach(|py| match res {
-                Ok(response) => Ok(PyList::new(
-                    py,
-                    response
-                        .ids
-                        .iter()
-                        .map(|id| uuid.call(py, (id.to_string(),), None))
-                        .collect::<Result<Vec<_>, _>>()?,
-                )?
-                .unbind()),
-                Err(e) => Err(convert_error(py, e)),
-            })
-        })
-    }
-
     /// DEPRECATED: Use `create_datapoints` instead.
     ///
     /// Make a POST request to the /datasets/{dataset_name}/datapoints/bulk endpoint.
@@ -2365,42 +1960,25 @@ impl AsyncTensorZeroGateway {
         })
     }
 
-    /// List datapoints from a dataset with filters and pagination.
+    /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
     ///
-    /// Make a POST request to the /v1/datasets/{dataset_name}/list_datapoints endpoint.
-    ///
-    /// BREAKING CHANGE: This method signature has changed to accept a request dict.
-    ///
-    /// :param dataset_name: The name of the dataset to list datapoints from.
-    /// :param function_name: The name of the function to list datapoints from.
-    /// :param limit: The maximum number of datapoints to return.
-    /// :param offset: The offset to start the list from.
-    /// :param filter: The filter to apply to the list of datapoints.
+    /// :param dataset_name: The name of the dataset to get the datapoints from.
     /// :return: A list of `Datapoint` objects.
-    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None, filter=None))]
-    fn list_datapoints<'py>(
-        this: PyRef<'py, Self>,
+    #[pyo3(signature = (*, dataset_name, function_name=None, limit=None, offset=None))]
+    fn list_datapoints(
+        this: PyRef<'_, Self>,
         dataset_name: String,
         function_name: Option<String>,
         limit: Option<u32>,
         offset: Option<u32>,
-        filter: Option<Bound<'py, PyAny>>,
-    ) -> PyResult<Bound<'py, PyAny>> {
+    ) -> PyResult<Bound<'_, PyAny>> {
         let client = this.as_super().client.clone();
-        let filter = filter
-            .as_ref()
-            .map(|x| deserialize_from_pyobj(this.py(), x))
-            .transpose()?;
-        let request: ListDatapointsRequest = ListDatapointsRequest {
-            function_name,
-            page_size: limit,
-            offset,
-            filter,
-        };
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
-            let res = client.list_datapoints(dataset_name, request).await;
+            let res = client
+                .list_datapoints(dataset_name, function_name, limit, offset)
+                .await;
             Python::attach(|py| match res {
-                Ok(response) => Ok(response.datapoints.into_pyobject(py)?.into_any().unbind()),
+                Ok(wire_datapoints) => Ok(PyList::new(py, wire_datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
