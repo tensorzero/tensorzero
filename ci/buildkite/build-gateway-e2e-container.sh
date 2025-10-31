@@ -16,7 +16,8 @@ docker pull $LATEST_TAG || true
 
 # Build the container with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
-  --build-arg PROFILE=release \ # Use 'release' instead of 'performance', which is faster to build
+  # Use 'release' instead of 'performance', which is faster to build
+  --build-arg PROFILE=release \
   --build-arg CARGO_BUILD_FLAGS="--features e2e_tests" \
   --cache-from $LATEST_TAG \
   -f gateway/Dockerfile . -t $TAG
