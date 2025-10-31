@@ -12,6 +12,7 @@ import {
   Playground,
   Model,
 } from "~/components/icons/Icons";
+import { KeyRound } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
 import { TensorZeroLogo } from "~/components/icons/Icons";
@@ -104,6 +105,16 @@ const navigation: NavigationSection[] = [
         title: "Workflow Evaluations",
         url: "/workflow_evaluations",
         icon: SequenceChecks,
+      },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      {
+        title: "TensorZero API Keys",
+        url: "/api-keys",
+        icon: KeyRound,
       },
     ],
   },
