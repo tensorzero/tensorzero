@@ -2,6 +2,11 @@ name: Build Gateway Container
 
 on:
   workflow_call:
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: true
+      DOCKERHUB_TOKEN:
+        required: true
 
 env:
   TAG: tensorzero/gateway-e2e:sha-${{ github.sha }}
