@@ -7,9 +7,6 @@ on:
       - "docs/**"
   pull_request:
     branches: ["main"]
-  push:
-    branches:
-      - "andrew/move-rust-client-to-tensorzero-core"
 
 concurrency:
   group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
