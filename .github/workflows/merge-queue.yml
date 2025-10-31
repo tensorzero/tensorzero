@@ -69,7 +69,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
+      # Permission to checkout the repository
       contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
     timeout-minutes: 45
     strategy:
       matrix:
