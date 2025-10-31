@@ -3,8 +3,8 @@ use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
-    ChatInferenceDatapoint, ClientOptimizationExt, Datapoint, JsonInferenceDatapoint, Role,
-    StorageKind, StoragePath, StoredChatInference, StoredInference, StoredJsonInference, Tool,
+    ChatInferenceDatapoint, ClientExt, Datapoint, JsonInferenceDatapoint, Role, StorageKind,
+    StoragePath, StoredChatInference, StoredInference, StoredJsonInference, Tool,
 };
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;

@@ -10,8 +10,7 @@ use uuid::Uuid;
 use tracing_subscriber::{self, EnvFilter};
 
 use tensorzero::{
-    ClientConfigExt, ClientOptimizationExt, InferenceOutputSource,
-    LaunchOptimizationWorkflowParams, RenderedSample, Role,
+    ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
 };
 use tensorzero_core::{
     cache::CacheOptions,

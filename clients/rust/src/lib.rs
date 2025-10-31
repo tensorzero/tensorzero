@@ -84,36 +84,13 @@ use tensorzero_core::endpoints::workflow_evaluation_run::{
 use tensorzero_core::stored_inference::StoredSample;
 use uuid::Uuid;
 
-/// Extension trait for ClickHouse health checking
+/// Extension trait for additional Client methods
 #[async_trait::async_trait]
-pub trait ClientHealthExt {
+pub trait ClientExt {
+    // Health checking
     async fn clickhouse_health(&self) -> Result<(), TensorZeroError>;
-}
 
-#[async_trait::async_trait]
-impl ClientHealthExt for Client {
-    /// Queries the health of the ClickHouse database
-    /// This does nothing in `ClientMode::HTTPGateway`
-    async fn clickhouse_health(&self) -> Result<(), TensorZeroError> {
-        match self.mode() {
-            ClientMode::HTTPGateway(_) => Ok(()),
-            ClientMode::EmbeddedGateway {
-                gateway,
-                timeout: _,
-            } => gateway
-                .handle
-                .app_state
-                .clickhouse_connection_info
-                .health()
-                .await
-                .map_err(|e| TensorZeroError::Other { source: e.into() }),
-        }
-    }
-}
-
-/// Extension trait for dataset operations
-#[async_trait::async_trait]
-pub trait ClientDatasetsExt {
+    // Dataset operations
     async fn create_datapoints(
         &self,
         dataset_name: String,
@@ -150,10 +127,83 @@ pub trait ClientDatasetsExt {
         &self,
         dataset_name: String,
     ) -> Result<StaleDatasetResponse, TensorZeroError>;
+
+    // Workflow evaluation operations
+    async fn workflow_evaluation_run(
+        &self,
+        params: WorkflowEvaluationRunParams,
+    ) -> Result<WorkflowEvaluationRunResponse, TensorZeroError>;
+
+    async fn workflow_evaluation_run_episode(
+        &self,
+        run_id: Uuid,
+        params: WorkflowEvaluationRunEpisodeParams,
+    ) -> Result<WorkflowEvaluationRunEpisodeResponse, TensorZeroError>;
+
+    // Inference operations
+    #[cfg(feature = "e2e_tests")]
+    async fn start_batch_inference(
+        &self,
+        params: tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams,
+    ) -> Result<
+        tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
+        TensorZeroError,
+    >;
+
+    async fn experimental_list_inferences(
+        &self,
+        params: ListInferencesParams<'_>,
+    ) -> Result<Vec<StoredInference>, TensorZeroError>;
+
+    // Optimization operations
+    async fn experimental_render_samples<T: StoredSample + Send>(
+        &self,
+        stored_samples: Vec<T>,
+        variants: std::collections::HashMap<String, String>,
+    ) -> Result<Vec<RenderedSample>, TensorZeroError>;
+
+    async fn experimental_launch_optimization(
+        &self,
+        params: LaunchOptimizationParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroError>;
+
+    async fn experimental_launch_optimization_workflow(
+        &self,
+        params: LaunchOptimizationWorkflowParams,
+    ) -> Result<OptimizationJobHandle, TensorZeroError>;
+
+    async fn experimental_poll_optimization(
+        &self,
+        handle: &OptimizationJobHandle,
+    ) -> Result<OptimizationJobInfo, TensorZeroError>;
+
+    // Config access
+    fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
+
+    #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
+    fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData>;
 }
 
 #[async_trait::async_trait]
-impl ClientDatasetsExt for Client {
+impl ClientExt for Client {
+    /// Queries the health of the ClickHouse database
+    /// This does nothing in `ClientMode::HTTPGateway`
+    async fn clickhouse_health(&self) -> Result<(), TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(_) => Ok(()),
+            ClientMode::EmbeddedGateway {
+                gateway,
+                timeout: _,
+            } => gateway
+                .handle
+                .app_state
+                .clickhouse_connection_info
+                .health()
+                .await
+                .map_err(|e| TensorZeroError::Other { source: e.into() }),
+        }
+    }
+
     async fn create_datapoints(
         &self,
         dataset_name: String,
@@ -380,25 +430,7 @@ impl ClientDatasetsExt for Client {
             }
         }
     }
-}
 
-/// Extension trait for workflow evaluation operations
-#[async_trait::async_trait]
-pub trait ClientWorkflowExt {
-    async fn workflow_evaluation_run(
-        &self,
-        params: WorkflowEvaluationRunParams,
-    ) -> Result<WorkflowEvaluationRunResponse, TensorZeroError>;
-
-    async fn workflow_evaluation_run_episode(
-        &self,
-        run_id: Uuid,
-        params: WorkflowEvaluationRunEpisodeParams,
-    ) -> Result<WorkflowEvaluationRunEpisodeResponse, TensorZeroError>;
-}
-
-#[async_trait::async_trait]
-impl ClientWorkflowExt for Client {
     async fn workflow_evaluation_run(
         &self,
         mut params: WorkflowEvaluationRunParams,
@@ -479,28 +511,7 @@ impl ClientWorkflowExt for Client {
             }
         }
     }
-}
 
-/// Extension trait for inference listing and batch operations
-#[async_trait::async_trait]
-pub trait ClientInferencesExt {
-    #[cfg(feature = "e2e_tests")]
-    async fn start_batch_inference(
-        &self,
-        params: tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams,
-    ) -> Result<
-        tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
-        TensorZeroError,
-    >;
-
-    async fn experimental_list_inferences(
-        &self,
-        params: ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, TensorZeroError>;
-}
-
-#[async_trait::async_trait]
-impl ClientInferencesExt for Client {
     #[cfg(feature = "e2e_tests")]
     async fn start_batch_inference(
         &self,
@@ -555,35 +566,7 @@ impl ClientInferencesExt for Client {
             .map_err(err_to_http)?;
         Ok(inferences)
     }
-}
 
-/// Extension trait for optimization operations
-#[async_trait::async_trait]
-pub trait ClientOptimizationExt {
-    async fn experimental_render_samples<T: StoredSample + Send>(
-        &self,
-        stored_samples: Vec<T>,
-        variants: std::collections::HashMap<String, String>,
-    ) -> Result<Vec<RenderedSample>, TensorZeroError>;
-
-    async fn experimental_launch_optimization(
-        &self,
-        params: LaunchOptimizationParams,
-    ) -> Result<OptimizationJobHandle, TensorZeroError>;
-
-    async fn experimental_launch_optimization_workflow(
-        &self,
-        params: LaunchOptimizationWorkflowParams,
-    ) -> Result<OptimizationJobHandle, TensorZeroError>;
-
-    async fn experimental_poll_optimization(
-        &self,
-        handle: &OptimizationJobHandle,
-    ) -> Result<OptimizationJobInfo, TensorZeroError>;
-}
-
-#[async_trait::async_trait]
-impl ClientOptimizationExt for Client {
     async fn experimental_render_samples<T: StoredSample + Send>(
         &self,
         stored_samples: Vec<T>,
@@ -745,17 +728,7 @@ impl ClientOptimizationExt for Client {
             }
         }
     }
-}
 
-/// Extension trait for config and app state access
-pub trait ClientConfigExt {
-    fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
-
-    #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
-    fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData>;
-}
-
-impl ClientConfigExt for Client {
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
         use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
