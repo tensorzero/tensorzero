@@ -5,7 +5,7 @@
     clippy::unwrap_used
 )]
 use crate::config::BatchWritesConfig;
-use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
+use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
 use crate::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunEpisodeRow, WorkflowEvaluationRunRow,
 };
@@ -99,7 +99,7 @@ pub async fn select_json_datapoint_clickhouse(
 pub async fn select_chat_dataset_clickhouse(
     clickhouse_connection_info: &ClickHouseConnectionInfo,
     dataset_name: &str,
-) -> Option<Vec<ChatInferenceDatapoint>> {
+) -> Option<Vec<StoredChatInferenceDatapoint>> {
     #[cfg(feature = "e2e_tests")]
     clickhouse_flush_async_insert(clickhouse_connection_info).await;
 
@@ -130,9 +130,9 @@ pub async fn select_chat_dataset_clickhouse(
         .await
         .unwrap();
     let lines = text.response.lines();
-    let mut chat_rows: Vec<ChatInferenceDatapoint> = Vec::new();
+    let mut chat_rows: Vec<StoredChatInferenceDatapoint> = Vec::new();
     for line in lines {
-        let chat_row: ChatInferenceDatapoint = serde_json::from_str(line).unwrap();
+        let chat_row: StoredChatInferenceDatapoint = serde_json::from_str(line).unwrap();
         chat_rows.push(chat_row);
     }
     Some(chat_rows)

@@ -5,7 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::{Datapoint, GetDatapointParams};
+use tensorzero::{GetDatapointParams, StoredDatapoint};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -113,7 +113,7 @@ async fn test_update_chat_datapoint_output() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = old_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_datapoint else {
         panic!("Expected chat datapoint");
     };
 
@@ -134,7 +134,7 @@ async fn test_update_chat_datapoint_output() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -241,7 +241,7 @@ async fn test_update_json_datapoint_output() {
         })
         .await
         .unwrap();
-    let Datapoint::Json(json_datapoint) = new_datapoint else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
     };
     assert!(json_datapoint.staled_at.is_none());
@@ -374,7 +374,7 @@ async fn test_update_multiple_datapoints() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = old_dp1 else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_dp1 else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_some());
@@ -387,7 +387,7 @@ async fn test_update_multiple_datapoints() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = old_dp2 else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_dp2 else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_some());
@@ -564,7 +564,7 @@ async fn test_update_datapoint_with_metadata() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, Some("Test Datapoint Name".to_string()));
@@ -699,7 +699,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -789,7 +789,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -878,7 +878,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -966,7 +966,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -1059,7 +1059,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Json(json_datapoint) = new_datapoint else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
     };
     assert!(json_datapoint.staled_at.is_none());
@@ -1156,7 +1156,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         .await
         .unwrap();
 
-    let Datapoint::Json(json_datapoint) = new_datapoint else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
     };
     assert!(json_datapoint.staled_at.is_none());
@@ -1252,7 +1252,7 @@ async fn test_update_metadata_chat_datapoint() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = updated_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = updated_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, Some("updated_name".to_string()));
@@ -1345,7 +1345,7 @@ async fn test_update_metadata_json_datapoint() {
         .await
         .unwrap();
 
-    let Datapoint::Json(json_datapoint) = updated_datapoint else {
+    let StoredDatapoint::Json(json_datapoint) = updated_datapoint else {
         panic!("Expected json datapoint");
     };
     assert_eq!(json_datapoint.name, Some("updated_json_name".to_string()));
@@ -1422,7 +1422,7 @@ async fn test_update_metadata_set_name_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = updated_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = updated_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, None);
@@ -1533,7 +1533,7 @@ async fn test_update_metadata_batch() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = datapoint1 else {
+    let StoredDatapoint::Chat(chat_datapoint) = datapoint1 else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, Some("updated_name1".to_string()));
@@ -1547,7 +1547,7 @@ async fn test_update_metadata_batch() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = datapoint2 else {
+    let StoredDatapoint::Chat(chat_datapoint) = datapoint2 else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, Some("updated_name2".to_string()));
