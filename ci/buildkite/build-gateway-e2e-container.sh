@@ -16,8 +16,10 @@ docker pull $LATEST_TAG || true
 
 # Build the container with cache
 docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 \
+  --build-arg PROFILE=release \ # Use 'release' instead of 'performance', which is faster to build
+  --build-arg CARGO_BUILD_FLAGS="--features e2e_tests" \
   --cache-from $LATEST_TAG \
-  -f tensorzero-core/tests/e2e/Dockerfile.gateway.e2e . -t $TAG
+  -f gateway/Dockerfile . -t $TAG
 
 # Tag with latest and push both tags
 docker tag $TAG $LATEST_TAG
