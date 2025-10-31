@@ -38,6 +38,18 @@ export async function loadConfig(): Promise<Config> {
   return config;
 }
 
+/**
+ * Helper function to get the config path used by the UI.
+ * Returns null if using default config, otherwise returns the config path.
+ */
+export function getConfigPath(): string | null {
+  const env = getEnv();
+  if (env.TENSORZERO_UI_DEFAULT_CONFIG) {
+    return null;
+  }
+  return env.TENSORZERO_UI_CONFIG_PATH;
+}
+
 interface ConfigCache {
   data: Config;
   timestamp: number;

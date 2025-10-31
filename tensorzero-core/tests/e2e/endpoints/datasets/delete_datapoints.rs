@@ -11,7 +11,7 @@ use tensorzero_core::db::datasets::{
     JsonInferenceDatapointInsert,
 };
 use tensorzero_core::endpoints::datasets::v1::types::DeleteDatapointsResponse;
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::inference::types::{
     JsonInferenceOutput, Role, StoredInput, StoredInputMessage, StoredInputMessageContent, Text,
 };
@@ -125,7 +125,7 @@ async fn test_delete_datapoints_single_chat() {
     assert_eq!(stale_datapoints.len(), 1);
 
     // Verify staled_at is set
-    let Datapoint::Chat(dp) = &stale_datapoints[0] else {
+    let StoredDatapoint::Chat(dp) = &stale_datapoints[0] else {
         panic!("Expected chat datapoint");
     };
     assert!(dp.staled_at.is_some());

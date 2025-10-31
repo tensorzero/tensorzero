@@ -168,7 +168,7 @@ impl GatewayHandle {
 
     #[cfg(feature = "pyo3")]
     pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
-        let config = Arc::new(Config::default());
+        let config = Arc::new(Config::new_dummy_for_pyo3());
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         #[cfg(test)]
         let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
@@ -231,7 +231,7 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::default(), Some(clickhouse_url), true).await
+    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
 }
 
 pub async fn setup_clickhouse(
@@ -411,7 +411,7 @@ pub async fn start_openai_compatible_gateway(
     let config = if let Some(config_file) = config_file {
         Arc::new(Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?)
     } else {
-        Arc::new(Config::default())
+        Arc::new(Config::new_empty().await?)
     };
     let gateway_handle =
         GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
@@ -479,6 +479,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -541,6 +542,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -570,6 +572,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -601,6 +604,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,

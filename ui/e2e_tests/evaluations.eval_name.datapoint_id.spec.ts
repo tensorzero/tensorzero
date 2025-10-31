@@ -144,6 +144,8 @@ test("should be able to add a datapoint from the evaluation page", async ({
   await page.waitForURL(`/datasets/${datasetName}/datapoint/**`, {
     timeout: 5000,
   });
+  // Wait for the page to load
+  await page.waitForLoadState("networkidle");
 
   // Assert that the page URL starts with /datasets/test_eval_dataset/datapoint/
   expect(page.url()).toMatch(
