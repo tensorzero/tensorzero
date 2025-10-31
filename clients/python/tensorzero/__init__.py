@@ -114,6 +114,7 @@ DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
 OptimizationConfig = t.Union[
     OpenAISFTConfig,
     FireworksSFTConfig,
+    GCPVertexGeminiSFTConfig,
     TogetherSFTConfig,
     DICLOptimizationConfig,
     OpenAIRFTConfig,
