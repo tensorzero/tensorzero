@@ -32,7 +32,7 @@ use tensorzero_core::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
-    tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
+    tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
@@ -313,7 +313,7 @@ fn generate_text_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(output)),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         output_schema: None,
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Marseille.".to_string(),
@@ -443,8 +443,9 @@ fn generate_tool_call_example() -> RenderedSample {
         },
         output: Some(tool_call_output.clone()),
         stored_output: Some(StoredOutput::Chat(tool_call_output)),
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![Tool {
+        tool_params: DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![Tool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({
@@ -458,10 +459,11 @@ fn generate_tool_call_example() -> RenderedSample {
                     "required": ["location"]
                 }),
                 strict: false,
-            }],
-            tool_choice: ToolChoice::Auto,
+            }]),
+            tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: None,
-        }),
+            provider_tools: None,
+        },
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
@@ -529,7 +531,7 @@ fn generate_image_example() -> RenderedSample {
         },
         output: Some(output.clone()),
         stored_output: Some(StoredOutput::Chat(output)),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,

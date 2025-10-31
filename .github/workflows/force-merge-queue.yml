@@ -10,17 +10,25 @@ permissions:
 # Important: *DO NOT* add 'merge_group' (or any other trigger) to the workflow.
 # We need to ensure that this *never* runs for PRs that are inside the merge queue, so
 # that actually merging a PR requires the real 'check-all-general-jobs-passed' job to pass.
+
 on:
   pull_request:
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [labeled, unlabeled]
 
 jobs:
-  check-all-general-jobs-passed:
-    runs-on: ubuntu-latest
+  # Unfortunately, Github branch protection rules treated skipped checks as passing:
+  # https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging
+  # As a result, we need a two-step process:
+  # 1. This file (force-merge-queue.yml) runs when a label is adjusted on a PR.
+  # 2. If the 'force-add-to-merge-queue' was added, we invoke a helper workflow, which defines a job named 'check-all-general-jobs-passed' that always succeeds.
+  #
+  # This means that if this workflow fires when 'force-add-to-merge-queue' does not exist, we will not create *any* status for 'check-all-general-jobs-passed'
+  # (since the workflow containing the 'check-all-general-jobs-passed' job will not run at all)
+  # If we defined the job in the same workflow, then we would still add a 'skipped' status for 'check-all-general-jobs-passed',
+  # which would incorrectly cause the branch protection rule to succeed, allowing all PRs to be added to the merge queue without running
+  # the real 'check-all-general-jobs-passed' job.
+  trigger-force-merge-queue-helper:
+    name: Invoke helper workflow
     # Only run this job if the force-add-to-merge-queue label is present
-    if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue')
-    steps:
-      - name: Force pass check
-        run: |
-          echo "Force merge queue label detected - marking check as passed"
-          echo "This allows the PR to be added to the merge queue even if other checks have not completed"
+    if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue') && github.event.action == 'labeled'
+    uses: ./.github/workflows/force-merge-queue-helper.yml

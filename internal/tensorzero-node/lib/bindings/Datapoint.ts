@@ -2,6 +2,10 @@
 import type { ChatInferenceDatapoint } from "./ChatInferenceDatapoint";
 import type { JsonInferenceDatapoint } from "./JsonInferenceDatapoint";
 
+/**
+ * Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
+ * This one should be used in all public interfaces.
+ */
 export type Datapoint =
   | ({ type: "chat" } & ChatInferenceDatapoint)
   | ({ type: "json" } & JsonInferenceDatapoint);

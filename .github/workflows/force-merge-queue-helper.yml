@@ -1,0 +1,14 @@
+name: Helper for force add to merge queue
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+
+jobs:
+  check-all-general-jobs-passed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Force pass check
+        run: |
+          echo "Dummy check-all-general-jobs-passed - this was triggered from force-merge-queue.yml"
