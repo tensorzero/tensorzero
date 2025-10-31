@@ -4,7 +4,7 @@ export type KeyInfo = {
   public_id: string;
   organization: string;
   workspace: string;
-  description: string | null;
+  description?: string;
   created_at: string;
-  disabled_at: string | null;
+  disabled_at?: string;
 };

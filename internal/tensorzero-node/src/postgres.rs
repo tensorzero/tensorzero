@@ -1,4 +1,5 @@
 use secrecy::ExposeSecret;
+use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::{
     config::Config, db::postgres::PostgresConnectionInfo, utils::gateway::setup_postgres,
 };
@@ -31,8 +32,8 @@ impl PostgresClient {
             .ok_or_else(|| napi::Error::from_reason("Postgres connection not available"))?;
 
         let key = tensorzero_auth::postgres::create_key(
-            "default",
-            "default",
+            DEFAULT_ORGANIZATION,
+            DEFAULT_WORKSPACE,
             description.as_deref(),
             pool,
         )
