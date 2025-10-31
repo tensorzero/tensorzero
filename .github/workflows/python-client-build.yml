@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  RUST_TOOLCHAIN: 1.90
+  RUST_TOOLCHAIN: "1.90"
 
 jobs:
   linux:
