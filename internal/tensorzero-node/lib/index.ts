@@ -9,7 +9,6 @@ import type {
   DatasetMetadata,
   DatasetQueryParams,
   EpisodeByIdRow,
-  EstimateTrackAndStopOptimalProbabilitiesParams,
   EvaluationRunEvent,
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
@@ -57,8 +56,6 @@ const {
   DatabaseClient: NativeDatabaseClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
-  estimateTrackAndStopOptimalProbabilities:
-    nativeEstimateTrackAndStopOptimalProbabilities,
 } = require("../index.cjs") as typeof import("../index");
 
 // Wrapper class for type safety and convenience
@@ -124,6 +121,14 @@ export class TensorZeroClient {
     const staleDatasetString =
       await this.nativeClient.staleDataset(datasetName);
     return JSON.parse(staleDatasetString) as StaleDatasetResponse;
+  }
+
+  async getVariantSamplingProbabilities(
+    functionName: string,
+  ): Promise<Record<string, number>> {
+    const probabilitiesString =
+      await this.nativeClient.getVariantSamplingProbabilities(functionName);
+    return JSON.parse(probabilitiesString) as Record<string, number>;
   }
 }
 
@@ -207,29 +212,6 @@ export async function runEvaluationStreaming(
       }
     },
   );
-}
-
-/**
- * Estimates optimal sampling probabilities for bandit experiments.
- *
- * Given feedback statistics (mean, variance, count) for each variant,
- * this function computes the optimal probability of sampling each variant
- * to efficiently identify the best arm while respecting an ε-tolerance
- * for sub-optimality.
- *
- * The algorithm uses Second-Order Cone Programming (SOCP) to solve
- * an optimization problem that balances exploration and exploitation.
- *
- * @param params - Parameters including feedback data and optimization settings
- * @returns A mapping from variant names to optimal sampling probabilities
- */
-export function estimateTrackAndStopOptimalProbabilities(
-  params: EstimateTrackAndStopOptimalProbabilitiesParams,
-): Record<string, number> {
-  const paramsString = safeStringify(params);
-  const resultString =
-    nativeEstimateTrackAndStopOptimalProbabilities(paramsString);
-  return JSON.parse(resultString) as Record<string, number>;
 }
 
 function safeStringify(obj: unknown) {

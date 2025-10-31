@@ -368,6 +368,11 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Cleanup disk space
+        timeout-minutes: 30
+        run: ./ci/free-disk-space.sh
+
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
