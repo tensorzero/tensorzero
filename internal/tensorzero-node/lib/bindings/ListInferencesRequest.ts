@@ -12,17 +12,17 @@ export type ListInferencesRequest = {
    * Optional function name to filter inferences by.
    * If provided, only inferences from this function will be returned.
    */
-  function_name: string | null;
+  function_name?: string;
   /**
    * Optional variant name to filter inferences by.
    * If provided, only inferences from this variant will be returned.
    */
-  variant_name: string | null;
+  variant_name?: string;
   /**
    * Optional episode ID to filter inferences by.
    * If provided, only inferences from this episode will be returned.
    */
-  episode_id: string | null;
+  episode_id?: string;
   /**
    * Source of the inference output. Determines whether to return the original
    * inference output or demonstration feedback (manually-curated output) if available.
@@ -32,20 +32,20 @@ export type ListInferencesRequest = {
    * The maximum number of inferences to return.
    * Defaults to 20.
    */
-  page_size: number | null;
+  page_size?: number;
   /**
    * The number of inferences to skip before starting to return results.
    * Defaults to 0.
    */
-  offset: number | null;
+  offset?: number;
   /**
    * Optional filter to apply when querying inferences.
    * Supports filtering by metrics, tags, time, and logical combinations (AND/OR/NOT).
    */
-  filter: InferenceFilter | null;
+  filter?: InferenceFilter;
   /**
    * Optional ordering criteria for the results.
    * Supports multiple sort criteria (e.g., sort by timestamp then by metric).
    */
-  order_by: Array<OrderBy> | null;
+  order_by?: Array<OrderBy>;
 };

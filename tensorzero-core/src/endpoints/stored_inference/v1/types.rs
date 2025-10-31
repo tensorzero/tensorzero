@@ -9,7 +9,7 @@ use crate::stored_inference::StoredInference;
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct ListInferencesRequest {
     /// Optional function name to filter inferences by.
     /// If provided, only inferences from this function will be returned.
