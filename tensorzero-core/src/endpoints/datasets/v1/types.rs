@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
-use crate::inference::types::{ContentBlockChatOutput, Input};
+use crate::inference::types::{ContentBlockChatOutput, Input, JsonInferenceOutput};
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
@@ -87,9 +88,10 @@ pub struct UpdateJsonDatapointRequest {
     pub input: Option<Input>,
 
     /// JSON datapoint output. If omitted, it will be left unchanged. If `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
-    /// This will be validated against `output_schema` or the function's output schema.
+    /// This will be parsed and validated against output_schema, and valid `raw` values will be parsed and stored as `parsed`. Invalid `raw` values will
+    /// also be stored, because we allow invalid outputs in datapoints by design.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    pub output: Option<Option<Value>>,
+    pub output: Option<Option<JsonDatapointOutputUpdate>>,
 
     /// The output schema of the JSON datapoint. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     /// If not provided, the function's output schema will be used.
@@ -104,6 +106,45 @@ pub struct UpdateJsonDatapointRequest {
     /// Metadata fields. If omitted, it will be left unchanged.
     #[serde(default)]
     pub metadata: Option<DatapointMetadataUpdate>,
+}
+
+/// A request to update the output of a JSON datapoint.
+/// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
+/// for users to run evals against them.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct JsonDatapointOutputUpdate {
+    /// The raw output of the datapoint. For valid JSON outputs, this should be a JSON-serialized string.
+    pub raw: String,
+}
+
+impl JsonDatapointOutputUpdate {
+    /// Converts this `JsonDatapointOutputUpdate` into a `JsonInferenceOutput`.
+    ///
+    /// This function parses and validates the `raw` output against the `output_schema`, and only
+    /// populates the `parsed` field if the output is valid.
+    pub async fn into_json_inference_output(
+        self,
+        output_schema: &DynamicJSONSchema,
+    ) -> JsonInferenceOutput {
+        let parse_result = serde_json::from_str(self.raw.as_str());
+
+        let mut output = JsonInferenceOutput {
+            raw: Some(self.raw),
+            parsed: None,
+        };
+
+        let Ok(parsed_unvalidated_value) = parse_result else {
+            return output;
+        };
+        let Ok(()) = output_schema.validate(&parsed_unvalidated_value).await else {
+            return output;
+        };
+
+        output.parsed = Some(parsed_unvalidated_value);
+        output
+    }
 }
 
 /// A request to update the metadata of a datapoint.
@@ -275,4 +316,75 @@ pub struct DeleteDatapointsRequest {
 pub struct DeleteDatapointsResponse {
     /// The number of deleted datapoints.
     pub num_deleted_datapoints: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_json_datapoint_output_update_into_json_inference_output_valid() {
+        let update = JsonDatapointOutputUpdate {
+            raw: r#"{"key": "value"}"#.to_string(),
+        };
+        let schema_value = json!({"type": "object", "properties": {"key": {"type": "string"}}, });
+        let schema = DynamicJSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
+
+        assert_eq!(
+            output.raw,
+            Some(r#"{"key": "value"}"#.to_string()),
+            "Raw field should be the same as the input"
+        );
+        assert_eq!(
+            output.parsed,
+            Some(json!({"key": "value"})),
+            "Parsed field should be the same as the input because it conforms to the schema"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_json_datapoint_output_update_into_json_inference_output_nonconformant() {
+        let update = JsonDatapointOutputUpdate {
+            raw: r#"{"key": "nonconformant value"}"#.to_string(),
+        };
+        let schema_value = json!({"type": "object", "properties": {"key": {"type": "number"}}, });
+        let schema = DynamicJSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
+        assert_eq!(output.parsed, None);
+
+        assert_eq!(
+            output.raw,
+            Some(r#"{"key": "nonconformant value"}"#.to_string()),
+            "Raw field should be the same as the input"
+        );
+        assert_eq!(
+            output.parsed, None,
+            "Parsed field should be None because it does not conform to the schema"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_prepare_json_update_output_invalid_json() {
+        let update = JsonDatapointOutputUpdate {
+            raw: "intentionally invalid \" json".to_string(),
+        };
+
+        let schema_value = json!({"type": "object", "properties": {"value": {"type": "string"}}, });
+        let schema = DynamicJSONSchema::new(schema_value);
+        let output = update.into_json_inference_output(&schema).await;
+        assert_eq!(output.parsed, None);
+
+        assert_eq!(
+            output.raw,
+            Some("intentionally invalid \" json".to_string()),
+            "Raw field should be the same as the input"
+        );
+        assert_eq!(
+            output.parsed, None,
+            "Parsed field should be None because it is invalid JSON"
+        );
+    }
 }

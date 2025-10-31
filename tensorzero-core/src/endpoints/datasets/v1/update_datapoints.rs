@@ -4,7 +4,6 @@ use axum::extract::{Path, State};
 use axum::Json;
 use chrono::Utc;
 use serde::Deserialize;
-use serde_json;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -19,8 +18,8 @@ use crate::endpoints::datasets::{
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::{FetchContext, Input, JsonInferenceOutput};
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::inference::types::{FetchContext, Input};
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -286,8 +285,6 @@ async fn prepare_json_update(
         }));
     };
 
-    // Grab a copy of IDs for logging.
-    let existing_datapoint_id = existing_datapoint.id;
     let updated_datapoint_id = Uuid::now_v7();
 
     // Update old datapoint as staled, and create new datapoint.
@@ -306,36 +303,38 @@ async fn prepare_json_update(
         updated_datapoint.input = new_input;
     }
 
-    if let Some(new_output_schema) = update.output_schema {
+    // Validate and update output_schema if provided
+    let output_schema = if let Some(new_output_schema) = update.output_schema {
+        // Validate the new schema by converting it to DynamicJSONSchema
+        let schema_str = serde_json::to_string(&new_output_schema).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize output_schema: {e}"),
+            })
+        })?;
+        let validated_schema = DynamicJSONSchema::parse_from_str(&schema_str)?;
+        // Ensure the schema is valid by forcing compilation
+        validated_schema.ensure_valid().await?;
         updated_datapoint.output_schema = new_output_schema;
-    }
+        validated_schema
+    } else {
+        // Use existing schema, convert it to DynamicJSONSchema
+        let schema_str = serde_json::to_string(&updated_datapoint.output_schema).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize existing output_schema: {e}"),
+            })
+        })?;
+        let schema = DynamicJSONSchema::parse_from_str(&schema_str)?;
+        // Ensure the schema is valid by forcing compilation
+        schema.ensure_valid().await?;
+        schema
+    };
+
+    // Validate the output against the output schema. If the output is invalid, we only store the raw output.
     if let Some(new_output) = update.output {
         updated_datapoint.output = match new_output {
+            Some(output) => Some(output.into_json_inference_output(&output_schema).await),
             None => None,
-            Some(value) => {
-                // Validate the output with schema before saving.
-                StaticJSONSchema::from_value(updated_datapoint.output_schema.clone())?
-                    .validate(&value)
-                    .map_err(|e| {
-                        Error::new(ErrorDetails::InvalidRequest {
-                            message: format!(
-                                "Provided output for datapoint {existing_datapoint_id} does not match function output schema: {e}",
-                            ),
-                        })
-                    })?;
-
-                Some(JsonInferenceOutput {
-                    raw: Some(serde_json::to_string(&value).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Failed to serialize provided output for datapoint {existing_datapoint_id}: {e}",
-                            )
-                        })
-                    })?),
-                    parsed: Some(value),
-                })
-            }
-        }
+        };
     }
 
     if let Some(new_tags) = update.tags {
@@ -517,7 +516,9 @@ mod tests {
     use super::*;
     use crate::config::{Config, ObjectStoreInfo, SchemaData};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
-    use crate::endpoints::datasets::v1::types::DatapointMetadataUpdate;
+    use crate::endpoints::datasets::v1::types::{
+        DatapointMetadataUpdate, JsonDatapointOutputUpdate,
+    };
     use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
@@ -1541,7 +1542,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(new_output_value.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output_value).unwrap(),
+                })),
                 output_schema: None,
                 tags: None,
                 metadata: None,
@@ -1624,7 +1627,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(new_output.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output).unwrap(),
+                })),
                 output_schema: Some(new_schema.clone()),
                 tags: None,
                 metadata: None,
@@ -1662,8 +1667,50 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(bad_output)),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&bad_output).unwrap(),
+                })),
                 output_schema: None, // Will use existing schema which expects {value: string}
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(updated.output.as_ref().unwrap().parsed, None);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_invalid_output_schema() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+
+            // Provide an invalid schema
+            let invalid_schema = json!({
+                "type": "invalid_type",  // This is not a valid JSON Schema type
+                "properties": {"value": {"type": "string"}}
+            });
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                output_schema: Some(invalid_schema),
                 tags: None,
                 metadata: None,
             };
@@ -1678,13 +1725,14 @@ mod tests {
             )
             .await;
 
-            assert!(result.is_err(), "Expected validation error");
-            let err = result.unwrap_err();
-            let err_msg = format!("{err:?}");
-            assert!(
-                err_msg.contains("does not match") || err_msg.contains("schema"),
-                "Expected schema validation error, got: {err_msg}"
-            );
+            // Should return an error because the schema is invalid
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            // Verify the error is related to JSON schema validation
+            assert!(matches!(
+                error.get_details(),
+                ErrorDetails::DynamicJsonSchema { .. }
+            ));
         }
 
         #[tokio::test]
@@ -1746,7 +1794,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: Some(new_input),
-                output: Some(Some(new_output.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output).unwrap(),
+                })),
                 output_schema: Some(new_schema.clone()),
                 tags: Some(new_tags.clone()),
                 metadata: Some(DatapointMetadataUpdate {
