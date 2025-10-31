@@ -368,13 +368,17 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Cleanup disk space
+        timeout-minutes: 30
+        run: ./ci/free-disk-space.sh
+
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
       - name: Launch ClickHouse container for E2E tests
         run: |
-          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
 
       - name: Set up .env file for production deployment tests
         run: |

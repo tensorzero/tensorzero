@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  TensorZeroClient,
-  DatabaseClient,
-  getConfig,
-  estimateTrackAndStopOptimalProbabilities,
-} from "../index.js";
+import { TensorZeroClient, DatabaseClient, getConfig } from "../index.js";
 
 const UI_FIXTURES_CONFIG_PATH = "../../ui/fixtures/config/tensorzero.toml";
 
@@ -201,76 +196,4 @@ it("should get config with evaluations", async () => {
   );
   expect(config.evaluations.haiku!.function_name).toBe("write_haiku");
   expect(config.evaluations.images!.function_name).toBe("image_judger");
-});
-
-describe("estimateTrackAndStopOptimalProbabilities", () => {
-  it("should compute optimal probabilities from feedback data", () => {
-    const result = estimateTrackAndStopOptimalProbabilities({
-      feedback: [
-        { variant_name: "variant_a", mean: 0.7, variance: 0.05, count: 100n },
-        { variant_name: "variant_b", mean: 0.85, variance: 0.03, count: 100n },
-      ],
-      metric_optimize: "max",
-    });
-
-    expect(result).toBeDefined();
-    expect(typeof result).toBe("object");
-    expect(result.variant_a).toBeDefined();
-    expect(result.variant_b).toBeDefined();
-    expect(typeof result.variant_a).toBe("number");
-    expect(typeof result.variant_b).toBe("number");
-
-    // Probabilities should sum to approximately 1
-    const sum = result.variant_a + result.variant_b;
-    expect(sum).toBeCloseTo(1.0, 5);
-
-    // Both variants should get non-zero probability
-    expect(result.variant_a).toBeGreaterThan(0);
-    expect(result.variant_b).toBeGreaterThan(0);
-  });
-
-  it("should handle minimize optimization", () => {
-    const result = estimateTrackAndStopOptimalProbabilities({
-      feedback: [
-        { variant_name: "variant_a", mean: 100, variance: 50, count: 100n },
-        { variant_name: "variant_b", mean: 50, variance: 20, count: 100n },
-      ],
-      metric_optimize: "min",
-    });
-
-    expect(result).toBeDefined();
-
-    // Probabilities should sum to approximately 1
-    const sum = result.variant_a + result.variant_b;
-    expect(sum).toBeCloseTo(1.0, 5);
-
-    // Both variants should get non-zero probability
-    expect(result.variant_a).toBeGreaterThan(0);
-    expect(result.variant_b).toBeGreaterThan(0);
-  });
-
-  it("should handle optional parameters", () => {
-    const result = estimateTrackAndStopOptimalProbabilities({
-      feedback: [
-        { variant_name: "v1", mean: 0.5, variance: 0.1, count: 50n },
-        { variant_name: "v2", mean: 0.6, variance: 0.1, count: 50n },
-        { variant_name: "v3", mean: 0.55, variance: 0.1, count: 50n },
-      ],
-      metric_optimize: "max",
-      epsilon: 0.05,
-      min_prob: 0.1,
-    });
-
-    expect(result).toBeDefined();
-    expect(Object.keys(result).length).toBe(3);
-
-    // All probabilities should be at least min_prob
-    expect(result.v1).toBeGreaterThanOrEqual(0.1);
-    expect(result.v2).toBeGreaterThanOrEqual(0.1);
-    expect(result.v3).toBeGreaterThanOrEqual(0.1);
-
-    // Should sum to 1
-    const sum = result.v1 + result.v2 + result.v3;
-    expect(sum).toBeCloseTo(1.0, 5);
-  });
 });

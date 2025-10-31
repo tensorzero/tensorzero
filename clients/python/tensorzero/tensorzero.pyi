@@ -540,6 +540,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         extra_headers: Optional[List[Dict[str, Any]]] = None,
         otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -957,6 +958,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         extra_headers: Optional[List[Dict[str, Any]]] = None,
         otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
