@@ -7,12 +7,11 @@ use futures::FutureExt;
 use mime::MediaType;
 use object_store::{PutMode, PutOptions};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use url::Url;
 
 use super::{
-    storage::StoragePath, Base64File, ObjectStorageFile, PendingObjectStoreFile, Role, System,
-    Text, Thought,
+    storage::StoragePath, Base64File, ObjectStorageFile, PendingObjectStoreFile, RawText, Role,
+    System, Text, Thought, Unknown,
 };
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
@@ -20,7 +19,7 @@ use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::stored_input::{
     StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
-use crate::inference::types::{RequestMessage, ResolvedContentBlock, TemplateInput};
+use crate::inference::types::{RequestMessage, ResolvedContentBlock, Template};
 use crate::rate_limiting::RateLimitedInputContent;
 use crate::tool::{ToolCall, ToolResult};
 
@@ -108,24 +107,16 @@ pub type FileFuture =
 
 #[derive(Clone, Debug)]
 pub enum LazyResolvedInputMessageContent {
-    Text {
-        text: String,
-    },
-    Template(TemplateInput),
+    Text(Text),
+    Template(Template),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     // When we add support for forwarding image urls to the model provider,
     // we'll store additional information here
     File(Box<LazyFile>),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
-    // We may extend this in the future to include other types of content
+    Unknown(Unknown),
 }
 
 /// Like `Input`, but with all network resources resolved.
@@ -368,20 +359,14 @@ impl ResolvedInputMessage {
 #[cfg_attr(test, ts(export))]
 pub enum ResolvedInputMessageContent {
     Text(Text),
-    Template(TemplateInput),
+    Template(Template),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[cfg_attr(any(feature = "pyo3", test), serde(alias = "image"))]
     File(Box<ObjectStorageFile>),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
-    // We may extend this in the future to include other types of content
+    Unknown(Unknown),
 }
 
 impl ResolvedInputMessageContent {
@@ -397,8 +382,8 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::ToolResult(tool_result) => {
                 StoredInputMessageContent::ToolResult(tool_result)
             }
-            ResolvedInputMessageContent::RawText { value } => {
-                StoredInputMessageContent::RawText { value }
+            ResolvedInputMessageContent::RawText(raw_text) => {
+                StoredInputMessageContent::RawText(raw_text)
             }
             ResolvedInputMessageContent::Thought(thought) => {
                 StoredInputMessageContent::Thought(thought)
@@ -406,13 +391,9 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::File(resolved) => {
                 StoredInputMessageContent::File(Box::new(StoredFile(resolved.file)))
             }
-            ResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => StoredInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            ResolvedInputMessageContent::Unknown(unknown) => {
+                StoredInputMessageContent::Unknown(unknown)
+            }
         })
     }
 
@@ -420,9 +401,7 @@ impl ResolvedInputMessageContent {
         self,
     ) -> Result<LazyResolvedInputMessageContent, Error> {
         Ok(match self {
-            ResolvedInputMessageContent::Text(text) => {
-                LazyResolvedInputMessageContent::Text { text: text.text }
-            }
+            ResolvedInputMessageContent::Text(text) => LazyResolvedInputMessageContent::Text(text),
             ResolvedInputMessageContent::Template(template) => {
                 LazyResolvedInputMessageContent::Template(template)
             }
@@ -433,8 +412,8 @@ impl ResolvedInputMessageContent {
                 LazyResolvedInputMessageContent::ToolResult(tool_result)
             }
 
-            ResolvedInputMessageContent::RawText { value } => {
-                LazyResolvedInputMessageContent::RawText { value }
+            ResolvedInputMessageContent::RawText(raw_text) => {
+                LazyResolvedInputMessageContent::RawText(raw_text)
             }
             ResolvedInputMessageContent::Thought(thought) => {
                 LazyResolvedInputMessageContent::Thought(thought)
@@ -442,13 +421,9 @@ impl ResolvedInputMessageContent {
             ResolvedInputMessageContent::File(resolved) => {
                 LazyResolvedInputMessageContent::File(Box::new(LazyFile::ObjectStorage(*resolved)))
             }
-            ResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => LazyResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            },
+            ResolvedInputMessageContent::Unknown(unknown) => {
+                LazyResolvedInputMessageContent::Unknown(unknown)
+            }
         })
     }
 }

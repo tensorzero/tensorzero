@@ -3,7 +3,7 @@ import type { Role } from "./Role";
 import type { StoredInputMessageContent } from "./StoredInputMessageContent";
 
 /**
- * `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
+ * `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
  */
 export type StoredInputMessage = {
   role: Role;

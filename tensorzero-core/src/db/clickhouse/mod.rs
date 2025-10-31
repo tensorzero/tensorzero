@@ -33,6 +33,11 @@ pub mod query_builder;
 mod select_queries;
 mod table_name;
 
+#[cfg(test)]
+mod mock_clickhouse_connection_info;
+#[cfg(test)]
+pub(crate) use mock_clickhouse_connection_info::MockClickHouseConnectionInfo;
+
 #[cfg(any(test, feature = "e2e_tests"))]
 pub mod test_helpers;
 

@@ -54,7 +54,7 @@ async fn get_providers() -> E2ETestProviders {
     let pdf_providers = vec![E2ETestProvider {
         supports_batch_inference: false,
         variant_name: "anthropic".to_string(),
-        model_name: "anthropic::claude-3-5-sonnet-20241022".into(),
+        model_name: "anthropic::claude-sonnet-4-5-20250929".into(),
         model_provider_name: "anthropic".into(),
         credentials: HashMap::new(),
     }];
@@ -1081,7 +1081,7 @@ async fn test_forward_file_url() {
     let client = make_embedded_gateway_with_config(&config).await;
 
     let response = client.inference(ClientInferenceParams {
-        model_name: Some("anthropic::claude-3-5-sonnet-20241022".to_string()),
+        model_name: Some("anthropic::claude-sonnet-4-5-20250929".to_string()),
         input: ClientInput {
             messages: vec![ClientInputMessage {
                 role: Role::User,
@@ -1114,7 +1114,7 @@ async fn test_forward_file_url() {
         .unwrap()
         .as_str()
         .unwrap();
-    assert_eq!(raw_request, "{\"model\":\"claude-3-5-sonnet-20241022\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"max_tokens\":8192,\"stream\":false}");
+    assert_eq!(raw_request, "{\"model\":\"claude-sonnet-4-5-20250929\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Describe the contents of the PDF\"},{\"type\":\"document\",\"source\":{\"type\":\"url\",\"url\":\"https://raw.githubusercontent.com/tensorzero/tensorzero/ac37477d56deaf6e0585a394eda68fd4f9390cab/tensorzero-core/tests/e2e/providers/deepseek_paper.pdf\"}}]}],\"max_tokens\":64000,\"stream\":false}");
 
     let file_path =
         "observability/files/3e127d9a726f6be0fd81d73ccea97d96ec99419f59650e01d49183cd3be999ef.pdf";

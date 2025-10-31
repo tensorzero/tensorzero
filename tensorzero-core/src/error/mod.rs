@@ -20,6 +20,8 @@ use crate::inference::types::storage::StoragePath;
 use crate::inference::types::Thought;
 use crate::rate_limiting::{FailedRateLimit, RateLimitingConfigScopes};
 
+pub mod delayed_error;
+
 /// Controls whether to include raw request/response details in error output
 ///
 /// When true:
@@ -155,6 +157,10 @@ impl Error {
         self.0.log();
     }
 
+    pub fn log_at_level(&self, prefix: &str, level: tracing::Level) {
+        self.0.log_at_level(prefix, level);
+    }
+
     pub fn is_retryable(&self) -> bool {
         self.0.is_retryable()
     }
@@ -194,6 +200,9 @@ impl From<ErrorDetails> for Error {
 pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
+    },
+    TensorZeroAuth {
+        message: String,
     },
     InvalidInferenceTarget {
         message: String,
@@ -584,6 +593,7 @@ impl ErrorDetails {
     fn level(&self) -> tracing::Level {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::TensorZeroAuth { .. } => tracing::Level::WARN,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
@@ -707,6 +717,7 @@ impl ErrorDetails {
     fn status_code(&self) -> StatusCode {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::TensorZeroAuth { .. } => StatusCode::UNAUTHORIZED,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
@@ -836,15 +847,19 @@ impl ErrorDetails {
         }
     }
 
+    pub fn log_at_level(&self, prefix: &str, level: tracing::Level) {
+        match level {
+            tracing::Level::ERROR => tracing::error!("{prefix}{self}"),
+            tracing::Level::WARN => tracing::warn!("{prefix}{self}"),
+            tracing::Level::INFO => tracing::info!("{prefix}{self}"),
+            tracing::Level::DEBUG => tracing::debug!("{prefix}{self}"),
+            tracing::Level::TRACE => tracing::trace!("{prefix}{self}"),
+        }
+    }
+
     /// Log the error using the `tracing` library
     pub fn log(&self) {
-        match self.level() {
-            tracing::Level::ERROR => tracing::error!("{self}"),
-            tracing::Level::WARN => tracing::warn!("{self}"),
-            tracing::Level::INFO => tracing::info!("{self}"),
-            tracing::Level::DEBUG => tracing::debug!("{self}"),
-            tracing::Level::TRACE => tracing::trace!("{self}"),
-        }
+        self.log_at_level("", self.level());
     }
 
     pub fn is_retryable(&self) -> bool {
@@ -872,6 +887,9 @@ impl std::fmt::Display for ErrorDetails {
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
+            }
+            ErrorDetails::TensorZeroAuth { message } => {
+                write!(f, "TensorZero authentication error: {message}")
             }
             ErrorDetails::ModelProviderTimeout {
                 provider_name,

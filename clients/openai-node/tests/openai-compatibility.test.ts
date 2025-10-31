@@ -797,7 +797,9 @@ describe("OpenAI Compatibility", () => {
         // @ts-expect-error - custom TensorZero property
         "tensorzero::episode_id": episodeId,
       })
-    ).rejects.toThrow(/System message must be a text content block/);
+    ).rejects.toThrow(
+      /System message must contain only text or template content blocks/
+    );
   });
 
   it("should handle json failure", async () => {

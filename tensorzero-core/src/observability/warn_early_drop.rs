@@ -6,6 +6,7 @@ use std::{
 };
 
 use axum::{body::Body, extract::Request, middleware::Next, response::Response};
+use http::Method;
 use http_body::{Frame, SizeHint};
 use tracing::Span;
 
@@ -102,11 +103,14 @@ pub async fn warn_on_early_connection_drop(
     next: Next,
 ) -> Response<GuardBodyWrapper> {
     let start_time = Instant::now();
+    // Axum runs GET handlers when a HEAD requests is made, but drops the body.
+    // To avoid false positives, we never log a warning for HEAD requests.
+    let is_finished = matches!(request.method(), &Method::HEAD);
     let guard = ConnectionDropGuard {
         // Save the current span, since we have no idea what span we'll be in when `Drop` runs.
         span: Span::current(),
         start_time,
-        finished: Cell::new(false),
+        finished: Cell::new(is_finished),
     };
     let response = next.run(request).await;
     response.map(|body| GuardBodyWrapper { inner: body, guard })

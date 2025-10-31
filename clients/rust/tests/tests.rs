@@ -5,6 +5,7 @@ use tensorzero::{
     input_handling::resolved_input_to_client_input, Base64File, ClientBuilder, ClientBuilderMode,
     ClientInferenceParams, ClientInput, ClientInputMessageContent, File, System,
 };
+use tensorzero_core::inference::types::Arguments;
 
 use reqwest::Url;
 use tensorzero_core::inference::types::StoredInput;
@@ -47,12 +48,10 @@ async fn test_versioning() {
             function_name: Some("basic_test".to_string()),
             episode_id: None,
             input: ClientInput {
-                system: Some(System::Template(
-                    json!({"assistant_name": "John"})
-                        .as_object()
-                        .unwrap()
-                        .clone(),
-                )),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                    "assistant_name".to_string(),
+                    "John".into(),
+                )])))),
                 messages: vec![],
             },
             ..Default::default()

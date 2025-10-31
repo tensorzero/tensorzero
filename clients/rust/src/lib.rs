@@ -23,6 +23,9 @@ pub use tensorzero_core::endpoints::optimization::LaunchOptimizationParams;
 pub use tensorzero_core::endpoints::optimization::LaunchOptimizationWorkflowParams;
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
 use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::endpoints::variant_probabilities::{
+    GetVariantSamplingProbabilitiesParams, GetVariantSamplingProbabilitiesResponse,
+};
 use tensorzero_core::http::TensorzeroHttpClient;
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
@@ -80,7 +83,7 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{Base64File, File, ObjectStoragePointer, UrlFile};
 pub use tensorzero_core::inference::types::{
-    ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System,
+    ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System, Unknown,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 
@@ -1198,6 +1201,48 @@ impl Client {
                 })
                 .into(),
             }),
+        }
+    }
+
+    pub async fn get_variant_sampling_probabilities(
+        &self,
+        function_name: &str,
+    ) -> Result<HashMap<String, f64>, TensorZeroError> {
+        match &*self.mode {
+            ClientMode::HTTPGateway(client) => {
+                let url = client
+                    .base_url
+                    .join("variant_sampling_probabilities")
+                    .map_err(|e| TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /variant_sampling_probabilities endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    })?;
+                let builder = client
+                    .http_client
+                    .get(url)
+                    .query(&[("function_name", function_name)]);
+                let response: GetVariantSamplingProbabilitiesResponse =
+                    self.parse_http_response(builder.send().await).await?;
+                Ok(response.probabilities)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    let response = tensorzero_core::endpoints::variant_probabilities::get_variant_sampling_probabilities(
+                        gateway.handle.app_state.clone(),
+                        GetVariantSamplingProbabilitiesParams {
+                            function_name: function_name.to_string(),
+                        },
+                    )
+                    .await
+                    .map_err(err_to_http)?;
+                    Ok(response.probabilities)
+                })
+                .await?)
+            }
         }
     }
 
