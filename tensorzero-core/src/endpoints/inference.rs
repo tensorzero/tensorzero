@@ -292,8 +292,8 @@ pub async fn inference(
         .into());
     }
 
-    // Validate the input (skip if using dynamic variant config)
-    if params.internal_dynamic_variant_config.is_none() {
+    // Validate the input (skip if using dynamic variant config and there are no candidate variants)
+    if !candidate_variants.is_empty() || params.internal_dynamic_variant_config.is_none() {
         function.validate_inference_params(&params)?;
     }
 
