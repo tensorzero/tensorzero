@@ -148,18 +148,33 @@ jobs:
           # Note that we cannot check the file contents - we will legitimately get some different cache keys when
           # regenerating, since the output from some cache entries get fed into judge models (affecting the cache key)
           echo "Cache file validation passed: same number of rows"
-          # Take down and destroy the containers, so that our subsequent test run starts with a fresh ClickHouse
-          # server, and inserts our regenerated fixtures from scratch
-          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
-          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
 
       - name: Upload new model inference cache
         if: always() && inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: model-inference-cache
           path: |
             ui/fixtures/model_inference_cache_e2e.jsonl
+
+      - name: Make sure the current commit short hash is in the Docker Compose gateway logs (immediately after regen)
+        if: inputs.regen_cache == true
+        working-directory: ui
+        run: |
+          SHORT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker compose -f fixtures/docker-compose.e2e.yml logs gateway | grep "(commit: ${SHORT_HASH})" || {
+            echo "ERROR: Commit hash ${SHORT_HASH} not found in gateway logs"
+            exit 1
+          }
+
+      - name: Destroy containers before re-run with fresh cache
+        if: inputs.regen_cache == true
+        working-directory: ui
+        run: |
+          # Take down and destroy the containers, so that our subsequent test run starts with a fresh ClickHouse
+          # server, and inserts our regenerated fixtures from scratch
+          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
+          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
 
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
@@ -205,7 +220,7 @@ jobs:
         working-directory: ui
         run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
 
-      - name: Make sure the current commit short hash is in the Docker Compose gateway logs
+      - name: Make sure the current commit short hash is in the Docker Compose gateway logs (after re-run with new cache)
         if: always()
         working-directory: ui
         run: |
