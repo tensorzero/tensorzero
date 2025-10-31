@@ -60,14 +60,14 @@ jobs:
   batch-tests:
     permissions:
       contents: read
-    if: github.repository == 'tensorzero/tensorzero'
+    if: github.repository == 'tensorzero/tensorzero' && false
     uses: ./.github/workflows/batch-test.yml
     secrets: inherit
 
   live-tests:
     name: "live-tests (batch_writes: ${{ matrix.batch_writes }})"
     runs-on: ubuntu-latest
-    if: github.repository == 'tensorzero/tensorzero' && false
+    if: github.repository == 'tensorzero/tensorzero'
     permissions:
       contents: read
     timeout-minutes: 45
