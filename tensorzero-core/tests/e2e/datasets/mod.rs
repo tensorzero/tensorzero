@@ -228,7 +228,7 @@ async fn test_create_delete_datapoint_chat() {
         .collect::<Vec<_>>();
     assert_eq!(list_datapoints.len(), 3);
 
-    for (datapoint, list_datapoint) in datapoints.iter().zip(list_datapoints.iter()) {
+    for datapoint in &datapoints {
         let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
         println!("pretty_datapoint: {pretty_datapoint}");
         // Verify the datapoint structure and content
@@ -240,6 +240,12 @@ async fn test_create_delete_datapoint_chat() {
         assert_eq!(datapoint.auxiliary, "");
         assert!(datapoint.staled_at.is_none());
         let datapoint_id = datapoint.id;
+
+        // Find the matching list_datapoint by ID
+        let list_datapoint = list_datapoints
+            .iter()
+            .find(|dp| dp.id == datapoint_id)
+            .expect("datapoint from database should be in list response");
 
         // Test the getter
         let get_datapoint_response = client
@@ -3084,3 +3090,5 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         "call_eBDiwZRnNnddB5tjcQbhdY0s"
     );
 }
+
+pub mod tool_params;
