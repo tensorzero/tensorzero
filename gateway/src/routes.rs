@@ -79,7 +79,6 @@ pub fn build_axum_router(
                         method = %request.method(),
                         uri = %request.uri(),
                         version = ?request.version(),
-                        headers = ?request.headers(),
                     )
                 }),
         )
