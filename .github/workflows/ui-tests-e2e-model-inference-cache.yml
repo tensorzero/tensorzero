@@ -97,7 +97,6 @@ jobs:
         run: |
           # Environment variables shared by the gateway and ui containers
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero_ui_fixtures" >> fixtures/.env
-          echo "TENSORZERO_POSTGRES_URL=postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
           echo "TENSORZERO_GATEWAY_URL=http://gateway:3000" >> fixtures/.env
           echo "TENSORZERO_GATEWAY_TAG=sha-${{ github.sha }}" >> fixtures/.env
           echo "TENSORZERO_UI_TAG=sha-${{ github.sha }}" >> fixtures/.env
