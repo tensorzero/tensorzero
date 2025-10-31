@@ -49,38 +49,15 @@ system_schema = "fixtures/config/functions/generate_draft/system_schema.json"
 
 [functions.generate_draft.variants.openai_promptA]
 type = "chat_completion"
+weight = 0.9
 model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
 
 [functions.generate_draft.variants.openai_promptB]
 type = "chat_completion"
+weight = 0.1
 model = "gpt-4.1-mini"
 system_template = "fixtures/config/functions/generate_draft/promptB/system_template.minijinja"
-
-[functions.generate_draft.variants.anthropic_promptA]
-type = "chat_completion"
-model = "claude-3-haiku-20240307"
-system_template = "fixtures/config/functions/generate_draft/promptA/system_template.minijinja"
-
-[functions.generate_draft.variants.anthropic_promptB]
-type = "chat_completion"
-model = "claude-3-haiku-20240307"
-system_template = "fixtures/config/functions/generate_draft/promptB/system_template.minijinja"
-
-[functions.generate_draft.experimentation]
-type = "track_and_stop"
-metric = "user_rating"
-candidate_variants = [
-    "openai_promptA",
-    "openai_promptA",
-    "anthropic_promptA",
-    "anthropic_promptB",
-]
-fallback_variants = []
-min_samples_per_variant = 10
-delta = 0.05
-epsilon = 0.30
-update_period_s = 60
 
 [functions.json_with_schemas]
 type = "json"
