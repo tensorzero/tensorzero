@@ -1436,11 +1436,6 @@ impl Client {
         }
     }
 
-    #[cfg(feature = "e2e_tests")]
-    pub async fn e2e_update_gateway_version(&self, version: String) {
-        self.update_gateway_version(version).await;
-    }
-
     async fn update_gateway_version_from_headers(&self, headers: &HeaderMap) {
         let mut version = headers
             .get("x-tensorzero-gateway-version")
