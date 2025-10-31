@@ -33,6 +33,7 @@ pub use tensorzero_core::db::inferences::{InferenceOutputSource, ListInferencesP
 pub use tensorzero_core::db::{ClickHouseConnection, ModelUsageTimePoint, TimeWindow};
 pub use tensorzero_core::endpoints::datasets::{
     ChatInferenceDatapoint, Datapoint, DatapointKind, JsonInferenceDatapoint,
+    StoredChatInferenceDatapoint, StoredDatapoint,
 };
 pub use tensorzero_core::endpoints::feedback::FeedbackResponse;
 pub use tensorzero_core::endpoints::feedback::Params as FeedbackParams;
@@ -42,6 +43,9 @@ pub use tensorzero_core::endpoints::inference::{
 pub use tensorzero_core::endpoints::object_storage::ObjectResponse;
 pub use tensorzero_core::endpoints::optimization::{
     LaunchOptimizationParams, LaunchOptimizationWorkflowParams,
+};
+pub use tensorzero_core::endpoints::variant_probabilities::{
+    GetVariantSamplingProbabilitiesParams, GetVariantSamplingProbabilitiesResponse,
 };
 pub use tensorzero_core::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunParams, WorkflowEvaluationRunResponse,
@@ -53,7 +57,8 @@ pub use tensorzero_core::inference::types::{
 };
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 pub use tensorzero_core::stored_inference::{
-    RenderedSample, StoredChatInference, StoredInference, StoredJsonInference,
+    RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
+    StoredInferenceDatabase, StoredJsonInference,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
@@ -176,6 +181,12 @@ pub trait ClientExt {
         &self,
         handle: &OptimizationJobHandle,
     ) -> Result<OptimizationJobInfo, TensorZeroError>;
+
+    // Variant sampling operations
+    async fn get_variant_sampling_probabilities(
+        &self,
+        function_name: &str,
+    ) -> Result<std::collections::HashMap<String, f64>, TensorZeroError>;
 
     // Config access
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
@@ -353,6 +364,7 @@ impl ClientExt for Client {
                     tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
                         &gateway.handle.app_state.clickhouse_connection_info,
+                        &gateway.handle.app_state.config,
                         function_name,
                         limit,
                         offset,
@@ -394,6 +406,8 @@ impl ClientExt for Client {
                             allow_stale: None,
                         })
                         .await
+                        .map_err(err_to_http)?
+                        .into_datapoint(&gateway.handle.app_state.config)
                         .map_err(err_to_http)
                 })
                 .await?)
@@ -563,6 +577,10 @@ impl ClientExt for Client {
             .clickhouse_connection_info
             .list_inferences(&gateway.handle.app_state.config, &params)
             .await
+            .map_err(err_to_http)?
+            .into_iter()
+            .map(|x| x.into_stored_inference(&gateway.handle.app_state.config))
+            .collect::<Result<Vec<_>, _>>()
             .map_err(err_to_http)?;
         Ok(inferences)
     }
@@ -725,6 +743,49 @@ impl ClientExt for Client {
                 let resp: OptimizationJobInfo =
                     self.parse_http_response(builder.send().await).await?;
                 Ok(resp)
+            }
+        }
+    }
+
+    async fn get_variant_sampling_probabilities(
+        &self,
+        function_name: &str,
+    ) -> Result<std::collections::HashMap<String, f64>, TensorZeroError> {
+        use tensorzero_core::error::{Error, ErrorDetails};
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client
+                    .base_url
+                    .join("variant_sampling_probabilities")
+                    .map_err(|e| TensorZeroError::Other {
+                        source: Error::new(ErrorDetails::InvalidBaseUrl {
+                            message: format!(
+                                "Failed to join base URL with /variant_sampling_probabilities endpoint: {e}"
+                            ),
+                        })
+                        .into(),
+                    })?;
+                let builder = client
+                    .http_client
+                    .get(url)
+                    .query(&[("function_name", function_name)]);
+                let response: GetVariantSamplingProbabilitiesResponse =
+                    self.parse_http_response(builder.send().await).await?;
+                Ok(response.probabilities)
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    let response = tensorzero_core::endpoints::variant_probabilities::get_variant_sampling_probabilities(
+                        gateway.handle.app_state.clone(),
+                        GetVariantSamplingProbabilitiesParams {
+                            function_name: function_name.to_string(),
+                        },
+                    )
+                    .await
+                    .map_err(err_to_http)?;
+                    Ok(response.probabilities)
+                })
+                .await?)
             }
         }
     }

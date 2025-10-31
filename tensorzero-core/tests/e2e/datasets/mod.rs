@@ -4,9 +4,8 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{
-    ChatInferenceDatapoint, ClientExt, Datapoint, JsonInferenceDatapoint, Role, System,
-};
+use tensorzero::{ClientExt, JsonInferenceDatapoint, Role, StoredDatapoint, System};
+use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
 use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{
@@ -256,7 +255,7 @@ async fn test_create_delete_datapoint_chat() {
         assert!(get_datapoint_json.get("auxiliary").is_none());
         let get_datapoint =
             serde_json::from_value::<ChatInferenceDatapoint>(get_datapoint_json).unwrap();
-        assert_eq!(&get_datapoint, datapoint);
+        assert_eq!(&get_datapoint, list_datapoint);
 
         // Verify the list datapoint structure and content
         assert_eq!(list_datapoint.dataset_name, dataset_name);
@@ -362,10 +361,9 @@ async fn test_create_delete_datapoint_chat() {
         }
 
         // Verify tool_params if present for the list datapoint
-        if let Some(tool_params) = &list_datapoint.tool_params {
-            let tools_available = &tool_params.tools_available;
-            assert!(!tools_available.is_empty());
-            let first_tool = tools_available[0].clone();
+        if let Some(additional_tools) = &list_datapoint.tool_params.additional_tools {
+            assert!(!additional_tools.is_empty());
+            let first_tool = &additional_tools[0];
             assert_eq!(first_tool.name, "get_temperature");
             assert_eq!(
                 first_tool.description,
@@ -3011,7 +3009,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = &datapoint[0] else {
+    let StoredDatapoint::Chat(chat_datapoint) = &datapoint[0] else {
         panic!("Datapoint is not a chat datapoint");
     };
     let output = chat_datapoint.output.as_ref().unwrap();
@@ -3074,7 +3072,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = &datapoint[0] else {
+    let StoredDatapoint::Chat(chat_datapoint) = &datapoint[0] else {
         panic!("Datapoint is not a chat datapoint");
     };
     let output = chat_datapoint.output.as_ref().unwrap();

@@ -8,7 +8,7 @@ use crate::db::clickhouse::query_builder::{DatapointFilter, InferenceFilter};
 use crate::endpoints::datasets::Datapoint;
 use crate::inference::types::{ContentBlockChatOutput, Input};
 use crate::serde_util::deserialize_double_option;
-use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::DynamicToolParams;
 
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -56,7 +56,7 @@ pub struct UpdateChatDatapointRequest {
 
     /// Datapoint tool parameters. If omitted, it will be left unchanged. If specified as `null`, it will be set to `null`. If specified as a value, it will be set to the provided value.
     #[serde(default, deserialize_with = "deserialize_double_option")]
-    pub tool_params: Option<Option<ToolCallConfigDatabaseInsert>>,
+    pub tool_params: Option<Option<DynamicToolParams>>,
 
     /// Datapoint tags. If omitted, it will be left unchanged. If empty, it will be cleared. Otherwise,
     /// it will be overwrite the existing tags.
@@ -250,11 +250,11 @@ pub enum CreateDatapointsFromInferenceRequestParams {
     },
 }
 
-/// Response from creating datapoints from inferences.
+/// Response from creating datapoints.
 #[derive(Debug, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-pub struct CreateDatapointsFromInferenceResponse {
+pub struct CreateDatapointsResponse {
     /// The IDs of the newly-generated datapoints.
     pub ids: Vec<Uuid>,
 }

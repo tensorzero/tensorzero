@@ -33,7 +33,9 @@ use crate::inference::types::{
 use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
-use crate::tool::{DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolChoice};
+use crate::tool::{
+    DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolCallConfigDatabaseInsert, ToolChoice,
+};
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
 #[derive(Debug, Serialize)]
@@ -355,6 +357,53 @@ impl FunctionConfig {
                 }
                 Ok(None)
             }
+        }
+    }
+
+    /// Convert DynamicToolParams to ToolCallConfigDatabaseInsert using prepare_tool_config
+    /// This properly merges static and dynamic tools according to function configuration
+    pub fn dynamic_tool_params_to_database_insert(
+        &self,
+        dynamic_params: DynamicToolParams,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
+        let tool_config = self.prepare_tool_config(dynamic_params, static_tools)?;
+        Ok(tool_config.map(std::convert::Into::into))
+    }
+
+    /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams by subtracting static tools
+    /// Static tools (from function config) become allowed_tools, additional tools remain as additional_tools
+    pub fn database_insert_to_dynamic_tool_params(
+        &self,
+        db_insert: ToolCallConfigDatabaseInsert,
+    ) -> DynamicToolParams {
+        // Get static tool names from function config
+        let static_tool_names: HashSet<&str> = match self {
+            FunctionConfig::Chat(c) => c.tools.iter().map(std::string::String::as_str).collect(),
+            FunctionConfig::Json(_) => HashSet::new(),
+        };
+
+        // Partition tools into static (allowed) and dynamic (additional)
+        let (static_tools, additional_tools): (Vec<_>, Vec<_>) = db_insert
+            .tools_available
+            .into_iter()
+            .partition(|tool| static_tool_names.contains(tool.name.as_str()));
+
+        DynamicToolParams {
+            allowed_tools: if static_tools.is_empty() {
+                None
+            } else {
+                Some(static_tools.into_iter().map(|t| t.name).collect())
+            },
+            additional_tools: if additional_tools.is_empty() {
+                None
+            } else {
+                Some(additional_tools)
+            },
+            tool_choice: Some(db_insert.tool_choice),
+            parallel_tool_calls: db_insert.parallel_tool_calls,
+            // TODO(#4271): store and restore the provider_tools from DB
+            provider_tools: None,
         }
     }
 
@@ -2333,6 +2382,191 @@ mod tests {
                 assert_eq!(result.finish_reason, Some(FinishReason::Stop));
             }
             InferenceResult::Chat(_) => panic!("Expected a JSON inference result"),
+        }
+    }
+
+    mod database_insert_to_dynamic_tool_params_tests {
+        use super::*;
+        use crate::tool::{Tool, ToolCallConfigDatabaseInsert};
+
+        fn create_test_tool(name: &str, strict: bool) -> Tool {
+            Tool {
+                name: name.to_string(),
+                description: format!("Description for {name}"),
+                parameters: json!({"type": "object", "properties": {"input": {"type": "string"}}}),
+                strict,
+            }
+        }
+
+        fn create_chat_function(tool_names: Vec<&str>) -> FunctionConfig {
+            FunctionConfig::Chat(FunctionConfigChat {
+                variants: HashMap::new(),
+                schemas: SchemaData::default(),
+                tools: tool_names.into_iter().map(String::from).collect(),
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: Some(true),
+                ..Default::default()
+            })
+        }
+
+        #[test]
+        fn test_tool_partitioning() {
+            // Test 1: Only static tools (all match function config)
+            let function_config = create_chat_function(vec!["tool1", "tool2"]);
+            let db_insert = ToolCallConfigDatabaseInsert {
+                tools_available: vec![
+                    create_test_tool("tool1", false),
+                    create_test_tool("tool2", true),
+                ],
+                tool_choice: ToolChoice::Required,
+                parallel_tool_calls: Some(false),
+            };
+            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+            assert_eq!(
+                result.allowed_tools,
+                Some(vec!["tool1".to_string(), "tool2".to_string()])
+            );
+            assert_eq!(result.additional_tools, None);
+
+            // Test 2: Only dynamic tools (none match function config)
+            let function_config = create_chat_function(vec!["static1"]);
+            let db_insert = ToolCallConfigDatabaseInsert {
+                tools_available: vec![
+                    create_test_tool("dynamic1", false),
+                    create_test_tool("dynamic2", true),
+                ],
+                tool_choice: ToolChoice::None,
+                parallel_tool_calls: Some(true),
+            };
+            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+            assert_eq!(result.allowed_tools, None);
+            assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
+            assert_eq!(
+                result.additional_tools.as_ref().unwrap()[0].name,
+                "dynamic1"
+            );
+            assert_eq!(
+                result.additional_tools.as_ref().unwrap()[1].name,
+                "dynamic2"
+            );
+
+            // Test 3: Mixed static and dynamic tools
+            let function_config = create_chat_function(vec!["a", "b"]);
+            let db_insert = ToolCallConfigDatabaseInsert {
+                tools_available: vec![
+                    create_test_tool("a", false),
+                    create_test_tool("x", true),
+                    create_test_tool("b", false),
+                    create_test_tool("y", true),
+                ],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: None,
+            };
+            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+            assert_eq!(
+                result.allowed_tools,
+                Some(vec!["a".to_string(), "b".to_string()])
+            );
+            let additional = result.additional_tools.unwrap();
+            assert_eq!(additional.len(), 2);
+            assert_eq!(additional[0].name, "x");
+            assert_eq!(additional[1].name, "y");
+            assert!(additional[0].strict);
+            assert!(additional[1].strict);
+
+            // Test 4: Empty tools list
+            let function_config = create_chat_function(vec!["tool1"]);
+            let db_insert = ToolCallConfigDatabaseInsert {
+                tools_available: vec![],
+                tool_choice: ToolChoice::None,
+                parallel_tool_calls: None,
+            };
+            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+            assert_eq!(result.allowed_tools, None);
+            assert_eq!(result.additional_tools, None);
+
+            // Test 5: Chat function with no tools in config
+            let function_config = create_chat_function(vec![]);
+            let db_insert = ToolCallConfigDatabaseInsert {
+                tools_available: vec![
+                    create_test_tool("tool1", false),
+                    create_test_tool("tool2", true),
+                ],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: None,
+            };
+            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+            assert_eq!(result.allowed_tools, None);
+            assert_eq!(result.additional_tools.as_ref().unwrap().len(), 2);
+        }
+
+        #[test]
+        fn test_field_preservation() {
+            let function_config = create_chat_function(vec!["tool1"]);
+
+            // Test tool_choice variants
+            for choice in [
+                ToolChoice::None,
+                ToolChoice::Auto,
+                ToolChoice::Required,
+                ToolChoice::Specific("tool1".to_string()),
+            ] {
+                let db_insert = ToolCallConfigDatabaseInsert {
+                    tools_available: vec![create_test_tool("tool1", false)],
+                    tool_choice: choice.clone(),
+                    parallel_tool_calls: None,
+                };
+                let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+                assert_eq!(result.tool_choice, Some(choice));
+            }
+
+            // Test parallel_tool_calls variants
+            for ptc in [None, Some(true), Some(false)] {
+                let db_insert = ToolCallConfigDatabaseInsert {
+                    tools_available: vec![create_test_tool("tool1", false)],
+                    tool_choice: ToolChoice::Auto,
+                    parallel_tool_calls: ptc,
+                };
+                let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+                assert_eq!(result.parallel_tool_calls, ptc);
+            }
+
+            // Test provider_tools is always None (lossy conversion)
+            let db_insert = ToolCallConfigDatabaseInsert {
+                tools_available: vec![create_test_tool("tool1", false)],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: None,
+            };
+            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+            assert_eq!(result.provider_tools, None);
+        }
+
+        #[test]
+        fn test_tool_metadata_preservation() {
+            let function_config = create_chat_function(vec![]);
+            let tool = Tool {
+                name: "test_tool".to_string(),
+                description: "A detailed description".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {"param1": {"type": "string"}, "param2": {"type": "number"}},
+                    "required": ["param1"]
+                }),
+                strict: true,
+            };
+
+            let db_insert = ToolCallConfigDatabaseInsert {
+                tools_available: vec![tool.clone()],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: Some(false),
+            };
+            let result = function_config.database_insert_to_dynamic_tool_params(db_insert);
+
+            let result_tool = &result.additional_tools.unwrap()[0];
+            assert_eq!(result_tool.name, tool.name);
+            assert_eq!(result_tool.description, tool.description);
+            assert_eq!(result_tool.parameters, tool.parameters);
+            assert_eq!(result_tool.strict, tool.strict);
         }
     }
 

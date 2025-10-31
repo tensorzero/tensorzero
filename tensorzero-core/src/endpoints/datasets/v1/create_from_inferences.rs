@@ -10,11 +10,12 @@ use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferen
 use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
 use crate::endpoints::datasets::validate_dataset_name;
 use crate::error::{Error, ErrorDetails};
+use crate::stored_inference::StoredInference;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
     CreateDatapointsFromInferenceRequest, CreateDatapointsFromInferenceRequestParams,
-    CreateDatapointsFromInferenceResponse,
+    CreateDatapointsResponse,
 };
 
 /// Handler for the POST `/v1/datasets/{dataset_id}/from_inferences` endpoint.
@@ -25,7 +26,7 @@ pub async fn create_from_inferences_handler(
     State(app_state): AppState,
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<CreateDatapointsFromInferenceRequest>,
-) -> Result<Json<CreateDatapointsFromInferenceResponse>, Error> {
+) -> Result<Json<CreateDatapointsResponse>, Error> {
     let response = create_from_inferences(
         &app_state.config,
         &app_state.clickhouse_connection_info,
@@ -46,7 +47,7 @@ async fn create_from_inferences(
     clickhouse: &(impl InferenceQueries + DatasetQueries),
     dataset_name: String,
     request: CreateDatapointsFromInferenceRequest,
-) -> Result<CreateDatapointsFromInferenceResponse, Error> {
+) -> Result<CreateDatapointsResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
     // If output_source is not specified, default to Inference.
@@ -88,9 +89,12 @@ async fn create_from_inferences(
     };
 
     // Step 1: Query inferences
-    let inferences = clickhouse
+    let inferences: Vec<StoredInference> = clickhouse
         .list_inferences(config, &list_inferences_params)
-        .await?;
+        .await?
+        .into_iter()
+        .map(|x| x.into_stored_inference(config))
+        .collect::<Result<Vec<_>, _>>()?;
 
     if let CreateDatapointsFromInferenceRequestParams::InferenceIds {
         inference_ids: request_inference_ids,
@@ -99,7 +103,7 @@ async fn create_from_inferences(
         // Check if all inferences are found. If not, we fail early without creating any datapoints for a pseudo-transactional behavior.
         let found_inference_ids = inferences
             .iter()
-            .map(crate::stored_inference::StoredInference::id)
+            .map(StoredInference::id)
             .collect::<HashSet<_>>();
         for inference_id in request_inference_ids {
             if !found_inference_ids.contains(inference_id) {
@@ -116,7 +120,7 @@ async fn create_from_inferences(
 
     for inference in inferences {
         let datapoint_insert =
-            inference.into_datapoint_insert(&dataset_name, &request_output_source);
+            inference.into_datapoint_insert(&dataset_name, &request_output_source, config)?;
         ids.push(datapoint_insert.id());
         datapoints_to_insert.push(datapoint_insert);
     }
@@ -126,24 +130,65 @@ async fn create_from_inferences(
         clickhouse.insert_datapoints(&datapoints_to_insert).await?;
     }
 
-    Ok(CreateDatapointsFromInferenceResponse { ids })
+    Ok(CreateDatapointsResponse { ids })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{Config, SchemaData};
     use crate::db::clickhouse::query_builder::{InferenceFilter, TagComparisonOperator, TagFilter};
     use crate::db::clickhouse::MockClickHouseConnectionInfo;
     use crate::db::datasets::DatapointInsert;
+    use crate::experimentation::ExperimentationConfig;
+    use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::{ContentBlockChatOutput, Text};
-    use crate::stored_inference::{StoredChatInference, StoredInference};
-    use crate::tool::ToolCallConfigDatabaseInsert;
+    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::stored_inference::{StoredChatInferenceDatabase, StoredInferenceDatabase};
+    use crate::tool::{ToolCallConfig, ToolCallConfigDatabaseInsert, ToolChoice};
     use std::collections::HashMap;
+    use std::sync::Arc;
     use uuid::Uuid;
 
-    /// Helper to create a test inference
-    fn create_test_inference(id: Uuid) -> StoredInference {
-        StoredInference::Chat(StoredChatInference {
+    /// Helper to create a test config with the functions registered
+    fn create_test_config() -> Config {
+        let mut config = Config::default();
+
+        // Add the test_function (Chat function)
+        config.functions.insert(
+            "test_function".to_string(),
+            Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+                variants: Default::default(),
+                schemas: SchemaData::default(),
+                tools: vec![],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: None,
+                description: None,
+                experimentation: ExperimentationConfig::default(),
+                all_explicit_templates_names: Default::default(),
+            })),
+        );
+
+        // Add the json_function (Json function)
+        config.functions.insert(
+            "json_function".to_string(),
+            Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                variants: Default::default(),
+                schemas: SchemaData::default(),
+                output_schema: StaticJSONSchema::default(),
+                implicit_tool_call_config: ToolCallConfig::default(),
+                description: None,
+                experimentation: ExperimentationConfig::default(),
+                all_explicit_template_names: Default::default(),
+            })),
+        );
+
+        config
+    }
+
+    /// Helper to create a test inference (storage type for database)
+    fn create_test_inference(id: Uuid) -> StoredInferenceDatabase {
+        StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "test_function".to_string(),
             variant_name: "test_variant".to_string(),
             input: crate::inference::types::StoredInput {
@@ -164,7 +209,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_from_query_params_success() {
-        let config = Config::default();
+        let config = create_test_config();
         let function_name = "test_function";
         let variant_name = "test_variant";
 
@@ -223,7 +268,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_from_query_params_returns_empty_if_no_inferences_found() {
-        let config = Config::default();
+        let config = create_test_config();
         let function_name = "test_function";
         let variant_name = "test_variant";
 
@@ -269,7 +314,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_from_query_params_queries_for_demonstration_output() {
-        let config = Config::default();
+        let config = create_test_config();
         let function_name = "test_function";
         let variant_name = "test_variant";
 
@@ -309,7 +354,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_from_inference_ids_success() {
-        let config = Config::default();
+        let config = create_test_config();
         let id1 = Uuid::now_v7();
         let id2 = Uuid::now_v7();
 
@@ -362,7 +407,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_from_inference_ids_missing_inference_fails() {
-        let config = Config::default();
+        let config = create_test_config();
         let existing_id = Uuid::now_v7();
         let missing_id = Uuid::now_v7();
 
@@ -407,7 +452,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_dataset_name_fails_without_querying() {
-        let config = Config::default();
+        let config = create_test_config();
 
         // We shouldn't query inferences or insert datapoints if the dataset name is invalid.
         let mut mock_clickhouse = MockClickHouseConnectionInfo::new();
@@ -441,7 +486,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_output_source_none_drops_output() {
-        let config = Config::default();
+        let config = create_test_config();
         let id = Uuid::now_v7();
 
         let inference = create_test_inference(id);
@@ -490,7 +535,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_output_source_inference_preserves_output() {
-        let config = Config::default();
+        let config = create_test_config();
         let id = Uuid::now_v7();
 
         let inference = create_test_inference(id);
@@ -545,7 +590,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_filters_passed_to_list_inferences() {
-        let config = Config::default();
+        let config = create_test_config();
         let function_name = "test_function";
         let tag_key = "environment";
         let tag_value = "production";

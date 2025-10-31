@@ -1257,9 +1257,12 @@ impl TensorZeroGateway {
     ) -> PyResult<Vec<RenderedSample>> {
         tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
+        let config = client
+            .get_config()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, &config))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -1285,9 +1288,12 @@ impl TensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Vec<RenderedSample>> {
         let client = this.as_super().client.clone();
+        let config = client
+            .get_config()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, &config))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -2126,9 +2132,12 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'a, PyAny>> {
         tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
+        let config = client
+            .get_config()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, &config))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
@@ -2162,9 +2171,12 @@ impl AsyncTensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
+        let config = client
+            .get_config()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, &config))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client

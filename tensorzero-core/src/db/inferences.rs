@@ -14,7 +14,9 @@ use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
 use crate::serde_util::{deserialize_defaulted_string, deserialize_json_string};
-use crate::stored_inference::{StoredChatInference, StoredInference, StoredJsonInference};
+use crate::stored_inference::{
+    StoredChatInferenceDatabase, StoredInferenceDatabase, StoredJsonInference,
+};
 use crate::tool::ToolCallConfigDatabaseInsert;
 
 #[derive(Debug, Deserialize)]
@@ -35,7 +37,7 @@ pub(super) struct ClickHouseStoredChatInferenceWithDispreferredOutputs {
     pub tags: HashMap<String, String>,
 }
 
-impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredChatInference {
+impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredChatInferenceDatabase {
     type Error = Error;
 
     fn try_from(
@@ -53,7 +55,7 @@ impl TryFrom<ClickHouseStoredChatInferenceWithDispreferredOutputs> for StoredCha
             })
             .collect::<Result<Vec<Vec<ContentBlockChatOutput>>, Error>>()?;
 
-        Ok(StoredChatInference {
+        Ok(StoredChatInferenceDatabase {
             function_name: value.function_name,
             variant_name: value.variant_name,
             input: value.input,
@@ -128,7 +130,7 @@ pub(super) enum ClickHouseStoredInferenceWithDispreferredOutputs {
     Chat(ClickHouseStoredChatInferenceWithDispreferredOutputs),
 }
 
-impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInference {
+impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferenceDatabase {
     type Error = Error;
 
     fn try_from(
@@ -136,10 +138,10 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
     ) -> Result<Self, Self::Error> {
         Ok(match value {
             ClickHouseStoredInferenceWithDispreferredOutputs::Json(inference) => {
-                StoredInference::Json(inference.try_into()?)
+                StoredInferenceDatabase::Json(inference.try_into()?)
             }
             ClickHouseStoredInferenceWithDispreferredOutputs::Chat(inference) => {
-                StoredInference::Chat(inference.try_into()?)
+                StoredInferenceDatabase::Chat(inference.try_into()?)
             }
         })
     }
@@ -216,5 +218,5 @@ pub trait InferenceQueries {
         // config is used for identifying the type of the function.
         config: &Config,
         params: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error>;
+    ) -> Result<Vec<StoredInferenceDatabase>, Error>;
 }
