@@ -4,8 +4,8 @@ use uuid::Uuid;
 
 use object_store::path::Path as ObjectStorePath;
 use tensorzero::{
-    Datapoint, DatasetQueryParams, FloatComparisonOperator, GetDatapointParams,
-    GetDatasetMetadataParams, Role,
+    DatasetQueryParams, FloatComparisonOperator, GetDatapointParams, GetDatasetMetadataParams,
+    Role, StoredDatapoint,
 };
 use tensorzero_core::config::{MetricConfigLevel, MetricConfigType};
 use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
@@ -962,7 +962,7 @@ async fn test_get_datapoint_returns_correct_json_datapoint_with_specific_id() {
         .await
         .unwrap();
 
-    if let Datapoint::Json(datapoint) = datapoint {
+    if let StoredDatapoint::Json(datapoint) = datapoint {
         assert_eq!(datapoint.dataset_name, "bar");
         assert_eq!(datapoint.function_name, "ask_question");
         assert_eq!(
@@ -1033,7 +1033,7 @@ async fn test_get_datapoint_returns_correct_chat_datapoint_with_specific_id() {
         .await
         .unwrap();
 
-    if let Datapoint::Chat(datapoint) = datapoint {
+    if let StoredDatapoint::Chat(datapoint) = datapoint {
         assert_eq!(datapoint.dataset_name, "foo");
         assert_eq!(datapoint.function_name, "write_haiku");
         assert_eq!(
@@ -1130,7 +1130,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
     assert_eq!(retrieved_datapoint.function_name(), "write_haiku");
     assert_eq!(retrieved_datapoint.dataset_name(), "test_chat_dataset");
 
-    if let Datapoint::Chat(chat_dp) = retrieved_datapoint {
+    if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
         assert_eq!(chat_dp.source_inference_id, Some(source_inference_id));
     } else {
         panic!("Expected chat datapoint");
@@ -1175,7 +1175,7 @@ async fn test_chat_datapoint_lifecycle_insert_get_delete() {
 
     assert_eq!(staled_datapoint.id(), datapoint_id);
 
-    if let Datapoint::Chat(chat_dp) = staled_datapoint {
+    if let StoredDatapoint::Chat(chat_dp) = staled_datapoint {
         assert!(
             chat_dp.staled_at.is_some(),
             "Should have staled_at timestamp"
@@ -1236,7 +1236,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
     assert_eq!(retrieved_datapoint.function_name(), "extract_entities");
     assert_eq!(retrieved_datapoint.dataset_name(), "test_json_dataset");
 
-    if let Datapoint::Json(json_dp) = retrieved_datapoint {
+    if let StoredDatapoint::Json(json_dp) = retrieved_datapoint {
         assert_eq!(json_dp.source_inference_id, Some(source_inference_id));
     } else {
         panic!("Expected json datapoint");
@@ -1281,7 +1281,7 @@ async fn test_json_datapoint_lifecycle_insert_get_delete() {
 
     assert_eq!(staled_datapoint.id(), datapoint_id);
 
-    if let Datapoint::Json(json_dp) = staled_datapoint {
+    if let StoredDatapoint::Json(json_dp) = staled_datapoint {
         assert!(
             json_dp.staled_at.is_some(),
             "Should have staled_at timestamp"
@@ -1670,7 +1670,7 @@ async fn test_get_datapoints_with_single_chat_datapoint() {
 
     assert_eq!(result.len(), 1, "Should return exactly one datapoint");
 
-    if let Datapoint::Chat(dp) = &result[0] {
+    if let StoredDatapoint::Chat(dp) = &result[0] {
         assert_eq!(dp.id, datapoint_id);
         assert_eq!(dp.function_name, "test_function");
         assert_eq!(dp.name, Some("test_chat".to_string()));
@@ -1732,7 +1732,7 @@ async fn test_get_datapoints_with_single_json_datapoint() {
 
     assert_eq!(result.len(), 1, "Should return exactly one datapoint");
 
-    if let Datapoint::Json(dp) = &result[0] {
+    if let StoredDatapoint::Json(dp) = &result[0] {
         assert_eq!(dp.id, datapoint_id);
         assert_eq!(dp.function_name, "test_function");
         assert_eq!(dp.name, Some("test_json".to_string()));
@@ -1857,7 +1857,7 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     );
 
     // Verify we got all the expected IDs
-    let returned_ids: Vec<Uuid> = result.iter().map(Datapoint::id).collect();
+    let returned_ids: Vec<Uuid> = result.iter().map(StoredDatapoint::id).collect();
     assert!(returned_ids.contains(&chat_id1));
     assert!(returned_ids.contains(&json_id));
     assert!(returned_ids.contains(&chat_id2));
@@ -1865,11 +1865,11 @@ async fn test_get_datapoints_with_multiple_mixed_datapoints() {
     // Count types
     let chat_count = result
         .iter()
-        .filter(|dp| matches!(dp, Datapoint::Chat(_)))
+        .filter(|dp| matches!(dp, StoredDatapoint::Chat(_)))
         .count();
     let json_count = result
         .iter()
-        .filter(|dp| matches!(dp, Datapoint::Json(_)))
+        .filter(|dp| matches!(dp, StoredDatapoint::Json(_)))
         .count();
 
     assert_eq!(chat_count, 2, "Should have 2 chat datapoints");
@@ -2090,7 +2090,7 @@ async fn test_get_datapoints_respects_allow_stale_true() {
         "Should return staled datapoint when allow_stale=true"
     );
 
-    if let Datapoint::Chat(dp) = &result[0] {
+    if let StoredDatapoint::Chat(dp) = &result[0] {
         assert!(
             dp.staled_at.is_some(),
             "Datapoint should have staled_at timestamp"
@@ -2220,7 +2220,7 @@ async fn test_chat_datapoint_with_file_object_storage_roundtrip() {
         .unwrap();
 
     // Verify the file was preserved correctly
-    if let Datapoint::Chat(chat_dp) = retrieved_datapoint {
+    if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
         assert_eq!(chat_dp.id, datapoint_id);
         assert_eq!(chat_dp.input.messages.len(), 1);
         assert_eq!(chat_dp.input.messages[0].content.len(), 1);
@@ -2304,7 +2304,7 @@ async fn test_json_datapoint_with_file_object_storage_roundtrip() {
         .unwrap();
 
     // Verify the file was preserved correctly
-    if let Datapoint::Json(json_dp) = retrieved_datapoint {
+    if let StoredDatapoint::Json(json_dp) = retrieved_datapoint {
         assert_eq!(json_dp.id, datapoint_id);
         assert_eq!(json_dp.input.messages.len(), 1);
         assert_eq!(json_dp.input.messages[0].content.len(), 1);
@@ -2407,7 +2407,7 @@ async fn test_datapoint_with_mixed_file_types() {
         .unwrap();
 
     // Verify all files were preserved correctly
-    if let Datapoint::Chat(chat_dp) = retrieved_datapoint {
+    if let StoredDatapoint::Chat(chat_dp) = retrieved_datapoint {
         assert_eq!(chat_dp.id, datapoint_id);
         assert_eq!(chat_dp.input.messages.len(), 2);
 

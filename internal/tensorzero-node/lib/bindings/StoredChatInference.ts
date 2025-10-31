@@ -6,24 +6,18 @@ import type { Tool } from "./Tool";
 import type { ToolChoice } from "./ToolChoice";
 
 /**
- * Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
- * This one should be used in all public interfaces.
+ * Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
  */
-export type ChatInferenceDatapoint = {
-  dataset_name: string;
+export type StoredChatInference = {
   function_name: string;
-  id: string;
-  episode_id: string | null;
+  variant_name: string;
   input: StoredInput;
-  output?: Array<ContentBlockChatOutput>;
-  tags?: Record<string, string>;
-  auxiliary?: string;
-  is_deleted: boolean;
-  is_custom: boolean;
-  source_inference_id?: string;
-  staled_at?: string;
-  updated_at: string;
-  name?: string;
+  output: Array<ContentBlockChatOutput>;
+  dispreferred_outputs: Array<Array<ContentBlockChatOutput>>;
+  timestamp: string;
+  episode_id: string;
+  inference_id: string;
+  tags: { [key in string]?: string };
   /**
    * Names of static tools (from function config) to use. If None, all static tools are available.
    */

@@ -50,6 +50,7 @@ use tensorzero_core::{
         DiclConfigPyClass, MixtureOfNConfigPyClass,
     },
 };
+use tensorzero_core::{endpoints::datasets::Datapoint, stored_inference::StoredInference};
 use tensorzero_core::{
     endpoints::{
         datasets::InsertDatapointParams,
@@ -62,10 +63,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
-    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream,
-    LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle, RenderedSample,
-    StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, DynamicToolParams,
+    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, LaunchOptimizationParams,
+    ListInferencesParams, OptimizationJobHandle, RenderedSample, TensorZeroError, Tool,
+    WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -1079,9 +1080,9 @@ impl TensorZeroGateway {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-        tokio_block_on_without_gil(this.py(), fut)
-            .map(|x| x.into_pyobject(this.py()))
-            .map_err(|e| convert_error(this.py(), e))?
+        let wire: Datapoint =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        wire.into_pyobject(this.py())
     }
 
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
@@ -1100,12 +1101,12 @@ impl TensorZeroGateway {
         let fut = client.list_datapoints(dataset_name, function_name, limit, offset);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
-            Ok(resp) => {
-                let datapoints = resp
+            Ok(datapoints) => {
+                let py_datapoints = datapoints
                     .into_iter()
                     .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
-                PyList::new(this.py(), datapoints)
+                PyList::new(this.py(), py_datapoints)
             }
             Err(e) => Err(convert_error(this.py(), e)),
         }
@@ -1244,7 +1245,9 @@ impl TensorZeroGateway {
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+        let wires: Vec<StoredInference> =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        Ok(wires)
     }
 
     /// DEPRECATED: use `experimental_render_samples` instead.
@@ -1269,9 +1272,19 @@ impl TensorZeroGateway {
     ) -> PyResult<Vec<RenderedSample>> {
         tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
+        let config = client.config().ok_or_else(|| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_inferences, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -1297,9 +1310,19 @@ impl TensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Vec<RenderedSample>> {
         let client = this.as_super().client.clone();
+        let config = client.config().ok_or_else(|| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         let fut = client.experimental_render_samples(stored_samples, variants);
         tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
@@ -1926,12 +1949,12 @@ impl AsyncTensorZeroGateway {
         dataset_name: String,
         datapoint_id: Bound<'_, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
-                Ok(resp) => Ok(resp.into_py_any(py)?),
+                Ok(wire) => Ok(wire.into_py_any(py)?),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1955,7 +1978,7 @@ impl AsyncTensorZeroGateway {
                 .list_datapoints(dataset_name, function_name, limit, offset)
                 .await;
             Python::attach(|py| match res {
-                Ok(datapoints) => Ok(PyList::new(py, datapoints)?.unbind()),
+                Ok(wire_datapoints) => Ok(PyList::new(py, wire_datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2101,7 +2124,7 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.experimental_list_inferences(params).await;
             Python::attach(|py| match res {
-                Ok(stored_inferences) => Ok(PyList::new(py, stored_inferences)?.unbind()),
+                Ok(wire_inferences) => Ok(PyList::new(py, wire_inferences)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2140,9 +2163,19 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'a, PyAny>> {
         tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
+        let config = client.config().ok_or_else(|| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_inferences = stored_inferences
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client
@@ -2176,9 +2209,19 @@ impl AsyncTensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
+        let config = client.config().ok_or_else(|| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
-            .map(|x| deserialize_from_stored_sample(this.py(), x))
+            .map(|x| deserialize_from_stored_sample(this.py(), x, config))
             .collect::<Result<Vec<_>, _>>()?;
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client

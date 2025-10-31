@@ -8,7 +8,7 @@ use mockall::automock;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
-use crate::endpoints::datasets::{Datapoint, DatapointKind};
+use crate::endpoints::datasets::{DatapointKind, StoredDatapoint};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
 use crate::serde_util::{
@@ -20,6 +20,7 @@ use crate::tool::ToolCallConfigDatabaseInsert;
 /// Datapoint types that are directly serialized and inserted into ClickHouse.
 /// These should be internal-only types but are exposed to tensorzero-node.
 #[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum DatapointInsert {
     Chat(ChatInferenceDatapointInsert),
     Json(JsonInferenceDatapointInsert),
@@ -355,10 +356,13 @@ pub trait DatasetQueries {
 
     /// Gets a single datapoint by dataset name and ID
     /// TODO(shuyangli): To deprecate in favor of `get_datapoints`
-    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error>;
+    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error>;
 
     /// Gets multiple datapoints with various filters and pagination
-    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error>;
+    async fn get_datapoints(
+        &self,
+        params: &GetDatapointsParams,
+    ) -> Result<Vec<StoredDatapoint>, Error>;
 
     /// Deletes datapoints or datasets by marking specified datapoints as stale.
     /// This is a soft deletion, so evaluation runs will still refer to it.

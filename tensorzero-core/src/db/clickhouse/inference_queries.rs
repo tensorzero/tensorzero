@@ -14,7 +14,7 @@ use crate::function::FunctionConfigType;
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
-    stored_inference::StoredInference,
+    stored_inference::StoredInferenceDatabase,
 };
 
 /// Represents the structured parts of a single-table query
@@ -32,7 +32,7 @@ impl InferenceQueries for ClickHouseConnectionInfo {
         &self,
         config: &Config,
         params: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error> {
+    ) -> Result<Vec<StoredInferenceDatabase>, Error> {
         let (sql, bound_parameters) = generate_list_inferences_sql(config, params)?;
         let query_params = bound_parameters
             .iter()
@@ -52,7 +52,7 @@ impl InferenceQueries for ClickHouseConnectionInfo {
                     })
                     .and_then(ClickHouseStoredInferenceWithDispreferredOutputs::try_into)
             })
-            .collect::<Result<Vec<StoredInference>, Error>>()?;
+            .collect::<Result<Vec<StoredInferenceDatabase>, Error>>()?;
         Ok(inferences)
     }
 }

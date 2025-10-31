@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use tensorzero::{ChatInferenceDatapoint, JsonInferenceDatapoint};
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::{db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 use tracing::{debug, info, instrument};
 
@@ -12,7 +12,7 @@ pub async fn query_dataset(
     dataset_name: &str,
     function_name: &str,
     function_config: &FunctionConfig,
-) -> Result<Vec<Datapoint>> {
+) -> Result<Vec<StoredDatapoint>> {
     let table_name = match function_config {
         FunctionConfig::Chat(_) => "ChatInferenceDatapoint",
         FunctionConfig::Json(_) => "JsonInferenceDatapoint",
@@ -41,14 +41,16 @@ pub async fn query_dataset(
         "Query executed successfully"
     );
     debug!("Parsing datapoints from query result");
-    let datapoints: Vec<Datapoint> = match function_config {
+    let datapoints: Vec<StoredDatapoint> = match function_config {
         FunctionConfig::Chat(_) => {
             debug!("Parsing as chat datapoints");
             let chat_datapoints: serde_json::Value = serde_json::from_str(&result.response)?;
-            let chat_datapoints: Vec<ChatInferenceDatapoint> =
+            let chat_datapoints: Vec<StoredChatInferenceDatapoint> =
                 serde_json::from_value(chat_datapoints["data"].clone())?;
-            let datapoints: Vec<Datapoint> =
-                chat_datapoints.into_iter().map(Datapoint::Chat).collect();
+            let datapoints: Vec<StoredDatapoint> = chat_datapoints
+                .into_iter()
+                .map(StoredDatapoint::Chat)
+                .collect();
             debug!(count = datapoints.len(), "Chat datapoints parsed");
             datapoints
         }
@@ -57,8 +59,10 @@ pub async fn query_dataset(
             let json_value: serde_json::Value = serde_json::from_str(&result.response)?;
             let json_datapoints: Vec<JsonInferenceDatapoint> =
                 serde_json::from_value(json_value["data"].clone())?;
-            let datapoints: Vec<Datapoint> =
-                json_datapoints.into_iter().map(Datapoint::Json).collect();
+            let datapoints: Vec<StoredDatapoint> = json_datapoints
+                .into_iter()
+                .map(StoredDatapoint::Json)
+                .collect();
             debug!(count = datapoints.len(), "JSON datapoints parsed");
             datapoints
         }

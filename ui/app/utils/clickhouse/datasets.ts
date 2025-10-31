@@ -8,6 +8,8 @@ import {
 
 /**
  * Schema representing a fully-qualified row in the Chat Inference dataset.
+ * NOTE: This schema is for database rows which still use the legacy tool_params format.
+ * For the wire format, see ChatInferenceDatapoint in tensorzero-node bindings.
  */
 export const ChatInferenceDatapointRowSchema = z
   .object({
