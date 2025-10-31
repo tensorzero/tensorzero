@@ -483,6 +483,9 @@ impl ClientBuilder {
         // Build the HTTP client, applying timeout and/or API key
         let http_client = if let Some(client) = self.http_client {
             // Use custom client provided by advanced users
+
+            // TODO: Later we can decide if we want to override the custom HTTP clients.
+
             if self.timeout.is_some() {
                 tracing::warn!("A timeout is set but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the timeout to the custom client.");
             }
