@@ -108,11 +108,12 @@ impl TensorZeroApiKey {
     ///
     /// TODO: This is `pub` while we run the cache from the gateway but later we should internalize it.
     pub fn cache_key(&self) -> String {
-        format!(
-            "{}:{}",
-            self.public_id,
-            self.hashed_long_key.expose_secret()
-        )
+        let TensorZeroApiKey {
+            public_id,
+            hashed_long_key,
+        } = self;
+
+        format!("{public_id}:{}", hashed_long_key.expose_secret())
     }
 }
 
