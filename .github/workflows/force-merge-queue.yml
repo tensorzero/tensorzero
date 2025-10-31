@@ -28,12 +28,7 @@ jobs:
   # which would incorrectly cause the branch protection rule to succeed, allowing all PRs to be added to the merge queue without running
   # the real 'check-all-general-jobs-passed' job.
   trigger-force-merge-queue-helper:
-    runs-on: ubuntu-latest
+    name: Invoke helper workflow
     # Only run this job if the force-add-to-merge-queue label is present
     if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue') && github.event.action == 'labeled'
-    steps:
-      - name: Check out the repo
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Invoke helper workflow
-        uses: ./.github/workflows/force-merge-queue-helper.yml
+    uses: ./.github/workflows/force-merge-queue-helper.yml
