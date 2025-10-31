@@ -51,7 +51,7 @@ jobs:
         run: docker pull $LATEST_TAG || true
 
       - name: Build `gateway-e2e` container
-        run: docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 --build-arg PROFILE=debug --build-arg CARGO_BUILD_FLAGS="--features e2e_tests" --cache-from $LATEST_TAG -f gateway/Dockerfile . -t $TAG
+        run: docker build --load --build-arg BUILDKIT_CONTEXT_KEEP_GIT_DIR=1 --build-arg PROFILE=dev --build-arg CARGO_BUILD_FLAGS="--features e2e_tests" --cache-from $LATEST_TAG -f gateway/Dockerfile . -t $TAG
 
       - name: Tag latest image and push both tags
         run: |
