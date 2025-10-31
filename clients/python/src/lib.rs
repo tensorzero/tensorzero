@@ -547,7 +547,7 @@ impl TensorZeroGateway {
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
-    /// :param api_key: The API key to use for authentication with the TensorZero gateway. If not provided, will attempt to read from the TENSORZERO_API_KEY environment variable.
+    /// :param api_key: The API key to use for authentication with the TensorZero Gateway. If not provided, the client will attempt to read from the TENSORZERO_API_KEY environment variable.
     /// :return: A `TensorZeroGateway` instance configured to use the HTTP gateway.
     fn build_http(
         cls: &Bound<'_, PyType>,
@@ -1333,7 +1333,7 @@ impl AsyncTensorZeroGateway {
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
     /// :param async_setup: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
-    /// :param api_key: The API key to use for authentication with the TensorZero gateway. If not provided, will attempt to read from the TENSORZERO_API_KEY environment variable.
+    /// :param api_key: The API key to use for authentication with the TensorZero Gateway. If not provided, the client will attempt to read from the TENSORZERO_API_KEY environment variable.
     /// :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
     fn build_http(
         cls: &Bound<'_, PyType>,
