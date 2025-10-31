@@ -4,7 +4,7 @@ use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::error::{Error, ErrorDetails};
 use async_trait::async_trait;
 
-/// Adds columns `dynamic_tools`, `allowed_tools`, `tool_choice`, `parallel_tool_calls`
+/// Adds columns `dynamic_tools`, `dynamic_provider_tools`, `allowed_tools`, `tool_choice`, `parallel_tool_calls`
 /// to ChatInference, ChatInferenceDatapoint, and BatchModelInference so that we can store more comprehensive info about
 /// what happened with tool configuration.
 pub struct Migration0041<'a> {
