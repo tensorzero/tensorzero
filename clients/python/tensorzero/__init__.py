@@ -117,6 +117,7 @@ OptimizationConfig = t.Union[
     TogetherSFTConfig,
     DICLOptimizationConfig,
     OpenAIRFTConfig,
+    t.Dict[str, Any],
 ]
 ChatInferenceOutput = t.List[ContentBlock]
 

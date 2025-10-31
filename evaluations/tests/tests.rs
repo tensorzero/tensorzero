@@ -13,7 +13,7 @@ use tensorzero_core::cache::CacheEnabledMode;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::evaluations::{LLMJudgeConfig, LLMJudgeInputFormat, LLMJudgeOutputType};
 use tensorzero_core::function::{FunctionConfig, FunctionConfigJson};
 use tensorzero_core::inference::types::{
@@ -39,7 +39,7 @@ use tensorzero_core::{
 };
 use tensorzero_core::{
     endpoints::{
-        datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint},
+        datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint},
         inference::{ChatInferenceResponse, JsonInferenceResponse},
     },
     evaluations::{LLMJudgeIncludeConfig, LLMJudgeOptimize},
@@ -1278,7 +1278,7 @@ async fn test_run_llm_judge_evaluator_chat() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1387,7 +1387,7 @@ async fn test_run_llm_judge_evaluator_chat() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1453,7 +1453,7 @@ async fn test_run_llm_judge_evaluator_json() {
         },
         variant_name: "test_variant".to_string(),
     });
-    let datapoint = Datapoint::Json(JsonInferenceDatapoint {
+    let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {
@@ -1563,7 +1563,7 @@ async fn test_run_llm_judge_evaluator_json() {
     assert_eq!(result.value, json!(1));
 
     // Try without output
-    let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         input: StoredInput {
             system: None,
             messages: vec![StoredInputMessage {

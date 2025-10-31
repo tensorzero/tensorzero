@@ -16,6 +16,20 @@ use crate::{
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
 
+/*  Key tool types in TensorZero
+ * - DynamicToolParams: the wire format for tool configuration info (flattened into struct body)
+ *       contains a disjoint set of information from that specified in FunctionConfig and config.tools
+ * - ToolCallConfig: the representation at inference time of what tool calls are possible
+ * - ToolCallConfigDatabaseInsert: the storage format for tool call configuration info
+ *     In a close-following PR @viraj will refactor this type.
+ * All of these types are convertible given access to the current Config. The conversion from ToolCallConfig
+ * to ToolCallConfigDatabaseInsert is temporarily lossy because we don't yet stored dynamic provider tools.
+ *
+ * Tool: represents a single Tool that could be called by an LLM. This will be generalized soon to an enum.
+ * ToolCall: represents a request by an LLM to call a tool.
+ * ToolResult: the response from a tool call.
+ */
+
 /* A Tool is a function that can be called by an LLM
  * We represent them in various ways depending on how they are configured by the user.
  * The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
@@ -380,22 +394,168 @@ impl ToolCallConfig {
         }
     }
 }
-/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
-/// It is used to insert the ToolCallConfig into the database.
-#[cfg_attr(test, derive(ts_rs::TS))]
+/// Storage representation of tool call configuration for database persistence.
+///
+/// This type is the **database/storage format** for tool configurations, designed to be stored
+/// in ClickHouse and other persistence layers. It represents a simplified, flattened view of
+/// tool configuration after all static and dynamic tools have been merged.
+///
+/// # Purpose
+/// - Store tool configurations in the database alongside inference records
+/// - Provide a serializable, cloneable format for persistence
+/// - Simplify the tool configuration to a single merged list
+///
+/// # Key Differences from DynamicToolParams
+/// - **Merged tools**: All tools (static from config + dynamic from runtime) are combined into a single `tools_available` list
+/// - **No distinction**: Does not track which tools came from static config vs dynamic runtime parameters
+/// - **No provider_tools**: This field is not persisted (lossy conversion)
+/// - **No bindings**: Not exposed to Python/TypeScript clients (internal storage only)
+///
+/// # Conversion
+/// - **From wire type**: Use `FunctionConfig::dynamic_tool_params_to_database_insert()` to convert `DynamicToolParams` → `ToolCallConfigDatabaseInsert`
+/// - **To wire type**: Use `FunctionConfig::database_insert_to_dynamic_tool_params()` to convert `ToolCallConfigDatabaseInsert` → `DynamicToolParams`
+/// - **To ToolCallConfig**: Use the `into_tool_call_config()` method for a direct conversion to `ToolCallConfig`
+///
+/// See also: [`DynamicToolParams`] for the wire/API format
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
+    /// All tools available for this inference (merged static + dynamic tools)
     pub tools_available: Vec<Tool>,
+    /// The tool choice strategy
     pub tool_choice: ToolChoice,
     // TODO: decide what we want the Python interface to be for ToolChoice
     // This is complicated because ToolChoice is an enum with some simple arms and some
     // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
+    /// Whether parallel tool calls are enabled
     pub parallel_tool_calls: Option<bool>,
 }
 
-impl std::fmt::Display for ToolCallConfigDatabaseInsert {
+impl ToolCallConfigDatabaseInsert {
+    /// Converts this database representation back into a `ToolCallConfig`.
+    /// Errors if there are tools specified in the function that are not in the
+    /// static tools (shouldn't happen). Or if the function is a JSON function (no tools).
+    ///
+    /// This method performs the reverse transformation of the lossy conversion that occurs
+    /// when storing `ToolCallConfig` in the database. It reconstructs the tool configuration
+    /// by:
+    /// 1. Converting the stored tools into `DynamicToolParams`
+    /// 2. Using the function config to prepare a full `ToolCallConfig`
+    ///
+    ///
+    /// # Lossy Conversion
+    /// Note that this conversion cannot fully restore the original `ToolCallConfig`:
+    /// - `provider_tools` are not stored in the database and will be `None`
+    /// - The distinction between static/dynamic tools is reconstructed based on function config
+    /// This will be fixed in a follow-up PR.
+    ///
+    /// # Parameters
+    /// - `function_config`: The function configuration containing static tool definitions
+    /// - `static_tools`: Map of static tool names to their compiled configurations
+    ///
+    /// # Returns
+    /// - `Ok(Some(ToolCallConfig))` if tools were configured
+    /// - `Ok(None)` if no tools were available (e.g., JSON functions)
+    /// - `Err(Error)` if reconstruction fails (e.g., tool not found, duplicate tools)
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let db_insert = get_tool_config_from_database();
+    /// let tool_config = db_insert.into_tool_call_config(&function_config, &static_tools)?;
+    /// ```
+    pub fn into_tool_call_config(
+        self,
+        function_config: &crate::function::FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<Option<ToolCallConfig>, Error> {
+        let dynamic_params = function_config.database_insert_to_dynamic_tool_params(self);
+        function_config.prepare_tool_config(dynamic_params, static_tools)
+    }
+}
+
+/// Wire/API representation of dynamic tool parameters for inference requests.
+///
+/// This type is the **wire format** for tool configurations used in API requests and responses.
+/// It distinguishes between static tools (configured in the function) and dynamic tools
+/// (provided at runtime), allowing clients to reference pre-configured tools by name or
+/// provide new tools on-the-fly.
+///
+/// # Purpose
+/// - Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)
+/// - Expose tool configurations in API responses for stored inferences
+/// - Support Python and TypeScript client bindings
+/// - Allow runtime customization of tool behavior
+///
+/// # Fields
+/// - `allowed_tools`: Names of static tools from function config to use (subset selection)
+/// - `additional_tools`: New tools defined at runtime (not in static config)
+/// - `tool_choice`: Override the function's default tool choice strategy
+/// - `parallel_tool_calls`: Override whether parallel tool calls are enabled
+/// - `provider_tools`: Provider-specific tool configurations (not persisted to database)
+///
+/// # Key Differences from ToolCallConfigDatabaseInsert
+/// - **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools
+/// - **By reference**: Static tools referenced by name, not duplicated
+/// - **Has provider_tools**: Can specify provider-specific tool configurations
+/// - **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`
+///
+/// # Conversion to Storage Format
+/// Converting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:
+/// 1. Static tools (from `allowed_tools` names) are resolved from function config
+/// 2. Dynamic tools (from `additional_tools`) are included as-is
+/// 3. Both lists are merged into a single `tools_available` list
+/// 4. The distinction between static and dynamic tools is lost
+/// 5. `provider_tools` are dropped (not stored)
+///
+/// Use `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.
+///
+/// # Conversion from Storage Format
+/// Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:
+/// 1. Tools that match function config tool names → `allowed_tools`
+/// 2. Tools that don't match function config → `additional_tools`
+/// 3. `provider_tools` is set to `None` (cannot be recovered)
+///
+/// Use `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.
+///
+/// # Example
+/// ```rust,ignore
+/// // API request with dynamic tool params
+/// let params = DynamicToolParams {
+///     allowed_tools: Some(vec!["calculator".to_string()]),  // Use only the calculator tool from config
+///     additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
+///     tool_choice: Some(ToolChoice::Required),
+///     parallel_tool_calls: Some(true),
+///     provider_tools: None,
+/// };
+///
+/// // Convert to storage format (merge tools, lose distinction)
+/// let db_insert = function_config
+///     .dynamic_tool_params_to_database_insert(params, &static_tools)?
+///     .unwrap_or_default();
+///
+/// // db_insert.tools_available now contains both the calculator tool (from config)
+/// // and the runtime tool (from additional_tools), merged together
+/// ```
+///
+/// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(optional_fields)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct DynamicToolParams {
+    /// Names of static tools (from function config) to use. If None, all static tools are available.
+    pub allowed_tools: Option<Vec<String>>,
+    /// Additional tools provided at runtime (not in function config)
+    pub additional_tools: Option<Vec<Tool>>,
+    /// Override the function's tool choice strategy
+    pub tool_choice: Option<ToolChoice>,
+    /// Override whether parallel tool calls are enabled
+    pub parallel_tool_calls: Option<bool>,
+    /// Provider-specific tool configurations (not persisted to database)
+    pub provider_tools: Option<Vec<ProviderTool>>,
+}
+
+impl std::fmt::Display for DynamicToolParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -404,37 +564,34 @@ impl std::fmt::Display for ToolCallConfigDatabaseInsert {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ToolCallConfigDatabaseInsert {
+impl DynamicToolParams {
     #[getter]
-    pub fn get_tools_available(&self) -> Vec<Tool> {
-        self.tools_available.clone()
+    pub fn allowed_tools(&self) -> Option<Vec<String>> {
+        self.allowed_tools.clone()
     }
 
     #[getter]
-    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+    pub fn additional_tools(&self) -> Option<Vec<Tool>> {
+        self.additional_tools.clone()
+    }
+
+    // TODO: Add tool_choice getter when we decide how to handle it.
+    // Mixed enums (with unit and tuple variants) aren't well supported in PyO3,
+    // and we need to decide on the proper Python representation.
+
+    #[getter]
+    pub fn parallel_tool_calls(&self) -> Option<bool> {
         self.parallel_tool_calls
+    }
+
+    #[getter]
+    pub fn provider_tools(&self) -> Option<Vec<ProviderTool>> {
+        self.provider_tools.clone()
     }
 
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
-}
-
-/// A struct to hold the dynamic tool parameters passed at inference time.
-/// These should override the function-level tool parameters.
-/// `allowed_tools` should be a subset of the configured tools for the function.
-/// if `allowed_tools` is not provided, all tools are allowed.
-/// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
-/// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-pub struct DynamicToolParams {
-    pub allowed_tools: Option<Vec<String>>,
-    pub additional_tools: Option<Vec<Tool>>,
-    pub tool_choice: Option<ToolChoice>,
-    pub parallel_tool_calls: Option<bool>,
-    pub provider_tools: Option<Vec<ProviderTool>>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -890,32 +1047,6 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
             });
         }
         Ok(all_dynamic_tool_params)
-    }
-}
-
-impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
-    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
-        // TODO(Viraj): Come back and look at this - should these be static or dynamic tools?
-        Self {
-            static_tools_available: db_insert
-                .tools_available
-                .into_iter()
-                .map(|tool| {
-                    ToolConfig::Dynamic(DynamicToolConfig {
-                        description: tool.description,
-                        parameters: DynamicJSONSchema::new(tool.parameters),
-                        name: tool.name,
-                        strict: tool.strict,
-                    })
-                })
-                .collect(),
-            dynamic_tools_available: vec![],
-            tool_choice: db_insert.tool_choice,
-            parallel_tool_calls: db_insert.parallel_tool_calls,
-            // TODO(Viraj): address this once we start storing provider tools
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
-        }
     }
 }
 

@@ -577,7 +577,7 @@ jobs:
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=20
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            while ! curl http://localhost:3000/health; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
               count=$((count + 1))
@@ -595,7 +595,7 @@ jobs:
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=40
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            while ! curl http://localhost:3000/health; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
               count=$((count + 1))
@@ -718,7 +718,7 @@ jobs:
       - name: Launch the gateway for E2E tests
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
-          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+          while ! curl http://localhost:3000/health; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
           done

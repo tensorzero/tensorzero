@@ -10,9 +10,9 @@ use crate::db::datasets::{
     GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries, StaleDatapointParams,
 };
 use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
-use crate::endpoints::datasets::Datapoint;
+use crate::endpoints::datasets::StoredDatapoint;
 use crate::error::Error;
-use crate::stored_inference::StoredInference;
+use crate::stored_inference::StoredInferenceDatabase;
 
 /// Mock struct that implements all traits on ClickHouseConnectionInfo.
 /// Usage: in tests, create a new mutable instance of this struct, and use the appropriate expect_ methods on the fields inside to mock
@@ -44,7 +44,7 @@ impl InferenceQueries for MockClickHouseConnectionInfo {
         &self,
         config: &Config,
         params: &ListInferencesParams<'_>,
-    ) -> Result<Vec<StoredInference>, Error> {
+    ) -> Result<Vec<StoredInferenceDatabase>, Error> {
         self.inference_queries.list_inferences(config, params).await
     }
 }
@@ -103,11 +103,14 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
             .await
     }
 
-    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error> {
+    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
         self.dataset_queries.get_datapoint(params).await
     }
 
-    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error> {
+    async fn get_datapoints(
+        &self,
+        params: &GetDatapointsParams,
+    ) -> Result<Vec<StoredDatapoint>, Error> {
         self.dataset_queries.get_datapoints(params).await
     }
 

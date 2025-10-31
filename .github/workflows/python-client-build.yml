@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  RUST_TOOLCHAIN: "1.90"
+
 jobs:
   linux:
     runs-on: ${{ matrix.platform.runner }}
@@ -16,7 +19,7 @@ jobs:
         platform:
           - runner: ubuntu-24.04
             target: x86_64
-          - runner: namespace-profile-tensorzero-arm-2x8
+          - runner: ubuntu-24.04-arm
             target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -30,7 +33,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --profile minimal && rustup default stable; then
+            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -69,14 +72,14 @@ jobs:
         platform:
           - runner: ubuntu-24.04
             target: x86_64
-          - runner: namespace-profile-tensorzero-arm-2x8
+          - runner: ubuntu-24.04-arm
             target: aarch64
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --profile minimal && rustup default stable; then
+            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -124,7 +127,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --profile minimal && rustup default stable; then
+            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -176,7 +179,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --profile minimal && rustup default stable; then
+            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
               break
             fi
             if [ $attempt -eq 3 ]; then

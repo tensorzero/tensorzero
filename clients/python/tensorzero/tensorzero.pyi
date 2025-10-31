@@ -150,7 +150,11 @@ class StoredInference:
         episode_id: UUID,
         inference_id: UUID,
         timestamp: str,
-        tool_params: Optional[Any] = None,
+        allowed_tools: Optional[List[str]] = None,
+        additional_tools: Optional[List[Any]] = None,
+        tool_choice: Optional[str] = None,
+        parallel_tool_calls: Optional[bool] = None,
+        provider_tools: Optional[List[Any]] = None,
         output_schema: Optional[Any] = None,
         # Dispreferred outputs are lists because there may be several of them in the future.
         dispreferred_outputs: Union[List[ChatInferenceOutput], List[JsonInferenceOutput]] = [],
@@ -170,7 +174,13 @@ class StoredInference:
     @property
     def inference_id(self) -> Optional[UUID]: ...
     @property
-    def tool_params(self) -> Optional[Any]: ...
+    def allowed_tools(self) -> Optional[List[str]]: ...
+    @property
+    def additional_tools(self) -> Optional[List[Any]]: ...
+    @property
+    def parallel_tool_calls(self) -> Optional[bool]: ...
+    @property
+    def provider_tools(self) -> Optional[List[Any]]: ...
     @property
     def output_schema(self) -> Optional[Any]: ...
     @property
@@ -197,6 +207,14 @@ class RenderedSample:
     output_schema: Optional[Dict[str, Any]]
     dispreferred_outputs: List[ChatInferenceOutput] = []
     tags: Dict[str, str]
+    @property
+    def allowed_tools(self) -> Optional[List[str]]: ...
+    @property
+    def additional_tools(self) -> Optional[List[Any]]: ...
+    @property
+    def parallel_tool_calls(self) -> Optional[bool]: ...
+    @property
+    def provider_tools(self) -> Optional[List[Any]]: ...
 
 @final
 class OptimizationJobHandle:
@@ -383,7 +401,13 @@ class Datapoint:
     @property
     def function_name(self) -> str: ...
     @property
-    def tool_params(self) -> Optional[Any]: ...
+    def allowed_tools(self) -> Optional[List[str]]: ...
+    @property
+    def additional_tools(self) -> Optional[List[Any]]: ...
+    @property
+    def parallel_tool_calls(self) -> Optional[bool]: ...
+    @property
+    def provider_tools(self) -> Optional[List[Any]]: ...
     @property
     def output_schema(self) -> Optional[Any]: ...
     @property
@@ -540,6 +564,7 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         extra_headers: Optional[List[Dict[str, Any]]] = None,
         otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, Iterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.
@@ -957,6 +982,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         extra_headers: Optional[List[Dict[str, Any]]] = None,
         otlp_traces_extra_headers: Optional[Dict[str, str]] = None,
         include_original_response: Optional[bool] = None,
+        internal_dynamic_variant_config: Optional[Dict[str, Any]] = None,
     ) -> Union[InferenceResponse, AsyncIterator[InferenceChunk]]:
         """
         Make a POST request to the /inference endpoint.

@@ -132,7 +132,7 @@ pub struct TimeoutsConfig {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct TemplateFilesystemAccess {
-    /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
+    /// If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
     /// Defaults to `false`
     #[serde(default)]
     enabled: bool,
