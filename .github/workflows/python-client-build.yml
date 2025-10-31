@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  RUST_TOOLCHAIN: 1.90
+
 jobs:
   linux:
     runs-on: ${{ matrix.platform.runner }}
@@ -30,7 +33,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --profile minimal && rustup default stable; then
+            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -76,7 +79,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --profile minimal && rustup default stable; then
+            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -124,7 +127,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --profile minimal && rustup default stable; then
+            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
               break
             fi
             if [ $attempt -eq 3 ]; then
@@ -176,7 +179,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           for attempt in 1 2 3; do
-            if rustup toolchain install stable --profile minimal && rustup default stable; then
+            if rustup toolchain install $RUST_TOOLCHAIN --profile minimal && rustup default $RUST_TOOLCHAIN; then
               break
             fi
             if [ $attempt -eq 3 ]; then
