@@ -573,8 +573,8 @@ impl BaseTensorZeroGateway {
             include_original_response,
             extra_body,
             extra_headers,
-            otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
             internal_dynamic_variant_config,
+            otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
         })
     }
 }
@@ -1271,9 +1271,11 @@ impl TensorZeroGateway {
     ) -> PyResult<Vec<RenderedSample>> {
         tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
-        let config = client
-            .get_config()
-            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        let config = client.get_config().map_err(|_| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
         // Enter the Tokio runtime context while still holding the GIL
         // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
         // for JSON schema compilation
@@ -1307,9 +1309,11 @@ impl TensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Vec<RenderedSample>> {
         let client = this.as_super().client.clone();
-        let config = client
-            .get_config()
-            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        let config = client.get_config().map_err(|_| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
         // Enter the Tokio runtime context while still holding the GIL
         // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
         // for JSON schema compilation
@@ -2158,9 +2162,11 @@ impl AsyncTensorZeroGateway {
     ) -> PyResult<Bound<'a, PyAny>> {
         tracing::warn!("experimental_render_inferences is deprecated. Use experimental_render_samples instead. See https://github.com/tensorzero/tensorzero/issues/2675");
         let client = this.as_super().client.clone();
-        let config = client
-            .get_config()
-            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        let config = client.get_config().map_err(|_| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
         // Enter the Tokio runtime context while still holding the GIL
         // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
         // for JSON schema compilation
@@ -2202,9 +2208,11 @@ impl AsyncTensorZeroGateway {
         variants: HashMap<String, String>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let client = this.as_super().client.clone();
-        let config = client
-            .get_config()
-            .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        let config = client.get_config().map_err(|_| {
+            PyValueError::new_err(
+                "Config not available in HTTP gateway mode. Use embedded mode for render_samples.",
+            )
+        })?;
         // Enter the Tokio runtime context while still holding the GIL
         // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
         // for JSON schema compilation

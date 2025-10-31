@@ -86,6 +86,7 @@ use tensorzero_core::endpoints::validate_tags;
 use tensorzero_core::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunEpisodeParams, WorkflowEvaluationRunEpisodeResponse,
 };
+use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::stored_inference::StoredSample;
 use uuid::Uuid;
 
@@ -220,7 +221,6 @@ impl ClientExt for Client {
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
@@ -254,7 +254,6 @@ impl ClientExt for Client {
         dataset_name: String,
         params: InsertDatapointParams,
     ) -> Result<Vec<Uuid>, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead.");
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
@@ -289,7 +288,6 @@ impl ClientExt for Client {
         dataset_name: String,
         datapoint_id: Uuid,
     ) -> Result<(), TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
@@ -341,7 +339,6 @@ impl ClientExt for Client {
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<Vec<Datapoint>, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
@@ -382,7 +379,6 @@ impl ClientExt for Client {
         dataset_name: String,
         datapoint_id: Uuid,
     ) -> Result<Datapoint, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/{datapoint_id}")).map_err(|e| TensorZeroError::Other {
@@ -419,7 +415,6 @@ impl ClientExt for Client {
         &self,
         dataset_name: String,
     ) -> Result<StaleDatasetResponse, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
@@ -450,7 +445,6 @@ impl ClientExt for Client {
         mut params: WorkflowEvaluationRunParams,
     ) -> Result<WorkflowEvaluationRunResponse, TensorZeroError> {
         use git::GitInfo;
-        use tensorzero_core::error::{Error, ErrorDetails};
 
         // Validate tags before adding git info
         validate_tags(&params.tags, false)
@@ -499,7 +493,6 @@ impl ClientExt for Client {
         run_id: Uuid,
         params: WorkflowEvaluationRunEpisodeParams,
     ) -> Result<WorkflowEvaluationRunEpisodeResponse, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client.base_url.join(&format!("workflow_evaluation_run/{run_id}/episode")).map_err(|e| TensorZeroError::Other {
@@ -534,7 +527,6 @@ impl ClientExt for Client {
         tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
         TensorZeroError,
     > {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
                 source: Error::new(ErrorDetails::InternalError {
@@ -561,7 +553,6 @@ impl ClientExt for Client {
         &self,
         params: ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         let ClientMode::EmbeddedGateway { gateway, .. } = self.mode() else {
             return Err(TensorZeroError::Other {
                 source: Error::new(ErrorDetails::InvalidClientMode {
@@ -590,7 +581,6 @@ impl ClientExt for Client {
         stored_samples: Vec<T>,
         variants: std::collections::HashMap<String, String>,
     ) -> Result<Vec<RenderedSample>, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         let ClientMode::EmbeddedGateway { gateway, .. } = self.mode() else {
             return Err(TensorZeroError::Other {
                 source: Error::new(ErrorDetails::InvalidClientMode {
@@ -613,7 +603,6 @@ impl ClientExt for Client {
         &self,
         params: LaunchOptimizationParams,
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -643,7 +632,6 @@ impl ClientExt for Client {
         params: LaunchOptimizationWorkflowParams,
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
         use std::fmt::{Debug, Display};
-        use tensorzero_core::error::{Error, ErrorDetails};
 
         // Helper type to choose between using Debug or Display for a type
         struct DisplayOrDebug<T: Debug + Display> {
@@ -712,7 +700,6 @@ impl ClientExt for Client {
         &self,
         job_handle: &OptimizationJobHandle,
     ) -> Result<OptimizationJobInfo, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
@@ -751,7 +738,6 @@ impl ClientExt for Client {
         &self,
         function_name: &str,
     ) -> Result<std::collections::HashMap<String, f64>, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client
@@ -791,7 +777,6 @@ impl ClientExt for Client {
     }
 
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
-        use tensorzero_core::error::{Error, ErrorDetails};
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, .. } => {
                 Ok(gateway.handle.app_state.config.clone())
