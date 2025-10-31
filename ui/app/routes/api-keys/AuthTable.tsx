@@ -36,7 +36,7 @@ function ApiKeyRow({
   apiKey: KeyInfo;
   onDelete: (publicId: string) => void;
 }) {
-  const isDisabled = apiKey.disabled_at !== null;
+  const isDisabled = apiKey.disabled_at !== undefined;
 
   const publicIdElement = (
     <code
