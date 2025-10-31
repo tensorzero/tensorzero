@@ -4,6 +4,7 @@ use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use secrecy::SecretString;
+use tensorzero::ClientConfigExt;
 
 use object_store::{aws::AmazonS3Builder, ObjectStore};
 use std::sync::Arc;

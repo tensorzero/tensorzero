@@ -9,8 +9,8 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use serde::Serialize;
 use serde_json::Value;
 use tensorzero::{
-    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput,
-    OptimizationJobHandle, QUANTILES,
+    Client, ClientBuilder, ClientBuilderMode, ClientDatasetsExt, ClientInferenceParams,
+    ClientOptimizationExt, InferenceOutput, OptimizationJobHandle, QUANTILES,
 };
 use tensorzero_core::{
     cache::CacheEnabledMode,

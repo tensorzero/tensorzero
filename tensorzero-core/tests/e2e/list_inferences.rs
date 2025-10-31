@@ -1,9 +1,9 @@
 use chrono::DateTime;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
-    InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagFilter,
-    TimeComparisonOperator, TimeFilter,
+    BooleanMetricFilter, ClientInferencesExt, FloatComparisonOperator, FloatMetricFilter,
+    InferenceFilter, InferenceOutputSource, ListInferencesParams, StoredInference,
+    TagComparisonOperator, TagFilter, TimeComparisonOperator, TimeFilter,
 };
 use tensorzero_core::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
 use uuid::Uuid;

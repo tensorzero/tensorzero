@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, System};
+use tensorzero::{
+    ChatInferenceDatapoint, ClientDatasetsExt, Datapoint, JsonInferenceDatapoint, Role, System,
+};
 use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{

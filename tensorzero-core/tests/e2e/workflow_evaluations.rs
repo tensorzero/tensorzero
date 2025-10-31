@@ -6,7 +6,7 @@ use std::{
 use serde_json::json;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    FeedbackParams, InferenceOutput, Role, WorkflowEvaluationRunParams,
+    ClientWorkflowExt, FeedbackParams, InferenceOutput, Role, WorkflowEvaluationRunParams,
 };
 use tensorzero_core::{
     db::clickhouse::test_helpers::{

@@ -1,6 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_untagged::UntaggedEnumVisitor;
-use tensorzero_core::{
+use crate::{
     error::Error,
     inference::types::{
         File, InputMessageContent, RawText, Role, System, Template, Text, TextKind, Thought,
@@ -8,6 +6,8 @@ use tensorzero_core::{
     },
     tool::{ToolCallInput, ToolResult},
 };
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_untagged::UntaggedEnumVisitor;
 use tensorzero_derive::TensorZeroDeserialize;
 
 // Like the normal `Input` type, but with `ClientInputMessage` instead of `InputMessage`.
@@ -58,7 +58,7 @@ pub enum ClientInputMessageContent {
 
 impl ClientInputMessageContent {
     pub fn to_input_message_content(self, role: &Role) -> Result<InputMessageContent, Error> {
-        use tensorzero_core::inference::types::Text;
+        use crate::inference::types::Text;
 
         Ok(match self {
             ClientInputMessageContent::Text(TextKind::Text { text }) => {
@@ -111,15 +111,15 @@ pub fn deserialize_content<'de, D: Deserializer<'de>>(
 // as expected. This is never actually called - we just care that it compiles
 pub(super) fn test_client_input_to_input(
     client_input: ClientInput,
-) -> tensorzero_core::inference::types::Input {
-    tensorzero_core::inference::types::Input {
+) -> crate::inference::types::Input {
+    crate::inference::types::Input {
         system: client_input.system,
         messages: client_input
             .messages
             .into_iter()
             .map(|message| {
                 let ClientInputMessage { role, content } = message;
-                tensorzero_core::inference::types::InputMessage {
+                crate::inference::types::InputMessage {
                     role,
                     content: content
                         .into_iter()
@@ -153,11 +153,11 @@ pub(super) fn test_client_to_message_content(
             arguments,
             raw_arguments,
         }) => InputMessageContent::ToolCall(ToolCallInput {
-            id,
             name,
-            raw_name,
-            raw_arguments,
             arguments,
+            id,
+            raw_arguments,
+            raw_name,
         }),
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)

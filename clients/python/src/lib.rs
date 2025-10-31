@@ -62,10 +62,11 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, Datapoint,
-    DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams, InferenceStream,
-    LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle, RenderedSample,
-    StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
+    ClientBuilderMode, ClientConfigExt, ClientDatasetsExt, ClientInferenceParams,
+    ClientInferencesExt, ClientInput, ClientOptimizationExt, ClientSecretString, ClientWorkflowExt,
+    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    InferenceStream, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
+    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
