@@ -134,7 +134,6 @@ type = "groq"
 model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 api_key_location = "dynamic::groq_api_key"
 
-
 [models."claude-3-7-sonnet-20250219-thinking"]
 routing = ["anthropic-extra-body"]
 
