@@ -16,6 +16,7 @@ use crate::inference::types::{
 };
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
+use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
 use crate::optimization::openai_rft::UninitializedOpenAIRFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
@@ -424,10 +425,17 @@ pub fn deserialize_optimization_config(
         )))
     } else if obj.is_instance_of::<UninitializedDiclOptimizationConfig>() {
         Ok(UninitializedOptimizerConfig::Dicl(obj.extract()?))
-    } else {
-        Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, or DiclOptimizationConfig",
+    } else if obj.is_instance_of::<UninitializedGCPVertexGeminiSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
+            obj.extract()?,
         ))
+    } else {
+        // Fall back to deserializing from a dictionary
+        deserialize_from_pyobj(obj.py(), obj).map_err(|e| {
+            PyValueError::new_err(format!(
+                "Invalid optimization config. Expected one of: OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, GCPVertexGeminiSFTConfig, or DICLOptimizationConfig (as either a class instance or a dictionary with 'type' field). Error: {e}"
+            ))
+        })
     }
 }
 
