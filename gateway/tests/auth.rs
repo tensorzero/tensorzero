@@ -309,7 +309,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     let child_data = start_gateway_on_random_port(
         "
     [gateway.auth]
-    required = true
+    enabled = true
     [gateway.auth.cache]
     enabled = true
     ttl_ms = 20000
@@ -321,7 +321,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     let embedded_client = make_embedded_gateway_with_config_and_postgres(
         "
     [gateway.auth]
-    required = true
+    enabled = true
     ",
     )
     .await;
@@ -426,7 +426,7 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
     let child_data = start_gateway_on_random_port(
         "
     [gateway.auth]
-    required = true
+    enabled = true
     [gateway.auth.cache]
     enabled = false
     ",
@@ -437,7 +437,7 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
     let embedded_client = make_embedded_gateway_with_config_and_postgres(
         "
     [gateway.auth]
-    required = true
+    enabled = true
     ",
     )
     .await;
@@ -515,7 +515,7 @@ async fn test_auth_cache_requires_full_key_match() {
     let child_data = start_gateway_on_random_port(
         "
     [gateway.auth]
-    required = true
+    enabled = true
     [gateway.auth.cache]
     enabled = true
     ttl_ms = 2000
@@ -527,7 +527,7 @@ async fn test_auth_cache_requires_full_key_match() {
     let embedded_client = make_embedded_gateway_with_config_and_postgres(
         "
     [gateway.auth]
-    required = true
+    enabled = true
     ",
     )
     .await;
