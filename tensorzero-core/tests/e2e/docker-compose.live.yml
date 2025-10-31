@@ -1,14 +1,6 @@
 include:
   - docker-compose-common.yml
 
-volumes:
-  shared-tmpdir:
-    driver: local
-    driver_opts:
-      type: tmpfs
-      device: tmpfs
-      o: size=8G,uid=1000,gid=1000,mode=1777
-
 services:
   mock-inference-provider:
     image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG}
@@ -109,8 +101,6 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       # Mount GCP JWT key file
       - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
-      # Shared tmpdir filesystem
-      - shared-tmpdir:/tmp
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -225,8 +215,6 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ../../../target/nextest:/app/target/nextest
-      # Shared tmpdir filesystem
-      - shared-tmpdir:/tmp
     depends_on:
       fixtures:
         condition: service_completed_successfully
