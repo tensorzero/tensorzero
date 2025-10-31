@@ -12,7 +12,7 @@ export function NewRunButton({ className, ...props }: NewRunButtonProps) {
   const isReadOnly = useReadOnly();
 
   return (
-    <ReadOnlyGuard>
+    <ReadOnlyGuard asChild>
       <Button
         variant="outline"
         size="sm"

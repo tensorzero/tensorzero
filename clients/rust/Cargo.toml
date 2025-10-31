@@ -22,6 +22,7 @@ reqwest-eventsource = { workspace = true }
 async-stream = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-auth = { path = "../../internal/tensorzero-auth" }
 ts-rs = { workspace = true }
 url = { workspace = true }
 thiserror = "2.0.16"

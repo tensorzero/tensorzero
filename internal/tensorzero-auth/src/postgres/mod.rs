@@ -4,6 +4,7 @@ use chrono::SubsecRound;
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use secrecy::{ExposeSecret, SecretString};
+use serde::Serialize;
 use sqlx::PgPool;
 use sqlx::Row;
 
@@ -77,12 +78,19 @@ pub enum AuthResult {
     MissingKey,
 }
 
-#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone)]
+#[derive(sqlx::FromRow, Debug, PartialEq, Eq, Clone, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct KeyInfo {
     pub public_id: String,
     pub organization: String,
     pub workspace: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
     pub description: Option<String>,
+    pub created_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(test, ts(optional))]
     pub disabled_at: Option<DateTime<Utc>>,
 }
 
@@ -93,7 +101,7 @@ pub async fn check_key(
 ) -> Result<AuthResult, TensorZeroAuthError> {
     let key = sqlx::query_as!(
         KeyInfo,
-        "SELECT public_id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE public_id = $1 AND hash = $2",
+        "SELECT public_id, organization, workspace, description, created_at, disabled_at from tensorzero_auth_api_key WHERE public_id = $1 AND hash = $2",
         key.public_id,
         key.hashed_long_key.expose_secret()
     ).fetch_optional(pool).await?;
@@ -138,7 +146,7 @@ pub async fn list_key_info(
 ) -> Result<Vec<KeyInfo>, TensorZeroAuthError> {
     let keys = sqlx::query_as!(
         KeyInfo,
-        "SELECT public_id, organization, workspace, description, disabled_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT public_id, organization, workspace, description, created_at, disabled_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         organization,
         // We take in a 'u32' and convert to 'i64' to avoid any weirdness around negative values
         // Postgres does the right thing when the LIMIT or OFFSET is null (it gets ignored)
