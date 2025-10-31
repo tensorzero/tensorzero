@@ -5,7 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::{Datapoint, GetDatapointParams};
+use tensorzero::{GetDatapointParams, StoredDatapoint};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -15,7 +15,7 @@ use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
 };
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
+    Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
 };
 use tensorzero_core::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
@@ -40,12 +40,12 @@ async fn test_update_chat_datapoint_output() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -100,7 +100,7 @@ async fn test_update_chat_datapoint_output() {
     assert_ne!(new_id, datapoint_id, "Should create a new datapoint ID");
 
     // Wait for async inserts and give ClickHouse time to merge the staled version
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+
     clickhouse_flush_async_insert(&clickhouse).await;
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
@@ -113,17 +113,17 @@ async fn test_update_chat_datapoint_output() {
         })
         .await
         .unwrap();
-    if let Datapoint::Chat(chat_datapoint) = old_datapoint {
-        assert!(chat_datapoint.staled_at.is_some());
-        assert_eq!(
-            chat_datapoint.output,
-            Some(vec![ContentBlockChatOutput::Text(Text {
-                text: "Original output".to_string(),
-            })])
-        );
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_datapoint else {
         panic!("Expected chat datapoint");
-    }
+    };
+
+    assert!(chat_datapoint.staled_at.is_some());
+    assert_eq!(
+        chat_datapoint.output,
+        Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "Original output".to_string(),
+        })])
+    );
 
     // Verify the new datapoint has updated values
     let new_datapoint = clickhouse
@@ -134,21 +134,20 @@ async fn test_update_chat_datapoint_output() {
         })
         .await
         .unwrap();
-    if let Datapoint::Chat(chat_datapoint) = new_datapoint {
-        assert!(chat_datapoint.staled_at.is_none());
-        assert_eq!(
-            chat_datapoint.output,
-            Some(vec![ContentBlockChatOutput::Text(Text {
-                text: "Updated output".to_string(),
-            })])
-        );
-        assert_eq!(
-            chat_datapoint.tags,
-            Some(HashMap::from([("version".to_string(), "2".to_string())]))
-        );
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
-    }
+    };
+    assert!(chat_datapoint.staled_at.is_none());
+    assert_eq!(
+        chat_datapoint.output,
+        Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "Updated output".to_string(),
+        })])
+    );
+    assert_eq!(
+        chat_datapoint.tags,
+        Some(HashMap::from([("version".to_string(), "2".to_string())]))
+    );
 }
 
 #[tokio::test]
@@ -173,12 +172,12 @@ async fn test_update_json_datapoint_output() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -214,7 +213,9 @@ async fn test_update_json_datapoint_output() {
             "datapoints": [{
                 "type": "json",
                 "id": datapoint_id.to_string(),
-                "output": {"answer": "updated"},
+                "output": {
+                    "raw": "{\"answer\": \"updated\"}",
+                },
             }]
         }))
         .send()
@@ -242,13 +243,12 @@ async fn test_update_json_datapoint_output() {
         })
         .await
         .unwrap();
-    if let Datapoint::Json(json_datapoint) = new_datapoint {
-        assert!(json_datapoint.staled_at.is_none());
-        let output: JsonInferenceOutput = json_datapoint.output.unwrap();
-        assert_eq!(output.parsed.unwrap(), json!({"answer": "updated"}));
-    } else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
-    }
+    };
+    assert!(json_datapoint.staled_at.is_none());
+    let output: JsonInferenceOutput = json_datapoint.output.unwrap();
+    assert_eq!(output.parsed.unwrap(), json!({"answer": "updated"}));
 }
 
 #[tokio::test]
@@ -268,12 +268,12 @@ async fn test_update_multiple_datapoints() {
         id: datapoint_id1,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -299,12 +299,12 @@ async fn test_update_multiple_datapoints() {
         id: datapoint_id2,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -376,11 +376,10 @@ async fn test_update_multiple_datapoints() {
         })
         .await
         .unwrap();
-    if let Datapoint::Chat(chat_datapoint) = old_dp1 {
-        assert!(chat_datapoint.staled_at.is_some());
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_dp1 else {
         panic!("Expected chat datapoint");
-    }
+    };
+    assert!(chat_datapoint.staled_at.is_some());
 
     let old_dp2 = clickhouse
         .get_datapoint(&GetDatapointParams {
@@ -390,11 +389,10 @@ async fn test_update_multiple_datapoints() {
         })
         .await
         .unwrap();
-    if let Datapoint::Chat(chat_datapoint) = old_dp2 {
-        assert!(chat_datapoint.staled_at.is_some());
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_dp2 else {
         panic!("Expected chat datapoint");
-    }
+    };
+    assert!(chat_datapoint.staled_at.is_some());
 }
 
 #[tokio::test]
@@ -437,12 +435,12 @@ async fn test_update_datapoint_type_mismatch() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -462,7 +460,7 @@ async fn test_update_datapoint_type_mismatch() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -504,12 +502,12 @@ async fn test_update_datapoint_with_metadata() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -529,7 +527,7 @@ async fn test_update_datapoint_with_metadata() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -568,11 +566,10 @@ async fn test_update_datapoint_with_metadata() {
         .await
         .unwrap();
 
-    if let Datapoint::Chat(chat_datapoint) = new_datapoint {
-        assert_eq!(chat_datapoint.name, Some("Test Datapoint Name".to_string()));
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
-    }
+    };
+    assert_eq!(chat_datapoint.name, Some("Test Datapoint Name".to_string()));
 }
 
 #[tokio::test]
@@ -641,12 +638,12 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -666,7 +663,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -704,12 +701,11 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         .await
         .unwrap();
 
-    if let Datapoint::Chat(chat_datapoint) = new_datapoint {
-        assert!(chat_datapoint.staled_at.is_none());
-        assert_eq!(chat_datapoint.output, Some(vec![]));
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
-    }
+    };
+    assert!(chat_datapoint.staled_at.is_none());
+    assert_eq!(chat_datapoint.output, Some(vec![]));
 }
 
 #[tokio::test]
@@ -728,12 +724,12 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -757,7 +753,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -795,12 +791,11 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         .await
         .unwrap();
 
-    if let Datapoint::Chat(chat_datapoint) = new_datapoint {
-        assert!(chat_datapoint.staled_at.is_none());
-        assert_eq!(chat_datapoint.tool_params, None);
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
-    }
+    };
+    assert!(chat_datapoint.staled_at.is_none());
+    assert_eq!(chat_datapoint.tool_params, None);
 }
 
 #[tokio::test]
@@ -822,12 +817,12 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -847,7 +842,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -885,12 +880,11 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         .await
         .unwrap();
 
-    if let Datapoint::Chat(chat_datapoint) = new_datapoint {
-        assert!(chat_datapoint.staled_at.is_none());
-        assert_eq!(chat_datapoint.tags, Some(HashMap::new()));
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
-    }
+    };
+    assert!(chat_datapoint.staled_at.is_none());
+    assert_eq!(chat_datapoint.tags, Some(HashMap::new()));
 }
 
 #[tokio::test]
@@ -909,12 +903,12 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -934,7 +928,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -974,12 +968,11 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         .await
         .unwrap();
 
-    if let Datapoint::Chat(chat_datapoint) = new_datapoint {
-        assert!(chat_datapoint.staled_at.is_none());
-        assert_eq!(chat_datapoint.name, None);
-    } else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
-    }
+    };
+    assert!(chat_datapoint.staled_at.is_none());
+    assert_eq!(chat_datapoint.name, None);
 }
 
 #[tokio::test]
@@ -1004,12 +997,12 @@ async fn test_update_json_datapoint_set_output_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -1030,7 +1023,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -1068,12 +1061,11 @@ async fn test_update_json_datapoint_set_output_to_null() {
         .await
         .unwrap();
 
-    if let Datapoint::Json(json_datapoint) = new_datapoint {
-        assert!(json_datapoint.staled_at.is_none());
-        assert_eq!(json_datapoint.output, None);
-    } else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
-    }
+    };
+    assert!(json_datapoint.staled_at.is_none());
+    assert_eq!(json_datapoint.output, None);
 }
 
 #[tokio::test]
@@ -1102,12 +1094,12 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -1128,7 +1120,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -1166,10 +1158,451 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         .await
         .unwrap();
 
-    if let Datapoint::Json(json_datapoint) = new_datapoint {
-        assert!(json_datapoint.staled_at.is_none());
-        assert_eq!(json_datapoint.tags, Some(HashMap::new()));
-    } else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
-    }
+    };
+    assert!(json_datapoint.staled_at.is_none());
+    assert_eq!(json_datapoint.tags, Some(HashMap::new()));
+}
+
+// ============================================================================
+// Tests for update_datapoints_metadata endpoint
+// ============================================================================
+
+#[tokio::test]
+async fn test_update_metadata_chat_datapoint() {
+    let http_client = Client::new();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test-update-metadata-chat-{}", Uuid::now_v7());
+
+    // Create a chat datapoint
+    let datapoint_id = Uuid::now_v7();
+    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "basic_test".to_string(),
+        name: Some("original_name".to_string()),
+        id: datapoint_id,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Test message".to_string(),
+                })],
+            }],
+        },
+        output: Some(vec![ContentBlockChatOutput::Text(Text {
+            text: "Test output".to_string(),
+        })]),
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    });
+
+    clickhouse
+        .insert_datapoints(&[datapoint_insert])
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Update metadata
+    let resp = http_client
+        .patch(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints/metadata",
+        )))
+        .json(&json!({
+            "datapoints": [{
+                "id": datapoint_id.to_string(),
+                "metadata": {"name": "updated_name"}
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        resp.status().is_success(),
+        "Update metadata request failed: {:?}",
+        resp.status()
+    );
+    let resp_json: Value = resp.json().await.unwrap();
+    let returned_ids = resp_json["ids"].as_array().unwrap();
+    assert_eq!(returned_ids.len(), 1);
+    let returned_id: Uuid = returned_ids[0].as_str().unwrap().parse().unwrap();
+    assert_eq!(
+        returned_id, datapoint_id,
+        "Should return the same ID, not create a new one"
+    );
+
+    // Wait for async inserts
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    clickhouse_flush_async_insert(&clickhouse).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    // Verify the datapoint has updated name
+    let updated_datapoint = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: Some(false),
+        })
+        .await
+        .unwrap();
+
+    let StoredDatapoint::Chat(chat_datapoint) = updated_datapoint else {
+        panic!("Expected chat datapoint");
+    };
+    assert_eq!(chat_datapoint.name, Some("updated_name".to_string()));
+    assert!(chat_datapoint.staled_at.is_none(), "Should not be staled");
+}
+
+#[tokio::test]
+async fn test_update_metadata_json_datapoint() {
+    let http_client = Client::new();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test-update-metadata-json-{}", Uuid::now_v7());
+
+    // Create a JSON datapoint
+    let datapoint_id = Uuid::now_v7();
+    let output_schema = json!({
+        "type": "object",
+        "properties": {"result": {"type": "string"}},
+        "required": ["result"],
+        "additionalProperties": false
+    });
+
+    let datapoint_insert = DatapointInsert::Json(JsonInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "json_success".to_string(),
+        name: Some("original_json_name".to_string()),
+        id: datapoint_id,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: json!({"query": "test"}).to_string(),
+                })],
+            }],
+        },
+        output: Some(JsonInferenceOutput {
+            raw: Some(r#"{"result":"test"}"#.to_string()),
+            parsed: Some(json!({"result": "test"})),
+        }),
+        output_schema,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    });
+
+    clickhouse
+        .insert_datapoints(&[datapoint_insert])
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Update metadata
+    let resp = http_client
+        .patch(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints/metadata",
+        )))
+        .json(&json!({
+            "datapoints": [{
+                "id": datapoint_id.to_string(),
+                "metadata": {"name": "updated_json_name"}
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(resp.status().is_success());
+    let resp_json: Value = resp.json().await.unwrap();
+    let returned_ids = resp_json["ids"].as_array().unwrap();
+    assert_eq!(returned_ids.len(), 1);
+    let returned_id: Uuid = returned_ids[0].as_str().unwrap().parse().unwrap();
+    assert_eq!(returned_id, datapoint_id);
+
+    // Wait for async inserts
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    clickhouse_flush_async_insert(&clickhouse).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    // Verify the datapoint has updated name
+    let updated_datapoint = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: Some(false),
+        })
+        .await
+        .unwrap();
+
+    let StoredDatapoint::Json(json_datapoint) = updated_datapoint else {
+        panic!("Expected json datapoint");
+    };
+    assert_eq!(json_datapoint.name, Some("updated_json_name".to_string()));
+    assert!(json_datapoint.staled_at.is_none());
+}
+
+#[tokio::test]
+async fn test_update_metadata_set_name_to_null() {
+    let http_client = Client::new();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test-update-metadata-null-{}", Uuid::now_v7());
+
+    // Create a chat datapoint with a name
+    let datapoint_id = Uuid::now_v7();
+    let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "basic_test".to_string(),
+        name: Some("to_be_removed".to_string()),
+        id: datapoint_id,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Test".to_string(),
+                })],
+            }],
+        },
+        output: None,
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    });
+
+    clickhouse
+        .insert_datapoints(&[datapoint_insert])
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Set name to null
+    let resp = http_client
+        .patch(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints/metadata",
+        )))
+        .json(&json!({
+            "datapoints": [{
+                "id": datapoint_id.to_string(),
+                "metadata": {"name": null}
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(resp.status().is_success());
+
+    // Wait for async inserts
+    clickhouse_flush_async_insert(&clickhouse).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    // Verify name is now null
+    let updated_datapoint = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id,
+            allow_stale: Some(false),
+        })
+        .await
+        .unwrap();
+
+    let StoredDatapoint::Chat(chat_datapoint) = updated_datapoint else {
+        panic!("Expected chat datapoint");
+    };
+    assert_eq!(chat_datapoint.name, None);
+}
+
+#[tokio::test]
+async fn test_update_metadata_batch() {
+    let http_client = Client::new();
+    let clickhouse = get_clickhouse().await;
+    let dataset_name = format!("test-update-metadata-batch-{}", Uuid::now_v7());
+
+    // Create multiple datapoints
+    let datapoint_id1 = Uuid::now_v7();
+    let datapoint_id2 = Uuid::now_v7();
+
+    let datapoint1 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "basic_test".to_string(),
+        name: Some("name1".to_string()),
+        id: datapoint_id1,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Test 1".to_string(),
+                })],
+            }],
+        },
+        output: None,
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    });
+
+    let datapoint2 = DatapointInsert::Chat(ChatInferenceDatapointInsert {
+        dataset_name: dataset_name.clone(),
+        function_name: "basic_test".to_string(),
+        name: Some("name2".to_string()),
+        id: datapoint_id2,
+        episode_id: None,
+        input: StoredInput {
+            system: None,
+            messages: vec![StoredInputMessage {
+                role: Role::User,
+                content: vec![StoredInputMessageContent::Text(Text {
+                    text: "Test 2".to_string(),
+                })],
+            }],
+        },
+        output: None,
+        tool_params: None,
+        tags: None,
+        auxiliary: String::new(),
+        staled_at: None,
+        source_inference_id: None,
+        is_custom: true,
+    });
+
+    clickhouse
+        .insert_datapoints(&[datapoint1, datapoint2])
+        .await
+        .unwrap();
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Update both datapoints' metadata
+    let resp = http_client
+        .patch(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints/metadata",
+        )))
+        .json(&json!({
+            "datapoints": [
+                {
+                    "id": datapoint_id1.to_string(),
+                    "metadata": {"name": "updated_name1"}
+                },
+                {
+                    "id": datapoint_id2.to_string(),
+                    "metadata": {"name": "updated_name2"}
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(resp.status().is_success());
+    let resp_json: Value = resp.json().await.unwrap();
+    let returned_ids = resp_json["ids"].as_array().unwrap();
+    assert_eq!(returned_ids.len(), 2);
+
+    // Wait for async inserts
+    clickhouse_flush_async_insert(&clickhouse).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    // Verify both datapoints have updated names
+    let datapoint1 = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id: datapoint_id1,
+            allow_stale: Some(false),
+        })
+        .await
+        .unwrap();
+
+    let StoredDatapoint::Chat(chat_datapoint) = datapoint1 else {
+        panic!("Expected chat datapoint");
+    };
+    assert_eq!(chat_datapoint.name, Some("updated_name1".to_string()));
+
+    let datapoint2 = clickhouse
+        .get_datapoint(&GetDatapointParams {
+            dataset_name: dataset_name.clone(),
+            datapoint_id: datapoint_id2,
+            allow_stale: Some(false),
+        })
+        .await
+        .unwrap();
+
+    let StoredDatapoint::Chat(chat_datapoint) = datapoint2 else {
+        panic!("Expected chat datapoint");
+    };
+    assert_eq!(chat_datapoint.name, Some("updated_name2".to_string()));
+}
+
+#[tokio::test]
+async fn test_update_metadata_datapoint_not_found() {
+    let http_client = Client::new();
+    let dataset_name = format!("test-update-metadata-notfound-{}", Uuid::now_v7());
+    let non_existent_id = Uuid::now_v7();
+
+    let resp = http_client
+        .patch(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints/metadata",
+        )))
+        .json(&json!({
+            "datapoints": [{
+                "id": non_existent_id.to_string(),
+                "metadata": {"name": "new_name"}
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_update_metadata_duplicate_ids() {
+    let http_client = Client::new();
+    let dataset_name = format!("test-update-metadata-duplicate-{}", Uuid::now_v7());
+    let duplicate_id = Uuid::now_v7();
+
+    let resp = http_client
+        .patch(get_gateway_endpoint(&format!(
+            "/v1/datasets/{dataset_name}/datapoints/metadata",
+        )))
+        .json(&json!({
+            "datapoints": [
+                {
+                    "id": duplicate_id.to_string(),
+                    "metadata": {"name": "name1"}
+                },
+                {
+                    "id": duplicate_id.to_string(),
+                    "metadata": {"name": "name2"}
+                }
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }

@@ -20,20 +20,19 @@ use tensorzero_core::{
     endpoints::inference::InferenceClients,
     http::TensorzeroHttpClient,
     inference::types::{
-        file::Base64FileMetadata,
-        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
         stored_input::StoredFile,
-        Base64File, ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest,
-        ModelInput, RequestMessage, ResolvedContentBlock, ResolvedRequestMessage, StoredInput,
-        StoredInputMessage, StoredInputMessageContent, System, Text,
+        ContentBlock, ContentBlockChatOutput, FunctionType, ModelInferenceRequest, ModelInput,
+        ObjectStorageFile, ObjectStoragePointer, RequestMessage, ResolvedContentBlock,
+        ResolvedRequestMessage, StoredInput, StoredInputMessage, StoredInputMessageContent, System,
+        Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     optimization::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
-    tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
+    tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
@@ -314,7 +313,7 @@ fn generate_text_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(output)),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         output_schema: None,
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Marseille.".to_string(),
@@ -444,8 +443,9 @@ fn generate_tool_call_example() -> RenderedSample {
         },
         output: Some(tool_call_output.clone()),
         stored_output: Some(StoredOutput::Chat(tool_call_output)),
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![Tool {
+        tool_params: DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![Tool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({
@@ -459,10 +459,11 @@ fn generate_tool_call_example() -> RenderedSample {
                     "required": ["location"]
                 }),
                 strict: false,
-            }],
-            tool_choice: ToolChoice::Auto,
+            }]),
+            tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: None,
-        }),
+            provider_tools: None,
+        },
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
@@ -489,18 +490,18 @@ fn generate_image_example() -> RenderedSample {
                     ResolvedContentBlock::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    ResolvedContentBlock::File(Box::new(FileWithPath {
-                        file: Base64File {
-                            url: None,
+                    ResolvedContentBlock::File(Box::new(ObjectStorageFile {
+                        file: ObjectStoragePointer {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
-                            data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
+                            storage_path: StoragePath {
+                                kind: StorageKind::Disabled,
+                                path: object_store::path::Path::parse(
+                                    "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                                ).unwrap(),
+                            },
                         },
-                        storage_path: StoragePath {
-                            kind: StorageKind::Disabled,
-                            path: object_store::path::Path::parse(
-                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
-                            ).unwrap(),
-                        },
+                        data: base64::prelude::BASE64_STANDARD.encode(FERRIS_PNG),
                     })),
                 ],
             }],
@@ -513,24 +514,24 @@ fn generate_image_example() -> RenderedSample {
                     StoredInputMessageContent::Text(Text {
                         text: "What is the main color of this image?".to_string(),
                     }),
-                    StoredInputMessageContent::File(Box::new(StoredFile {
-                        file: Base64FileMetadata {
-                            url: None,
+                    StoredInputMessageContent::File(Box::new(StoredFile(
+                        ObjectStoragePointer {
+                            source_url: None,
                             mime_type: mime::IMAGE_PNG,
+                            storage_path: StoragePath {
+                                kind: StorageKind::Disabled,
+                                path: object_store::path::Path::parse(
+                                    "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
+                                ).unwrap(),
+                            },
                         },
-                        storage_path: StoragePath {
-                            kind: StorageKind::Disabled,
-                            path: object_store::path::Path::parse(
-                                "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
-                            ).unwrap(),
-                        },
-                    })),
+                    ))),
                 ],
             }],
         },
         output: Some(output.clone()),
         stored_output: Some(StoredOutput::Chat(output)),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,

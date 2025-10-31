@@ -12,6 +12,7 @@ import {
   Playground,
   Model,
 } from "~/components/icons/Icons";
+import { KeyRound } from "lucide-react";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useActivePath } from "~/hooks/use-active-path";
 import { TensorZeroLogo } from "~/components/icons/Icons";
@@ -33,6 +34,7 @@ import {
   SidebarGroupContent,
 } from "~/components/ui/sidebar";
 import TensorZeroStatusIndicator from "./TensorZeroStatusIndicator";
+import { ReadOnlyBadge } from "./ReadOnlyBadge";
 
 interface NavigationItem {
   title: string;
@@ -103,6 +105,16 @@ const navigation: NavigationSection[] = [
         title: "Workflow Evaluations",
         url: "/workflow_evaluations",
         icon: SequenceChecks,
+      },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      {
+        title: "TensorZero API Keys",
+        url: "/api-keys",
+        icon: KeyRound,
       },
     ],
   },
@@ -199,6 +211,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="relative">
+        <ReadOnlyBadge />
         {state === "expanded" && <TensorZeroStatusIndicator />}
         <SidebarTrigger className="justify-left mt-1 flex" />
       </SidebarFooter>

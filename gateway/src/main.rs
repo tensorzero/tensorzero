@@ -21,7 +21,6 @@ use tensorzero_core::observability::{self, LogFormat};
 use tensorzero_core::utils::gateway;
 
 mod routes;
-mod warn_early_drop;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -103,7 +102,14 @@ async fn main() {
         }
         (true, None) => {
             tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-            (Arc::new(Config::default()), None)
+            (
+                Arc::new(
+                    Config::new_empty()
+                        .await
+                        .expect_pretty("Failed to load default config"),
+                ),
+                None,
+            )
         }
         (false, Some(path)) => {
             let glob = ConfigFileGlob::new_from_path(&path)
@@ -310,7 +316,9 @@ async fn main() {
 
     if let Some(tracer_wrapper) = delayed_log_config.otel_tracer {
         tracing::info!("Shutting down OpenTelemetry exporter");
-        tracer_wrapper.shutdown().await;
+        tracer_wrapper
+            .shutdown(delayed_log_config.leak_detector.as_ref())
+            .await;
         tracing::info!("OpenTelemetry exporter shut down");
     }
 }

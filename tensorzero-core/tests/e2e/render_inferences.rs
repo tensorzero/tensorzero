@@ -3,17 +3,20 @@ use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
-    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
-    StoredChatInference, StoredInference, StoredJsonInference, Tool,
+    JsonInferenceDatapoint, Role, StorageKind, StoragePath, StoredChatInferenceDatabase,
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredInferenceDatabase, StoredJsonInference,
+    Tool,
 };
-use tensorzero_core::inference::types::file::Base64FileMetadata;
+use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
-use tensorzero_core::inference::types::{ResolvedContentBlock, ResolvedRequestMessage, System};
+use tensorzero_core::inference::types::{
+    Arguments, ResolvedContentBlock, ResolvedRequestMessage, System,
+};
 use tensorzero_core::{
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, TemplateInput, Text},
+    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Template, Text},
     tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
 };
 use tracing_test::traced_test;
@@ -25,7 +28,7 @@ pub async fn test_render_samples_empty() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     // Test with an empty stored inferences array.
-    let stored_inferences: Vec<StoredInference> = vec![];
+    let stored_inferences: Vec<StoredInferenceDatabase> = vec![];
     let rendered_inferences = client
         .experimental_render_samples(stored_inferences, HashMap::new())
         .await
@@ -40,7 +43,7 @@ pub async fn test_render_samples_empty() {
 pub async fn test_render_samples_no_function() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: StoredInput {
@@ -76,7 +79,7 @@ pub async fn test_render_samples_no_function() {
 pub async fn test_render_samples_no_variant() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: StoredInput {
@@ -120,13 +123,14 @@ pub async fn test_render_samples_no_variant() {
 pub async fn test_render_samples_missing_variable() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: StoredInput {
-            system: Some(System::Template(
-                json!({"foo": "bar"}).as_object().unwrap().clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "foo".to_string(),
+                "bar".into(),
+            )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -161,11 +165,13 @@ pub async fn test_render_samples_normal() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![
-        StoredInference::Chat(StoredChatInference {
+        StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -181,16 +187,18 @@ pub async fn test_render_samples_normal() {
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
         }),
-        StoredInference::Json(StoredJsonInference {
+        StoredInferenceDatabase::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(TemplateInput {
+                    content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
-                        arguments: serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))]),
+                        arguments: Arguments(serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))])),
                     })],
                 }],
             },
@@ -208,11 +216,13 @@ pub async fn test_render_samples_normal() {
             }],
             tags: HashMap::new(),
         }),
-        StoredInference::Chat(StoredChatInference {
+        StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -245,33 +255,35 @@ pub async fn test_render_samples_normal() {
             })]],
             tags: HashMap::new(),
         }),
-        StoredInference::Chat(StoredChatInference {
+        StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
                         StoredInputMessageContent::Text(Text {
                             text: "What is this a picture of?".to_string(),
                         }),
-                        StoredInputMessageContent::File(Box::new(StoredFile {
-                            file: Base64FileMetadata {
-                                url: None,
+                        StoredInputMessageContent::File(Box::new(StoredFile(
+                            ObjectStoragePointer {
+                                source_url: None,
                                 mime_type: mime::IMAGE_PNG,
-                            },
-                            storage_path: StoragePath {
-                                kind: StorageKind::S3Compatible {
-                                    bucket_name: Some("tensorzero-e2e-test-images".to_string()),
-                                    region: Some("us-east-1".to_string()),
-                                    prefix: String::new(),
-                                    endpoint: None,
-                                    allow_http: None,
+                                storage_path: StoragePath {
+                                    kind: StorageKind::S3Compatible {
+                                        bucket_name: Some("tensorzero-e2e-test-images".to_string()),
+                                        region: Some("us-east-1".to_string()),
+                                        prefix: String::new(),
+                                        endpoint: None,
+                                        allow_http: None,
+                                    },
+                                    path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                                 },
-                                path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                             },
-                        })),
+                        ))),
                     ],
                 }],
             },
@@ -318,7 +330,6 @@ pub async fn test_render_samples_normal() {
 
     // Check other fields
     assert!(first_inference.output.as_ref().unwrap().is_empty());
-    assert!(first_inference.tool_params.is_some());
     assert!(first_inference.output_schema.is_none());
 
     // Check the second rendered inference
@@ -357,7 +368,6 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "{}");
     // Check other fields
-    assert!(second_inference.tool_params.is_none());
     assert!(second_inference.output_schema.is_some());
 
     // Check the third rendered inference
@@ -399,7 +409,6 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "Hello, world!");
     // Check other fields
-    assert!(third_inference.tool_params.is_some());
     assert!(third_inference.output_schema.is_none());
 
     // Check the fourth rendered inference
@@ -427,13 +436,12 @@ pub async fn test_render_samples_normal() {
     };
 
     // Check that the base64 string is > 1000 chars
-    assert!(file.file.data.len() > 1000);
+    assert!(file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
-    assert!(fourth_inference.tool_params.is_some());
     assert!(fourth_inference.output_schema.is_none());
 }
 
@@ -442,7 +450,7 @@ pub async fn test_render_samples_normal() {
 pub async fn test_render_samples_template_no_schema() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test_template_no_schema".to_string(),
         variant_name: "test".to_string(),
         timestamp: Utc::now(),
@@ -534,7 +542,6 @@ pub async fn test_render_samples_template_no_schema() {
 
     // Check other fields
     assert!(first_inference.output.as_ref().unwrap().is_empty());
-    assert!(first_inference.tool_params.is_some());
     assert!(first_inference.output_schema.is_none());
 }
 
@@ -547,7 +554,7 @@ pub async fn test_render_datapoints_empty() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     // Test with an empty datapoints array.
-    let datapoints: Vec<Datapoint> = vec![];
+    let datapoints: Vec<StoredDatapoint> = vec![];
     let rendered_samples = client
         .experimental_render_samples(datapoints, HashMap::new())
         .await
@@ -562,7 +569,7 @@ pub async fn test_render_datapoints_empty() {
 pub async fn test_render_datapoints_no_function() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -603,7 +610,7 @@ pub async fn test_render_datapoints_no_function() {
 pub async fn test_render_datapoints_no_variant() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -652,16 +659,17 @@ pub async fn test_render_datapoints_no_variant() {
 pub async fn test_render_datapoints_missing_variable() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
         name: None,
         id: Uuid::now_v7(),
         episode_id: Some(Uuid::now_v7()),
         input: StoredInput {
-            system: Some(System::Template(
-                json!({"foo": "bar"}).as_object().unwrap().clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "foo".to_string(),
+                "bar".into(),
+            )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -698,14 +706,16 @@ pub async fn test_render_datapoints_normal() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![
-        Datapoint::Chat(ChatInferenceDatapoint {
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "basic_test".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -723,19 +733,21 @@ pub async fn test_render_datapoints_normal() {
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
-        Datapoint::Json(JsonInferenceDatapoint {
+        StoredDatapoint::Json(JsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "json_success".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
-                    content: vec![StoredInputMessageContent::Template(TemplateInput {
+                    content: vec![StoredInputMessageContent::Template(Template {
                         name: "user".to_string(),
-                        arguments: serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))]),
+                        arguments: Arguments(serde_json::Map::from_iter(vec![("country".to_string(), json!("Japan"))])),
                     })],
                 }],
             },
@@ -752,14 +764,16 @@ pub async fn test_render_datapoints_normal() {
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
-        Datapoint::Chat(ChatInferenceDatapoint {
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "weather_helper".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -792,36 +806,38 @@ pub async fn test_render_datapoints_normal() {
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
-        Datapoint::Chat(ChatInferenceDatapoint {
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "basic_test".to_string(),
             name: None,
             id: Uuid::now_v7(),
             episode_id: Some(Uuid::now_v7()),
             input: StoredInput {
-                system: Some(System::Template(json!({"assistant_name": "Dr. Mehta"}).as_object().unwrap().clone())),
+                system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                    ("assistant_name".to_string(), "Dr. Mehta".into()),
+                ])))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![
                         StoredInputMessageContent::Text(Text {
                             text: "What is this a picture of?".to_string(),
                         }),
-                        StoredInputMessageContent::File(Box::new(StoredFile {
-                            file: Base64FileMetadata {
-                                url: None,
+                        StoredInputMessageContent::File(Box::new(StoredFile(
+                            ObjectStoragePointer {
+                                source_url: None,
                                 mime_type: mime::IMAGE_PNG,
-                            },
-                            storage_path: StoragePath {
-                                kind: StorageKind::S3Compatible {
-                                    bucket_name: Some("tensorzero-e2e-test-images".to_string()),
-                                    region: Some("us-east-1".to_string()),
-                                    prefix: String::new(),
-                                    endpoint: None,
-                                    allow_http: None,
+                                storage_path: StoragePath {
+                                    kind: StorageKind::S3Compatible {
+                                        bucket_name: Some("tensorzero-e2e-test-images".to_string()),
+                                        region: Some("us-east-1".to_string()),
+                                        prefix: String::new(),
+                                        endpoint: None,
+                                        allow_http: None,
+                                    },
+                                    path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                                 },
-                                path: Path::from("observability/images/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                             },
-                        })),
+                        ))),
                     ],
                 }],
             },
@@ -870,7 +886,6 @@ pub async fn test_render_datapoints_normal() {
 
     // Check other fields
     assert!(first_sample.output.as_ref().unwrap().is_empty());
-    assert!(first_sample.tool_params.is_some());
     assert!(first_sample.output_schema.is_none());
 
     // Check the second rendered sample (json_success)
@@ -902,7 +917,6 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(output_text.text, "{}");
 
     // Check other fields
-    assert!(second_sample.tool_params.is_none());
     assert!(second_sample.output_schema.is_some());
 
     // Check the third rendered sample (weather_helper with tool call)
@@ -937,7 +951,6 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(tool_call.arguments, Some(json!({"location": "Tokyo"})));
 
     // Check other fields
-    assert!(third_sample.tool_params.is_some());
     assert!(third_sample.output_schema.is_none());
 
     // Check the fourth rendered sample (basic_test with image)
@@ -965,13 +978,12 @@ pub async fn test_render_datapoints_normal() {
     };
 
     // Check that the base64 string is > 1000 chars
-    assert!(file.file.data.len() > 1000);
+    assert!(file.data.len() > 1000);
 
     // Check the output
     assert_eq!(fourth_sample.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
-    assert!(fourth_sample.tool_params.is_some());
     assert!(fourth_sample.output_schema.is_none());
 }
 
@@ -980,7 +992,7 @@ pub async fn test_render_datapoints_normal() {
 pub async fn test_render_datapoints_template_no_schema() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test_template_no_schema".to_string(),
         name: None,
@@ -1077,6 +1089,5 @@ pub async fn test_render_datapoints_template_no_schema() {
 
     // Check other fields
     assert!(first_sample.output.as_ref().unwrap().is_empty());
-    assert!(first_sample.tool_params.is_some());
     assert!(first_sample.output_schema.is_none());
 }

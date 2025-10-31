@@ -1,6 +1,7 @@
 use crate::{ClientInput, ClientInputMessage, ClientInputMessageContent};
 use tensorzero_core::inference::types::{
-    File, ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent, TextKind,
+    Base64File, File, ObjectStorageFile, ResolvedInput, ResolvedInputMessage,
+    ResolvedInputMessageContent, TextKind,
 };
 use tensorzero_core::tool::{ToolCall, ToolCallInput};
 
@@ -51,25 +52,25 @@ fn resolved_input_message_content_to_client_input_message_content(
         ResolvedInputMessageContent::ToolResult(tool_result) => {
             ClientInputMessageContent::ToolResult(tool_result)
         }
-        ResolvedInputMessageContent::RawText { value } => {
-            ClientInputMessageContent::RawText { value }
+        ResolvedInputMessageContent::RawText(raw_text) => {
+            ClientInputMessageContent::RawText(raw_text)
         }
         ResolvedInputMessageContent::Thought(thought) => {
             ClientInputMessageContent::Thought(thought)
         }
-        ResolvedInputMessageContent::File(file) => {
-            let mime_type = file.file.mime_type;
-            let data = file.file.data;
+        ResolvedInputMessageContent::File(resolved) => {
+            let ObjectStorageFile { file, data } = *resolved;
+            let mime_type = file.mime_type;
 
-            ClientInputMessageContent::File(File::Base64 { mime_type, data })
+            ClientInputMessageContent::File(File::Base64(Base64File {
+                source_url: None,
+                mime_type,
+                data,
+            }))
         }
-        ResolvedInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        } => ClientInputMessageContent::Unknown {
-            data,
-            model_provider_name,
-        },
+        ResolvedInputMessageContent::Unknown(unknown) => {
+            ClientInputMessageContent::Unknown(unknown)
+        }
     }
 }
 
@@ -78,9 +79,8 @@ mod tests {
     use object_store::path::Path;
 
     use tensorzero_core::inference::types::{
-        resolved_input::FileWithPath,
         storage::{StorageKind, StoragePath},
-        Base64File,
+        Base64File, ObjectStorageFile, ObjectStoragePointer,
     };
     use url::Url;
 
@@ -128,13 +128,13 @@ mod tests {
         };
 
         // Create the resolved input message content with an image
-        let resolved_content = ResolvedInputMessageContent::File(Box::new(FileWithPath {
-            file: Base64File {
-                url: Some(Url::parse("http://notaurl.com").unwrap()),
+        let resolved_content = ResolvedInputMessageContent::File(Box::new(ObjectStorageFile {
+            file: ObjectStoragePointer {
+                source_url: Some(Url::parse("http://notaurl.com").unwrap()),
                 mime_type: mime::IMAGE_JPEG,
-                data: image_data.to_string(),
+                storage_path: storage_path.clone(),
             },
-            storage_path: storage_path.clone(),
+            data: image_data.to_string(),
         }));
 
         // Call the function under test
@@ -143,10 +143,11 @@ mod tests {
 
         // Verify the result
         match result {
-            ClientInputMessageContent::File(File::Base64 {
+            ClientInputMessageContent::File(File::Base64(Base64File {
                 mime_type: result_mime_type,
                 data: result_data,
-            }) => {
+                ..
+            })) => {
                 assert_eq!(result_mime_type, mime::IMAGE_JPEG);
                 assert_eq!(result_data, image_data);
             }

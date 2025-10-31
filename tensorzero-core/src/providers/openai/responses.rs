@@ -325,8 +325,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             .as_ref()
             .map(|tool_config| {
                 tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(|tool| OpenAITool::from(tool).into_openai_responses_tool())
                     .collect()
             })
@@ -698,7 +697,9 @@ async fn tensorzero_to_openai_responses_user_messages<'a>(
                     }
                     _ => {
                         return Err(Error::new(ErrorDetails::InternalError {
-                            message: format!("`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}")
+                            message: format!(
+                                "`prepare_file_message` produced an unexpected content block. {IMPOSSIBLE_ERROR_MESSAGE}"
+                            ),
                         }));
                     }
                 }

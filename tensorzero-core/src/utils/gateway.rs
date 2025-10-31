@@ -168,7 +168,7 @@ impl GatewayHandle {
 
     #[cfg(feature = "pyo3")]
     pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
-        let config = Arc::new(Config::default());
+        let config = Arc::new(Config::new_dummy_for_pyo3());
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         #[cfg(test)]
         let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
@@ -231,7 +231,7 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::default(), Some(clickhouse_url), true).await
+    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
 }
 
 pub async fn setup_clickhouse(
@@ -306,6 +306,8 @@ pub async fn setup_postgres(
         return Ok(PostgresConnectionInfo::Disabled);
     };
 
+    // TODO - decide how we should handle apply `connection_pool_size` to two pools
+    // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
     let pool = PgPoolOptions::new()
         .max_connections(config.postgres.connection_pool_size)
         .connect(&postgres_url)
@@ -315,7 +317,18 @@ pub async fn setup_postgres(
                 message: err.to_string(),
             })
         })?;
-    let connection_info = PostgresConnectionInfo::new_with_pool(pool);
+
+    let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
+        .max_connections(config.postgres.connection_pool_size)
+        .connect(&postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+
+    let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
     connection_info.check_migrations().await?;
     Ok(connection_info)
 }
@@ -398,7 +411,7 @@ pub async fn start_openai_compatible_gateway(
     let config = if let Some(config_file) = config_file {
         Arc::new(Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?)
     } else {
-        Arc::new(Config::default())
+        Arc::new(Config::new_empty().await?)
     };
     let gateway_handle =
         GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
@@ -407,6 +420,9 @@ pub async fn start_openai_compatible_gateway(
         .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
+        .layer(axum::middleware::from_fn(
+            crate::observability::warn_early_drop::warn_on_early_connection_drop,
+        ))
         .with_state(gateway_handle.app_state.clone());
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
@@ -463,6 +479,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -525,6 +542,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -554,6 +572,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -585,6 +604,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,

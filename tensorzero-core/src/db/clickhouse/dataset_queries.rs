@@ -2,6 +2,8 @@ use async_trait::async_trait;
 use itertools::Itertools;
 use std::collections::HashMap;
 use std::num::ParseIntError;
+use tokio::try_join;
+use uuid::Uuid;
 
 use crate::db::clickhouse::query_builder::QueryParameter;
 use crate::db::clickhouse::{ClickHouseConnectionInfo, ExternalDataInfo};
@@ -13,7 +15,7 @@ use crate::db::datasets::{
     GetDatasetMetadataParams, GetDatasetRowsParams, JsonInferenceDatapointInsert,
     StaleDatapointParams,
 };
-use crate::endpoints::datasets::{validate_dataset_name, Datapoint, DatapointKind};
+use crate::endpoints::datasets::{validate_dataset_name, DatapointKind, StoredDatapoint};
 use crate::error::{Error, ErrorDetails};
 
 #[async_trait]
@@ -372,12 +374,6 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(())
     }
 
-    async fn insert_datapoint(&self, datapoint: &DatapointInsert) -> Result<(), Error> {
-        self.insert_datapoints(std::slice::from_ref(datapoint))
-            .await?;
-        Ok(())
-    }
-
     async fn count_datapoints_for_dataset_function(
         &self,
         params: &CountDatapointsForDatasetFunctionParams,
@@ -448,7 +444,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(result)
     }
 
-    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<Datapoint, Error> {
+    async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error> {
         const DEFAULT_ALLOW_STALE_IN_GET_DATAPOINT: bool = false;
         let allow_stale = params
             .allow_stale
@@ -477,7 +473,10 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         Ok(first_datapoint)
     }
 
-    async fn get_datapoints(&self, params: &GetDatapointsParams) -> Result<Vec<Datapoint>, Error> {
+    async fn get_datapoints(
+        &self,
+        params: &GetDatapointsParams,
+    ) -> Result<Vec<StoredDatapoint>, Error> {
         let GetDatapointsParams {
             dataset_name,
             function_name,
@@ -645,7 +644,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             if line.trim().is_empty() {
                 continue;
             }
-            let datapoint: Datapoint = serde_json::from_str(line).map_err(|e| {
+            let datapoint: StoredDatapoint = serde_json::from_str(line).map_err(|e| {
                 Error::new(ErrorDetails::ClickHouseDeserialization {
                     message: format!("Failed to deserialize datapoint: {e}"),
                 })
@@ -654,6 +653,74 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         }
 
         Ok(datapoints)
+    }
+
+    /// Deletes datapoints from a dataset.
+    /// If datapoint_ids is empty, all datapoints in the dataset will be deleted.
+    /// Otherwise, only the datapoints with the given IDs will be deleted.
+    ///
+    /// Returns the number of datapoints that were deleted.
+    async fn delete_datapoints(
+        &self,
+        dataset_name: &str,
+        datapoint_ids: Option<&[Uuid]>,
+    ) -> Result<u64, Error> {
+        let datapoint_ids_filter_clause = match datapoint_ids {
+            None => Ok(String::new()),
+            Some(datapoint_ids) => {
+                if datapoint_ids.is_empty() {
+                    Err(Error::new(ErrorDetails::InvalidRequest {
+                        message: "If datapoint_ids are provided as a vector, it must be non-empty"
+                            .to_string(),
+                    }))
+                } else {
+                    Ok(format!(
+                        "AND id IN [{}]",
+                        datapoint_ids.iter().map(|id| format!("'{id}'")).join(",")
+                    ))
+                }
+            }
+        }?;
+
+        // NOTE: in the two queries below, we don't alias to staled_at because then we won't select any rows.
+        let chat_query = format!(
+            r"
+            INSERT INTO ChatInferenceDatapoint
+            SELECT
+                *
+                REPLACE (
+                    now64() AS updated_at,
+                    now64() AS staled_at
+                )
+            FROM ChatInferenceDatapoint FINAL
+            WHERE dataset_name = {{dataset_name:String}}
+            {datapoint_ids_filter_clause}
+            AND staled_at IS NULL
+            "
+        );
+
+        let json_query = format!(
+            r"
+            INSERT INTO JsonInferenceDatapoint
+            SELECT
+                *
+                REPLACE (
+                    now64() AS updated_at,
+                    now64() AS staled_at
+                )
+            FROM JsonInferenceDatapoint FINAL
+            WHERE dataset_name = {{dataset_name:String}}
+            {datapoint_ids_filter_clause}
+            AND staled_at IS NULL
+            "
+        );
+        let query_params = HashMap::from([("dataset_name", dataset_name)]);
+
+        let (chat_result, json_result) = try_join!(
+            self.run_query_synchronous(chat_query, &query_params),
+            self.run_query_synchronous(json_query, &query_params)
+        )?;
+        Ok(chat_result.metadata.written_rows + json_result.metadata.written_rows)
     }
 
     /// Inserts a batch of datapoints into the database. Internally, separate chat and JSON datapoints and write them to the appropriate tables. Note that this is not very atomic: the Chat table and Json table updates are not rolled back if one fails.
@@ -2095,7 +2162,7 @@ mod tests {
             is_custom: true,
         };
         assert!(
-            conn.insert_datapoint(&DatapointInsert::Chat(datapoint))
+            conn.insert_datapoints(&[DatapointInsert::Chat(datapoint)])
                 .await
                 .is_ok(),
             "Should insert chat datapoint successfully"
@@ -2182,7 +2249,7 @@ mod tests {
             is_custom: true,
         };
         assert!(
-            conn.insert_datapoint(&DatapointInsert::Json(datapoint))
+            conn.insert_datapoints(&[DatapointInsert::Json(datapoint)])
                 .await
                 .is_ok(),
             "Should insert json datapoint successfully"
@@ -3099,7 +3166,7 @@ mod tests {
 
         let result = conn.get_datapoint(&params).await.unwrap();
 
-        if let Datapoint::Chat(datapoint) = result {
+        if let StoredDatapoint::Chat(datapoint) = result {
             // Verify it's a chat datapoint
             assert_eq!(datapoint.dataset_name, "test_dataset");
             assert_eq!(datapoint.function_name, "test_function");
@@ -3149,7 +3216,7 @@ mod tests {
 
         let result = conn.get_datapoint(&params).await.unwrap();
 
-        if let Datapoint::Json(datapoint) = result {
+        if let StoredDatapoint::Json(datapoint) = result {
             // Verify it's a json datapoint
             assert_eq!(datapoint.dataset_name, "json_dataset");
             assert_eq!(datapoint.function_name, "json_function");
@@ -3364,7 +3431,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 1, "Should return exactly one datapoint");
-        if let Datapoint::Chat(datapoint) = &result[0] {
+        if let StoredDatapoint::Chat(datapoint) = &result[0] {
             assert_eq!(datapoint.dataset_name, "test_dataset");
             assert_eq!(datapoint.function_name, "test_function");
             assert_eq!(
@@ -3517,7 +3584,7 @@ mod tests {
             1,
             "Should return staled datapoints when allow_stale=true"
         );
-        if let Datapoint::Chat(datapoint) = &result[0] {
+        if let StoredDatapoint::Chat(datapoint) = &result[0] {
             assert!(
                 datapoint.staled_at.is_some(),
                 "Datapoint should have staled_at timestamp"
@@ -3576,20 +3643,20 @@ mod tests {
         // Count types
         let chat_count = result
             .iter()
-            .filter(|dp| matches!(dp, Datapoint::Chat(_)))
+            .filter(|dp| matches!(dp, StoredDatapoint::Chat(_)))
             .count();
         let json_count = result
             .iter()
-            .filter(|dp| matches!(dp, Datapoint::Json(_)))
+            .filter(|dp| matches!(dp, StoredDatapoint::Json(_)))
             .count();
 
         assert_eq!(chat_count, 1, "Should have 1 chat datapoint");
         assert_eq!(json_count, 1, "Should have 1 json datapoint");
 
         // Verify chat datapoint
-        if let Datapoint::Chat(chat_dp) = result
+        if let StoredDatapoint::Chat(chat_dp) = result
             .iter()
-            .find(|dp| matches!(dp, Datapoint::Chat(_)))
+            .find(|dp| matches!(dp, StoredDatapoint::Chat(_)))
             .unwrap()
         {
             assert_eq!(chat_dp.function_name, "chat_function");
@@ -3597,9 +3664,9 @@ mod tests {
         }
 
         // Verify json datapoint
-        if let Datapoint::Json(json_dp) = result
+        if let StoredDatapoint::Json(json_dp) = result
             .iter()
-            .find(|dp| matches!(dp, Datapoint::Json(_)))
+            .find(|dp| matches!(dp, StoredDatapoint::Json(_)))
             .unwrap()
         {
             assert_eq!(json_dp.function_name, "json_function");
@@ -3731,5 +3798,135 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.len(), 1, "Should return one datapoint");
+    }
+
+    #[tokio::test]
+    async fn test_delete_datapoints_with_specific_ids() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let id1 = Uuid::now_v7();
+        let id2 = Uuid::now_v7();
+
+        // Expect two queries: one for ChatInferenceDatapoint, one for JsonInferenceDatapoint
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(2)
+            .withf(move |query, parameters| {
+                assert_query_contains(query, "INSERT INTO");
+                assert_query_contains(
+                    query,
+                    "SELECT * REPLACE ( now64() AS updated_at, now64() AS staled_at )",
+                );
+                assert_query_contains(query, "WHERE dataset_name = {dataset_name:String}");
+                assert_query_contains(query, &format!("AND id IN ['{id1}','{id2}']"));
+                assert_query_contains(query, "AND staled_at IS NULL");
+
+                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 2,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .delete_datapoints("test_dataset", Some(&[id1, id2]))
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 4); // 2 from chat + 2 from json
+    }
+
+    #[tokio::test]
+    async fn test_delete_datapoints_with_empty_ids_deletes_all() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // Expect two queries: one for ChatInferenceDatapoint, one for JsonInferenceDatapoint
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(2)
+            .withf(|query, parameters| {
+                // Verify the query structure
+                assert_query_contains(query, "INSERT INTO");
+                assert_query_contains(
+                    query,
+                    "SELECT * REPLACE ( now64() AS updated_at, now64() AS staled_at )",
+                );
+                assert_query_contains(query, "WHERE dataset_name = {dataset_name:String}");
+                assert_query_contains(query, "AND staled_at IS NULL");
+
+                assert_query_does_not_contain(query, "AND id IN");
+
+                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 5,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn.delete_datapoints("test_dataset", None).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 10); // 5 from chat + 5 from json
+    }
+
+    #[tokio::test]
+    async fn test_delete_datapoints_queries_both_tables() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        let id1 = Uuid::now_v7();
+
+        // The queries are executed in parallel via try_join!, so we can't rely on ordering
+        // Just verify that both table types are queried
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(2)
+            .withf(move |query, _parameters| {
+                query.contains("ChatInferenceDatapoint") || query.contains("JsonInferenceDatapoint")
+            })
+            .returning(|query, _| {
+                // Return different row counts for each table to verify aggregation
+                if query.contains("ChatInferenceDatapoint") {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 1,
+                        },
+                    })
+                } else if query.contains("JsonInferenceDatapoint") {
+                    Ok(ClickHouseResponse {
+                        response: String::new(),
+                        metadata: ClickHouseResponseMetadata {
+                            read_rows: 0,
+                            written_rows: 2,
+                        },
+                    })
+                } else {
+                    panic!("Unexpected query: {query}");
+                }
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn.delete_datapoints("my_dataset", Some(&[id1])).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3); // 1 from chat + 2 from json
     }
 }

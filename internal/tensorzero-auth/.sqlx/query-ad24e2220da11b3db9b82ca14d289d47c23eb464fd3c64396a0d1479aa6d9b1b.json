@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at FROM tensorzero_auth_api_key WHERE (organization = $1 OR $1 is NULL) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_id",
+        "type_info": "Bpchar",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "public_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "organization",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "organization"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "workspace",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "workspace"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "disabled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "disabled_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "ad24e2220da11b3db9b82ca14d289d47c23eb464fd3c64396a0d1479aa6d9b1b"
+}

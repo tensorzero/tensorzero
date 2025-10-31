@@ -22,7 +22,7 @@ use tensorzero_core::error::Error;
 use tensorzero_core::evaluations::{EvaluationConfig, EvaluatorConfig};
 use tensorzero_core::inference::types::stored_input::StoragePathResolver;
 use tensorzero_core::{
-    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::Datapoint,
+    config::Config, db::clickhouse::ClickHouseConnectionInfo, endpoints::datasets::StoredDatapoint,
     function::FunctionConfig,
 };
 use tokio::{
@@ -444,7 +444,7 @@ pub async fn run_evaluation_core_streaming(
                 .await.map_err(|e| anyhow!("Error evaluating inference {inference_id} for datapoint {datapoint_id}: {e}"))?;
             debug!(datapoint_id = %datapoint.id(), evaluations_count = evaluation_result.len(), "Evaluations completed");
 
-            Ok::<(Datapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
+            Ok::<(StoredDatapoint, InferenceResponse, evaluators::EvaluationResult), anyhow::Error>((
                 Arc::into_inner(datapoint).ok_or_else(|| anyhow!("Failed to get datapoint for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
                 Arc::into_inner(inference_response).ok_or_else(|| anyhow!("Failed to get inference response for datapoint. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/categories/bug-reports."))?,
                 evaluation_result,
@@ -545,7 +545,7 @@ struct InferDatapointParams<'a> {
     variant_name: &'a str,
     evaluation_run_id: Uuid,
     dataset_name: &'a str,
-    datapoint: &'a Datapoint,
+    datapoint: &'a StoredDatapoint,
     input: &'a ClientInput,
     evaluation_name: &'a str,
     function_config: &'a FunctionConfig,

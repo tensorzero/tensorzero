@@ -16,9 +16,9 @@ use tensorzero_core::{
     endpoints::inference::{InferenceClients, InferenceCredentials},
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput, ResolvedInputMessage,
-        ResolvedInputMessageContent, Role, StoredContentBlock, StoredRequestMessage, System,
-        TemplateInput, Text,
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, ResolvedInput,
+        ResolvedInputMessage, ResolvedInputMessageContent, Role, StoredContentBlock,
+        StoredRequestMessage, System, Template, Text,
     },
     model_table::ProviderTypeDefaultCredentials,
     rate_limiting::ScopeInfo,
@@ -384,7 +384,7 @@ async fn embed_insert_example(
 
     let client = TensorzeroHttpClient::new().unwrap();
     let request = EmbeddingRequest {
-        input: serde_json::to_string(&input.clone().into_stored_input())
+        input: serde_json::to_string(&input.clone().into_stored_input().unwrap())
             .unwrap()
             .into(),
         dimensions: None,
@@ -416,7 +416,7 @@ async fn embed_insert_example(
     let id = Uuid::now_v7();
     let embedding = &response.embeddings[0];
 
-    let input_string = serde_json::to_string(&input.clone().into_stored_input()).unwrap();
+    let input_string = serde_json::to_string(&input.clone().into_stored_input().unwrap()).unwrap();
     let row = serde_json::json!({
         "id": id,
         "function_name": function_name,
@@ -461,12 +461,10 @@ pub async fn test_dicl_inference_request_simple() {
     let mut tasks = Vec::new();
 
     let input = ResolvedInput {
-        system: Some(System::Template(
-            json!({"assistant_name": "Dr. Mehta"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Dr. Mehta".into(),
+        )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text(Text {
@@ -486,12 +484,10 @@ pub async fn test_dicl_inference_request_simple() {
     ));
 
     let input = ResolvedInput {
-        system: Some(System::Template(
-            json!({"assistant_name": "Pinocchio"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Pinocchio".into(),
+        )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text(Text {
@@ -512,12 +508,10 @@ pub async fn test_dicl_inference_request_simple() {
     ));
 
     let input = ResolvedInput {
-        system: Some(System::Template(
-            json!({"assistant_name": "Pinocchio"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Pinocchio".into(),
+        )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text(Text {
@@ -540,12 +534,10 @@ pub async fn test_dicl_inference_request_simple() {
     ));
 
     let input = ResolvedInput {
-        system: Some(System::Template(
-            json!({"assistant_name": "Pinocchio"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Pinocchio".into(),
+        )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
             content: vec![ResolvedInputMessageContent::Text(Text {
@@ -1063,17 +1055,18 @@ async fn test_dicl_json_request() {
     let mut tasks = Vec::new();
 
     let input = ResolvedInput {
-        system: Some(System::Template(
-            json!({"assistant_name": "Dr. Mehta"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Dr. Mehta".into(),
+        )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![ResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"country": "Canada"}).as_object().unwrap().clone(),
+                arguments: Arguments(serde_json::Map::from_iter([(
+                    "country".to_string(),
+                    "Canada".into(),
+                )])),
             })],
         }],
     };
@@ -1092,17 +1085,18 @@ async fn test_dicl_json_request() {
     ));
 
     let input = ResolvedInput {
-        system: Some(System::Template(
-            json!({"assistant_name": "Pinocchio"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Pinocchio".into(),
+        )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![ResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"country": "India"}).as_object().unwrap().clone(),
+                arguments: Arguments(serde_json::Map::from_iter([(
+                    "country".to_string(),
+                    "India".into(),
+                )])),
             })],
         }],
     };
@@ -1121,17 +1115,18 @@ async fn test_dicl_json_request() {
     ));
 
     let input = ResolvedInput {
-        system: Some(System::Template(
-            json!({"assistant_name": "Pinocchio"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Pinocchio".into(),
+        )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![ResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"country": "USA"}).as_object().unwrap().clone(),
+                arguments: Arguments(serde_json::Map::from_iter([(
+                    "country".to_string(),
+                    "USA".into(),
+                )])),
             })],
         }],
     };
@@ -1149,17 +1144,18 @@ async fn test_dicl_json_request() {
     ));
 
     let input = ResolvedInput {
-        system: Some(System::Template(
-            json!({"assistant_name": "Pinocchio"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Pinocchio".into(),
+        )])))),
         messages: vec![ResolvedInputMessage {
             role: Role::User,
-            content: vec![ResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![ResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"country": "England"}).as_object().unwrap().clone(),
+                arguments: Arguments(serde_json::Map::from_iter([(
+                    "country".to_string(),
+                    "England".into(),
+                )])),
             })],
         }],
     };

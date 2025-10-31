@@ -11,7 +11,9 @@ use tensorzero_core::{
     },
     endpoints::feedback::{feedback, Params},
     http::TensorzeroHttpClient,
-    inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind},
+    inference::types::{
+        Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, System, Text, TextKind,
+    },
     utils::gateway::GatewayHandle,
 };
 use tokio::time::{sleep, Duration};
@@ -181,7 +183,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_comment_feedback_validation_disabled() {
-    let mut config = Config::default();
+    let mut config = Config::new_empty().await.unwrap();
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
@@ -1205,7 +1207,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_float_feedback_validation_disabled() {
-    let mut config = Config::default();
+    let mut config = Config::new_empty().await.unwrap();
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -1442,7 +1444,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_boolean_feedback_validation_disabled() {
-    let mut config = Config::default();
+    let mut config = Config::new_empty().await.unwrap();
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,
@@ -1507,7 +1509,9 @@ async fn test_fast_inference_then_feedback() {
                     variant_name: None,
                     episode_id: None,
                     input: tensorzero::ClientInput {
-                        system: Some(System::Template(json!({"assistant_name": "Alfred Pennyworth"}).as_object().unwrap().clone())),
+                        system: Some(System::Template(Arguments(serde_json::Map::from_iter([
+                            ("assistant_name".to_string(), "Alfred Pennyworth".into()),
+                        ])))),
                         messages: vec![tensorzero::ClientInputMessage {
                             role: Role::User,
                             content: vec![tensorzero::ClientInputMessageContent::Text(TextKind::Text {

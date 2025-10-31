@@ -9,8 +9,8 @@ use uuid::Uuid;
 use super::use_mock_inference_provider;
 use tensorzero::{
     ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
-    System,
+    DynamicToolParams, InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams,
+    RenderedSample, Role, System,
 };
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
@@ -20,7 +20,7 @@ use tensorzero_core::{
     },
     http::TensorzeroHttpClient,
     inference::types::{
-        ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
+        Arguments, ContentBlockChatOutput, ContentBlockChunk, JsonInferenceOutput, ModelInput,
         ResolvedContentBlock, ResolvedRequestMessage, StoredContentBlock, StoredInput,
         StoredInputMessage, StoredInputMessageContent, StoredRequestMessage, Text, TextKind, Usage,
     },
@@ -202,12 +202,10 @@ pub async fn test_dicl_optimization_chat() {
 
     // Test inference with the DICL variant using Pinocchio pattern
     let input = ClientInput {
-        system: Some(System::Template(
-            serde_json::json!({"assistant_name": "Pinocchio"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Pinocchio".into(),
+        )])))),
         messages: vec![ClientInputMessage {
             role: Role::User,
             content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -485,12 +483,10 @@ pub async fn test_dicl_optimization_json() {
 
     // Test inference with the DICL variant using Pinocchio pattern
     let input = ClientInput {
-        system: Some(System::Template(
-            serde_json::json!({"assistant_name": "Pinocchio"})
-                .as_object()
-                .unwrap()
-                .clone(),
-        )),
+        system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+            "assistant_name".to_string(),
+            "Pinocchio".into(),
+        )])))),
         messages: vec![ClientInputMessage {
             role: Role::User,
             content: vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -1195,7 +1191,7 @@ fn create_pinocchio_example(
         stored_input: StoredInput {
             system: system
                 .as_ref()
-                .map(|s| System::Template(s.as_object().unwrap().clone())),
+                .map(|s| System::Template(Arguments(s.as_object().unwrap().to_owned()))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -1207,7 +1203,7 @@ fn create_pinocchio_example(
         stored_output: Some(stored_output),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         output_schema: if is_json_function {
             Some(json!({
                 "type": "object",

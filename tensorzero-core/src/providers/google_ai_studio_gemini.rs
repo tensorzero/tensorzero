@@ -22,10 +22,9 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::resolved_input::FileWithPath;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
-    PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
+    ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseChunk, RequestMessage, Usage,
 };
 use crate::inference::types::{
@@ -604,14 +603,11 @@ async fn convert_non_thought_content_block(
         }
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
-            let FileWithPath {
-                file,
-                storage_path: _,
-            } = &*resolved_file;
+            let ObjectStorageFile { file, data } = &*resolved_file;
             Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: file.mime_type.to_string(),
-                    data: file.data()?.to_string(),
+                    data: data.to_string(),
                 },
             }))
         }
@@ -635,7 +631,7 @@ struct GeminiFunctionDeclaration<'a> {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiTool<'a> {
-    function_declarations: Vec<GeminiFunctionDeclaration<'a>>,
+    pub function_declarations: Vec<GeminiFunctionDeclaration<'a>>,
     // TODO (if needed): code_execution ([docs](https://ai.google.dev/api/caching#CodeExecution))
 }
 
@@ -651,16 +647,6 @@ impl<'a> From<&'a ToolConfig> for GeminiFunctionDeclaration<'a> {
             name: tool.name(),
             description: tool.description(),
             parameters,
-        }
-    }
-}
-
-impl<'a> From<&'a Vec<ToolConfig>> for GeminiTool<'a> {
-    fn from(tools: &'a Vec<ToolConfig>) -> Self {
-        let function_declarations: Vec<GeminiFunctionDeclaration<'a>> =
-            tools.iter().map(Into::into).collect();
-        GeminiTool {
-            function_declarations,
         }
     }
 }
@@ -827,10 +813,15 @@ fn prepare_tools<'a>(
 ) {
     match &request.tool_config {
         Some(tool_config) => {
-            if tool_config.tools_available.is_empty() {
+            if !tool_config.any_tools_available() {
                 return (None, None);
             }
-            let tools = Some(vec![(&tool_config.tools_available).into()]);
+            let tools = Some(vec![GeminiTool {
+                function_declarations: tool_config
+                    .tools_available()
+                    .map(GeminiFunctionDeclaration::from)
+                    .collect(),
+            }]);
             let tool_config = Some((&tool_config.tool_choice).into());
             (tools, tool_config)
         }
@@ -1336,7 +1327,7 @@ mod tests {
     use super::*;
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{AllowedTools, ToolCallConfig, ToolResult};
+    use crate::tool::{ToolCallConfig, ToolResult};
 
     #[test]
     #[traced_test]
@@ -1493,7 +1484,13 @@ mod tests {
 
     #[test]
     fn test_from_vec_tool() {
-        let tool = GeminiTool::from(&MULTI_TOOL_CONFIG.tools_available);
+        let tools_vec: Vec<&ToolConfig> = MULTI_TOOL_CONFIG.tools_available().collect();
+        let tool = GeminiTool {
+            function_declarations: tools_vec
+                .iter()
+                .map(|&t| GeminiFunctionDeclaration::from(t))
+                .collect(),
+        };
         assert_eq!(
             tool,
             GeminiTool {
@@ -1501,12 +1498,12 @@ mod tests {
                     GeminiFunctionDeclaration {
                         name: "get_temperature",
                         description: "Get the current temperature in a given location",
-                        parameters: MULTI_TOOL_CONFIG.tools_available[0].parameters().clone(),
+                        parameters: tools_vec[0].parameters().clone(),
                     },
                     GeminiFunctionDeclaration {
                         name: "query_articles",
                         description: "Query articles from Wikipedia",
-                        parameters: MULTI_TOOL_CONFIG.tools_available[1].parameters().clone(),
+                        parameters: tools_vec[1].parameters().clone(),
                     }
                 ]
             }
@@ -1567,13 +1564,7 @@ mod tests {
     #[tokio::test]
     async fn test_google_ai_studio_gemini_request_try_from() {
         // Test Case 1: Empty message list
-        let tool_config = ToolCallConfig {
-            tools_available: vec![],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: None,
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
-        };
+        let tool_config = ToolCallConfig::default();
         let inference_request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![],

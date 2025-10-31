@@ -772,7 +772,7 @@ async fn write_start_batch_inference<'a>(
             function_name: metadata.function_name.into(),
             variant_name: metadata.variant_name.into(),
             episode_id: metadata.episode_ids[i],
-            input: resolved_input.into_stored_input(),
+            input: resolved_input.into_stored_input()?,
             input_messages: try_join_all(
                 row.input_messages
                     .into_iter()
@@ -1020,8 +1020,17 @@ pub async fn write_completed_batch_inference<'a>(
             cached: false,
             finish_reason,
         };
-        let tool_config: Option<ToolCallConfig> =
-            tool_params.map(ToolCallConfigDatabaseInsert::into);
+        let tool_config: Option<ToolCallConfig> = match tool_params {
+            Some(db_insert) => match db_insert.into_tool_call_config(&function, &config.tools) {
+                Ok(config) => config,
+                Err(_) => {
+                    // Skip this inference if we can't convert the tool config
+                    // Error will be logged on construction in `into_tool_call_config`
+                    continue;
+                }
+            },
+            None => None,
+        };
         let output_schema = match output_schema
             .map(|s| DynamicJSONSchema::parse_from_str(&s))
             .transpose()

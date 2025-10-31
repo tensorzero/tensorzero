@@ -389,9 +389,7 @@ fn lazy_content_to_resolved_discarding_incompatible(
     content: LazyResolvedInputMessageContent,
 ) -> Result<ResolvedInputMessageContent, Error> {
     Ok(match content {
-        LazyResolvedInputMessageContent::Text { text } => {
-            ResolvedInputMessageContent::Text(Text { text })
-        }
+        LazyResolvedInputMessageContent::Text(text) => ResolvedInputMessageContent::Text(text),
         LazyResolvedInputMessageContent::Template(template) => {
             // Stringify template as JSON for DICL
             let json_str = serde_json::to_string(&serde_json::json!({
@@ -412,8 +410,8 @@ fn lazy_content_to_resolved_discarding_incompatible(
         LazyResolvedInputMessageContent::ToolResult(tool_result) => {
             ResolvedInputMessageContent::ToolResult(tool_result)
         }
-        LazyResolvedInputMessageContent::RawText { value } => {
-            ResolvedInputMessageContent::RawText { value }
+        LazyResolvedInputMessageContent::RawText(raw_text) => {
+            ResolvedInputMessageContent::RawText(raw_text)
         }
         LazyResolvedInputMessageContent::Thought(thought) => {
             ResolvedInputMessageContent::Thought(thought)
@@ -425,7 +423,7 @@ fn lazy_content_to_resolved_discarding_incompatible(
                 provider_type: "dicl".to_string(),
             }));
         }
-        // 'Unknown' blocks will need special handling (we don't want the literal string "unknown")
+        // `Unknown` blocks will need special handling (we don't want the literal string "unknown")
         // to show up in the LLM input, so reject the request for now.
         LazyResolvedInputMessageContent::Unknown { .. } => {
             return Err(Error::new(ErrorDetails::UnsupportedContentBlockType {
@@ -495,7 +493,7 @@ impl DiclConfig {
     ) -> Result<(Vec<Example>, EmbeddingResponseWithMetadata), Error> {
         // Serialize the input so that it can be embedded
         let serialized_input = serde_json::to_string(
-            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input(),
+            &lazy_input_to_input_rejecting_incompatible(input.clone())?.into_stored_input()?,
         )
         .map_err(|e| {
             Error::new(ErrorDetails::Serialization {
@@ -671,7 +669,7 @@ impl DiclConfig {
     }
 
     fn prepare_input_message(input: &ResolvedInput) -> Result<RequestMessage, Error> {
-        let content = vec![serde_json::to_string(&input.clone().into_stored_input())
+        let content = vec![serde_json::to_string(&input.clone().into_stored_input()?)
             .map_err(|e| {
                 Error::new(ErrorDetails::Serialization {
                     message: format!(
@@ -713,7 +711,9 @@ impl DiclConfig {
                                     ),
                                 })
                             })?;
-                            Ok(LazyResolvedInputMessageContent::Text { text: json_str })
+                            Ok(LazyResolvedInputMessageContent::Text(Text {
+                                text: json_str,
+                            }))
                         }
                         other => Ok(other.clone()),
                     }
@@ -909,6 +909,7 @@ mod tests {
     use crate::config::SchemaData;
     use crate::endpoints::inference::{ChatCompletionInferenceParams, InferenceIds};
     use crate::experimentation::ExperimentationConfig;
+    use crate::inference::types::file::ObjectStoragePointer;
     use crate::inference::types::resolved_input::LazyResolvedInputMessage;
     use crate::inference::types::stored_input::StoredFile;
     use crate::inference::types::StoredInputMessage;
@@ -918,9 +919,8 @@ mod tests {
     use crate::{
         function::{FunctionConfigChat, FunctionConfigJson},
         inference::types::{
-            file::Base64FileMetadata,
             storage::{StorageKind, StoragePath},
-            ResolvedInputMessage, ResolvedInputMessageContent, Role, Text,
+            Arguments, ResolvedInputMessage, ResolvedInputMessageContent, Role, Template, Text,
         },
         tool::{ToolCall, ToolCallOutput},
     };
@@ -934,12 +934,12 @@ mod tests {
 
         // Mock Input data
         let input_data = StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"type": "system", "content": "System message"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![
                 StoredInputMessage {
                     role: Role::User,
@@ -1038,12 +1038,12 @@ mod tests {
     fn test_prepare_input_message() {
         // Mock Input data
         let input_data = ResolvedInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Dr. Mehta"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![
                 ResolvedInputMessage {
                     role: Role::User,
@@ -1075,7 +1075,7 @@ mod tests {
 
         // The content should contain the serialized Input as a Text ContentBlock
         let expected_serialized_input =
-            serde_json::to_string(&input_data.clone().into_stored_input()).unwrap();
+            serde_json::to_string(&input_data.clone().into_stored_input().unwrap()).unwrap();
         let expected_content = vec![ContentBlock::Text(Text {
             text: expected_serialized_input.clone(),
         })];
@@ -1088,12 +1088,12 @@ mod tests {
         let raw_examples = vec![
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(System::Template(
+                    system: Some(System::Template(Arguments(
                         json!({"assistant_name": "Dr. Mehta"})
                             .as_object()
                             .unwrap()
                             .clone(),
-                    )),
+                    ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1110,28 +1110,28 @@ mod tests {
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(System::Template(
+                    system: Some(System::Template(Arguments(
                         json!({"assistant_name": "Pinocchio"})
                             .as_object()
                             .unwrap()
                             .clone(),
-                    )),
+                    ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![
                             StoredInputMessageContent::Text(Text {
                                 text: "What is the name of the capital city of Japan?".to_string(),
                             }),
-                            StoredInputMessageContent::File(Box::new(StoredFile {
-                                file: Base64FileMetadata {
-                                    url: None,
+                            StoredInputMessageContent::File(Box::new(StoredFile(
+                                ObjectStoragePointer {
+                                    source_url: None,
                                     mime_type: mime::IMAGE_PNG,
+                                    storage_path: StoragePath {
+                                        kind: StorageKind::Disabled,
+                                        path: Default::default(),
+                                    },
                                 },
-                                storage_path: StoragePath {
-                                    kind: StorageKind::Disabled,
-                                    path: Default::default(),
-                                },
-                            })),
+                            ))),
                         ],
                     }],
                 })
@@ -1162,12 +1162,12 @@ mod tests {
         // Create a raw example with missing output
         let raw_examples = vec![RawExample {
             input: serde_json::to_string(&StoredInput {
-                system: Some(System::Template(
+                system: Some(System::Template(Arguments(
                     json!({"assistant_name": "Dr. Mehta"})
                         .as_object()
                         .unwrap()
                         .clone(),
-                )),
+                ))),
                 messages: vec![StoredInputMessage {
                     role: Role::User,
                     content: vec![StoredInputMessageContent::Text(Text {
@@ -1206,12 +1206,12 @@ mod tests {
         let raw_examples = vec![
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(System::Template(
+                    system: Some(System::Template(Arguments(
                         json!({"assistant_name": "Dr. Mehta"})
                             .as_object()
                             .unwrap()
                             .clone(),
-                    )),
+                    ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1228,12 +1228,12 @@ mod tests {
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(System::Template(
+                    system: Some(System::Template(Arguments(
                         json!({"assistant_name": "Pinocchio"})
                             .as_object()
                             .unwrap()
                             .clone(),
-                    )),
+                    ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1276,12 +1276,12 @@ mod tests {
         let json_raw_examples = vec![
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(System::Template(
+                    system: Some(System::Template(Arguments(
                         json!({"assistant_name": "JsonTester"})
                             .as_object()
                             .unwrap()
                             .clone(),
-                    )),
+                    ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1304,12 +1304,12 @@ mod tests {
             },
             RawExample {
                 input: serde_json::to_string(&StoredInput {
-                    system: Some(System::Template(
+                    system: Some(System::Template(Arguments(
                         json!({"assistant_name": "JsonTester"})
                             .as_object()
                             .unwrap()
                             .clone(),
-                    )),
+                    ))),
                     messages: vec![StoredInputMessage {
                         role: Role::User,
                         content: vec![StoredInputMessageContent::Text(Text {
@@ -1376,15 +1376,15 @@ mod tests {
             messages: vec![
                 LazyResolvedInputMessage {
                     role: Role::User,
-                    content: vec![LazyResolvedInputMessageContent::Text {
+                    content: vec![LazyResolvedInputMessageContent::Text(Text {
                         text: "Hello, how are you?".to_string(),
-                    }],
+                    })],
                 },
                 LazyResolvedInputMessage {
                     role: Role::Assistant,
-                    content: vec![LazyResolvedInputMessageContent::Text {
+                    content: vec![LazyResolvedInputMessageContent::Text(Text {
                         text: "I'm doing great!".to_string(),
-                    }],
+                    })],
                 },
             ],
         };
@@ -1489,17 +1489,18 @@ mod tests {
             system: Some(System::Text("Custom system from input".to_string())),
             messages: vec![LazyResolvedInputMessage {
                 role: Role::User,
-                content: vec![LazyResolvedInputMessageContent::Text {
+                content: vec![LazyResolvedInputMessageContent::Text(Text {
                     text: "Hello!".to_string(),
-                }],
+                })],
             }],
         };
 
         // Create an example
         let example_input = StoredInput {
-            system: Some(System::Template(
-                json!({"context": "example"}).as_object().unwrap().clone(),
-            )),
+            system: Some(System::Template(Arguments(serde_json::Map::from_iter([(
+                "context".to_string(),
+                "example".into(),
+            )])))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -1671,16 +1672,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_prepare_request_message_dicl_with_template() {
-        use crate::inference::types::TemplateInput;
-
         let message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: serde_json::json!({"key": "value"})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
+                arguments: Arguments(
+                    serde_json::json!({"key": "value"})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ),
             })],
         };
         let templates = TemplateConfig::default();
@@ -1706,9 +1707,9 @@ mod tests {
     async fn test_prepare_request_message_dicl_without_template() {
         let message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Text {
+            content: vec![LazyResolvedInputMessageContent::Text(Text {
                 text: "Hello".to_string(),
-            }],
+            })],
         };
         let templates = TemplateConfig::default();
 
@@ -1728,14 +1729,14 @@ mod tests {
 
     #[test]
     fn test_lazy_content_to_resolved_with_template() {
-        use crate::inference::types::TemplateInput;
-
-        let template = LazyResolvedInputMessageContent::Template(TemplateInput {
+        let template = LazyResolvedInputMessageContent::Template(Template {
             name: "test_template".to_string(),
-            arguments: serde_json::json!({"foo": "bar"})
-                .as_object()
-                .unwrap()
-                .clone(),
+            arguments: Arguments(
+                serde_json::json!({"foo": "bar"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
         });
 
         let result = lazy_content_to_resolved_discarding_incompatible(template).unwrap();
