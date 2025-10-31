@@ -147,7 +147,7 @@ async fn test_write_poll_batch_inference() {
         status,
         errors,
     });
-    let config = Config::default();
+    let config = Config::new_empty().await.unwrap();
 
     // Write a pending batch
     let poll_inference_response = write_poll_batch_inference(
@@ -328,10 +328,8 @@ async fn test_write_read_completed_batch_inference_chat() {
         variants: HashMap::new(),
         ..Default::default()
     }));
-    let config = Config {
-        functions: HashMap::from([(function_name.to_string(), function_config)]),
-        ..Default::default()
-    };
+    let mut config = Config::new_empty().await.unwrap();
+    config.functions = HashMap::from([(function_name.to_string(), function_config)]);
     let batch_model_inference_rows =
         write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
     let inference_id1 = batch_model_inference_rows[0].inference_id;
@@ -530,10 +528,8 @@ async fn test_write_read_completed_batch_inference_json() {
         output_schema,
         ..Default::default()
     }));
-    let config = Config {
-        functions: HashMap::from([(function_name.to_string(), function_config)]),
-        ..Default::default()
-    };
+    let mut config = Config::new_empty().await.unwrap();
+    config.functions = HashMap::from([(function_name.to_string(), function_config)]);
     let batch_model_inference_rows =
         write_2_batch_model_inference_rows(&clickhouse, batch_id).await;
     let inference_id1 = batch_model_inference_rows[0].inference_id;
