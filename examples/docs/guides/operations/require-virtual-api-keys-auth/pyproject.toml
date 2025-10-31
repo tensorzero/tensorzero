@@ -1,0 +1,9 @@
+[project]
+name = "require-virtual-api-keys-auth"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=2.6.1",
+    "tensorzero>=2025.10.9",
+]
