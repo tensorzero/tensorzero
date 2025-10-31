@@ -25,7 +25,7 @@ use python_helpers::{
     python_uuid_to_uuid,
 };
 use tensorzero_core::{
-    config::{ConfigPyClass, FunctionsConfigPyClass},
+    config::{ConfigPyClass, FunctionsConfigPyClass, UninitializedVariantInfo},
     db::clickhouse::query_builder::OrderBy,
     function::{FunctionConfigChatPyClass, FunctionConfigJsonPyClass, VariantsConfigPyClass},
     inference::types::{
@@ -340,7 +340,7 @@ impl BaseTensorZeroGateway {
         })
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
         this: PyRef<'_, Self>,
@@ -366,6 +366,7 @@ impl BaseTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             this.py(),
@@ -391,6 +392,7 @@ impl BaseTensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            internal_dynamic_variant_config,
         )?;
         serialize_to_dict(this.py(), params)
     }
@@ -463,6 +465,7 @@ impl BaseTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: bool,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<ClientInferenceParams> {
         let episode_id = episode_id
             .map(|id| python_uuid_to_uuid("episode_id", id))
@@ -537,6 +540,13 @@ impl BaseTensorZeroGateway {
                 Default::default()
             };
 
+        let internal_dynamic_variant_config: Option<UninitializedVariantInfo> =
+            if let Some(config) = internal_dynamic_variant_config {
+                Some(deserialize_from_pyobj(py, config)?)
+            } else {
+                None
+            };
+
         let input: ClientInput = deserialize_from_pyobj(py, &input)?;
 
         Ok(ClientInferenceParams {
@@ -563,8 +573,8 @@ impl BaseTensorZeroGateway {
             include_original_response,
             extra_body,
             extra_headers,
-            internal_dynamic_variant_config: None,
             otlp_traces_extra_headers: otlp_traces_extra_headers.unwrap_or_default(),
+            internal_dynamic_variant_config,
         })
     }
 }
@@ -758,7 +768,7 @@ impl TensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -821,6 +831,7 @@ impl TensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let client = this.as_super().client.clone();
         let fut = client.inference(BaseTensorZeroGateway::prepare_inference_params(
@@ -847,6 +858,7 @@ impl TensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            internal_dynamic_variant_config,
         )?);
 
         // We're in the synchronous `TensorZeroGateway` class, so we need to block on the Rust future,
@@ -1067,9 +1079,9 @@ impl TensorZeroGateway {
         let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
         let fut = client.get_datapoint(dataset_name, datapoint_id);
-        tokio_block_on_without_gil(this.py(), fut)
-            .map(|x| x.into_pyobject(this.py()))
-            .map_err(|e| convert_error(this.py(), e))?
+        let wire: Datapoint =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        wire.into_pyobject(this.py())
     }
 
     /// Make a GET request to the /datasets/{dataset_name}/datapoints endpoint.
@@ -1088,12 +1100,12 @@ impl TensorZeroGateway {
         let fut = client.list_datapoints(dataset_name, function_name, limit, offset);
         let resp = tokio_block_on_without_gil(this.py(), fut);
         match resp {
-            Ok(resp) => {
-                let datapoints = resp
+            Ok(datapoints) => {
+                let py_datapoints = datapoints
                     .into_iter()
                     .map(|x| x.into_pyobject(this.py()))
                     .collect::<Result<Vec<_>, _>>()?;
-                PyList::new(this.py(), datapoints)
+                PyList::new(this.py(), py_datapoints)
             }
             Err(e) => Err(convert_error(this.py(), e)),
         }
@@ -1232,7 +1244,9 @@ impl TensorZeroGateway {
             ..Default::default()
         };
         let fut = client.experimental_list_inferences(params);
-        tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))
+        let wires: Vec<StoredInference> =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        Ok(wires)
     }
 
     /// DEPRECATED: use `experimental_render_samples` instead.
@@ -1260,6 +1274,11 @@ impl TensorZeroGateway {
         let config = client
             .get_config()
             .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_inferences = stored_inferences
             .iter()
             .map(|x| deserialize_from_stored_sample(this.py(), x, &config))
@@ -1291,6 +1310,11 @@ impl TensorZeroGateway {
         let config = client
             .get_config()
             .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
             .map(|x| deserialize_from_stored_sample(this.py(), x, &config))
@@ -1538,7 +1562,7 @@ impl AsyncTensorZeroGateway {
         }
     }
 
-    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None))]
+    #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, additional_tools=None, provider_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None,tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     /// Make a request to the /inference endpoint.
     ///
@@ -1601,6 +1625,7 @@ impl AsyncTensorZeroGateway {
         extra_headers: Option<&Bound<'_, PyList>>,
         include_original_response: Option<bool>,
         otlp_traces_extra_headers: Option<HashMap<String, String>>,
+        internal_dynamic_variant_config: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Bound<'a, PyAny>> {
         let params = BaseTensorZeroGateway::prepare_inference_params(
             py,
@@ -1626,6 +1651,7 @@ impl AsyncTensorZeroGateway {
             extra_headers,
             include_original_response.unwrap_or(false),
             otlp_traces_extra_headers,
+            internal_dynamic_variant_config,
         )?;
         let client = this.as_super().client.clone();
         let gateway = this.into_pyobject(py)?.into_any().unbind();
@@ -1918,12 +1944,12 @@ impl AsyncTensorZeroGateway {
         dataset_name: String,
         datapoint_id: Bound<'_, PyAny>,
     ) -> PyResult<Bound<'a, PyAny>> {
-        let client = this.as_super().client.clone();
         let datapoint_id = python_uuid_to_uuid("datapoint_id", datapoint_id)?;
+        let client = this.as_super().client.clone();
         pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
             let res = client.get_datapoint(dataset_name, datapoint_id).await;
             Python::attach(|py| match res {
-                Ok(resp) => Ok(resp.into_py_any(py)?),
+                Ok(wire) => Ok(wire.into_py_any(py)?),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -1947,7 +1973,7 @@ impl AsyncTensorZeroGateway {
                 .list_datapoints(dataset_name, function_name, limit, offset)
                 .await;
             Python::attach(|py| match res {
-                Ok(datapoints) => Ok(PyList::new(py, datapoints)?.unbind()),
+                Ok(wire_datapoints) => Ok(PyList::new(py, wire_datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2093,7 +2119,7 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.experimental_list_inferences(params).await;
             Python::attach(|py| match res {
-                Ok(stored_inferences) => Ok(PyList::new(py, stored_inferences)?.unbind()),
+                Ok(wire_inferences) => Ok(PyList::new(py, wire_inferences)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
@@ -2135,6 +2161,11 @@ impl AsyncTensorZeroGateway {
         let config = client
             .get_config()
             .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_inferences = stored_inferences
             .iter()
             .map(|x| deserialize_from_stored_sample(this.py(), x, &config))
@@ -2174,6 +2205,11 @@ impl AsyncTensorZeroGateway {
         let config = client
             .get_config()
             .map_err(|e| PyValueError::new_err(format!("Failed to get config: {e:?}")))?;
+        // Enter the Tokio runtime context while still holding the GIL
+        // This is needed because deserialize_from_stored_sample may use tokio::spawn internally
+        // for JSON schema compilation
+        // TODO (#4259): remove the tokio spawn from that function and remove this guard.
+        let _guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let stored_samples = stored_samples
             .iter()
             .map(|x| deserialize_from_stored_sample(this.py(), x, &config))
