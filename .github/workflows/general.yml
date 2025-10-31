@@ -780,7 +780,8 @@ jobs:
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   run-merge-queue-checks:
-    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
+    needs: [build-gateway-e2e-container]
+    if: (github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group') || true
     permissions:
       # Permission to checkout the repository
       contents: read
