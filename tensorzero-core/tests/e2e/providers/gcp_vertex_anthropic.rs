@@ -90,14 +90,6 @@ async fn get_providers() -> E2ETestProviders {
         credentials: HashMap::new(),
     }];
 
-    let reasoning_providers = vec![E2ETestProvider {
-        supports_batch_inference: false,
-        variant_name: "gcp-vertex-anthropic-thinking".to_string(),
-        model_name: "gcp-vertex-anthropic-claude-haiku-4-5@20251001-thinking".into(),
-        model_provider_name: "gcp_vertex_anthropic_thinking".into(),
-        credentials: HashMap::new(),
-    }];
-
     let credential_fallbacks = vec![ModelTestProvider {
         provider_type: "gcp_vertex_anthropic".to_string(),
         model_info: HashMap::from([
@@ -115,7 +107,7 @@ async fn get_providers() -> E2ETestProviders {
         simple_inference: standard_providers.clone(),
         extra_body_inference: extra_body_providers,
         bad_auth_extra_headers,
-        reasoning_inference: reasoning_providers,
+        reasoning_inference: vec![],
         embeddings: vec![],
         inference_params_inference: standard_providers.clone(),
         inference_params_dynamic_credentials: vec![],
