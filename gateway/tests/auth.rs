@@ -403,7 +403,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
         "Disabled key should still work due to cache"
     );
 
-    // Wait for cache to expire (2s TTL + buffer)
+    // Wait for cache to expire (4s TTL + buffer)
     tokio::time::sleep(tokio::time::Duration::from_millis(4100)).await;
 
     // Third request - should now fail because cache expired
