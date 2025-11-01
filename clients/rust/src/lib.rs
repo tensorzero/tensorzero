@@ -259,6 +259,8 @@ impl ClientExt for Client {
         }
     }
 
+    /// Gets the config from the embedded gateway
+    /// Returns None for HTTP gateway mode
     fn config(&self) -> Option<&Config> {
         match self.mode() {
             ClientMode::HTTPGateway(_) => None,
@@ -300,11 +302,11 @@ impl ClientExt for Client {
         &self,
         mut params: WorkflowEvaluationRunParams,
     ) -> Result<WorkflowEvaluationRunResponse, TensorZeroError> {
-        // Validate tags before adding git info
+        // We validate the tags here since we're going to add git information to the tags afterwards and set internal to true
         validate_tags(&params.tags, false)
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
 
-        // Apply git information to tags
+        // Apply the git information to the tags so it gets stored for our workflow evaluation run
         if let Ok(git_info) = GitInfo::new() {
             params.tags.extend(git_info.into_tags());
         }
@@ -712,6 +714,7 @@ impl ClientExt for Client {
         }
     }
 
+    /// Poll an optimization job for status.
     async fn experimental_poll_optimization(
         &self,
         job_handle: &OptimizationJobHandle,
