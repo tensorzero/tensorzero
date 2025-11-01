@@ -1287,7 +1287,15 @@ model = "test-model"
         result.err()
     );
 
+    // Verify fallback was attempted (DEBUG log)
     assert!(logs_contain("attempting fallback"));
+
+    // Verify no ERROR was logged since fallback succeeded
+    assert!(
+        !logs_contain("API key missing"),
+        "Should not log ERROR when fallback succeeds for {}",
+        provider.provider_type
+    );
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
