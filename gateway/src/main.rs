@@ -13,6 +13,7 @@ use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
+use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
@@ -78,7 +79,9 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
     let pool = sqlx_alpha::PgPool::connect(&postgres_url).await?;
 
     // Create the key with default organization and workspace
-    let key = tensorzero_auth::postgres::create_key("default", "default", None, &pool).await?;
+    let key =
+        tensorzero_auth::postgres::create_key(DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE, None, &pool)
+            .await?;
 
     // Print only the API key to stdout for easy machine parsing
     print_key(&key);
