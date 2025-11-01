@@ -31,6 +31,7 @@ permissions:
 
 jobs:
   ui-tests-e2e-model-inference-cache:
+    name: ui-tests-e2e-model-inference-cache (auth=${{ matrix.auth_enabled }})
     runs-on: namespace-profile-tensorzero-8x16
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
@@ -181,23 +182,37 @@ jobs:
         if: matrix.auth_enabled == true
         working-directory: ui
         run: |
-          # Start postgres first so we can generate the key
+          echo "Starting postgres..."
           docker compose -f fixtures/docker-compose.e2e.yml up postgres -d
+
+          echo "Waiting for postgres to be healthy..."
           docker compose -f fixtures/docker-compose.e2e.yml wait postgres
+          echo "Postgres is ready"
 
-          # Run migrations
+          echo "Starting gateway postgres migrations..."
           docker compose -f fixtures/docker-compose.e2e.yml up gateway-postgres-migrations -d
-          docker compose -f fixtures/docker-compose.e2e.yml wait gateway-postgres-migrations
 
-          # Generate API key
+          echo "Waiting for migrations to complete..."
+          docker compose -f fixtures/docker-compose.e2e.yml wait gateway-postgres-migrations
+          echo "Migrations complete"
+
+          echo "Checking docker networks..."
+          docker network ls | grep fixtures || echo "No fixtures network found"
+
+          echo "Checking postgres container..."
+          docker compose -f fixtures/docker-compose.e2e.yml ps postgres
+
+          echo "Generating API key using gateway:sha-${{ github.sha }}..."
           API_KEY=$(docker run --rm \
             --network fixtures_default \
             -e TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures" \
             tensorzero/gateway:sha-${{ github.sha }} \
             --create-api-key)
 
+          echo "API key generated successfully"
           # Only the UI needs the API key to make requests to the gateway
           echo "TENSORZERO_API_KEY=$API_KEY" >> fixtures/.env
+          echo "API key written to fixtures/.env"
 
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
