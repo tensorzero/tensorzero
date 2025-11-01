@@ -37,6 +37,11 @@ jobs:
     # For now, it just runs in the merge queue and on prs from the main repo
     if: github.repository == 'tensorzero/tensorzero' && ((github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') || inputs.is_merge_group || github.event_name == 'workflow_dispatch')
 
+    strategy:
+      matrix:
+        # Only include auth_enabled: true when running in merge queue
+        auth_enabled: ${{ inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]') }}
+
     steps:
       # TODO - investigate why using the Namespace checkout action causes
       # 'tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT' to be `None`
@@ -108,6 +113,12 @@ jobs:
           echo "FIREWORKS_ACCOUNT_ID=fake_fireworks_account" >> fixtures/.env
           echo "VITE_TENSORZERO_FORCE_CACHE_ON=1" >> fixtures/.env
 
+      - name: Enable authentication in config
+        if: matrix.auth_enabled == true
+        working-directory: ui
+        run: |
+          sed -i '2a\\n[gateway.auth]\nenabled = true' fixtures/config/tensorzero.e2e.toml
+
       - name: Regenerate model inference cache
         working-directory: ui
         if: inputs.regen_cache == true
@@ -164,6 +175,28 @@ jobs:
           name: model-inference-cache
           path: |
             ui/fixtures/model_inference_cache_e2e.jsonl
+
+      - name: Generate API key
+        if: matrix.auth_enabled == true
+        working-directory: ui
+        run: |
+          # Start postgres first so we can generate the key
+          docker compose -f fixtures/docker-compose.e2e.yml up postgres -d
+          docker compose -f fixtures/docker-compose.e2e.yml wait postgres
+
+          # Run migrations
+          docker compose -f fixtures/docker-compose.e2e.yml up gateway-postgres-migrations -d
+          docker compose -f fixtures/docker-compose.e2e.yml wait gateway-postgres-migrations
+
+          # Generate API key
+          API_KEY=$(docker run --rm \
+            --network fixtures_default \
+            -e TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures" \
+            tensorzero/gateway:sha-${{ github.sha }} \
+            --create-api-key)
+
+          # Only the UI needs the API key to make requests to the gateway
+          echo "TENSORZERO_API_KEY=$API_KEY" >> fixtures/.env
 
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
@@ -232,7 +265,7 @@ jobs:
         if: failure() && inputs.regen_cache == false
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: playwright-report
+          name: playwright-report-auth-${{ matrix.auth_enabled }}
           path: |
             ui/playwright-report/
             ui/test-results/
@@ -242,7 +275,7 @@ jobs:
         if: failure() && inputs.regen_cache == true
         uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
         with:
-          name: playwright-report
+          name: playwright-report-auth-${{ matrix.auth_enabled }}
           path: |
             ui/playwright-report/
             ui/test-results/
