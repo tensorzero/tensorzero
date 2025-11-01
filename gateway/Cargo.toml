@@ -44,3 +44,4 @@ serde_json = { workspace = true }
 reqwest-eventsource = { workspace = true }
 futures = { workspace = true }
 secrecy = { workspace = true }
+sqlx_alpha = { package = "sqlx", version = "0.9.0-alpha.1", features = ["postgres", "runtime-tokio"] }

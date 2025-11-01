@@ -1,9 +1,8 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout, clippy::expect_used)]
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
 use serde_json::json;
-use tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres;
 use tensorzero_auth::key::TensorZeroApiKey;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 
@@ -11,6 +10,15 @@ use crate::common::start_gateway_on_random_port;
 use secrecy::ExposeSecret;
 
 mod common;
+
+async fn get_postgres_pool_for_testing() -> sqlx_alpha::PgPool {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
+
+    sqlx_alpha::PgPool::connect(&postgres_url)
+        .await
+        .expect("Failed to connect to PostgreSQL")
+}
 
 #[tokio::test]
 async fn test_tensorzero_auth_enabled() {
@@ -23,22 +31,9 @@ async fn test_tensorzero_auth_enabled() {
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    ",
-    )
-    .await;
+    let postgres_pool = get_postgres_pool_for_testing().await;
 
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
-        .unwrap();
-
-    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, postgres_pool)
+    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &postgres_pool)
         .await
         .unwrap();
 
@@ -73,7 +68,7 @@ async fn test_tensorzero_auth_enabled() {
         &TensorZeroApiKey::parse(key.expose_secret())
             .unwrap()
             .public_id,
-        postgres_pool,
+        &postgres_pool,
     )
     .await
     .unwrap();
@@ -157,23 +152,10 @@ async fn test_tensorzero_missing_auth() {
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    ",
-    )
-    .await;
-
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
-        .unwrap();
+    let postgres_pool = get_postgres_pool_for_testing().await;
 
     let disabled_key =
-        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, postgres_pool)
+        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &postgres_pool)
             .await
             .unwrap();
 
@@ -181,7 +163,7 @@ async fn test_tensorzero_missing_auth() {
         &TensorZeroApiKey::parse(disabled_key.expose_secret())
             .unwrap()
             .public_id,
-        postgres_pool,
+        &postgres_pool,
     )
     .await
     .unwrap();
