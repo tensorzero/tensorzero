@@ -49,9 +49,8 @@ impl UninitializedExperimentationConfig {
         // Check if any variant has a weight specified
         let variants_with_weights: Vec<&str> = variants
             .iter()
-            .filter_map(|(name, variant)| {
-                variant.inner.weight().is_some().then(|| name.as_str())
-            })
+            .filter(|&(_name, variant)| variant.inner.weight().is_some())
+            .map(|(name, _variant)| name.as_str())
             .collect();
 
         if !variants_with_weights.is_empty() {
