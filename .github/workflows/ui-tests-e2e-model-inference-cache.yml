@@ -185,9 +185,28 @@ jobs:
           echo "Starting postgres..."
           docker compose -f fixtures/docker-compose.e2e.yml up postgres -d
 
-          echo "Waiting for postgres to be healthy..."
-          docker compose -f fixtures/docker-compose.e2e.yml wait postgres
-          echo "Postgres is ready"
+          echo "Waiting for postgres to be healthy (timeout: 2 minutes)..."
+          # Wait with explicit timeout and show progress
+          timeout 120 bash -c '
+            while true; do
+              STATUS=$(docker compose -f fixtures/docker-compose.e2e.yml ps postgres --format json | jq -r ".[0].Health")
+              echo "Postgres health status: $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Postgres is healthy!"
+                break
+              fi
+              sleep 2
+            done
+          ' || {
+            echo "ERROR: Timeout waiting for postgres to become healthy"
+            echo "=== Postgres container status ==="
+            docker compose -f fixtures/docker-compose.e2e.yml ps postgres
+            echo "=== Postgres container logs ==="
+            docker compose -f fixtures/docker-compose.e2e.yml logs postgres
+            echo "=== Postgres container inspect ==="
+            docker inspect $(docker compose -f fixtures/docker-compose.e2e.yml ps -q postgres)
+            exit 1
+          }
 
           echo "Starting gateway postgres migrations..."
           docker compose -f fixtures/docker-compose.e2e.yml up gateway-postgres-migrations -d
