@@ -97,7 +97,6 @@ k = 10
 max_distance = 0.5
 system_instructions = "functions/extract_entities/baseline/system_template.minijinja"
 json_mode = "strict"
-weight = 1
 
 [functions.extract_entities.variants.turbo]
 type = "chat_completion"
