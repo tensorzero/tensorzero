@@ -212,8 +212,18 @@ jobs:
           echo "Starting gateway postgres migrations..."
           docker compose -f fixtures/docker-compose.e2e.yml up gateway-postgres-migrations -d
 
-          echo "Waiting for migrations to complete..."
+          echo "Tailing migration logs while waiting for completion..."
+          # Tail logs in background
+          docker compose -f fixtures/docker-compose.e2e.yml logs -f gateway-postgres-migrations &
+          LOGS_PID=$!
+
+          # Wait for migrations to complete
           docker compose -f fixtures/docker-compose.e2e.yml wait gateway-postgres-migrations
+
+          # Stop tailing logs
+          kill $LOGS_PID 2>/dev/null || true
+          wait $LOGS_PID 2>/dev/null || true
+
           echo "Migrations complete"
 
           echo "Checking docker networks..."
