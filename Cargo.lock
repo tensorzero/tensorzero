@@ -1798,7 +1798,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.10.9"
+version = "2025.11.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.10.9"
+version = "2025.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2149,7 +2149,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.10.9"
+version = "2025.11.0"
 dependencies = [
  "axum",
  "clap",
@@ -4516,7 +4516,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.10.9"
+version = "2025.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6046,7 +6046,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.10.9"
+version = "2025.11.0"
 dependencies = [
  "chrono",
  "futures",
@@ -6062,7 +6062,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.10.9"
+version = "2025.11.0"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6176,7 +6176,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.10.9"
+version = "2025.11.0"
 dependencies = [
  "evaluations",
  "napi",
@@ -6195,7 +6195,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.10.9"
+version = "2025.11.0"
 dependencies = [
  "evaluations",
  "futures",
