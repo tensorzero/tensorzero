@@ -79,7 +79,7 @@ pub mod test_helpers;
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tensorzero_core::client::DisplayOrDebug;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
@@ -171,7 +171,7 @@ pub trait ClientExt {
     async fn experimental_render_samples<T: StoredSample + Send>(
         &self,
         stored_samples: Vec<T>,
-        variants: std::collections::HashMap<String, String>,
+        variants: HashMap<String, String>,
     ) -> Result<Vec<RenderedSample>, TensorZeroError>;
 
     async fn experimental_launch_optimization(
@@ -193,7 +193,7 @@ pub trait ClientExt {
     async fn get_variant_sampling_probabilities(
         &self,
         function_name: &str,
-    ) -> Result<std::collections::HashMap<String, f64>, TensorZeroError>;
+    ) -> Result<HashMap<String, f64>, TensorZeroError>;
 
     // Config access
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
@@ -363,7 +363,7 @@ impl ClientExt for Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                with_embedded_timeout(*timeout, async {
                     tensorzero_core::endpoints::datasets::list_datapoints(
                         dataset_name,
                         &gateway.handle.app_state.clickhouse_connection_info,
@@ -375,7 +375,7 @@ impl ClientExt for Client {
                     .await
                     .map_err(err_to_http)
                 })
-                .await?)
+                .await
             }
         }
     }
@@ -397,7 +397,7 @@ impl ClientExt for Client {
                 self.parse_http_response(builder.send().await).await
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
+                let datapoint = with_embedded_timeout(*timeout, async {
                     gateway
                         .handle
                         .app_state
@@ -405,18 +405,25 @@ impl ClientExt for Client {
                         .get_datapoint(&GetDatapointParams {
                             dataset_name,
                             datapoint_id,
+                            // By default, we don't return stale datapoints.
                             allow_stale: None,
                         })
                         .await
-                        .map_err(err_to_http)?
-                        .into_datapoint(&gateway.handle.app_state.config)
                         .map_err(err_to_http)
                 })
-                .await?)
+                .await?;
+
+                // Convert storage type to wire type
+                datapoint
+                    .into_datapoint(&gateway.handle.app_state.config)
+                    .map_err(|e| TensorZeroError::Other { source: e.into() })
             }
         }
     }
 
+    /// Stales all datapoints in a dataset that have not been staled yet.
+    /// This is a soft deletion, so evaluation runs will still refer to it.
+    /// Returns the number of datapoints that were staled as {num_staled_datapoints: u64}.
     async fn stale_dataset(
         &self,
         dataset_name: String,
@@ -553,13 +560,27 @@ impl ClientExt for Client {
         }
     }
 
+    /// Query the Clickhouse database for inferences.
+    ///
+    /// This function is only available in EmbeddedGateway mode.
+    ///
+    /// # Arguments
+    ///
+    /// * `function_name` - The name of the function to query.
+    /// * `variant_name` - The name of the variant to query. Optional
+    /// * `filters` - A filter tree to apply to the query. Optional
+    /// * `output_source` - The source of the output to query. "inference" or "demonstration"
+    /// * `limit` - The maximum number of inferences to return. Optional
+    /// * `offset` - The offset to start from. Optional
+    /// * `format` - The format to return the inferences in. For now, only "JSONEachRow" is supported.
     async fn experimental_list_inferences(
         &self,
         params: ListInferencesParams<'_>,
     ) -> Result<Vec<StoredInference>, TensorZeroError> {
+        // TODO: consider adding a flag that returns the generated sql query
         let ClientMode::EmbeddedGateway { gateway, .. } = self.mode() else {
             return Err(TensorZeroError::Other {
-                source: Error::new(ErrorDetails::InvalidClientMode {
+                source: tensorzero_core::error::Error::new(ErrorDetails::InvalidClientMode {
                     mode: "Http".to_string(),
                     message: "This function is only available in EmbeddedGateway mode".to_string(),
                 })
@@ -572,18 +593,29 @@ impl ClientExt for Client {
             .clickhouse_connection_info
             .list_inferences(&gateway.handle.app_state.config, &params)
             .await
-            .map_err(err_to_http)?
-            .into_iter()
-            .map(|x| x.into_stored_inference(&gateway.handle.app_state.config))
-            .collect::<Result<Vec<_>, _>>()
             .map_err(err_to_http)?;
-        Ok(inferences)
+
+        // Convert storage types to wire types
+        let wire_inferences: Result<Vec<StoredInference>, _> = inferences
+            .into_iter()
+            .map(|inf| inf.into_stored_inference(&gateway.handle.app_state.config))
+            .collect();
+
+        wire_inferences.map_err(|e| TensorZeroError::Other { source: e.into() })
     }
 
+    /// There are two things that need to happen in this function:
+    /// 1. We need to resolve all network resources (e.g. images) in the inference examples.
+    /// 2. We need to prepare all messages into "simple" messages that have been templated for a particular variant.
+    ///    To do this, we need to know what variant to use for each function that might appear in the data.
+    ///
+    /// IMPORTANT: For now, this function drops datapoints which are bad, e.g. ones where templating fails, the function
+    ///            has no variant specified, or where the process of downloading resources fails.
+    ///            In future we will make this behavior configurable by the caller.
     async fn experimental_render_samples<T: StoredSample + Send>(
         &self,
         stored_samples: Vec<T>,
-        variants: std::collections::HashMap<String, String>,
+        variants: HashMap<String, String>, // Map from function name to variant name
     ) -> Result<Vec<RenderedSample>, TensorZeroError> {
         let ClientMode::EmbeddedGateway { gateway, .. } = self.mode() else {
             return Err(TensorZeroError::Other {
@@ -603,6 +635,7 @@ impl ClientExt for Client {
         .map_err(err_to_http)
     }
 
+    /// Launch an optimization job.
     async fn experimental_launch_optimization(
         &self,
         params: LaunchOptimizationParams,
@@ -631,6 +664,8 @@ impl ClientExt for Client {
         }
     }
 
+    /// Start an optimization job.
+    /// NOTE: This is the composition of `list_inferences`, `render_inferences`, and `launch_optimization`.
     async fn experimental_launch_optimization_workflow(
         &self,
         params: LaunchOptimizationWorkflowParams,
@@ -720,10 +755,25 @@ impl ClientExt for Client {
         }
     }
 
+    fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
+        match self.mode() {
+            ClientMode::EmbeddedGateway { gateway, .. } => {
+                Ok(gateway.handle.app_state.config.clone())
+            }
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidClientMode {
+                    mode: "Http".to_string(),
+                    message: "This function is only available in EmbeddedGateway mode".to_string(),
+                })
+                .into(),
+            }),
+        }
+    }
+
     async fn get_variant_sampling_probabilities(
         &self,
         function_name: &str,
-    ) -> Result<std::collections::HashMap<String, f64>, TensorZeroError> {
+    ) -> Result<HashMap<String, f64>, TensorZeroError> {
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
                 let url = client
@@ -759,21 +809,6 @@ impl ClientExt for Client {
                 })
                 .await?)
             }
-        }
-    }
-
-    fn get_config(&self) -> Result<Arc<Config>, TensorZeroError> {
-        match self.mode() {
-            ClientMode::EmbeddedGateway { gateway, .. } => {
-                Ok(gateway.handle.app_state.config.clone())
-            }
-            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
-                source: Error::new(ErrorDetails::InvalidClientMode {
-                    mode: "Http".to_string(),
-                    message: "This function is only available in EmbeddedGateway mode".to_string(),
-                })
-                .into(),
-            }),
         }
     }
 
