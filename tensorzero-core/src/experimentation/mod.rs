@@ -46,6 +46,29 @@ impl UninitializedExperimentationConfig {
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
     ) -> Result<ExperimentationConfig, Error> {
+        // Check if any variant has a weight specified
+        let variants_with_weights: Vec<&str> = variants
+            .iter()
+            .filter_map(|(name, variant)| {
+                if variant.inner.weight().is_some() {
+                    Some(name.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if !variants_with_weights.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Cannot mix `experimentation` configuration with individual variant `weight` values. \
+                    The following variants have weights specified: {}. \
+                    Either use the `experimentation` section to control variant sampling, or specify `weight` on individual variants, but not both.",
+                    variants_with_weights.join(", ")
+                ),
+            }));
+        }
+
         match self {
             UninitializedExperimentationConfig::StaticWeights(config) => {
                 Ok(ExperimentationConfig::StaticWeights(config))
