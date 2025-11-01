@@ -205,6 +205,8 @@ pub enum ClientBuilderError {
     Clickhouse(TensorZeroError),
     #[error("Failed to configure PostgreSQL: {0}")]
     Postgres(TensorZeroError),
+    #[error("Authentication is not supported in embedded gateway mode: {0}")]
+    AuthNotSupportedInEmbeddedMode(TensorZeroError),
     #[error("Failed to parse config: {0}")]
     ConfigParsingPreGlob(TensorZeroError),
     #[error("Failed to parse config: {error}. Config file glob `{glob}` resolved to the following files:\n{paths}", glob = glob.glob,paths = glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"))]
@@ -366,7 +368,7 @@ impl ClientBuilder {
                     }));
                 }
                 if config.gateway.auth.enabled {
-                    return Err(ClientBuilderError::Postgres(TensorZeroError::Other {
+                    return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(TensorZeroError::Other {
                         source: tensorzero_core::error::Error::new(ErrorDetails::Config {
                             message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
                         })
