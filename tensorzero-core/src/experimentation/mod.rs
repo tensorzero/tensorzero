@@ -50,11 +50,7 @@ impl UninitializedExperimentationConfig {
         let variants_with_weights: Vec<&str> = variants
             .iter()
             .filter_map(|(name, variant)| {
-                if variant.inner.weight().is_some() {
-                    Some(name.as_str())
-                } else {
-                    None
-                }
+                variant.inner.weight().is_some().then(|| name.as_str())
             })
             .collect();
 
