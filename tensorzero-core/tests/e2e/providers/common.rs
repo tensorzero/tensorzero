@@ -2435,7 +2435,9 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         let _ = res.unwrap();
     }
 
-    if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
+    if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic"]
+        .contains(&provider.model_provider_name.as_str())
+    {
         assert!(
             !logs_contain("TensorZero doesn't support input thought blocks for the"),
             "Should not have warned about dropping thought blocks"
