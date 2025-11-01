@@ -114,9 +114,11 @@ DiclConfig = deprecated("Use DICLConfig instead")(DICLConfig)
 OptimizationConfig = t.Union[
     OpenAISFTConfig,
     FireworksSFTConfig,
+    GCPVertexGeminiSFTConfig,
     TogetherSFTConfig,
     DICLOptimizationConfig,
     OpenAIRFTConfig,
+    t.Dict[str, Any],
 ]
 ChatInferenceOutput = t.List[ContentBlock]
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
+    body::Body,
     extract::{DefaultBodyLimit, MatchedPath, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -64,7 +65,23 @@ pub fn build_axum_router(
         // This is only used to output request/response information to our logs
         // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
         // We log failed requests messages at 'DEBUG', since we already have our own error-logging code,
-        .layer(TraceLayer::new_for_http().on_failure(DefaultOnFailure::new().level(Level::DEBUG)))
+        .layer(
+            TraceLayer::new_for_http()
+                .on_failure(DefaultOnFailure::new().level(Level::DEBUG))
+                .make_span_with(|request: &Request<Body>| {
+                    // This is a copy of `DefaultMakeSpan` from `tower-http`.
+                    // We invoke the `tracing` macro ourselves, so that the `target` is `gateway`,
+                    // which will cause the span to get emitted even when `debug = false` in the gateway config.
+                    // This ensures that warnings will have proper HTTP request information attached when logged to the console
+                    // Entering and exiting the span itself does not produce any new console logs
+                    tracing::info_span!(
+                        "request",
+                        method = %request.method(),
+                        uri = %request.uri(),
+                        version = ?request.version(),
+                    )
+                }),
+        )
         // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
         .layer(in_flight_requests_layer)
         .with_state(app_state.clone());
@@ -259,6 +276,10 @@ fn build_otel_enabled_routes() -> (OtelEnabledRoutes, Router<AppStateData>) {
 // or uninteresting routes like /health
 fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<AppStateData> {
     Router::new()
+        .route(
+            "/variant_sampling_probabilities",
+            get(endpoints::variant_probabilities::get_variant_sampling_probabilities_handler),
+        )
         .route(
             "/datasets/{dataset_name}/datapoints",
             post(endpoints::datasets::create_datapoints_handler),

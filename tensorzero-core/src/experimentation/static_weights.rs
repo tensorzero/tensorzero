@@ -177,6 +177,51 @@ impl VariantSampler for StaticWeightsConfig {
             .map(String::as_str)
             .chain(self.fallback_variants.iter().map(String::as_str))
     }
+
+    fn get_current_display_probabilities<'a>(
+        &self,
+        _function_name: &str,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
+        _postgres: &PostgresConnectionInfo,
+    ) -> Result<HashMap<&'a str, f64>, Error> {
+        // Compute the total weight of variants present in active_variants
+        let total_weight: f64 = active_variants
+            .keys()
+            .map(|variant_name| self.candidate_variants.get(variant_name).unwrap_or(&0.0))
+            .sum();
+
+        if total_weight <= 0.0 {
+            // No active variants in the candidate set, use fallback variants
+            // Take the intersection of active_variants and fallback_variants
+            let intersection: Vec<&str> = active_variants
+                .keys()
+                .filter(|variant_name| self.fallback_variants.contains(variant_name))
+                .map(String::as_str)
+                .collect();
+
+            if intersection.is_empty() {
+                return Err(ErrorDetails::NoFallbackVariantsRemaining.into());
+            }
+
+            // Use uniform probability for all fallback variants
+            let uniform_prob = 1.0 / intersection.len() as f64;
+            let probabilities: HashMap<&'a str, f64> = intersection
+                .into_iter()
+                .map(|variant_name| (variant_name, uniform_prob))
+                .collect();
+            Ok(probabilities)
+        } else {
+            // Use weighted probabilities from candidate variants
+            let probabilities: HashMap<&'a str, f64> = active_variants
+                .keys()
+                .map(|variant_name| {
+                    let weight = self.candidate_variants.get(variant_name).unwrap_or(&0.0);
+                    (variant_name.as_str(), weight / total_weight)
+                })
+                .collect();
+            Ok(probabilities)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -738,5 +783,139 @@ mod tests {
             0.5,
         );
         assert_eq!(result.unwrap(), "B");
+    }
+
+    // Tests for get_current_display_probabilities
+    #[test]
+    fn test_get_current_display_probabilities_weighted() {
+        // Test weighted probabilities
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["A", "B", "C"]).into_iter().collect();
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 1.0);
+        candidate_variants.insert("B".to_string(), 2.0);
+        candidate_variants.insert("C".to_string(), 3.0);
+
+        let config = StaticWeightsConfig {
+            candidate_variants,
+            fallback_variants: vec![],
+        };
+
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let probs = config
+            .get_current_display_probabilities("test", &active_variants, &postgres)
+            .unwrap();
+
+        // Total weight = 6.0
+        // Expected: A=1/6, B=2/6, C=3/6
+        assert_eq!(probs.len(), 3);
+        assert!((probs["A"] - 1.0 / 6.0).abs() < 1e-9);
+        assert!((probs["B"] - 2.0 / 6.0).abs() < 1e-9);
+        assert!((probs["C"] - 3.0 / 6.0).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_current_display_probabilities_fallback() {
+        // Test fallback (uniform) probabilities
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["A", "B", "C"]).into_iter().collect();
+
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::new(), // No weights
+            fallback_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+        };
+
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let probs = config
+            .get_current_display_probabilities("test", &active_variants, &postgres)
+            .unwrap();
+
+        // Should have uniform probabilities
+        assert_eq!(probs.len(), 3);
+        assert!((probs["A"] - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs["B"] - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs["C"] - 1.0 / 3.0).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_current_display_probabilities_partial_intersection() {
+        // Test with only some active variants having weights
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["A", "C"]).into_iter().collect();
+        let mut candidate_variants = BTreeMap::new();
+        candidate_variants.insert("A".to_string(), 1.0);
+        candidate_variants.insert("B".to_string(), 2.0); // Not active
+        candidate_variants.insert("C".to_string(), 3.0);
+
+        let config = StaticWeightsConfig {
+            candidate_variants,
+            fallback_variants: vec![],
+        };
+
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let probs = config
+            .get_current_display_probabilities("test", &active_variants, &postgres)
+            .unwrap();
+
+        // Only A and C should appear, with normalized weights
+        // Total weight = 1.0 + 3.0 = 4.0
+        assert_eq!(probs.len(), 2);
+        assert!((probs["A"] - 1.0 / 4.0).abs() < 1e-9);
+        assert!((probs["C"] - 3.0 / 4.0).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_current_display_probabilities_fallback_partial() {
+        // Test fallback with only some variants active
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["B", "C"]).into_iter().collect();
+
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::new(),
+            fallback_variants: vec!["A".to_string(), "B".to_string(), "C".to_string()],
+        };
+
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let probs = config
+            .get_current_display_probabilities("test", &active_variants, &postgres)
+            .unwrap();
+
+        // Only B and C are active and in fallback
+        assert_eq!(probs.len(), 2);
+        assert!((probs["B"] - 0.5).abs() < 1e-9);
+        assert!((probs["C"] - 0.5).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_current_display_probabilities_no_fallback_error() {
+        // Test error when no fallback variants match
+        let active_variants: HashMap<_, _> =
+            create_test_variants(&["A", "B"]).into_iter().collect();
+
+        let config = StaticWeightsConfig {
+            candidate_variants: BTreeMap::new(),
+            fallback_variants: vec!["C".to_string(), "D".to_string()],
+        };
+
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let result = config.get_current_display_probabilities("test", &active_variants, &postgres);
+
+        assert!(result.is_err());
     }
 }

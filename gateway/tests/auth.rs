@@ -1,4 +1,5 @@
 #![allow(clippy::print_stdout)]
+use std::process::Stdio;
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
@@ -6,11 +7,14 @@ use serde_json::json;
 use tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres;
 use tensorzero_auth::key::TensorZeroApiKey;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
+use tokio::process::Command;
 
 use crate::common::start_gateway_on_random_port;
 use secrecy::ExposeSecret;
 
 mod common;
+
+const GATEWAY_PATH: &str = env!("CARGO_BIN_EXE_gateway");
 
 #[tokio::test]
 async fn test_tensorzero_auth_enabled() {
@@ -18,6 +22,8 @@ async fn test_tensorzero_auth_enabled() {
         "
     [gateway.auth]
     enabled = true
+    [gateway.auth.cache]
+    enabled = false
     ",
         None,
     )
@@ -27,6 +33,8 @@ async fn test_tensorzero_auth_enabled() {
         "
     [gateway.auth]
     enabled = true
+    [gateway.auth.cache]
+    enabled = false
     ",
     )
     .await;
@@ -152,6 +160,8 @@ async fn test_tensorzero_missing_auth() {
         "
     [gateway.auth]
     enabled = true
+    [gateway.auth.cache]
+    enabled = false
     ",
         None,
     )
@@ -161,6 +171,8 @@ async fn test_tensorzero_missing_auth() {
         "
     [gateway.auth]
     enabled = true
+    [gateway.auth.cache]
+    enabled = false
     ",
     )
     .await;
@@ -630,5 +642,75 @@ async fn test_auth_cache_requires_full_key_match() {
         response3.status(),
         StatusCode::OK,
         "Valid key should still work from cache"
+    );
+}
+
+#[tokio::test]
+async fn test_create_api_key_cli() {
+    // This test verifies that the --create-api-key CLI command works correctly
+    let output = Command::new(GATEWAY_PATH)
+        .args(["--create-api-key"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .await
+        .unwrap();
+
+    assert!(
+        output.status.success(),
+        "CLI command failed with stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let api_key = stdout.trim();
+
+    // Verify the key has the correct format
+    assert!(
+        api_key.starts_with("sk-t0-"),
+        "API key should start with 'sk-t0-', got: {api_key}"
+    );
+
+    // Verify the key can be parsed
+    let parsed_key = TensorZeroApiKey::parse(api_key);
+    assert!(
+        parsed_key.is_ok(),
+        "API key should be valid, got error: {:?}",
+        parsed_key.err()
+    );
+
+    // Verify the key works for authentication
+    let child_data = start_gateway_on_random_port(
+        "
+    [gateway.auth]
+    enabled = true
+    ",
+        None,
+    )
+    .await;
+
+    let inference_response = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(http::header::AUTHORIZATION, format!("Bearer {api_key}"))
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Hello, world!",
+                    }
+                ]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = inference_response.status();
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "Created API key should work for authentication"
     );
 }
