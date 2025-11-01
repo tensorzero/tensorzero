@@ -39,8 +39,9 @@ jobs:
 
     strategy:
       matrix:
-        # Only include auth_enabled: true when running in merge queue
-        auth_enabled: ${{ inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]') }}
+        # TEMPORARY: Include auth_enabled: true in PR CI for testing
+        # TODO: Change back to: inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]')
+        auth_enabled: [true, false]
 
     steps:
       # TODO - investigate why using the Namespace checkout action causes
