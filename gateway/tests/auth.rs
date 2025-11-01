@@ -324,7 +324,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     enabled = true
     [gateway.auth.cache]
     enabled = true
-    ttl_ms = 20000
+    ttl_ms = 4000
     ",
         None,
     )
@@ -404,7 +404,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     );
 
     // Wait for cache to expire (2s TTL + buffer)
-    tokio::time::sleep(tokio::time::Duration::from_millis(2100)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(4100)).await;
 
     // Third request - should now fail because cache expired
     let response3 = reqwest::Client::new()
