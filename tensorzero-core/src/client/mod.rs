@@ -170,9 +170,10 @@ pub enum ClientBuilderError {
 }
 
 // Helper type to choose between using Debug or Display for a type
-struct DisplayOrDebug<T: Debug + Display> {
-    val: T,
-    debug: bool,
+#[doc(hidden)]
+pub struct DisplayOrDebug<T: Debug + Display> {
+    pub val: T,
+    pub debug: bool,
 }
 
 impl<T: Debug + Display> Display for DisplayOrDebug<T> {

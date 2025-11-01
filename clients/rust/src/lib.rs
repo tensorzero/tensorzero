@@ -80,6 +80,7 @@ pub mod test_helpers;
 pub use tensorzero_core::observability;
 
 use std::sync::Arc;
+use tensorzero_core::client::DisplayOrDebug;
 use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
@@ -92,6 +93,8 @@ use tensorzero_core::endpoints::workflow_evaluation_run::{
 use tensorzero_core::error::{Error, ErrorDetails};
 use tensorzero_core::stored_inference::StoredSample;
 use uuid::Uuid;
+
+use crate::git::GitInfo;
 
 /// Extension trait for additional Client methods
 #[async_trait::async_trait]
@@ -447,8 +450,6 @@ impl ClientExt for Client {
         &self,
         mut params: WorkflowEvaluationRunParams,
     ) -> Result<WorkflowEvaluationRunResponse, TensorZeroError> {
-        use git::GitInfo;
-
         // Validate tags before adding git info
         validate_tags(&params.tags, false)
             .map_err(|e| TensorZeroError::Other { source: e.into() })?;
@@ -634,24 +635,6 @@ impl ClientExt for Client {
         &self,
         params: LaunchOptimizationWorkflowParams,
     ) -> Result<OptimizationJobHandle, TensorZeroError> {
-        use std::fmt::{Debug, Display};
-
-        // Helper type to choose between using Debug or Display for a type
-        struct DisplayOrDebug<T: Debug + Display> {
-            val: T,
-            debug: bool,
-        }
-
-        impl<T: Debug + Display> Display for DisplayOrDebug<T> {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                if self.debug {
-                    write!(f, "{:?}", self.val)
-                } else {
-                    write!(f, "{}", self.val)
-                }
-            }
-        }
-
         match self.mode() {
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 with_embedded_timeout(*timeout, async {
