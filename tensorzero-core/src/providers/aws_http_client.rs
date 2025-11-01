@@ -1,4 +1,4 @@
-// Copied from https://github.com/aws/amazon-q-developer-cli/blob/858f9417dcc131e140dfc6cce5a4b657af56616a/crates/fig_aws_common/src/http_client.rs
+// Based on https://github.com/aws/amazon-q-developer-cli/blob/858f9417dcc131e140dfc6cce5a4b657af56616a/crates/fig_aws_common/src/http_client.rs
 // (MIT-licensed)
 
 use std::time::Duration;
@@ -10,18 +10,19 @@ use aws_smithy_runtime_api::client::result::ConnectorError;
 use aws_smithy_runtime_api::client::runtime_components::RuntimeComponents;
 use aws_smithy_runtime_api::http::Request;
 use aws_smithy_types::body::SdkBody;
-use reqwest::Client as ReqwestClient;
 
-/// A wrapper around [reqwest::Client] that implements [HttpClient].
+use crate::http::TensorzeroHttpClient;
+
+/// A wrapper around [TensorzeroHttpClient] that implements [HttpClient].
 ///
 /// This is required to support using proxy servers with the AWS SDK.
 #[derive(Debug, Clone)]
 pub struct Client {
-    inner: ReqwestClient,
+    inner: TensorzeroHttpClient,
 }
 
 impl Client {
-    pub fn new(client: ReqwestClient) -> Self {
+    pub fn new(client: TensorzeroHttpClient) -> Self {
         Self { inner: client }
     }
 }
@@ -132,7 +133,7 @@ enum CallErrorKind {
 
 #[derive(Debug)]
 struct ReqwestConnector {
-    client: ReqwestClient,
+    client: TensorzeroHttpClient,
     timeout: Option<Duration>,
 }
 

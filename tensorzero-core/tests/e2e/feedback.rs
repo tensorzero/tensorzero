@@ -183,7 +183,7 @@ async fn e2e_test_comment_feedback_with_payload(inference_payload: serde_json::V
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_comment_feedback_validation_disabled() {
-    let mut config = Config::default();
+    let mut config = Config::new_empty().await.unwrap();
     let clickhouse = get_clickhouse().await;
     config.gateway.unstable_disable_feedback_target_validation = true;
     let handle = GatewayHandle::new_with_database_and_http_client(
@@ -1207,7 +1207,7 @@ async fn e2e_test_float_feedback_with_payload(inference_payload: serde_json::Val
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_float_feedback_validation_disabled() {
-    let mut config = Config::default();
+    let mut config = Config::new_empty().await.unwrap();
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Float,
         optimize: MetricConfigOptimize::Max,
@@ -1444,7 +1444,7 @@ async fn e2e_test_boolean_feedback_with_payload(inference_payload: serde_json::V
 
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_test_boolean_feedback_validation_disabled() {
-    let mut config = Config::default();
+    let mut config = Config::new_empty().await.unwrap();
     let metric_config = MetricConfig {
         r#type: MetricConfigType::Boolean,
         optimize: MetricConfigOptimize::Max,

@@ -29,7 +29,7 @@ export function TryWithButton({
   const isDisabled = isLoading || isReadOnly;
 
   return (
-    <ReadOnlyGuard>
+    <ReadOnlyGuard asChild>
       <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" disabled={isDisabled}>

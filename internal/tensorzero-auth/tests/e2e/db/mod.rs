@@ -90,6 +90,7 @@ async fn test_key_lifecycle(pool: PgPool) {
         organization: first_key_info.organization,
         workspace: first_key_info.workspace,
         description: first_key_info.description,
+        created_at: first_key_info.created_at,
         disabled_at: Some(disabled_at),
     };
     assert_eq!(new_list_keys_res, vec![second_key_info, disabled_first_key]);

@@ -26,6 +26,7 @@ use crate::inference::types::{
     ContentBlockChatOutput, FetchContext, Input, JsonInferenceOutput,
     TaggedInferenceDatabaseInsert, Text,
 };
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::{
     config::Config,
@@ -448,6 +449,21 @@ pub async fn update_datapoint_handler(
                 .resolve()
                 .await?;
             function_config.validate_input(&json.input)?;
+
+            // Validate the user-provided output_schema
+            let schema_str = serde_json::to_string(&json.output_schema).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize output_schema: {e}"),
+                })
+            })?;
+            let parsed_schema = DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Invalid output_schema: {e}"),
+                })
+            })?;
+            // Ensure the schema is valid by forcing compilation
+            parsed_schema.ensure_valid().await?;
+
             let dynamic_demonstration_info =
                 DynamicDemonstrationInfo::Json(json.output_schema.clone());
 
@@ -704,10 +720,28 @@ pub async fn insert_datapoint(
                             message: format!("Failed to resolve input for datapoint {i}: {e}"),
                         })
                     })?;
-                // Validate the outputs against the output schema
-                let output_schema = json
-                    .output_schema
-                    .unwrap_or_else(|| json_function_config.output_schema.value.clone());
+                // Validate the output_schema if provided by user
+                let output_schema = if let Some(user_schema) = json.output_schema {
+                    // Validate the schema by attempting to parse it
+                    let schema_str = serde_json::to_string(&user_schema).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to serialize output_schema for datapoint {i}: {e}"
+                            ),
+                        })
+                    })?;
+                    let parsed_schema =
+                        DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
+                            Error::new(ErrorDetails::InvalidRequest {
+                                message: format!("Invalid output_schema for datapoint {i}: {e}"),
+                            })
+                        })?;
+                    // Ensure the schema is valid by forcing compilation
+                    parsed_schema.ensure_valid().await?;
+                    user_schema
+                } else {
+                    json_function_config.output_schema.value.clone()
+                };
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Json(output_schema.clone());
                 let output = if let Some(output) = json.output {

@@ -1503,6 +1503,7 @@ async fn test_config_load_shorthand_models_only() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     env::set_var("OPENAI_API_KEY", "sk-something");
@@ -2180,6 +2181,7 @@ async fn test_config_duplicate_user_schema() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2218,6 +2220,7 @@ async fn test_config_named_schema_no_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2254,6 +2257,7 @@ async fn test_config_duplicate_user_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2286,6 +2290,7 @@ async fn test_config_invalid_template_no_schema() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2712,6 +2717,7 @@ async fn test_config_schema_missing_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
