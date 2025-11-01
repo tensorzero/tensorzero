@@ -9,9 +9,9 @@ license.workspace = true
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0.101"
+proc-macro2 = "1.0.103"
 quote = "1.0.40"
-syn = { version = "2.0.107", features = ["full"] }
+syn = { version = "2.0.108", features = ["full"] }
 
 [lints]
 workspace = true
@@ -20,4 +20,4 @@ workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
-trybuild = "1.0.112"
+trybuild = "1.0.113"

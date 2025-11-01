@@ -5,7 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::time::Duration;
-use tensorzero::{Datapoint, GetDatapointParams};
+use tensorzero::{GetDatapointParams, StoredDatapoint};
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -15,7 +15,7 @@ use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries, JsonInferenceDatapointInsert,
 };
 use tensorzero_core::inference::types::{
-    ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
+    Arguments, ContentBlockChatOutput, JsonInferenceOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
 };
 use tensorzero_core::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
@@ -40,12 +40,12 @@ async fn test_update_chat_datapoint_output() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -113,7 +113,7 @@ async fn test_update_chat_datapoint_output() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = old_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_datapoint else {
         panic!("Expected chat datapoint");
     };
 
@@ -134,7 +134,7 @@ async fn test_update_chat_datapoint_output() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -172,12 +172,12 @@ async fn test_update_json_datapoint_output() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -213,7 +213,9 @@ async fn test_update_json_datapoint_output() {
             "datapoints": [{
                 "type": "json",
                 "id": datapoint_id.to_string(),
-                "output": {"answer": "updated"},
+                "output": {
+                    "raw": "{\"answer\": \"updated\"}",
+                },
             }]
         }))
         .send()
@@ -241,7 +243,7 @@ async fn test_update_json_datapoint_output() {
         })
         .await
         .unwrap();
-    let Datapoint::Json(json_datapoint) = new_datapoint else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
     };
     assert!(json_datapoint.staled_at.is_none());
@@ -266,12 +268,12 @@ async fn test_update_multiple_datapoints() {
         id: datapoint_id1,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -297,12 +299,12 @@ async fn test_update_multiple_datapoints() {
         id: datapoint_id2,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -374,7 +376,7 @@ async fn test_update_multiple_datapoints() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = old_dp1 else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_dp1 else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_some());
@@ -387,7 +389,7 @@ async fn test_update_multiple_datapoints() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = old_dp2 else {
+    let StoredDatapoint::Chat(chat_datapoint) = old_dp2 else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_some());
@@ -433,12 +435,12 @@ async fn test_update_datapoint_type_mismatch() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -458,7 +460,7 @@ async fn test_update_datapoint_type_mismatch() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -500,12 +502,12 @@ async fn test_update_datapoint_with_metadata() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -525,7 +527,7 @@ async fn test_update_datapoint_with_metadata() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -564,7 +566,7 @@ async fn test_update_datapoint_with_metadata() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, Some("Test Datapoint Name".to_string()));
@@ -636,12 +638,12 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -661,7 +663,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -699,7 +701,7 @@ async fn test_update_chat_datapoint_set_output_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -722,12 +724,12 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -751,7 +753,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -789,7 +791,7 @@ async fn test_update_chat_datapoint_set_tool_params_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -815,12 +817,12 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -840,7 +842,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -878,7 +880,7 @@ async fn test_update_chat_datapoint_set_tags_to_empty() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -901,12 +903,12 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -926,7 +928,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -966,7 +968,7 @@ async fn test_update_chat_datapoint_set_name_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = new_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = new_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert!(chat_datapoint.staled_at.is_none());
@@ -995,12 +997,12 @@ async fn test_update_json_datapoint_set_output_to_null() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -1021,7 +1023,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -1059,7 +1061,7 @@ async fn test_update_json_datapoint_set_output_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Json(json_datapoint) = new_datapoint else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
     };
     assert!(json_datapoint.staled_at.is_none());
@@ -1092,12 +1094,12 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         id: datapoint_id,
         episode_id: None,
         input: StoredInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "Test"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages: vec![StoredInputMessage {
                 role: Role::User,
                 content: vec![StoredInputMessageContent::Text(Text {
@@ -1118,7 +1120,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
     });
 
     clickhouse
-        .insert_datapoint(&datapoint_insert)
+        .insert_datapoints(&[datapoint_insert])
         .await
         .unwrap();
 
@@ -1156,7 +1158,7 @@ async fn test_update_json_datapoint_set_tags_to_empty() {
         .await
         .unwrap();
 
-    let Datapoint::Json(json_datapoint) = new_datapoint else {
+    let StoredDatapoint::Json(json_datapoint) = new_datapoint else {
         panic!("Expected json datapoint");
     };
     assert!(json_datapoint.staled_at.is_none());
@@ -1252,7 +1254,7 @@ async fn test_update_metadata_chat_datapoint() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = updated_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = updated_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, Some("updated_name".to_string()));
@@ -1345,7 +1347,7 @@ async fn test_update_metadata_json_datapoint() {
         .await
         .unwrap();
 
-    let Datapoint::Json(json_datapoint) = updated_datapoint else {
+    let StoredDatapoint::Json(json_datapoint) = updated_datapoint else {
         panic!("Expected json datapoint");
     };
     assert_eq!(json_datapoint.name, Some("updated_json_name".to_string()));
@@ -1422,7 +1424,7 @@ async fn test_update_metadata_set_name_to_null() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = updated_datapoint else {
+    let StoredDatapoint::Chat(chat_datapoint) = updated_datapoint else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, None);
@@ -1533,7 +1535,7 @@ async fn test_update_metadata_batch() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = datapoint1 else {
+    let StoredDatapoint::Chat(chat_datapoint) = datapoint1 else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, Some("updated_name1".to_string()));
@@ -1547,7 +1549,7 @@ async fn test_update_metadata_batch() {
         .await
         .unwrap();
 
-    let Datapoint::Chat(chat_datapoint) = datapoint2 else {
+    let StoredDatapoint::Chat(chat_datapoint) = datapoint2 else {
         panic!("Expected chat datapoint");
     };
     assert_eq!(chat_datapoint.name, Some("updated_name2".to_string()));

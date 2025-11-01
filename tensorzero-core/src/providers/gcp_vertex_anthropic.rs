@@ -40,6 +40,7 @@ use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
 use crate::model::{fully_qualified_name, ModelProvider};
 use crate::model_table::{GCPVertexAnthropicKind, ProviderType, ProviderTypeDefaultCredentials};
+use crate::providers::gcp_vertex_gemini::location_subdomain_prefix;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
 use super::anthropic::{
@@ -133,13 +134,15 @@ impl GCPVertexAnthropicProvider {
             } => (location, format!("endpoints/{endpoint_id}")),
         };
 
+        let location_prefix = location_subdomain_prefix(location);
+
         let request_url = format!(
-            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:rawPredict"
+            "https://{location_prefix}aiplatform.googleapis.com/v1/{project_url_path}:rawPredict"
         );
         let streaming_request_url = format!(
-            "https://{location}-aiplatform.googleapis.com/v1/{project_url_path}:streamRawPredict"
+            "https://{location_prefix}aiplatform.googleapis.com/v1/{project_url_path}:streamRawPredict"
         );
-        let audience = format!("https://{location}-aiplatform.googleapis.com/");
+        let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         Ok(GCPVertexAnthropicProvider {
             model_id,
@@ -161,9 +164,11 @@ impl GCPVertexAnthropicProvider {
             .get_defaulted_credential(api_key_location.as_ref(), default_credentials)
             .await?;
 
-        let request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
-        let streaming_request_url = format!("https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
-        let audience = format!("https://{location}-aiplatform.googleapis.com/");
+        let location_prefix = location_subdomain_prefix(&location);
+
+        let request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:rawPredict");
+        let streaming_request_url = format!("https://{location_prefix}aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/publishers/anthropic/models/{model_id}:streamRawPredict");
+        let audience = format!("https://{location_prefix}aiplatform.googleapis.com/");
 
         Ok(GCPVertexAnthropicProvider {
             model_id,
@@ -683,7 +688,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(c.tools_available.iter().map(Into::into).collect::<Vec<_>>())
+                Some(c.tools_available().map(Into::into).collect::<Vec<_>>())
             }
         });
         // `tool_choice` should only be set if tools are set and non-empty

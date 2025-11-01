@@ -747,7 +747,7 @@ impl<'a> AnthropicRequestBody<'a> {
             if matches!(c.tool_choice, ToolChoice::None) {
                 None
             } else {
-                Some(c.tools_available.iter().map(Into::into).collect::<Vec<_>>())
+                Some(c.tools_available().map(Into::into).collect::<Vec<_>>())
             }
         });
 
@@ -1447,7 +1447,7 @@ mod tests {
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
-    use crate::tool::{AllowedTools, DynamicToolConfig, ToolConfig, ToolResult};
+    use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
     use serde_json::json;
     use tracing_test::traced_test;
     use uuid::Uuid;
@@ -1456,11 +1456,8 @@ mod tests {
     fn test_try_from_tool_call_config() {
         // Need to cover all 4 cases
         let tool_call_config = ToolCallConfig {
-            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(false),
-            tools_available: vec![],
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(matches!(
@@ -1471,11 +1468,8 @@ mod tests {
         ));
 
         let tool_call_config = ToolCallConfig {
-            tool_choice: ToolChoice::Auto,
             parallel_tool_calls: Some(true),
-            tools_available: vec![],
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1489,9 +1483,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            tools_available: vec![],
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());
@@ -1505,9 +1497,7 @@ mod tests {
         let tool_call_config = ToolCallConfig {
             tool_choice: ToolChoice::Specific("test".to_string()),
             parallel_tool_calls: Some(false),
-            tools_available: vec![],
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
         let anthropic_tool_choice = AnthropicToolChoice::try_from(&tool_call_config);
         assert!(anthropic_tool_choice.is_ok());

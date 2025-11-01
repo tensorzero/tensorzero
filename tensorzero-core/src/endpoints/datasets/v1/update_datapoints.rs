@@ -4,7 +4,6 @@ use axum::extract::{Path, State};
 use axum::Json;
 use chrono::Utc;
 use serde::Deserialize;
-use serde_json;
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -13,14 +12,14 @@ use crate::db::datasets::{
     JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::{
-    validate_dataset_name, ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint,
+    validate_dataset_name, JsonInferenceDatapoint, StoredChatInferenceDatapoint, StoredDatapoint,
     CLICKHOUSE_DATETIME_FORMAT,
 };
 use crate::error::{Error, ErrorDetails};
 use crate::function::FunctionConfig;
 use crate::inference::types::stored_input::StoredInput;
-use crate::inference::types::{FetchContext, Input, JsonInferenceOutput};
-use crate::jsonschema_util::StaticJSONSchema;
+use crate::inference::types::{FetchContext, Input};
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{
@@ -105,7 +104,7 @@ async fn update_datapoints(
         .await?;
 
     // Build a HashMap to construct new DatapointInserts
-    let mut datapoints_map: HashMap<Uuid, Datapoint> =
+    let mut datapoints_map: HashMap<Uuid, StoredDatapoint> =
         datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
 
     // Each update will produce two DatapointInserts: one stale and one updated
@@ -125,21 +124,21 @@ async fn update_datapoints(
         })?;
 
         match (update, existing) {
-            (UpdateDatapointRequest::Chat(_), Datapoint::Json(_)) => {
+            (UpdateDatapointRequest::Chat(_), StoredDatapoint::Json(_)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Datapoint {datapoint_id} is a JSON datapoint but a chat update was provided"
                     ),
                 }));
             }
-            (UpdateDatapointRequest::Json(_), Datapoint::Chat(_)) => {
+            (UpdateDatapointRequest::Json(_), StoredDatapoint::Chat(_)) => {
                 return Err(Error::new(ErrorDetails::InvalidRequest {
                     message: format!(
                         "Datapoint {datapoint_id} is a chat datapoint but a JSON update was provided"
                     ),
                 }));
             }
-            (UpdateDatapointRequest::Chat(update), Datapoint::Chat(existing)) => {
+            (UpdateDatapointRequest::Chat(update), StoredDatapoint::Chat(existing)) => {
                 let prepared = prepare_chat_update(
                     app_state,
                     &fetch_context,
@@ -152,7 +151,7 @@ async fn update_datapoints(
                 datapoints.extend([prepared.stale, prepared.updated]);
                 new_ids.push(prepared.new_id);
             }
-            (UpdateDatapointRequest::Json(update), Datapoint::Json(existing)) => {
+            (UpdateDatapointRequest::Json(update), StoredDatapoint::Json(existing)) => {
                 let prepared = prepare_json_update(
                     app_state,
                     &fetch_context,
@@ -187,7 +186,7 @@ async fn prepare_chat_update(
     fetch_context: &FetchContext<'_>,
     dataset_name: &str,
     update: UpdateChatDatapointRequest,
-    existing_datapoint: ChatInferenceDatapoint,
+    existing_datapoint: StoredChatInferenceDatapoint,
     now_timestamp: &str,
 ) -> Result<PreparedUpdate, Error> {
     if existing_datapoint.dataset_name != dataset_name {
@@ -234,7 +233,11 @@ async fn prepare_chat_update(
         updated_datapoint.output = Some(new_output);
     }
     if let Some(new_tool_params) = update.tool_params {
-        updated_datapoint.tool_params = new_tool_params;
+        updated_datapoint.tool_params = match new_tool_params {
+            Some(dynamic_params) => function_config
+                .dynamic_tool_params_to_database_insert(dynamic_params, &app_state.config.tools)?,
+            None => None,
+        };
     }
     if let Some(new_tags) = update.tags {
         updated_datapoint.tags = Some(new_tags);
@@ -282,8 +285,6 @@ async fn prepare_json_update(
         }));
     };
 
-    // Grab a copy of IDs for logging.
-    let existing_datapoint_id = existing_datapoint.id;
     let updated_datapoint_id = Uuid::now_v7();
 
     // Update old datapoint as staled, and create new datapoint.
@@ -302,36 +303,38 @@ async fn prepare_json_update(
         updated_datapoint.input = new_input;
     }
 
-    if let Some(new_output_schema) = update.output_schema {
+    // Validate and update output_schema if provided
+    let output_schema = if let Some(new_output_schema) = update.output_schema {
+        // Validate the new schema by converting it to DynamicJSONSchema
+        let schema_str = serde_json::to_string(&new_output_schema).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize output_schema: {e}"),
+            })
+        })?;
+        let validated_schema = DynamicJSONSchema::parse_from_str(&schema_str)?;
+        // Ensure the schema is valid by forcing compilation
+        validated_schema.ensure_valid().await?;
         updated_datapoint.output_schema = new_output_schema;
-    }
+        validated_schema
+    } else {
+        // Use existing schema, convert it to DynamicJSONSchema
+        let schema_str = serde_json::to_string(&updated_datapoint.output_schema).map_err(|e| {
+            Error::new(ErrorDetails::Serialization {
+                message: format!("Failed to serialize existing output_schema: {e}"),
+            })
+        })?;
+        let schema = DynamicJSONSchema::parse_from_str(&schema_str)?;
+        // Ensure the schema is valid by forcing compilation
+        schema.ensure_valid().await?;
+        schema
+    };
+
+    // Validate the output against the output schema. If the output is invalid, we only store the raw output.
     if let Some(new_output) = update.output {
         updated_datapoint.output = match new_output {
+            Some(output) => Some(output.into_json_inference_output(&output_schema).await),
             None => None,
-            Some(value) => {
-                // Validate the output with schema before saving.
-                StaticJSONSchema::from_value(updated_datapoint.output_schema.clone())?
-            .validate(&value)
-            .map_err(|e| {
-                Error::new(ErrorDetails::InvalidRequest {
-                    message: format!(
-                        "Provided output for datapoint {existing_datapoint_id} does not match function output schema: {e}",
-                    ),
-                })
-            })?;
-
-                Some(JsonInferenceOutput {
-                    raw: Some(serde_json::to_string(&value).map_err(|e| {
-                        Error::new(ErrorDetails::Serialization {
-                            message: format!(
-                                "Failed to serialize provided output for datapoint {existing_datapoint_id}: {e}",
-                            )
-                        })
-                    })?),
-                    parsed: Some(value),
-                })
-            }
-        }
+        };
     }
 
     if let Some(new_tags) = update.tags {
@@ -448,7 +451,7 @@ async fn update_datapoints_metadata(
         .await?;
 
     // Build a HashMap for quick lookup
-    let mut datapoints_map: HashMap<Uuid, Datapoint> =
+    let mut datapoints_map: HashMap<Uuid, StoredDatapoint> =
         datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
 
     let mut datapoints: Vec<DatapointInsert> = Vec::with_capacity(request.datapoints.len());
@@ -463,7 +466,7 @@ async fn update_datapoints_metadata(
         })?;
 
         match existing {
-            Datapoint::Chat(mut existing_datapoint) => {
+            StoredDatapoint::Chat(mut existing_datapoint) => {
                 if existing_datapoint.dataset_name != dataset_name {
                     return Err(Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
@@ -481,7 +484,7 @@ async fn update_datapoints_metadata(
 
                 datapoints.push(DatapointInsert::Chat(existing_datapoint.into()));
             }
-            Datapoint::Json(mut existing_datapoint) => {
+            StoredDatapoint::Json(mut existing_datapoint) => {
                 if existing_datapoint.dataset_name != dataset_name {
                     return Err(Error::new(ErrorDetails::InvalidRequest {
                         message: format!(
@@ -513,8 +516,10 @@ mod tests {
     use super::*;
     use crate::config::{Config, ObjectStoreInfo, SchemaData};
     use crate::db::clickhouse::clickhouse_client::MockClickHouseClient;
-    use crate::endpoints::datasets::v1::types::DatapointMetadataUpdate;
-    use crate::endpoints::datasets::{ChatInferenceDatapoint, JsonInferenceDatapoint};
+    use crate::endpoints::datasets::v1::types::{
+        DatapointMetadataUpdate, JsonDatapointOutputUpdate,
+    };
+    use crate::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
@@ -522,10 +527,10 @@ mod tests {
     use crate::inference::types::{
         Base64File, ContentBlockChatOutput, File, Input, InputMessage, InputMessageContent,
         JsonInferenceOutput, ObjectStoragePointer, Role, StoredInputMessage,
-        StoredInputMessageContent, Text, TextKind,
+        StoredInputMessageContent, Text,
     };
     use crate::jsonschema_util::StaticJSONSchema;
-    use crate::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+    use crate::tool::{DynamicToolParams, ToolCallConfigDatabaseInsert, ToolChoice};
     use crate::utils::gateway::{AppStateData, GatewayHandle, GatewayHandleTestOptions};
     use object_store::path::Path as ObjectStorePath;
     use serde_json::json;
@@ -693,8 +698,8 @@ mod tests {
         use super::*;
 
         /// Helper to create a sample ChatInferenceDatapoint
-        pub fn create_sample_chat_datapoint(dataset_name: &str) -> ChatInferenceDatapoint {
-            ChatInferenceDatapoint {
+        pub fn create_sample_chat_datapoint(dataset_name: &str) -> StoredChatInferenceDatapoint {
+            StoredChatInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_chat_function".to_string(),
@@ -825,8 +830,8 @@ mod tests {
         }
 
         /// Helper to create a sample ChatInferenceDatapoint
-        fn create_sample_chat_datapoint(dataset_name: &str) -> ChatInferenceDatapoint {
-            ChatInferenceDatapoint {
+        fn create_sample_chat_datapoint(dataset_name: &str) -> StoredChatInferenceDatapoint {
+            StoredChatInferenceDatapoint {
                 id: Uuid::now_v7(),
                 dataset_name: dataset_name.to_string(),
                 function_name: "test_chat_function".to_string(),
@@ -972,7 +977,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new input text".into(),
                     })],
                 }],
@@ -1133,17 +1138,22 @@ mod tests {
             let dataset_name = "test_dataset";
             let existing = create_sample_chat_datapoint(dataset_name);
 
-            let new_tool_params = ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
+            // Create DynamicToolParams directly instead of round-tripping through database_insert_to_dynamic_tool_params
+            // This represents a user setting allowed_tools to an empty list with tool_choice None
+            // When there are no tools available, the result should be None (tools disabled)
+            let dynamic_tool_params = DynamicToolParams {
+                allowed_tools: Some(vec![]),
+                additional_tools: None,
+                tool_choice: Some(ToolChoice::None),
                 parallel_tool_calls: Some(false),
+                provider_tools: None,
             };
 
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: None,
                 output: None,
-                tool_params: Some(Some(new_tool_params.clone())),
+                tool_params: Some(Some(dynamic_tool_params)),
                 tags: None,
                 metadata: None,
             };
@@ -1163,7 +1173,8 @@ mod tests {
                 panic!("Expected Chat insert");
             };
 
-            assert_eq!(updated.tool_params, Some(new_tool_params));
+            // When tools are disabled (empty allowed_tools), tool_params should be None
+            assert_eq!(updated.tool_params, None);
         }
 
         #[tokio::test]
@@ -1346,7 +1357,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new input".into(),
                     })],
                 }],
@@ -1354,18 +1365,23 @@ mod tests {
             let new_output = vec![ContentBlockChatOutput::Text(Text {
                 text: "new output".to_string(),
             })];
-            let new_tool_params = ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            };
             let new_tags = HashMap::from([("new".to_string(), "tag".to_string())]);
+
+            // Create DynamicToolParams directly instead of round-tripping
+            // Setting allowed_tools to empty list means "no tools" which results in None
+            let dynamic_tool_params = DynamicToolParams {
+                allowed_tools: Some(vec![]),
+                additional_tools: None,
+                tool_choice: Some(ToolChoice::None),
+                parallel_tool_calls: Some(false),
+                provider_tools: None,
+            };
 
             let update = UpdateChatDatapointRequest {
                 id: existing.id,
                 input: Some(new_input),
                 output: Some(new_output.clone()),
-                tool_params: Some(Some(new_tool_params.clone())),
+                tool_params: Some(Some(dynamic_tool_params)),
                 tags: Some(new_tags.clone()),
                 metadata: Some(DatapointMetadataUpdate {
                     name: Some(Some("updated_name".to_string())),
@@ -1389,7 +1405,7 @@ mod tests {
 
             // Verify all fields were updated
             assert_eq!(updated.output, Some(new_output));
-            assert_eq!(updated.tool_params, Some(new_tool_params));
+            assert_eq!(updated.tool_params, None); // Empty allowed_tools results in None
             assert_eq!(updated.tags, Some(new_tags));
             assert_eq!(updated.name, Some("updated_name".to_string()));
         }
@@ -1526,7 +1542,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(new_output_value.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output_value).unwrap(),
+                })),
                 output_schema: None,
                 tags: None,
                 metadata: None,
@@ -1609,7 +1627,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(new_output.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output).unwrap(),
+                })),
                 output_schema: Some(new_schema.clone()),
                 tags: None,
                 metadata: None,
@@ -1647,8 +1667,50 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: None,
-                output: Some(Some(bad_output)),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&bad_output).unwrap(),
+                })),
                 output_schema: None, // Will use existing schema which expects {value: string}
+                tags: None,
+                metadata: None,
+            };
+
+            let result = prepare_json_update(
+                &app_state,
+                &fetch_context,
+                dataset_name,
+                update,
+                existing,
+                "2025-01-01 00:00:00",
+            )
+            .await
+            .unwrap();
+
+            let DatapointInsert::Json(updated) = result.updated else {
+                panic!("Expected Json insert");
+            };
+
+            assert_eq!(updated.output.as_ref().unwrap().parsed, None);
+        }
+
+        #[tokio::test]
+        async fn test_prepare_json_update_invalid_output_schema() {
+            let app_state = create_test_app_state();
+            let fetch_context = create_fetch_context(&app_state.http_client);
+            let dataset_name = "test_dataset";
+            let existing = create_sample_json_datapoint(dataset_name);
+
+            // Provide an invalid schema
+            let invalid_schema = json!({
+                "type": "invalid_type",  // This is not a valid JSON Schema type
+                "properties": {"value": {"type": "string"}}
+            });
+
+            let update = UpdateJsonDatapointRequest {
+                id: existing.id,
+                input: None,
+                output: None,
+                output_schema: Some(invalid_schema),
                 tags: None,
                 metadata: None,
             };
@@ -1663,13 +1725,14 @@ mod tests {
             )
             .await;
 
-            assert!(result.is_err(), "Expected validation error");
-            let err = result.unwrap_err();
-            let err_msg = format!("{err:?}");
-            assert!(
-                err_msg.contains("does not match") || err_msg.contains("schema"),
-                "Expected schema validation error, got: {err_msg}"
-            );
+            // Should return an error because the schema is invalid
+            assert!(result.is_err());
+            let error = result.unwrap_err();
+            // Verify the error is related to JSON schema validation
+            assert!(matches!(
+                error.get_details(),
+                ErrorDetails::DynamicJsonSchema { .. }
+            ));
         }
 
         #[tokio::test]
@@ -1718,7 +1781,7 @@ mod tests {
                 system: None,
                 messages: vec![InputMessage {
                     role: Role::User,
-                    content: vec![InputMessageContent::Text(TextKind::Text {
+                    content: vec![InputMessageContent::Text(Text {
                         text: "new json input".into(),
                     })],
                 }],
@@ -1731,7 +1794,9 @@ mod tests {
             let update = UpdateJsonDatapointRequest {
                 id: existing.id,
                 input: Some(new_input),
-                output: Some(Some(new_output.clone())),
+                output: Some(Some(JsonDatapointOutputUpdate {
+                    raw: serde_json::to_string(&new_output).unwrap(),
+                })),
                 output_schema: Some(new_schema.clone()),
                 tags: Some(new_tags.clone()),
                 metadata: Some(DatapointMetadataUpdate {
@@ -1777,7 +1842,7 @@ mod tests {
             let existing_datapoint_clone = existing_datapoint.clone();
             mock_db.expect_get_datapoints().returning(move |_| {
                 let cloned_datapoint = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Chat(cloned_datapoint)]) })
+                Box::pin(async move { Ok(vec![StoredDatapoint::Chat(cloned_datapoint)]) })
             });
             mock_db
                 .expect_insert_datapoints()
@@ -1794,7 +1859,7 @@ mod tests {
                     // The other fields should stay the same.
                     assert_eq!(dp.input, existing_datapoint.input);
                     assert_eq!(dp.output, existing_datapoint.output);
-                    assert_eq!(dp.tool_params, existing_datapoint.tool_params);
+                    assert_eq!(dp.tool_params, existing_datapoint.tool_params.clone());
                     assert_eq!(dp.tags, existing_datapoint.tags);
                     assert_eq!(dp.staled_at, existing_datapoint.staled_at);
                     assert_eq!(
@@ -1831,7 +1896,7 @@ mod tests {
             let existing_datapoint_clone = existing_datapoint.clone();
             mock_db.expect_get_datapoints().returning(move |_| {
                 let dp = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Json(dp)]) })
+                Box::pin(async move { Ok(vec![StoredDatapoint::Json(dp)]) })
             });
             mock_db
                 .expect_insert_datapoints()
@@ -1885,7 +1950,7 @@ mod tests {
             let existing_datapoint_clone = existing_datapoint.clone();
             mock_db.expect_get_datapoints().returning(move |_| {
                 let dp = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Chat(dp)]) })
+                Box::pin(async move { Ok(vec![StoredDatapoint::Chat(dp)]) })
             });
             mock_db
                 .expect_insert_datapoints()
@@ -1917,7 +1982,7 @@ mod tests {
             let existing_datapoint_clone = existing_datapoint.clone();
             mock_db.expect_get_datapoints().returning(move |_| {
                 let dp = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Chat(dp)]) })
+                Box::pin(async move { Ok(vec![StoredDatapoint::Chat(dp)]) })
             });
             mock_db
                 .expect_insert_datapoints()
@@ -2027,7 +2092,9 @@ mod tests {
             mock_db.expect_get_datapoints().returning(move |_| {
                 let dp1 = datapoint1_clone.clone();
                 let dp2 = datapoint2_clone.clone();
-                Box::pin(async move { Ok(vec![Datapoint::Chat(dp1), Datapoint::Json(dp2)]) })
+                Box::pin(
+                    async move { Ok(vec![StoredDatapoint::Chat(dp1), StoredDatapoint::Json(dp2)]) },
+                )
             });
             mock_db
                 .expect_insert_datapoints()

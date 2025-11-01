@@ -20,6 +20,9 @@ spec:
         {{- include "tensorzero.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: ui
     spec:
+      {{- if .Values.ui.serviceAccountName }}
+      serviceAccountName: {{ .Values.ui.serviceAccountName }}
+      {{- end }}
       containers:
         - name: ui
           image: "{{ .Values.ui.image.repository }}:{{ .Values.ui.image.tag | default .Chart.AppVersion }}"

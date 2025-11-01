@@ -75,6 +75,48 @@ For `json` functions, each datapoint object must have the following fields:
 - `tags` (map of string to string, optional)
 - `name` (string, optional)
 
+### Update datapoints in a dataset
+
+This endpoint updates one or more datapoints in a dataset by creating new versions.
+The original datapoint is marked as stale (i.e. a soft deletion), and a new datapoint is created with the updated values and a new ID.
+The response returns the newly created IDs.
+
+- **Gateway Endpoint:** `PATCH /v1/datasets/{dataset_name}/datapoints`
+- **Client Method:** `update_datapoints`
+
+Each object must have the fields `id` (string, UUIDv7) and `type` (`"chat"` or `"json"`).
+
+The following fields are optional.
+If provided, they will update the corresponding fields in the datapoint.
+If omitted, the fields will remain unchanged.
+If set to `null`, the fields will be cleared (as long as they are nullable).
+
+For `chat` functions, you can update the following fields:
+
+- `input` (object) - replaces the datapoint's input
+- `output` (list of content blocks) - replaces the datapoint's output
+- `tool_params` (object or null) - replaces the tool configuration (can be set to `null` to clear)
+- `tags` (map of string to string) - replaces all tags
+- `metadata` (object) - updates metadata fields:
+  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+
+For `json` functions, you can update the following fields:
+
+- `input` (object) - replaces the datapoint's input
+- `output` (object or null) - replaces the output (validated against the output schema; can be set to `null` to clear)
+- `output_schema` (object) - replaces the output schema
+- `tags` (map of string to string) - replaces all tags
+- `metadata` (object) - updates metadata fields:
+  - `name` (string or null) - replaces the name (can be set to `null` to clear)
+
+<Tip>
+
+If you're only updating datapoint metadata (e.g. `name`), the `update_datapoint_metadata` method below is an alternative that does not affect the datapoint ID.
+
+</Tip>
+
+The endpoint returns an object with `ids`, a list of IDs (strings, UUIDv7) of the updated datapoints.
+
 ### Update datapoint metadata
 
 This endpoint updates metadata fields for one or more datapoints in a dataset.

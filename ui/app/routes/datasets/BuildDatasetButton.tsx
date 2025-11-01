@@ -1,27 +1,22 @@
 import { Plus } from "lucide-react";
 import { Button } from "~/components/ui/button";
+import { useReadOnly } from "~/context/read-only";
+import { ReadOnlyGuard } from "~/components/utils/read-only-guard";
 
 interface BuildDatasetButtonProps {
   onClick: () => void;
   className?: string;
-  disabled?: boolean;
 }
 
-export function BuildDatasetButton({
-  onClick,
-  className,
-  disabled = false,
-}: BuildDatasetButtonProps) {
+export function BuildDatasetButton(props: BuildDatasetButtonProps) {
+  const isReadOnly = useReadOnly();
+
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={onClick}
-      className={className}
-      disabled={disabled}
-    >
-      <Plus className="text-fg-tertiary mr-2 h-4 w-4" />
-      Build Dataset
-    </Button>
+    <ReadOnlyGuard asChild>
+      <Button variant="outline" size="sm" disabled={isReadOnly} {...props}>
+        <Plus className="text-fg-tertiary mr-2 h-4 w-4" />
+        Build Dataset
+      </Button>
+    </ReadOnlyGuard>
   );
 }

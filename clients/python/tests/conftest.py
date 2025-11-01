@@ -20,7 +20,6 @@ from tensorzero import (
     TensorZeroGateway,
     Text,
     Tool,
-    ToolParams,
     patch_openai_client,
 )
 from tensorzero.util import uuid7
@@ -119,22 +118,20 @@ def mixed_rendered_samples(
         episode_id=uuid7(),
         inference_id=uuid7(),
         timestamp=datetime.now(timezone.utc).isoformat(),
-        tool_params=ToolParams(
-            tools_available=[
-                Tool(
-                    name="test",
-                    description="test",
-                    parameters={
-                        "type": "object",
-                        "properties": {"foo": {"type": "string", "description": "bar"}},
-                        "required": ["foo"],
-                    },
-                    strict=False,
-                )
-            ],
-            tool_choice="auto",
-            parallel_tool_calls=False,
-        ),
+        additional_tools=[
+            Tool(
+                name="test",
+                description="test",
+                parameters={
+                    "type": "object",
+                    "properties": {"foo": {"type": "string", "description": "bar"}},
+                    "required": ["foo"],
+                },
+                strict=False,
+            )
+        ],
+        tool_choice="auto",
+        parallel_tool_calls=False,
         output_schema=None,
         dispreferred_outputs=[],
         tags={"test_key": "test_value"},
@@ -160,7 +157,6 @@ def mixed_rendered_samples(
             "type": "object",
             "properties": {"answer": {"type": "string"}},
         },
-        tool_params=None,
         dispreferred_outputs=[],
         tags={"test_key": "test_value"},
     )
@@ -193,11 +189,8 @@ def chat_function_rendered_samples(
         episode_id=uuid7(),
         inference_id=uuid7(),
         timestamp=datetime.now(timezone.utc).isoformat(),
-        tool_params=ToolParams(
-            tools_available=[],  # No tools for DICL compatibility
-            tool_choice="none",
-            parallel_tool_calls=False,
-        ),
+        tool_choice="none",
+        parallel_tool_calls=False,
         output_schema=None,
         dispreferred_outputs=[],
         tags={"test_key": "test_value"},
@@ -236,7 +229,6 @@ def json_function_rendered_samples(
             "type": "object",
             "properties": {"answer": {"type": "string"}},
         },
-        tool_params=None,  # JSON functions don't have tool_params
         dispreferred_outputs=[],
         tags={"test_key": "test_value"},
     )

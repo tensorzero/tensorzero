@@ -19,11 +19,12 @@ serde.workspace = true
 serde_json.workspace = true
 url.workspace = true
 uuid.workspace = true
+secrecy.workspace = true
 tensorzero = { path = "../../clients/rust" }
 tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-auth = { path = "../../internal/tensorzero-auth" }
 evaluations = { path = "../../evaluations" }
 ts-rs = { workspace = true }
 
 [build-dependencies]
-napi-build = "2.2.2"
-
+napi-build = "2.2.4"

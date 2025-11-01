@@ -20,7 +20,7 @@ use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
     batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
-    ModelInferenceRequest, RequestMessage, Role, System,
+    ModelInferenceRequest, RequestMessage, Role, System, Text,
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -370,7 +370,9 @@ pub fn prepare_system_message(
                 // Otherwise, we use the system message as-is.
                 let system_value = match system {
                     Some(System::Text(text)) => Cow::Owned(Value::String(text.clone())),
-                    Some(System::Template(map)) => Cow::Owned(Value::Object(map.clone())),
+                    Some(System::Template(arguments)) => {
+                        Cow::Owned(Value::Object(arguments.0.clone()))
+                    }
                     None => Cow::Owned(Value::Null),
                 };
                 system_value
@@ -399,19 +401,19 @@ pub async fn prepare_request_message(
     let mut content = Vec::new();
     for block in &message.content {
         match block {
-            LazyResolvedInputMessageContent::Text { text } => {
+            LazyResolvedInputMessageContent::Text(text) => {
                 let template = chat_templates.get_implicit_template(message.role);
                 let text_content = match template {
                     Some(template) if template.legacy_definition => {
                         let context = serde_json::json!({
-                            message.role.implicit_template_var().to_string(): text
+                            message.role.implicit_template_var().to_string(): text.text
                         });
                         templates_config.template_message(
                             &template.template.path.get_template_key(),
                             &context,
                         )?
                     }
-                    _ => text.clone(),
+                    _ => text.text.clone(),
                 };
                 content.push(text_content.into());
             }
@@ -434,8 +436,10 @@ pub async fn prepare_request_message(
                 )?;
                 content.push(text_content.into());
             }
-            LazyResolvedInputMessageContent::RawText { value: text } => {
-                content.push(text.clone().into());
+            LazyResolvedInputMessageContent::RawText(raw_text) => {
+                content.push(ContentBlock::Text(Text {
+                    text: raw_text.value.clone(),
+                }));
             }
             // The following two clones are probably removable.
             // We will need to implement a ToolCallRef type or something so that we can avoid cloning the ToolCall and ToolResult.
@@ -451,13 +455,10 @@ pub async fn prepare_request_message(
             LazyResolvedInputMessageContent::Thought(thought) => {
                 content.push(ContentBlock::Thought(thought.clone()));
             }
-            LazyResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => {
+            LazyResolvedInputMessageContent::Unknown(unknown) => {
                 content.push(ContentBlock::Unknown {
-                    data: data.clone(),
-                    model_provider_name: model_provider_name.clone(),
+                    data: unknown.data.clone(),
+                    model_provider_name: unknown.model_provider_name.clone(),
                 });
             }
         }
@@ -783,9 +784,10 @@ mod tests {
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::http::TensorzeroHttpClient;
-    use crate::inference::types::TemplateInput;
+    use crate::inference::types::Template;
     use crate::inference::types::{
-        ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode, Usage,
+        Arguments, ContentBlockChatOutput, InferenceResultChunk, ModelInferenceRequestJsonMode,
+        Usage,
     };
     use crate::jsonschema_util::{DynamicJSONSchema, StaticJSONSchema};
     use crate::minijinja_util::tests::{
@@ -797,7 +799,7 @@ mod tests {
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::{DummyProvider, DUMMY_JSON_RESPONSE_RAW};
     use crate::providers::test_helpers::get_temperature_tool_config;
-    use crate::tool::{AllowedTools, ToolCallConfig, ToolChoice};
+    use crate::tool::{ToolCallConfig, ToolChoice};
     use crate::{
         error::Error,
         inference::types::{ContentBlockChunk, Role, TextChunk},
@@ -869,9 +871,12 @@ mod tests {
         // Test case 3: Invalid JSON input
         let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"invalid": "json"}).as_object().unwrap().clone(),
+                arguments: Arguments(serde_json::Map::from_iter([(
+                    "invalid".to_string(),
+                    "json".into(),
+                )])),
             })],
         };
         let result = chat_completion_config
@@ -921,12 +926,12 @@ mod tests {
         // Test case 4: Assistant message with template
         let input_message = LazyResolvedInputMessage {
             role: Role::Assistant,
-            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(Template {
                 name: "assistant".to_string(),
-                arguments: json!({"reason": "it's against my ethical guidelines"})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
+                arguments: Arguments(serde_json::Map::from_iter([(
+                    "reason".to_string(),
+                    "it's against my ethical guidelines".into(),
+                )])),
             })],
         };
         let prepared_message = chat_completion_config
@@ -949,12 +954,12 @@ mod tests {
         // Test case 5: User message with template
         let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"name": "John", "age": 30})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
+                arguments: Arguments(serde_json::Map::from_iter([
+                    ("name".to_string(), "John".into()),
+                    ("age".to_string(), 30.into()),
+                ])),
             })],
         };
         let prepared_message = chat_completion_config
@@ -977,9 +982,12 @@ mod tests {
         // Test case 6: User message with bad input (missing required field)
         let input_message = LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"name": "Alice"}).as_object().unwrap().clone(), // Missing "age" field
+                arguments: Arguments(serde_json::Map::from_iter([(
+                    "name".to_string(),
+                    "Alice".into(),
+                )])), // Missing "age" field
             })],
         };
         let result = chat_completion_config
@@ -1072,12 +1080,12 @@ mod tests {
             weight: Some(1.0),
             ..Default::default()
         };
-        let input_message = System::Template(
+        let input_message = System::Template(Arguments(
             json!({"message": "You are a helpful assistant."})
                 .as_object()
                 .unwrap()
                 .clone(),
-        );
+        ));
         let result =
             chat_completion_config.prepare_system_message(&templates, Some(&input_message));
         assert!(result.is_err());
@@ -1130,12 +1138,12 @@ mod tests {
         )
         .unwrap();
 
-        let input_message = System::Template(
+        let input_message = System::Template(Arguments(
             serde_json::json!({"assistant_name": "ChatGPT"})
                 .as_object()
                 .unwrap()
                 .clone(),
-        );
+        ));
         let prepared_message = chat_completion_config
             .prepare_system_message(&templates, Some(&input_message))
             .unwrap();
@@ -1371,12 +1379,12 @@ mod tests {
             content: vec![],
         }];
         let input = LazyResolvedInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "R2-D2"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages,
         };
         let provider_types = ProviderTypesConfig::default();
@@ -1791,21 +1799,23 @@ mod tests {
         }
         let messages = vec![LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"name": "Luke", "age": 20})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
+                arguments: Arguments(
+                    json!({"name": "Luke", "age": 20})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ),
             })],
         }];
         let input = LazyResolvedInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "R2-D2"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages,
         };
         // Test case 6: JSON output was supposed to happen and it did
@@ -2256,21 +2266,23 @@ mod tests {
         let inference_params = InferenceParams::default();
         let messages = vec![LazyResolvedInputMessage {
             role: Role::User,
-            content: vec![LazyResolvedInputMessageContent::Template(TemplateInput {
+            content: vec![LazyResolvedInputMessageContent::Template(Template {
                 name: "user".to_string(),
-                arguments: json!({"name": "Luke", "age": 20})
-                    .as_object()
-                    .unwrap()
-                    .clone(),
+                arguments: Arguments(
+                    json!({"name": "Luke", "age": 20})
+                        .as_object()
+                        .unwrap()
+                        .clone(),
+                ),
             })],
         }];
         let input = LazyResolvedInput {
-            system: Some(System::Template(
+            system: Some(System::Template(Arguments(
                 json!({"assistant_name": "R2-D2"})
                     .as_object()
                     .unwrap()
                     .clone(),
-            )),
+            ))),
             messages,
         };
         let chat_completion_config = Box::leak(Box::new(
@@ -2609,16 +2621,7 @@ mod tests {
             schemas: SchemaData::load(None, None, None, UninitializedSchemas::default(), "test")
                 .unwrap(),
             output_schema: StaticJSONSchema::from_value(output_schema_value.clone()).unwrap(),
-            implicit_tool_call_config: ToolCallConfig {
-                tools_available: vec![],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-                provider_tools: vec![],
-                allowed_tools: AllowedTools::default(),
-            },
-            description: None,
-            all_explicit_template_names: HashSet::new(),
-            experimentation: ExperimentationConfig::default(),
+            ..Default::default()
         });
         let inference_config = InferenceConfig {
             ids: InferenceIds {

@@ -10,8 +10,8 @@ use crate::inference::types::ResolvedInputMessage;
 use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredContentBlock;
 use crate::inference::types::System;
-use crate::inference::types::TemplateInput;
-use crate::inference::types::{Role, Text, Thought, ToolCall, ToolResult};
+use crate::inference::types::Template;
+use crate::inference::types::{RawText, Role, Text, Thought, ToolCall, ToolResult, Unknown};
 use futures::future::try_join_all;
 use serde::de::{self, Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -80,7 +80,7 @@ impl StoredInput {
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database.
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database (see below).
 pub struct StoredInputMessage {
     pub role: Role,
     pub content: Vec<StoredInputMessageContent>,
@@ -103,6 +103,12 @@ impl StoredInputMessage {
     }
 }
 
+/// `StoredInputMessage` has a custom deserializer that addresses legacy data formats in the database:
+///
+/// - {"type": "text", "value": "..."} -> {"type": "text", "text": "..."}
+/// - {"type": "text", "value": { ... }} -> {"type": "template", "name": "role", "arguments": { ... }}
+///
+/// The correct type {"type": "text", "text": "..."} goes through without modification.
 impl<'de> Deserialize<'de> for StoredInputMessage {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -207,20 +213,14 @@ impl<'de> Deserialize<'de> for StoredInputMessage {
 #[cfg_attr(test, ts(export))]
 pub enum StoredInputMessageContent {
     Text(Text),
-    Template(TemplateInput),
+    Template(Template),
     ToolCall(ToolCall),
     ToolResult(ToolResult),
-    RawText {
-        value: String,
-    },
+    RawText(RawText),
     Thought(Thought),
     #[serde(alias = "image")]
     File(Box<StoredFile>),
-    Unknown {
-        data: Value,
-        model_provider_name: Option<String>,
-    },
-    // We may extend this in the future to include other types of content
+    Unknown(Unknown),
 }
 
 impl StoredInputMessageContent {
@@ -239,8 +239,8 @@ impl StoredInputMessageContent {
             StoredInputMessageContent::ToolResult(tool_result) => {
                 Ok(ResolvedInputMessageContent::ToolResult(tool_result))
             }
-            StoredInputMessageContent::RawText { value } => {
-                Ok(ResolvedInputMessageContent::RawText { value })
+            StoredInputMessageContent::RawText(raw_text) => {
+                Ok(ResolvedInputMessageContent::RawText(raw_text))
             }
             StoredInputMessageContent::Thought(thought) => {
                 Ok(ResolvedInputMessageContent::Thought(thought))
@@ -258,13 +258,9 @@ impl StoredInputMessageContent {
                     },
                 )))
             }
-            StoredInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            } => Ok(ResolvedInputMessageContent::Unknown {
-                data,
-                model_provider_name,
-            }),
+            StoredInputMessageContent::Unknown(unknown) => {
+                Ok(ResolvedInputMessageContent::Unknown(unknown))
+            }
         }
     }
 }
@@ -477,8 +473,8 @@ mod tests {
         match &message.content[0] {
             StoredInputMessageContent::Template(template) => {
                 assert_eq!(template.name, "user");
-                assert_eq!(template.arguments.get("foo").unwrap(), "bar");
-                assert_eq!(template.arguments.get("baz").unwrap(), 123);
+                assert_eq!(template.arguments.0.get("foo").unwrap(), "bar");
+                assert_eq!(template.arguments.0.get("baz").unwrap(), 123);
             }
             _ => panic!("Expected Template variant"),
         }
