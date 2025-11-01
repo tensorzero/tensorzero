@@ -498,13 +498,6 @@ class BaseTensorZeroGateway:
 
 @final
 class TensorZeroGateway(BaseTensorZeroGateway):
-    def __init__(self, base_url: str, *, timeout: Optional[float] = None) -> None:
-        """
-        Initialize the TensorZero client.
-
-        :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
-        """
-
     @classmethod
     def build_http(
         cls,
@@ -512,12 +505,14 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         gateway_url: str,
         timeout: Optional[float] = None,
         verbose_errors: bool = False,
+        api_key: Optional[str] = None,
     ) -> "TensorZeroGateway":
         """
         Initialize the TensorZero client, using the HTTP gateway.
         :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
         :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
         :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+        :param api_key: The API key to use for authentication with the TensorZero Gateway. If not provided, the client will attempt to read from the TENSORZERO_API_KEY environment variable.
         :return: A `TensorZeroGateway` instance configured to use the HTTP gateway.
         """
 
@@ -912,13 +907,6 @@ class TensorZeroGateway(BaseTensorZeroGateway):
 
 @final
 class AsyncTensorZeroGateway(BaseTensorZeroGateway):
-    def __init__(self, base_url: str, *, timeout: Optional[float] = None) -> None:
-        """
-        Initialize the TensorZero client.
-
-        :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
-        """
-
     @classmethod
     def build_http(
         cls,
@@ -927,6 +915,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         timeout: Optional[float] = None,
         verbose_errors: bool = False,
         async_setup: bool = True,
+        api_key: Optional[str] = None,
     ) -> Union[Awaitable["AsyncTensorZeroGateway"], "AsyncTensorZeroGateway"]:
         """
         Initialize the TensorZero client, using the HTTP gateway.
@@ -934,6 +923,7 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
         :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
         :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
         :param async_setup (Optional): If True, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and return an `AsyncTensorZeroGateway` directly.
+        :param api_key: The API key to use for authentication with the TensorZero Gateway. If not provided, the client will attempt to read from the TENSORZERO_API_KEY environment variable.
         :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
         """
 
