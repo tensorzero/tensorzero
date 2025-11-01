@@ -249,8 +249,6 @@ For example:
 
 ```bash
 curl -X POST http://localhost:3000/inference \
-  -H "tensorzero-otlp-traces-extra-attribute-user_id: \"user-123\"" \
-  -H "tensorzero-otlp-traces-extra-attribute-is_premium: true" \
   -H "tensorzero-otlp-traces-extra-resource-service.namespace: production" \
   -d '{ ... }'
 ```
