@@ -902,7 +902,8 @@ impl Client {
     }
 }
 
-async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>>(
+#[doc(hidden)]
+pub async fn with_embedded_timeout<R, F: Future<Output = Result<R, TensorZeroError>>>(
     timeout: Option<Duration>,
     fut: F,
 ) -> Result<R, TensorZeroError> {

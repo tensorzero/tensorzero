@@ -7,7 +7,10 @@ pub use tensorzero_core::client::{
 };
 
 // Client error types
-pub use tensorzero_core::client::{ClientBuilderError, TensorZeroError, TensorZeroInternalError};
+pub use tensorzero_core::client::{
+    err_to_http, with_embedded_timeout, ClientBuilderError, TensorZeroError,
+    TensorZeroInternalError,
+};
 
 // Client input types
 pub use tensorzero_core::client::{
@@ -797,31 +800,5 @@ impl ClientExt for Client {
             ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state),
             ClientMode::HTTPGateway(_) => None,
         }
-    }
-}
-
-// Helper functions for extension traits
-use std::time::Duration;
-use tokio::time::error::Elapsed;
-
-async fn with_embedded_timeout<R, F: std::future::Future<Output = Result<R, TensorZeroError>>>(
-    timeout: Option<Duration>,
-    fut: F,
-) -> Result<R, TensorZeroError> {
-    if let Some(timeout) = timeout {
-        tokio::time::timeout(timeout, fut)
-            .await
-            .map_err(|_: Elapsed| TensorZeroError::RequestTimeout)?
-    } else {
-        fut.await
-    }
-}
-
-#[doc(hidden)]
-pub fn err_to_http(e: tensorzero_core::error::Error) -> TensorZeroError {
-    TensorZeroError::Http {
-        status_code: e.status_code().as_u16(),
-        text: Some(serde_json::json!({"error": e.to_string()}).to_string()),
-        source: e.into(),
     }
 }
