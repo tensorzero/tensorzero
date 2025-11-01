@@ -1697,6 +1697,7 @@ pub use tensorzero_core::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
     #[tokio::test]
@@ -1716,6 +1717,34 @@ mod tests {
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"),
+            "Bad error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_auth_not_supported_in_embedded() {
+        // Create a config that enables auth, which is not supported in embedded mode
+        let config = r"
+[gateway.auth]
+enabled = true
+";
+        let tmp_config = NamedTempFile::new().unwrap();
+        std::fs::write(tmp_config.path(), config).unwrap();
+
+        let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(tmp_config.path().to_owned()),
+            clickhouse_url: None,
+            postgres_url: None,
+            timeout: None,
+            verify_credentials: false, // Skip credential verification
+            allow_batch_writes: false,
+        })
+        .build()
+        .await
+        .expect_err("ClientBuilder should have failed");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("`[gateway.auth]` is not supported in embedded gateway"),
             "Bad error message: {err_msg}"
         );
     }
