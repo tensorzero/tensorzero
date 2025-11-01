@@ -2854,3 +2854,122 @@ async fn test_config_file_glob_recursive() {
     // Should match both files
     assert_eq!(config_glob.paths.len(), 2);
 }
+
+/// Test that a deprecation warning is emitted when parallel_tool_calls is set at function level
+#[tokio::test]
+#[traced_test]
+async fn test_parallel_tool_calls_function_level_deprecation_warning() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    // Create a simple system template
+    let system_template_path = temp_dir.path().join("system.minijinja");
+    std::fs::write(&system_template_path, "You are a helpful assistant.").unwrap();
+
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .display()
+        .to_string();
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file
+        .write_all(
+            format!(
+                r#"
+        [functions.test_function]
+        type = "chat"
+        tools = ["get_temperature"]
+        parallel_tool_calls = false
+
+        [functions.test_function.variants.test_variant]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        system_template = "{}"
+
+        [tools.get_temperature]
+        description = "Get the weather for a given location"
+        parameters = "{base_path}/fixtures/config/tools/get_temperature.json"
+        "#,
+                system_template_path.display()
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    let config = Config::load_and_verify_from_path(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .await
+    .expect("Config should load successfully");
+
+    // Verify the config loaded properly
+    assert!(config.functions.contains_key("test_function"));
+
+    // Verify the deprecation warning was emitted
+    assert!(logs_contain(
+        "Deprecation Warning: The property `parallel_tool_calls` will migrate from functions to variants"
+    ));
+    assert!(logs_contain("test_function"));
+}
+
+/// Test that parallel_tool_calls works at variant level without warnings
+#[tokio::test]
+#[traced_test]
+async fn test_parallel_tool_calls_variant_level_no_warning() {
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    // Create a simple system template
+    let system_template_path = temp_dir.path().join("system.minijinja");
+    std::fs::write(&system_template_path, "You are a helpful assistant.").unwrap();
+
+    let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .display()
+        .to_string();
+
+    let mut temp_file = NamedTempFile::new().unwrap();
+    temp_file
+        .write_all(
+            format!(
+                r#"
+        [functions.test_function]
+        type = "chat"
+        tools = ["get_temperature"]
+
+        [functions.test_function.variants.test_variant]
+        type = "chat_completion"
+        model = "dummy::echo_request_messages"
+        system_template = "{}"
+        parallel_tool_calls = false
+
+        [tools.get_temperature]
+        description = "Get the weather for a given location"
+        parameters = "{base_path}/fixtures/config/tools/get_temperature.json"
+        "#,
+                system_template_path.display()
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+
+    let config = Config::load_and_verify_from_path(
+        &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+    )
+    .await
+    .expect("Config should load successfully");
+
+    // Verify the config loaded properly
+    let function = config.functions.get("test_function").unwrap();
+    match &**function {
+        FunctionConfig::Chat(chat_config) => {
+            let variant = chat_config.variants.get("test_variant").unwrap();
+            match &variant.inner {
+                VariantConfig::ChatCompletion(chat_completion_config) => {
+                    assert_eq!(chat_completion_config.parallel_tool_calls(), Some(false));
+                }
+                _ => panic!("Expected a chat completion variant"),
+            }
+        }
+        _ => panic!("Expected a chat function"),
+    }
+
+    // Verify no deprecation warning was emitted
+    assert!(!logs_contain("Deprecation Warning"));
+}

@@ -1468,6 +1468,16 @@ impl UninitializedFunctionConfig {
                             .map(|v| (name, Arc::new(v)))
                     })
                     .collect::<Result<HashMap<_, _>, Error>>()?;
+
+                // Check for deprecation warning: parallel_tool_calls at function level
+                if params.parallel_tool_calls.is_some() {
+                    tracing::warn!(
+                        function_name = function_name,
+                        "Deprecation Warning: The property `parallel_tool_calls` will migrate from functions to variants. \
+                         Please move `parallel_tool_calls` from the function `{function_name}` to its variants."
+                    );
+                }
+
                 let mut all_template_names = HashSet::new();
                 for (name, variant) in &variants {
                     all_template_names.extend(variant.get_all_explicit_template_names());

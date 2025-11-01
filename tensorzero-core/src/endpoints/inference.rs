@@ -306,7 +306,8 @@ pub async fn inference(
         .into());
     }
 
-    let tool_config = function.prepare_tool_config(params.dynamic_tool_params, &config.tools)?;
+    // Tool config will be prepared inside infer_variant to use variant-specific parallel_tool_calls
+    let dynamic_tool_params = params.dynamic_tool_params.clone();
     let mut templates = Arc::clone(&config.templates);
 
     let needs_sampling = prepare_candidate_variants(
@@ -395,7 +396,7 @@ pub async fn inference(
             inference_clients,
             inference_params: params.params.clone(),
             templates,
-            tool_config: &tool_config,
+            dynamic_tool_params: &dynamic_tool_params,
             output_schema: &output_schema,
             config: &config,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -446,7 +447,7 @@ pub async fn inference(
             inference_clients: inference_clients.clone(),
             inference_params: params.params.clone(),
             templates,
-            tool_config: &tool_config,
+            dynamic_tool_params: &dynamic_tool_params,
             output_schema: &output_schema,
             config: &config,
             clickhouse_connection_info: &clickhouse_connection_info,
@@ -493,7 +494,7 @@ struct InferVariantArgs<'a> {
     inference_clients: InferenceClients,
     inference_params: InferenceParams,
     templates: &'a Arc<TemplateConfig<'static>>,
-    tool_config: &'a Option<ToolCallConfig>,
+    dynamic_tool_params: &'a DynamicToolParams,
     output_schema: &'a Option<DynamicJSONSchema>,
     config: &'a Arc<Config>,
     clickhouse_connection_info: &'a ClickHouseConnectionInfo,
@@ -519,7 +520,7 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         inference_clients,
         inference_params,
         templates,
-        tool_config,
+        dynamic_tool_params,
         output_schema,
         config,
         clickhouse_connection_info,
@@ -528,6 +529,19 @@ async fn infer_variant(args: InferVariantArgs<'_>) -> Result<InferenceOutput, Er
         extra_headers,
         include_original_response,
     } = args;
+
+    // Extract variant-level parallel_tool_calls based on variant type
+    let variant_parallel_tool_calls = match &variant.inner {
+        VariantConfig::ChatCompletion(chat_config) => chat_config.parallel_tool_calls(),
+        _ => None,
+    };
+
+    // Prepare tool config with variant-specific parallel_tool_calls
+    let tool_config = function.prepare_tool_config(
+        dynamic_tool_params.clone(),
+        &config.tools,
+        variant_parallel_tool_calls,
+    )?;
 
     // Will be edited by the variant as part of making the request so we must clone here
     let variant_inference_params = inference_params.clone();
