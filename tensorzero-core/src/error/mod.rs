@@ -132,6 +132,11 @@ impl Error {
         Error(Arc::new(details))
     }
 
+    /// Log this error using the appropriate tracing level
+    pub fn log(&self) {
+        self.0.log();
+    }
+
     pub fn status_code(&self) -> StatusCode {
         self.0.status_code()
     }
@@ -151,10 +156,6 @@ impl Error {
                 description: self.to_string().into(),
             });
         }
-    }
-
-    pub fn log(&self) {
-        self.0.log();
     }
 
     pub fn log_at_level(&self, prefix: &str, level: tracing::Level) {

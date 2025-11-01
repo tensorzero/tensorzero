@@ -118,34 +118,50 @@ impl TryFrom<Credential> for TogetherCredentials {
 }
 
 impl TogetherCredentials {
+    /// Get API key, logging errors at the top level when the entire credential chain fails
     pub fn get_api_key<'a>(
+        &'a self,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<Cow<'a, SecretString>, Error> {
+        self.get_api_key_with_fallbacks(dynamic_api_keys)
+            .inspect_err(|err| {
+                err.log();
+            })
+    }
+
+    /// Recursive implementation that tries default credentials then falls back, without logging
+    fn get_api_key_with_fallbacks<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<Cow<'a, SecretString>, Error> {
         match self {
             TogetherCredentials::Static(api_key) => Ok(Cow::Owned(api_key.clone())),
-            TogetherCredentials::Dynamic(key_name) => {
-                Ok(Cow::Borrowed(dynamic_api_keys.get(key_name).ok_or_else(
-                    || ErrorDetails::ApiKeyMissing {
+            TogetherCredentials::Dynamic(key_name) => Ok(Cow::Borrowed(
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    Error::new_without_logging(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    },
-                )?))
-            }
+                    })
+                })?,
+            )),
             TogetherCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                default
+                    .get_api_key_with_fallbacks(dynamic_api_keys)
+                    .or_else(|_| {
+                        tracing::debug!(
+                            "Default credential for {} is unavailable, attempting fallback",
+                            PROVIDER_NAME
+                        );
+                        fallback.get_api_key_with_fallbacks(dynamic_api_keys)
+                    })
             }
-            TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: PROVIDER_NAME.to_string(),
-                message: "No credentials are set".to_string(),
-            })?,
+            TogetherCredentials::None => {
+                Err(Error::new_without_logging(ErrorDetails::ApiKeyMissing {
+                    provider_name: PROVIDER_NAME.to_string(),
+                    message: "No credentials are set".to_string(),
+                }))?
+            }
         }
     }
 }

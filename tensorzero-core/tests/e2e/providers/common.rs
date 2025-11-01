@@ -1172,6 +1172,9 @@ pub async fn test_provider_type_fallback_credentials_with_provider(
 
     let config = format!(
         r#"
+[gateway]
+debug = true
+
 [models."test-model"]
 routing = ["test-provider"]
 

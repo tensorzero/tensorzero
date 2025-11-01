@@ -264,7 +264,7 @@ pub async fn make_gcp_object_store(
             match Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await {
                 Ok(store) => return Ok(store),
                 Err(_) => {
-                    tracing::info!(
+                    tracing::debug!(
                         "Default credential for {} is unavailable for GCS, attempting fallback",
                         PROVIDER_NAME
                     );
@@ -274,7 +274,7 @@ pub async fn make_gcp_object_store(
             }
         }
         GCPVertexCredentials::None => {
-            return Err(Error::new(ErrorDetails::ApiKeyMissing {
+            return Err(Error::new_without_logging(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
             }))
@@ -797,7 +797,21 @@ enum GCPVertexJobState {
 }
 
 impl GCPVertexCredentials {
+    /// Get auth headers, logging errors at the top level when the entire credential chain fails
     pub async fn get_auth_headers<'a>(
+        &'a self,
+        audience: &'a str,
+        dynamic_api_keys: &'a InferenceCredentials,
+    ) -> Result<HeaderMap, Error> {
+        self.get_auth_headers_with_fallbacks(audience, dynamic_api_keys)
+            .await
+            .inspect_err(|err| {
+                err.log();
+            })
+    }
+
+    /// Recursive implementation that tries default credentials then falls back, without logging
+    async fn get_auth_headers_with_fallbacks<'a>(
         &'a self,
         audience: &'a str,
         dynamic_api_keys: &'a InferenceCredentials,
@@ -810,7 +824,7 @@ impl GCPVertexCredentials {
                 dynamic_api_keys
                     .get(key_name)
                     .ok_or_else(|| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
+                        Error::new_without_logging(ErrorDetails::ApiKeyMissing {
                             provider_name: PROVIDER_NAME.to_string(),
                             message: format!("Dynamic api key `{key_name}` is missing"),
                         })
@@ -822,7 +836,7 @@ impl GCPVertexCredentials {
                     .headers(http::Extensions::default())
                     .await
                     .map_err(|e| {
-                        Error::new(ErrorDetails::GCPCredentials {
+                        Error::new_without_logging(ErrorDetails::GCPCredentials {
                             message: format!("Failed to get GCP access token: {e}"),
                         })
                     })?;
@@ -833,7 +847,7 @@ impl GCPVertexCredentials {
                     } => return Ok(data),
                     // We didn't pass in any 'Extensions' when calling headers, so this should never happen
                     CacheableResource::NotModified => {
-                        return Err(Error::new(ErrorDetails::InternalError {
+                        return Err(Error::new_without_logging(ErrorDetails::InternalError {
                             message: "GCP SDK return CacheableResource::NotModified. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
                         }))
                     }
@@ -841,20 +855,24 @@ impl GCPVertexCredentials {
             }
             GCPVertexCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                match Box::pin(default.get_auth_headers(audience, dynamic_api_keys)).await {
+                match Box::pin(default.get_auth_headers_with_fallbacks(audience, dynamic_api_keys))
+                    .await
+                {
                     Ok(headers) => return Ok(headers),
                     Err(_) => {
-                        tracing::info!(
+                        tracing::debug!(
                             "Default credential for {} is unavailable, attempting fallback",
                             PROVIDER_NAME
                         );
-                        return Box::pin(fallback.get_auth_headers(audience, dynamic_api_keys))
-                            .await;
+                        return Box::pin(
+                            fallback.get_auth_headers_with_fallbacks(audience, dynamic_api_keys),
+                        )
+                        .await;
                     }
                 }
             }
             GCPVertexCredentials::None => {
-                return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                return Err(Error::new_without_logging(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
                     message: "No credentials are set".to_string(),
                 }))
