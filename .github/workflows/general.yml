@@ -7,9 +7,6 @@ on:
       - "docs/**"
   pull_request:
     branches: ["main"]
-  push:
-    branches:
-      - "andrew/move-rust-client-to-tensorzero-core"
 
 concurrency:
   group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
@@ -783,7 +780,7 @@ jobs:
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   run-merge-queue-checks:
-    if: github.repository == 'tensorzero/tensorzero' && (github.event_name == 'merge_group' || github.ref == 'refs/heads/andrew/move-rust-client-to-tensorzero-core')
+    if: github.repository == 'tensorzero/tensorzero' && github.event_name == 'merge_group'
     permissions:
       # Permission to checkout the repository
       contents: read
