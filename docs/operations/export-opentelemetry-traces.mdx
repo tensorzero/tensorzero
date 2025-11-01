@@ -255,6 +255,19 @@ curl -X POST http://localhost:3000/inference \
   -d '{ ... }'
 ```
 
+### Link to existing traces with `traceparent`
+
+TensorZero automatically handles incoming `traceparent` headers for distributed tracing when OTLP is enabled.
+This follows the [W3C Trace Context standard](https://www.w3.org/TR/trace-context/).
+
+```bash
+curl -X POST http://localhost:3000/inference \
+  -H "traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01" \
+  -d '{ ... }'
+```
+
+TensorZero spans will become children of the incoming trace, preserving the trace ID across services.
+
 ### Export OpenInference traces
 
 By default, TensorZero exports traces with attributes that follow the [OpenTelemetry Generative AI semantic conventions](https://github.com/open-telemetry/semantic-conventions/tree/main/docs/gen-ai).
