@@ -196,10 +196,47 @@ pub trait ClientExt {
     ) -> Result<HashMap<String, f64>, TensorZeroError>;
 
     // Config access
+    fn config(&self) -> Option<&Config>;
+
     fn get_config(&self) -> Result<Arc<Config>, TensorZeroError>;
 
     #[cfg(any(feature = "e2e_tests", feature = "pyo3"))]
     fn get_app_state_data(&self) -> Option<&tensorzero_core::utils::gateway::AppStateData>;
+}
+
+// Private helper for creating datapoints (shared by create_datapoints and bulk_insert_datapoints)
+async fn create_datapoints_internal(
+    client: &Client,
+    dataset_name: String,
+    params: InsertDatapointParams,
+    endpoint_path: &str,
+) -> Result<Vec<Uuid>, TensorZeroError> {
+    match client.mode() {
+        ClientMode::HTTPGateway(http_client) => {
+            let url = http_client.base_url.join(&format!("datasets/{dataset_name}/{endpoint_path}")).map_err(|e| TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InvalidBaseUrl {
+                    message: format!("Failed to join base URL with /datasets/{dataset_name}/{endpoint_path} endpoint: {e}"),
+                })
+                .into(),
+            })?;
+            let builder = http_client.http_client.post(url).json(&params);
+            client.parse_http_response(builder.send().await).await
+        }
+        ClientMode::EmbeddedGateway { gateway, timeout } => {
+            Ok(with_embedded_timeout(*timeout, async {
+                tensorzero_core::endpoints::datasets::insert_datapoint(
+                    dataset_name,
+                    params,
+                    &gateway.handle.app_state.config,
+                    &gateway.handle.app_state.http_client,
+                    &gateway.handle.app_state.clickhouse_connection_info,
+                )
+                .await
+                .map_err(err_to_http)
+            })
+            .await?)
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -222,30 +259,34 @@ impl ClientExt for Client {
         }
     }
 
-    async fn create_datapoints(
-        &self,
-        dataset_name: String,
-        params: InsertDatapointParams,
-    ) -> Result<Vec<Uuid>, TensorZeroError> {
+    fn config(&self) -> Option<&Config> {
         match self.mode() {
-            ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints")).map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints endpoint: {e}"),
-                    })
-                    .into(),
-                })?;
-                let builder = client.http_client.post(url).json(&params);
-                self.parse_http_response(builder.send().await).await
-            }
+            ClientMode::HTTPGateway(_) => None,
+            ClientMode::EmbeddedGateway { gateway, .. } => Some(&gateway.handle.app_state.config),
+        }
+    }
+
+    #[cfg(feature = "e2e_tests")]
+    async fn start_batch_inference(
+        &self,
+        params: tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams,
+    ) -> Result<
+        tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
+        TensorZeroError,
+    > {
+        match self.mode() {
+            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
+                source: Error::new(ErrorDetails::InternalError {
+                    message: "batch_inference is not yet implemented for HTTPGateway mode"
+                        .to_string(),
+                })
+                .into(),
+            }),
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::datasets::insert_datapoint(
-                        dataset_name,
+                    tensorzero_core::endpoints::batch_inference::start_batch_inference(
+                        gateway.handle.app_state.clone(),
                         params,
-                        &gateway.handle.app_state.config,
-                        &gateway.handle.app_state.http_client,
-                        &gateway.handle.app_state.clickhouse_connection_info,
                     )
                     .await
                     .map_err(err_to_http)
@@ -255,17 +296,32 @@ impl ClientExt for Client {
         }
     }
 
-    async fn bulk_insert_datapoints(
+    async fn workflow_evaluation_run(
         &self,
-        dataset_name: String,
-        params: InsertDatapointParams,
-    ) -> Result<Vec<Uuid>, TensorZeroError> {
-        tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead.");
+        mut params: WorkflowEvaluationRunParams,
+    ) -> Result<WorkflowEvaluationRunResponse, TensorZeroError> {
+        // Validate tags before adding git info
+        validate_tags(&params.tags, false)
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
+
+        // Apply git information to tags
+        if let Ok(git_info) = GitInfo::new() {
+            params.tags.extend(git_info.into_tags());
+        }
+
+        // Set internal to true so we don't validate the tags again
+        params.internal = true;
+
+        // Automatically add internal tag when internal=true
+        params
+            .tags
+            .insert("tensorzero::internal".to_string(), "true".to_string());
+
         match self.mode() {
             ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("datasets/{dataset_name}/datapoints/bulk")).map_err(|e| TensorZeroError::Other {
+                let url = client.base_url.join("workflow_evaluation_run").map_err(|e| TensorZeroError::Other {
                     source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /datasets/{dataset_name}/datapoints/bulk endpoint: {e}"),
+                        message: format!("Failed to join base URL with /workflow_evaluation_run endpoint: {e}"),
                     })
                     .into(),
                 })?;
@@ -274,12 +330,9 @@ impl ClientExt for Client {
             }
             ClientMode::EmbeddedGateway { gateway, timeout } => {
                 Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::datasets::insert_datapoint(
-                        dataset_name,
+                    tensorzero_core::endpoints::workflow_evaluation_run::workflow_evaluation_run(
+                        gateway.handle.app_state.clone(),
                         params,
-                        &gateway.handle.app_state.config,
-                        &gateway.handle.app_state.http_client,
-                        &gateway.handle.app_state.clickhouse_connection_info,
                     )
                     .await
                     .map_err(err_to_http)
@@ -287,6 +340,55 @@ impl ClientExt for Client {
                 .await?)
             }
         }
+    }
+
+    async fn workflow_evaluation_run_episode(
+        &self,
+        run_id: Uuid,
+        params: WorkflowEvaluationRunEpisodeParams,
+    ) -> Result<WorkflowEvaluationRunEpisodeResponse, TensorZeroError> {
+        match self.mode() {
+            ClientMode::HTTPGateway(client) => {
+                let url = client.base_url.join(&format!("workflow_evaluation_run/{run_id}/episode")).map_err(|e| TensorZeroError::Other {
+                    source: Error::new(ErrorDetails::InvalidBaseUrl {
+                        message: format!("Failed to join base URL with /workflow_evaluation_run/{run_id}/episode endpoint: {e}"),
+                    })
+                    .into(),
+                })?;
+                let builder = client.http_client.post(url).json(&params);
+                self.parse_http_response(builder.send().await).await
+            }
+            ClientMode::EmbeddedGateway { gateway, timeout } => {
+                Ok(with_embedded_timeout(*timeout, async {
+                    tensorzero_core::endpoints::workflow_evaluation_run::workflow_evaluation_run_episode(
+                        gateway.handle.app_state.clone(),
+                        run_id,
+                        params,
+                    )
+                    .await
+                    .map_err(err_to_http)
+                })
+                .await?)
+            }
+        }
+    }
+
+    async fn create_datapoints(
+        &self,
+        dataset_name: String,
+        params: InsertDatapointParams,
+    ) -> Result<Vec<Uuid>, TensorZeroError> {
+        create_datapoints_internal(self, dataset_name, params, "datapoints").await
+    }
+
+    /// DEPRECATED: Use `create_datapoints` instead.
+    async fn bulk_insert_datapoints(
+        &self,
+        dataset_name: String,
+        params: InsertDatapointParams,
+    ) -> Result<Vec<Uuid>, TensorZeroError> {
+        tracing::warn!("`Client::bulk_insert_datapoints` is deprecated. Use `Client::create_datapoints` instead.");
+        create_datapoints_internal(self, dataset_name, params, "datapoints/bulk").await
     }
 
     async fn delete_datapoint(
@@ -449,113 +551,6 @@ impl ClientExt for Client {
                 })?;
                 let builder = client.http_client.delete(url);
                 self.parse_http_response(builder.send().await).await
-            }
-        }
-    }
-
-    async fn workflow_evaluation_run(
-        &self,
-        mut params: WorkflowEvaluationRunParams,
-    ) -> Result<WorkflowEvaluationRunResponse, TensorZeroError> {
-        // Validate tags before adding git info
-        validate_tags(&params.tags, false)
-            .map_err(|e| TensorZeroError::Other { source: e.into() })?;
-
-        // Apply git information to tags
-        if let Ok(git_info) = GitInfo::new() {
-            params.tags.extend(git_info.into_tags());
-        }
-
-        // Set internal to true so we don't validate the tags again
-        params.internal = true;
-
-        // Automatically add internal tag when internal=true
-        params
-            .tags
-            .insert("tensorzero::internal".to_string(), "true".to_string());
-
-        match self.mode() {
-            ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join("workflow_evaluation_run").map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /workflow_evaluation_run endpoint: {e}"),
-                    })
-                    .into(),
-                })?;
-                let builder = client.http_client.post(url).json(&params);
-                self.parse_http_response(builder.send().await).await
-            }
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::workflow_evaluation_run::workflow_evaluation_run(
-                        gateway.handle.app_state.clone(),
-                        params,
-                    )
-                    .await
-                    .map_err(err_to_http)
-                })
-                .await?)
-            }
-        }
-    }
-
-    async fn workflow_evaluation_run_episode(
-        &self,
-        run_id: Uuid,
-        params: WorkflowEvaluationRunEpisodeParams,
-    ) -> Result<WorkflowEvaluationRunEpisodeResponse, TensorZeroError> {
-        match self.mode() {
-            ClientMode::HTTPGateway(client) => {
-                let url = client.base_url.join(&format!("workflow_evaluation_run/{run_id}/episode")).map_err(|e| TensorZeroError::Other {
-                    source: Error::new(ErrorDetails::InvalidBaseUrl {
-                        message: format!("Failed to join base URL with /workflow_evaluation_run/{run_id}/episode endpoint: {e}"),
-                    })
-                    .into(),
-                })?;
-                let builder = client.http_client.post(url).json(&params);
-                self.parse_http_response(builder.send().await).await
-            }
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::workflow_evaluation_run::workflow_evaluation_run_episode(
-                        gateway.handle.app_state.clone(),
-                        run_id,
-                        params,
-                    )
-                    .await
-                    .map_err(err_to_http)
-                })
-                .await?)
-            }
-        }
-    }
-
-    #[cfg(feature = "e2e_tests")]
-    async fn start_batch_inference(
-        &self,
-        params: tensorzero_core::endpoints::batch_inference::StartBatchInferenceParams,
-    ) -> Result<
-        tensorzero_core::endpoints::batch_inference::PrepareBatchInferenceOutput,
-        TensorZeroError,
-    > {
-        match self.mode() {
-            ClientMode::HTTPGateway(_) => Err(TensorZeroError::Other {
-                source: Error::new(ErrorDetails::InternalError {
-                    message: "batch_inference is not yet implemented for HTTPGateway mode"
-                        .to_string(),
-                })
-                .into(),
-            }),
-            ClientMode::EmbeddedGateway { gateway, timeout } => {
-                Ok(with_embedded_timeout(*timeout, async {
-                    tensorzero_core::endpoints::batch_inference::start_batch_inference(
-                        gateway.handle.app_state.clone(),
-                        params,
-                    )
-                    .await
-                    .map_err(err_to_http)
-                })
-                .await?)
             }
         }
     }
