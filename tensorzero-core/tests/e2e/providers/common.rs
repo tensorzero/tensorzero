@@ -2421,11 +2421,13 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         })
         .await;
 
-    if "anthropic" == provider.model_provider_name.as_str() {
+    if provider.model_provider_name.as_str() == "anthropic"
+        || provider.model_provider_name.as_str() == "gcp_vertex_anthropic"
+    {
         // Anthropic rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
-    } else if "openai-responses" == provider.variant_name.as_str() {
+    } else if provider.variant_name.as_str() == "openai-responses" {
         // OpenAI Responses rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
