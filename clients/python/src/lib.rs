@@ -300,46 +300,6 @@ fn make_dummy_client() -> Client {
 
 #[pymethods]
 impl BaseTensorZeroGateway {
-    #[new]
-    #[pyo3(signature = (base_url, *, timeout=None, verbose_errors=false))]
-    fn new(
-        py: Python<'_>,
-        base_url: &str,
-        timeout: Option<f64>,
-        verbose_errors: bool,
-    ) -> PyResult<Self> {
-        let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
-            url: Url::parse(base_url)
-                .map_err(|e| PyValueError::new_err(format!("Failed to parse base_url: {e:?}")))?,
-        })
-        .with_verbose_errors(verbose_errors);
-        if let Some(timeout) = timeout {
-            let http_client = reqwest::Client::builder()
-                .timeout(
-                    Duration::try_from_secs_f64(timeout)
-                        .map_err(|e| PyValueError::new_err(format!("Invalid timeout: {e}")))?,
-                )
-                .build()
-                .map_err(|e| {
-                    PyValueError::new_err(format!("Failed to build HTTP client: {e:?}"))
-                })?;
-            client_builder = client_builder.with_http_client(http_client);
-        }
-        let client = match client_builder.build_http() {
-            Ok(client) => client,
-            Err(e) => {
-                return Err(tensorzero_core_error(
-                    py,
-                    &format!("Failed to construct TensorZero client: {e:?}"),
-                )?);
-            }
-        };
-
-        Ok(Self {
-            client: DropInTokio::new(client, make_dummy_client),
-        })
-    }
-
     #[pyo3(signature = (*, input, function_name=None, model_name=None, episode_id=None, stream=None, params=None, variant_name=None, dryrun=None, output_schema=None, allowed_tools=None, provider_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, internal=None, tags=None, credentials=None, cache_options=None, extra_body=None, extra_headers=None, include_original_response=None, otlp_traces_extra_headers=None, internal_dynamic_variant_config=None))]
     #[expect(clippy::too_many_arguments)]
     fn _prepare_inference_request(
@@ -580,47 +540,34 @@ impl BaseTensorZeroGateway {
 }
 #[pymethods]
 impl TensorZeroGateway {
-    #[new]
-    #[pyo3(signature = (base_url, *, timeout=None))]
-    fn new(
-        py: Python<'_>,
-        base_url: &str,
-        timeout: Option<f64>,
-    ) -> PyResult<(Self, BaseTensorZeroGateway)> {
-        tracing::warn!("TensorZeroGateway.__init__ is deprecated. Use TensorZeroGateway.build_http or TensorZeroGateway.build_embedded instead.");
-        Ok((
-            Self {},
-            BaseTensorZeroGateway::new(py, base_url, timeout, false)?,
-        ))
-    }
-
     #[classmethod]
-    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false))]
+    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false, api_key=None))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
+    /// :param api_key: The API key to use for authentication with the TensorZero Gateway. If not provided, the client will attempt to read from the TENSORZERO_API_KEY environment variable.
     /// :return: A `TensorZeroGateway` instance configured to use the HTTP gateway.
     fn build_http(
         cls: &Bound<'_, PyType>,
         gateway_url: &str,
         timeout: Option<f64>,
         verbose_errors: bool,
+        api_key: Option<String>,
     ) -> PyResult<Py<TensorZeroGateway>> {
         let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
             url: Url::parse(gateway_url)
                 .map_err(|e| PyValueError::new_err(format!("Invalid gateway URL: {e}")))?,
         })
         .with_verbose_errors(verbose_errors);
+        if let Some(api_key) = api_key {
+            client_builder = client_builder.with_api_key(api_key);
+        }
         if let Some(timeout) = timeout {
-            let http_client = reqwest::Client::builder()
-                .timeout(
-                    Duration::try_from_secs_f64(timeout)
-                        .map_err(|e| PyValueError::new_err(format!("Invalid timeout: {e}")))?,
-                )
-                .build()
-                .map_err(|e| PyValueError::new_err(format!("Failed to build HTTP client: {e}")))?;
-            client_builder = client_builder.with_http_client(http_client);
+            client_builder = client_builder.with_timeout(
+                Duration::try_from_secs_f64(timeout)
+                    .map_err(|e| PyValueError::new_err(format!("Invalid timeout: {e}")))?,
+            );
         }
         let client_fut = client_builder.build();
         let client_res = tokio_block_on_without_gil(cls.py(), client_fut);
@@ -638,18 +585,6 @@ impl TensorZeroGateway {
         })
         .add_subclass(TensorZeroGateway {});
         Py::new(cls.py(), instance)
-    }
-
-    /// **Deprecated** (use `build_http` or `build_embedded` instead)
-    /// Initialize the TensorZero client.
-    ///
-    /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
-    /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
-    #[expect(unused_variables)]
-    #[pyo3(signature = (base_url, *, timeout=None))]
-    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<f64>) -> Py<Self> {
-        // The actual logic is in the 'new' method - this method just exists to generate a docstring
-        this
     }
 
     /// Close the connection to the TensorZero gateway.
@@ -1390,27 +1325,14 @@ struct AsyncTensorZeroGateway {}
 
 #[pymethods]
 impl AsyncTensorZeroGateway {
-    #[new]
-    #[pyo3(signature = (base_url, *, timeout=None))]
-    fn new(
-        py: Python<'_>,
-        base_url: &str,
-        timeout: Option<f64>,
-    ) -> PyResult<(Self, BaseTensorZeroGateway)> {
-        tracing::warn!("AsyncTensorZeroGateway.__init__ is deprecated. Use AsyncTensorZeroGateway.build_http or AsyncTensorZeroGateway.build_embedded instead.");
-        Ok((
-            Self {},
-            BaseTensorZeroGateway::new(py, base_url, timeout, false)?,
-        ))
-    }
-
     #[classmethod]
-    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false, async_setup=true))]
+    #[pyo3(signature = (*, gateway_url, timeout=None, verbose_errors=false, async_setup=true, api_key=None))]
     /// Initialize the TensorZero client, using the HTTP gateway.
     /// :param gateway_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
     /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
     /// :param verbose_errors: If true, the client will increase the detail in errors (increasing the risk of leaking sensitive information).
     /// :param async_setup: If true, this method will return a `Future` that resolves to an `AsyncTensorZeroGateway` instance. Otherwise, it will block and construct the `AsyncTensorZeroGateway`
+    /// :param api_key: The API key to use for authentication with the TensorZero Gateway. If not provided, the client will attempt to read from the TENSORZERO_API_KEY environment variable.
     /// :return: An `AsyncTensorZeroGateway` instance configured to use the HTTP gateway.
     fn build_http(
         cls: &Bound<'_, PyType>,
@@ -1418,18 +1340,18 @@ impl AsyncTensorZeroGateway {
         timeout: Option<f64>,
         verbose_errors: bool,
         async_setup: bool,
+        api_key: Option<String>,
     ) -> PyResult<Py<PyAny>> {
         let mut client_builder = ClientBuilder::new(ClientBuilderMode::HTTPGateway {
             url: Url::parse(gateway_url)
                 .map_err(|e| PyValueError::new_err(format!("Invalid gateway URL: {e}")))?,
         })
         .with_verbose_errors(verbose_errors);
+        if let Some(api_key) = api_key {
+            client_builder = client_builder.with_api_key(api_key);
+        }
         if let Some(timeout) = timeout {
-            let http_client = reqwest::Client::builder()
-                .timeout(Duration::from_secs_f64(timeout))
-                .build()
-                .map_err(|e| PyValueError::new_err(format!("Failed to build HTTP client: {e}")))?;
-            client_builder = client_builder.with_http_client(http_client);
+            client_builder = client_builder.with_timeout(Duration::from_secs_f64(timeout));
         }
         let client_fut = client_builder.build();
         let build_gateway = async move {
@@ -1460,18 +1382,6 @@ impl AsyncTensorZeroGateway {
         } else {
             Ok(tokio_block_on_without_gil(cls.py(), build_gateway)?.into_any())
         }
-    }
-
-    /// **Deprecated** (use `build_http` or `build_embedded` instead)
-    /// Initialize the TensorZero client.
-    ///
-    /// :param base_url: The base URL of the TensorZero gateway. Example: "http://localhost:3000"
-    /// :param timeout: The timeout for the HTTP client in seconds. If not provided, no timeout will be set.
-    #[expect(unused_variables)]
-    #[pyo3(signature = (base_url, *, timeout=None))]
-    fn __init__(this: Py<Self>, base_url: &str, timeout: Option<f64>) -> Py<Self> {
-        // The actual logic is in the 'new' method - this method just exists to generate a docstring
-        this
     }
 
     /// Close the connection to the TensorZero gateway.
