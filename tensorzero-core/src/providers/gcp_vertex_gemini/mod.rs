@@ -274,7 +274,7 @@ pub async fn make_gcp_object_store(
             }
         }
         GCPVertexCredentials::None => {
-            return Err(Error::new_without_logging(ErrorDetails::ApiKeyMissing {
+            return Err(Error::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
             }))
