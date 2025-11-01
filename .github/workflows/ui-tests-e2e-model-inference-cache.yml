@@ -189,7 +189,8 @@ jobs:
           # Wait with explicit timeout and show progress
           timeout 120 bash -c '
             while true; do
-              STATUS=$(docker compose -f fixtures/docker-compose.e2e.yml ps postgres --format json | jq -r ".[0].Health")
+              # Parse JSON - handle both array and object formats
+              STATUS=$(docker compose -f fixtures/docker-compose.e2e.yml ps postgres --format json | jq -r "if type == \"array\" then .[0].Health else .Health end")
               echo "Postgres health status: $STATUS"
               if [ "$STATUS" = "healthy" ]; then
                 echo "Postgres is healthy!"
