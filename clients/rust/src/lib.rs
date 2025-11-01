@@ -360,7 +360,15 @@ impl ClientBuilder {
                 {
                     return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
                         source: tensorzero_core::error::Error::new(ErrorDetails::Config {
-                            message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode".to_string(),
+                            message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
+                        })
+                        .into(),
+                    }));
+                }
+                if config.gateway.auth.enabled {
+                    return Err(ClientBuilderError::Postgres(TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::Config {
+                            message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
                         })
                         .into(),
                     }));
