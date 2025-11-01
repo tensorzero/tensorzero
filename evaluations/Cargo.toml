@@ -11,7 +11,6 @@ path = "tests/tests.rs"
 required-features = ["e2e_tests"]
 
 [dependencies]
-tensorzero = { path = "../clients/rust" }
 tensorzero-core = { path = "../tensorzero-core" }
 clap = { workspace = true }
 url = { workspace = true }
@@ -26,13 +25,13 @@ futures = { workspace = true }
 indicatif = "0.18.2"
 
 [dev-dependencies]
-tensorzero = { path = "../clients/rust" }
+tensorzero-core = { path = "../tensorzero-core", features = ["e2e_tests"] }
 
 [lints]
 workspace = true
 
 [features]
 default = []
-# Forward this feature to 'evaluations', so that our
+# Forward this feature to 'tensorzero-core', so that our
 # tests can recognize things like the `dummy` provider
-e2e_tests = ["tensorzero/e2e_tests"]
+e2e_tests = ["tensorzero-core/e2e_tests"]

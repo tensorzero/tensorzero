@@ -4,13 +4,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tensorzero::{
-    Client, ClientBuilder, ClientBuilderMode, JsonInferenceDatapoint, StoredChatInferenceDatapoint,
-};
+use tensorzero_core::client::{Client, ClientBuilder, ClientBuilderMode};
 use tensorzero_core::db::clickhouse::{
     test_helpers::{get_clickhouse, CLICKHOUSE_URL},
     TableName,
 };
+use tensorzero_core::endpoints::datasets::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
 use uuid::Uuid;
 
 /// Takes a chat fixture as a path to a JSONL file and writes the fixture to the dataset.
