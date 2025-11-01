@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   ui-tests-e2e-model-inference-cache:
-    runs-on: namespace-profile-tensorzero-8x16
+    runs-on: ubuntu-latest
     # We currently only run this job when we have secrets available, since we need to use an S3 object_store
     # In the future, we might want to fix this so that it can run in PR CI for external (forked) PRs
     # For now, it just runs in the merge queue and on prs from the main repo
@@ -42,9 +42,6 @@ jobs:
       # 'tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT' to be `None`
       - name: Check out the repo
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -71,17 +68,13 @@ jobs:
       - name: Setup Playwright
         run: pnpm --filter=tensorzero-ui exec playwright install --with-deps chromium
 
-      # When we're regenerating the model inference cache, don't download the container images
-      # The images will get built by `regenerate-model-inference-cache.sh`
       - name: Download container images
-        if: inputs.regen_cache == false
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with:
           pattern: build-*-container
           merge-multiple: true
 
       - name: Load `gateway` and `ui` containers
-        if: inputs.regen_cache == false
         run: |
           docker load < gateway-container.tar
           docker load < ui-container.tar
@@ -152,18 +145,33 @@ jobs:
           # Note that we cannot check the file contents - we will legitimately get some different cache keys when
           # regenerating, since the output from some cache entries get fed into judge models (affecting the cache key)
           echo "Cache file validation passed: same number of rows"
-          # Take down and destroy the containers, so that our subsequent test run starts with a fresh ClickHouse
-          # server, and inserts our regenerated fixtures from scratch
-          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
-          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
 
       - name: Upload new model inference cache
         if: always() && inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: model-inference-cache
           path: |
             ui/fixtures/model_inference_cache_e2e.jsonl
+
+      - name: Make sure the current commit short hash is in the Docker Compose gateway logs (immediately after regen)
+        if: inputs.regen_cache == true
+        working-directory: ui
+        run: |
+          SHORT_HASH=$(echo "${{ github.sha }}" | cut -c1-7)
+          docker compose -f fixtures/docker-compose.e2e.yml logs gateway | grep "(commit: ${SHORT_HASH})" || {
+            echo "ERROR: Commit hash ${SHORT_HASH} not found in gateway logs"
+            exit 1
+          }
+
+      - name: Destroy containers before re-run with fresh cache
+        if: inputs.regen_cache == true
+        working-directory: ui
+        run: |
+          # Take down and destroy the containers, so that our subsequent test run starts with a fresh ClickHouse
+          # server, and inserts our regenerated fixtures from scratch
+          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml down
+          docker compose -f ./fixtures/docker-compose.e2e.yml -f ./fixtures/docker-compose.ui.yml rm -f
 
       - name: Start dependency Docker containers and apply fixtures
         working-directory: ui
@@ -210,7 +218,7 @@ jobs:
         working-directory: ui
         run: docker inspect --format "{{json .State.Health }}" $(docker compose -f fixtures/docker-compose.e2e.yml -f fixtures/docker-compose.ui.yml ps -q ui) | jq
 
-      - name: Make sure the current commit short hash is in the Docker Compose gateway logs
+      - name: Make sure the current commit short hash is in the Docker Compose gateway logs (after re-run with new cache)
         if: always()
         working-directory: ui
         run: |
@@ -229,20 +237,10 @@ jobs:
         run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
 
       - name: Upload Playwright artifacts (GitHub runner)
-        if: failure() && inputs.regen_cache == false
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: playwright-report
-          path: |
-            ui/playwright-report/
-            ui/test-results/
-          retention-days: 7
-
-      - name: Upload Playwright artifacts (Namespace runner)
-        if: failure() && inputs.regen_cache == true
-        uses: namespace-actions/upload-artifact@9a78c62e083914789d908952f9773e42744b9f68
-        with:
-          name: playwright-report
+          name: playwright-report-regen-${{ inputs.regen_cache }}
           path: |
             ui/playwright-report/
             ui/test-results/
