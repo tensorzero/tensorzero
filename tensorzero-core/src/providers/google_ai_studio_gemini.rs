@@ -2730,4 +2730,29 @@ mod tests {
             assert_eq!(chunk.finish_reason, Some(expected_reason));
         }
     }
+
+    #[test]
+    #[traced_test]
+    fn test_google_ai_studio_gemini_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = GeminiRequest {
+            contents: vec![],
+            generation_config: None,
+            tools: None,
+            tool_config: None,
+            system_instruction: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "Google AI Studio Gemini does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "Google AI Studio Gemini does not support the inference parameter `verbosity`"
+        ));
+    }
 }

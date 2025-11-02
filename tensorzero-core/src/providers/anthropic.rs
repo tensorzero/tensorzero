@@ -3192,4 +3192,34 @@ mod tests {
         assert_eq!(res, None);
         assert!(logs_contain("Discarding unknown chunk"));
     }
+
+    #[test]
+    #[traced_test]
+    fn test_anthropic_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = AnthropicRequestBody {
+            model: "claude-3-5-sonnet-20241022",
+            messages: vec![],
+            max_tokens: 1024,
+            stream: None,
+            system: None,
+            temperature: None,
+            top_p: None,
+            stop_sequences: None,
+            tool_choice: None,
+            tools: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "Anthropic does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "Anthropic does not support the inference parameter `verbosity`"
+        ));
+    }
 }

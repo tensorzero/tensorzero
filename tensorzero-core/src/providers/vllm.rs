@@ -297,6 +297,7 @@ impl InferenceProvider for VLLMProvider {
 /// for more details.
 /// We are not handling many features of the API here.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct VLLMRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -833,5 +834,24 @@ mod tests {
         assert!(vllm_request.tools.is_none());
         assert!(vllm_request.tool_choice.is_none());
         assert!(vllm_request.parallel_tool_calls.is_none());
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_vllm_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = VLLMRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "vLLM does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "vLLM does not support the inference parameter `verbosity`"
+        ));
     }
 }

@@ -352,7 +352,7 @@ enum FireworksResponseFormat<'a> {
 /// presence_penalty, frequency_penalty, service_tier, stop, user,
 /// or context_length_exceeded_behavior.
 /// NOTE: Fireworks does not support seed.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct FireworksRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -866,6 +866,7 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
 mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
+    use tracing_test::traced_test;
 
     use uuid::Uuid;
 
@@ -1510,5 +1511,24 @@ mod tests {
         } else {
             panic!("Expected a tool call chunk");
         }
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_fireworks_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = FireworksRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "Fireworks does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "Fireworks does not support the inference parameter `verbosity`"
+        ));
     }
 }

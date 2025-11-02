@@ -1130,4 +1130,22 @@ mod tests {
         third_run().await;
         fourth_run().await;
     }
+
+    #[test]
+    #[traced_test]
+    fn test_aws_bedrock_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+
+        apply_inference_params(&inference_params);
+
+        assert!(logs_contain(
+            "AWS Bedrock does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "AWS Bedrock does not support the inference parameter `verbosity`"
+        ));
+    }
 }

@@ -4350,4 +4350,41 @@ mod tests {
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
     }
+
+    #[tokio::test]
+    async fn test_openai_apply_inference_params_called() {
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Test".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: Some("high".to_string()),
+                verbosity: Some("detailed".to_string()),
+            },
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let openai_request = OpenAIRequest::new("gpt-4o", &request)
+            .await
+            .expect("Failed to create OpenAI request");
+
+        // Verify that inference params were applied
+        assert_eq!(openai_request.reasoning_effort, Some("high".to_string()));
+        assert_eq!(openai_request.verbosity, Some("detailed".to_string()));
+    }
 }

@@ -483,6 +483,7 @@ mod tests {
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
+    use tracing_test::traced_test;
 
     #[tokio::test]
     async fn test_hyperbolic_request_new() {
@@ -623,5 +624,35 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_hyperbolic_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = HyperbolicRequest {
+            messages: vec![],
+            model: "test-model",
+            frequency_penalty: None,
+            max_tokens: None,
+            presence_penalty: None,
+            seed: None,
+            stream: false,
+            temperature: None,
+            top_p: None,
+            stop: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "Hyperbolic does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "Hyperbolic does not support the inference parameter `verbosity`"
+        ));
     }
 }

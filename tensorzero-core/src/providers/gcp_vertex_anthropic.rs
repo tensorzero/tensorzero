@@ -625,7 +625,7 @@ enum GCPVertexAnthropicSystemBlock<'a> {
     },
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, Default, PartialEq, Serialize)]
 struct GCPVertexAnthropicRequestBody<'a> {
     anthropic_version: &'static str,
     messages: Vec<GCPVertexAnthropicMessage<'a>>,
@@ -2826,5 +2826,24 @@ mod tests {
         .unwrap();
         assert_eq!(res, None);
         assert!(logs_contain("Discarding unknown chunk"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_gcp_vertex_anthropic_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = GCPVertexAnthropicRequestBody::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "GCP Vertex Anthropic does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "GCP Vertex Anthropic does not support the inference parameter `verbosity`"
+        ));
     }
 }

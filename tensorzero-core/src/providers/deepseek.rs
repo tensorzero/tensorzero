@@ -336,7 +336,7 @@ impl DeepSeekResponseFormat {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct DeepSeekRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -818,6 +818,7 @@ mod tests {
     use super::*;
     use std::borrow::Cow;
     use std::time::Duration;
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{
@@ -1244,6 +1245,25 @@ mod tests {
             content,
             tool_call_id,
         })
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_deepseek_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = DeepSeekRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "DeepSeek does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "DeepSeek does not support the inference parameter `verbosity`"
+        ));
     }
 
     #[tokio::test]

@@ -416,8 +416,10 @@ fn stream_tgi(
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct TGIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
+    #[cfg_attr(test, serde(default))]
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -1107,5 +1109,24 @@ mod tests {
         let _ = TGIProvider::new(invalid_url_2.clone(), TGICredentials::None);
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_tgi_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = TGIRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "TGI does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "TGI does not support the inference parameter `verbosity`"
+        ));
     }
 }

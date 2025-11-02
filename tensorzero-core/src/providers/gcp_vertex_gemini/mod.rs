@@ -4603,4 +4603,30 @@ mod tests {
         // Verify tool call tracking state - should remain None for error cases
         assert_eq!(last_tool_idx, None);
     }
+
+    #[test]
+    #[traced_test]
+    fn test_gcp_vertex_gemini_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = GCPVertexGeminiRequest {
+            contents: vec![],
+            generation_config: None,
+            tools: None,
+            tool_config: None,
+            system_instruction: None,
+            labels: HashMap::new(),
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "GCP Vertex Gemini does not support the inference parameter `verbosity`"
+        ));
+    }
 }

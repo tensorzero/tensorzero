@@ -337,8 +337,10 @@ enum TogetherResponseFormat<'a> {
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
 /// or context_length_exceeded_behavior
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct TogetherRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
+    #[cfg_attr(test, serde(default))]
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -829,6 +831,7 @@ mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
 
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -1611,5 +1614,24 @@ mod tests {
                 id: "0".to_string(),
             })]
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_together_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = TogetherRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "Together does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "Together does not support the inference parameter `verbosity`"
+        ));
     }
 }

@@ -796,7 +796,7 @@ mod tests {
     use std::borrow::Cow;
     use std::collections::HashMap;
     use std::time::Duration;
-
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -1123,5 +1123,37 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Dynamic endpoint 'missing_endpoint' not found"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_azure_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = AzureRequest {
+            messages: vec![],
+            temperature: None,
+            top_p: None,
+            stop: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_completion_tokens: None,
+            seed: None,
+            stream: false,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "Azure does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "Azure does not support the inference parameter `verbosity`"
+        ));
     }
 }

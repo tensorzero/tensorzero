@@ -830,6 +830,7 @@ mod tests {
 
     use crate::inference::types::{FunctionType, RequestMessage, Role};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use tracing_test::traced_test;
 
     #[tokio::test]
     async fn test_mistral_request_new() {
@@ -1264,6 +1265,39 @@ mod tests {
         assert!(matches!(
             result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_mistral_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = MistralRequest {
+            messages: vec![],
+            model: "test-model",
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            random_seed: None,
+            stream: false,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            stop: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `verbosity`"
         ));
     }
 }

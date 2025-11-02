@@ -528,8 +528,10 @@ impl SGLangResponseFormat {
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct SGLangRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
+    #[cfg_attr(test, serde(default))]
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -1046,5 +1048,24 @@ mod tests {
         assert!(sglang_request.tools.is_none());
         assert!(sglang_request.tool_choice.is_none());
         assert!(sglang_request.parallel_tool_calls.is_none());
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_sglang_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = SGLangRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "SGLang does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "SGLang does not support the inference parameter `verbosity`"
+        ));
     }
 }

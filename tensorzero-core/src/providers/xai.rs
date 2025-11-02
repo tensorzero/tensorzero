@@ -311,6 +311,7 @@ impl InferenceProvider for XAIProvider {
 /// logit_bias, seed, service_tier, stop, user or response_format.
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct XAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -533,6 +534,7 @@ mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
 
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -748,5 +750,24 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_xai_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = XAIRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "xAI does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "xAI does not support the inference parameter `verbosity`"
+        ));
     }
 }

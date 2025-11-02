@@ -1373,6 +1373,7 @@ mod tests {
     };
 
     use super::*;
+    use tracing_test::traced_test;
 
     #[test]
     fn test_get_chat_url() {
@@ -2747,5 +2748,40 @@ mod tests {
             serialized,
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_openrouter_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            verbosity: Some("detailed".to_string()),
+        };
+        let mut request = OpenRouterRequest {
+            messages: vec![],
+            model: "test-model",
+            temperature: None,
+            max_completion_tokens: None,
+            seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            stream: false,
+            stream_options: None,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            stop: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        assert!(logs_contain(
+            "OpenRouter does not support the inference parameter `reasoning_effort`"
+        ));
+        assert!(logs_contain(
+            "OpenRouter does not support the inference parameter `verbosity`"
+        ));
     }
 }
