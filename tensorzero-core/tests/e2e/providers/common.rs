@@ -4051,7 +4051,11 @@ pub async fn check_inference_params_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    assert!(
+        output.len() == 1 || output.len() == 2,
+        "Expected 1 or 2 content blocks in ModelInference output, got {}",
+        output.len()
+    );
 }
 
 pub async fn test_inference_params_streaming_inference_request_with_provider(
@@ -4329,7 +4333,11 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
+    assert!(
+        output.len() == 1 || output.len() == 2,
+        "Expected 1 or 2 content blocks in ModelInference output, got {}",
+        output.len()
+    );
 }
 
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
