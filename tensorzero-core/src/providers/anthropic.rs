@@ -18,7 +18,9 @@ use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, E
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
@@ -792,18 +794,12 @@ fn apply_inference_params(
 
     // reasoning_effort
     if inference_params.reasoning_effort.is_some() {
-        tracing::warn!(
-            "{} does not support the inference parameter `reasoning_effort`, so it'll be ignored.",
-            PROVIDER_NAME
-        );
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
     }
 
     // verbosity
     if inference_params.verbosity.is_some() {
-        tracing::warn!(
-            "{} does not support the inference parameter `verbosity`, so it'll be ignored.",
-            PROVIDER_NAME
-        );
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
     }
 }
 

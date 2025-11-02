@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(deny_unknown_fields)]
 pub struct ChatCompletionInferenceParamsV2 {
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
