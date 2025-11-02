@@ -5,7 +5,7 @@ description: "TensorZero is an open-source alternative to LiteLLM featuring an L
 ---
 
 TensorZero and LiteLLM both offer a unified inference API for LLMs, but they have different features beyond that.
-TensorZero offers a broader set of features (including observability, optimization, evaluations, and experimentation), whereas LiteLLM offers more traditional service gateway features (e.g. access control, queuing) and third-party integrations.
+TensorZero offers a broader set of features (including observability, optimization, evaluations, and experimentation), whereas LiteLLM offers additional service gateway features (e.g. budgeting, queuing) and third-party integrations.
 That said, **you can get the best of both worlds by using LiteLLM as a model provider inside TensorZero**!
 
 ## Similarities
@@ -70,12 +70,12 @@ That said, **you can get the best of both worlds by using LiteLLM as a model pro
   LiteLLM only offers the standard unstructured chat completion interface.<br />
   [→ Prompt Templates & Schemas with TensorZero](/gateway/create-a-prompt-template)
 
-### LiteLLM
+- **Virtual API Keys (Authentication).**
+  Both TensorZero and LiteLLM support virtual (custom) API keys to authenticate requests.
+  LiteLLM offers advanced authentication features in its enterprise plan, whereas TensorZero requires complementary open-source tools like Nginx or OAuth2 Proxy for such use cases.<br />
+  [→ Require virtual API keys (auth) with TensorZero](/operations/require-virtual-api-keys-auth)
 
-- **Access Control.**
-  LiteLLM offers many access control features, including auth, service accounts with virtual keys, and budgeting.
-  Many of these features are open-source, but advanced functionality requires an enterprise license.
-  TensorZero doesn't offer built-in access control features, and instead requires you to manage it externally (e.g using Nginx).
+### LiteLLM
 
 - **Dynamic Provider Routing.**
   LiteLLM allows you to dynamically route requests to different model providers based on latency, cost, and rate limits.

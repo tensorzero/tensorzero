@@ -40,7 +40,7 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway
+    image: tensorzero/gateway:keys # TODO: DO NOT MERGE
     volumes:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml

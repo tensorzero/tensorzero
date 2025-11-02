@@ -393,7 +393,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "openai", specifier = ">=2.6.1" },
-    { name = "tensorzero", specifier = ">=2025.10.9" },
+    { name = "tensorzero", directory = "../../../../../clients/python" },
 ]
 
 [[package]]
@@ -407,22 +407,34 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-version = "2025.10.9"
-source = { registry = "https://pypi.org/simple" }
+source = { directory = "../../../../../clients/python" }
 dependencies = [
     { name = "httpx" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6e/9e/b849bd7009535368ac6ec1bab9d65e7fe43bfefd1078d7c47c9a68781b04/tensorzero-2025.10.9.tar.gz", hash = "sha256:f118186a4dbd9db0713112a161a036939a10661407a282178c5a25e314b3d2ce", size = 1793049, upload_time = "2025-10-31T03:02:56.352Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3c/8d/876a7b8656097bd5eedeb31042c84df7e091fd41385d7e31393baa3ae77b/tensorzero-2025.10.9-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:74ae00dd261c7f66d1b031235031ed6d9ae494c927dcce09821f57877aa32394", size = 27042420, upload_time = "2025-10-31T03:02:48.912Z" },
-    { url = "https://files.pythonhosted.org/packages/85/05/65bb2a63ff5fd7cb59f284a274015e2193387fd92ad9c1bfdcd2c73698b7/tensorzero-2025.10.9-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:ca75e11f43f91abe8e9e4d6944a18de867cbd134c50f3b4b279ea6a153af98d8", size = 25803230, upload_time = "2025-10-31T03:02:46.631Z" },
-    { url = "https://files.pythonhosted.org/packages/f5/03/b9364ec2e3b999fdd069630b3e973cc2ab501cd555b760e15e34c57d70c5/tensorzero-2025.10.9-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:4489f17cce74c47944a88fbcad9f77efa4114e4cc37a1dddc7e9e5882d7f1beb", size = 28234968, upload_time = "2025-10-31T03:02:41.251Z" },
-    { url = "https://files.pythonhosted.org/packages/6e/39/9a149e713b68bcc6c1da2c5b5621fd32785aa6b285498c6dc6ec92886db3/tensorzero-2025.10.9-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:362741ca15b18d729cab5e0d4738b3374db562399e763347a9ef724fbea5c9d2", size = 28676377, upload_time = "2025-10-31T03:02:44.049Z" },
-    { url = "https://files.pythonhosted.org/packages/30/21/3596762ec4b040f9b626f94c53bf650fc81abad275205718f48aada421e3/tensorzero-2025.10.9-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:d99a51d8af2de947142d0eabe7ef882a3146505407d0c459f3f7f88568878346", size = 28444587, upload_time = "2025-10-31T03:02:51.539Z" },
-    { url = "https://files.pythonhosted.org/packages/48/70/f63f197759b34f1f78ba7db0608fd74d33172d3299a226a1ab716619a6f1/tensorzero-2025.10.9-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:965faab44dc32d4a176d36a6c5bd81b2a0180e4113766ddd9128177cf43764da", size = 29207142, upload_time = "2025-10-31T03:02:54.069Z" },
-    { url = "https://files.pythonhosted.org/packages/18/f8/f5a7a619ccb7cb482d3eee68f7322c2bdbc8119c822ace365b79dbdf8822/tensorzero-2025.10.9-cp39-abi3-win_amd64.whl", hash = "sha256:7cb273f8739c7b174c82c12eb3f2b0874e35efdebd155c92a611efed75e0ea99", size = 24881909, upload_time = "2025-10-31T03:02:58.147Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "typing-extensions", specifier = ">=4.12.2" },
+    { name = "uuid-utils", specifier = ">=0.9.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "clickhouse-connect" },
+    { name = "maturin" },
+    { name = "mypy" },
+    { name = "openai" },
+    { name = "pandas" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-httpserver" },
+    { name = "pytest-rerunfailures" },
+    { name = "pytest-xdist" },
+    { name = "requests" },
 ]
 
 [[package]]

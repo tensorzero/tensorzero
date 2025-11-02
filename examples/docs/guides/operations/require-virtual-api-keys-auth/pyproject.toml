@@ -5,5 +5,8 @@ readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
     "openai>=2.6.1",
-    "tensorzero>=2025.10.9",
+    "tensorzero>=2025.11.0",
 ]
+
+[tool.uv.sources]
+tensorzero = { path = "../../../../../clients/python" }  # TODO: DO NOT MERGE

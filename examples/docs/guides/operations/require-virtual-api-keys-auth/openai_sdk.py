@@ -4,7 +4,10 @@ from openai import OpenAI
 
 # Good request
 
-client = OpenAI(api_key=os.environ["TENSORZERO_API_KEY"], base_url="http://localhost:3000/openai/v1")
+client = OpenAI(
+    api_key=os.environ["TENSORZERO_API_KEY"],
+    base_url="http://localhost:3000/openai/v1",
+)
 
 response = client.chat.completions.create(
     model="tensorzero::model_name::openai::gpt-5-mini",

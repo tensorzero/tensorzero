@@ -118,6 +118,7 @@
             "group": "Operations",
             "pages": [
               "operations/manage-credentials",
+              "operations/require-virtual-api-keys-auth",
               "operations/enforce-custom-rate-limits",
               "operations/organize-your-configuration",
               "operations/export-opentelemetry-traces",
