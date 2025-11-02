@@ -63,7 +63,7 @@ model = "anthropic::claude-3-7-sonnet-20250219"
 max_tokens = 2048
 extra_body = [
     { pointer = "/tools", value = [{ type = "bash_20250124", name = "bash" }] },
-    { pointer = "/ultrathinking", value = { type = "enabled", budget_tokens = 1024 } },
+    { pointer = "/ultrathinking", value = { type = "enabled", budget_tokens = 1024 } }, # made-up parameter
 ]
 extra_headers = [
     { name = "anthropic-beta", value = "computer-use-2025-01-24" },

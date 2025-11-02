@@ -1383,11 +1383,20 @@ impl ChatCompletionInferenceParams {
         if self.stop_sequences.is_none() {
             self.stop_sequences = stop_sequences;
         }
+        let ChatCompletionInferenceParamsV2 {
+            reasoning_effort,
+            thinking_budget_tokens,
+            verbosity,
+        } = inference_params_v2;
+
         if self.reasoning_effort.is_none() {
-            self.reasoning_effort = inference_params_v2.reasoning_effort;
+            self.reasoning_effort = reasoning_effort;
+        }
+        if self.thinking_budget_tokens.is_none() {
+            self.thinking_budget_tokens = thinking_budget_tokens;
         }
         if self.verbosity.is_none() {
-            self.verbosity = inference_params_v2.verbosity;
+            self.verbosity = verbosity;
         }
     }
 }
