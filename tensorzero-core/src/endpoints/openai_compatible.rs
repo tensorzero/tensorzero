@@ -725,6 +725,7 @@ impl Params {
 
         // Override the inference parameters with OpenAI-compatible parameters
         // TODO (GabrielBianconi): Should we warn if we override parameters that are already set?
+        // Currently: OpenAI-compatible parameters take precedence over TensorZero parameters
         inference_params.chat_completion = ChatCompletionInferenceParams {
             frequency_penalty: openai_compatible_params
                 .frequency_penalty
