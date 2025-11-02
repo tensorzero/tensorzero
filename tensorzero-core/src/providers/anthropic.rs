@@ -27,7 +27,8 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
+    UnknownChunk, Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
@@ -1370,11 +1371,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: delta.into_owned(),
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1390,11 +1391,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: content_block.into_owned(),
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1410,11 +1411,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "message_delta".to_string(),
                     data: delta.into_owned(),
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -3148,7 +3149,7 @@ mod tests {
 
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data, .. } => {
+            ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                 assert_eq!(id, "0");
                 assert_eq!(
                     data.get("my_unknown").and_then(|v| v.as_str()),

@@ -30,7 +30,7 @@ use crate::inference::types::{
 use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, Latency, ModelInferenceRequestJsonMode,
     ProviderInferenceResponseArgs, ProviderInferenceResponseStreamInner, Role, Text, TextChunk,
-    Thought, ThoughtChunk,
+    Thought, ThoughtChunk, UnknownChunk,
 };
 use crate::inference::types::{FinishReason, FlattenUnknown};
 use crate::inference::InferenceProvider;
@@ -967,11 +967,11 @@ fn content_part_to_tensorzero_chunk(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
                 return Ok(());
             }
-            output.push(ContentBlockChunk::Unknown {
+            output.push(ContentBlockChunk::Unknown(UnknownChunk {
                 id: last_unknown_chunk_id.to_string(),
                 data: part.into_owned(),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
-            });
+            }));
             *last_unknown_chunk_id += 1;
         }
     }

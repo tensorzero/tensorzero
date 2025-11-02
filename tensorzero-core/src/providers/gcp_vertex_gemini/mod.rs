@@ -52,6 +52,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
     ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
+    UnknownChunk,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{
@@ -2247,11 +2248,11 @@ fn content_part_to_tensorzero_chunk(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
                 return Ok(None);
             }
-            Ok(Some(ContentBlockChunk::Unknown {
+            Ok(Some(ContentBlockChunk::Unknown(UnknownChunk {
                 id: "0".to_string(),
                 data: part.into_owned(),
                 provider_type: Some(PROVIDER_TYPE.to_string()),
-            }))
+            })))
         }
     }
 }
@@ -3985,7 +3986,7 @@ mod tests {
 
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data, .. } => {
+            ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                 assert_eq!(id, "0");
                 assert_eq!(
                     data.get("unknown_field").and_then(|v| v.as_str()),
@@ -4640,7 +4641,7 @@ mod tests {
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
-            Some(ContentBlockChunk::Unknown { id, data, .. }) => {
+            Some(ContentBlockChunk::Unknown(UnknownChunk { id, data, .. })) => {
                 assert_eq!(id, "0");
                 assert_eq!(
                     data.get("unknown_field").and_then(|v| v.as_str()),

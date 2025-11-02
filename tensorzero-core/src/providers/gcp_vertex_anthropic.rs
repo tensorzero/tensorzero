@@ -31,7 +31,8 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Thought, ThoughtChunk, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, Thought, ThoughtChunk, UnknownChunk,
+    Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
@@ -1317,11 +1318,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: delta.into_owned(),
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1337,11 +1338,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: content_block.into_owned(),
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1357,11 +1358,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "message_delta".to_string(),
                     data: delta.into_owned(),
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                })],
                 None,
                 raw_message,
                 message_latency,

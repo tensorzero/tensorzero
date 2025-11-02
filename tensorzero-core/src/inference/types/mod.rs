@@ -125,7 +125,7 @@ pub use streams::{
     collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
     InferenceResultChunk, InferenceResultStream, JsonInferenceResultChunk,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
+    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
 };
 
 /*

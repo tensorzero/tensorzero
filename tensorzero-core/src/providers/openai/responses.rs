@@ -18,7 +18,7 @@ use crate::{
         ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
         ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, Usage,
+        TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
     },
     model::fully_qualified_name,
     providers::openai::{
@@ -1132,11 +1132,11 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 } else {
                     // Unknown item type - return as unknown chunk
                     return Ok(Some(ProviderInferenceResponseChunk::new(
-                        vec![ContentBlockChunk::Unknown {
+                        vec![ContentBlockChunk::Unknown(UnknownChunk {
                             id: output_index.to_string(),
                             data: item,
                             provider_type: Some(PROVIDER_TYPE.to_string()),
-                        }],
+                        })],
                         None,
                         raw_message,
                         message_latency,
@@ -1255,11 +1255,11 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 json!({ "raw": raw_message.clone() })
             });
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "unknown".to_string(),
                     data,
                     provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -2057,7 +2057,7 @@ mod tests {
         // Unknown events should return an Unknown chunk
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data, .. } => {
+            ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                 assert_eq!(id, "unknown");
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
