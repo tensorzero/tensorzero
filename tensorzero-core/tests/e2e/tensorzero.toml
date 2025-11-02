@@ -134,14 +134,6 @@ type = "groq"
 model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
 api_key_location = "dynamic::groq_api_key"
 
-
-[models."claude-3-7-sonnet-20250219-thinking"]
-routing = ["anthropic-extra-body"]
-
-[models."claude-3-7-sonnet-20250219-thinking".providers.anthropic-extra-body]
-type = "anthropic"
-model_name = "claude-3-7-sonnet-20250219"
-
 [models."claude-3-7-sonnet-20250219-thinking-128k"]
 routing = ["anthropic"]
 
@@ -3132,7 +3124,7 @@ tool_choice = "auto"
 [functions.weather_helper.variants.anthropic-thinking]
 type = "chat_completion"
 weight = 0
-model = "claude-3-7-sonnet-20250219-thinking"
+model = "anthropic::claude-3-7-sonnet-20250219"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
 thinking_budget_tokens = 1024
 max_tokens = 1200

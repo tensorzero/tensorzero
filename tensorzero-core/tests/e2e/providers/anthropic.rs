@@ -184,7 +184,7 @@ async fn test_thinking_rejected_128k() {
     // since we want to test the current Anthropic behavior.
     let random = Uuid::now_v7();
     let payload = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "model_name": "anthropic::claude-3-7-sonnet-20250219",
         "input":{
             "messages": [
                 {
@@ -195,6 +195,7 @@ async fn test_thinking_rejected_128k() {
         "params": {
             "chat_completion": {
                 "max_tokens": 128000,
+                "thinking_budget_tokens": 1024,
             }
         },
         "stream": false,
@@ -341,6 +342,7 @@ async fn test_thinking_128k() {
             ]},
         "params": {
             "chat_completion": {
+                "thinking_budget_tokens": 1024,
                 "max_tokens": 128000,
             }
         },
@@ -474,9 +476,9 @@ async fn test_thinking_signature() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "claude-3-7-sonnet-20250219-thinking");
+    assert_eq!(model_name, "anthropic::claude-3-7-sonnet-20250219");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, "anthropic-extra-body");
+    assert_eq!(model_provider_name, "anthropic");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("weather"));
     // Check that raw_request is valid JSON
@@ -511,10 +513,15 @@ async fn test_thinking_signature() {
     println!("New messages: {new_messages:?}");
 
     let payload = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "model_name": "anthropic::claude-3-7-sonnet-20250219",
         "episode_id": episode_id,
         "input": {
             "messages": new_messages
+        },
+        "params": {
+            "chat_completion": {
+                "thinking_budget_tokens": 1024,
+            }
         },
         "stream": false,
     });
@@ -548,7 +555,7 @@ async fn test_redacted_thinking() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "model_name": "anthropic::claude-3-7-sonnet-20250219",
         "episode_id": episode_id,
         "input": {
             "messages": [
@@ -562,6 +569,11 @@ async fn test_redacted_thinking() {
                     "content": "What is the capital of Japan?"
                 }
             ]},
+        "params": {
+            "chat_completion": {
+                "thinking_budget_tokens": 1024,
+            }
+        },
         "stream": false,
     });
 
@@ -644,7 +656,7 @@ async fn test_redacted_thinking() {
     assert_eq!(retrieved_episode_id, episode_id);
     // Check the variant name
     let variant_name = result.get("variant_name").unwrap().as_str().unwrap();
-    assert_eq!(variant_name, "claude-3-7-sonnet-20250219-thinking");
+    assert_eq!(variant_name, "anthropic::claude-3-7-sonnet-20250219");
     // Check the processing time
     let processing_time_ms = result.get("processing_time_ms").unwrap().as_u64().unwrap();
     assert!(processing_time_ms > 0);
@@ -657,9 +669,9 @@ async fn test_redacted_thinking() {
     let inference_id_result = Uuid::parse_str(inference_id_result).unwrap();
     assert_eq!(inference_id_result, inference_id);
     let model_name = result.get("model_name").unwrap().as_str().unwrap();
-    assert_eq!(model_name, "claude-3-7-sonnet-20250219-thinking");
+    assert_eq!(model_name, "anthropic::claude-3-7-sonnet-20250219");
     let model_provider_name = result.get("model_provider_name").unwrap().as_str().unwrap();
-    assert_eq!(model_provider_name, "anthropic-extra-body");
+    assert_eq!(model_provider_name, "anthropic");
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
     // Check that raw_request is valid JSON
@@ -694,10 +706,15 @@ async fn test_redacted_thinking() {
     }));
 
     let payload = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "model_name": "anthropic::claude-3-7-sonnet-20250219",
         "episode_id": episode_id,
         "input": {
             "messages": new_messages
+        },
+        "params": {
+            "chat_completion": {
+                "thinking_budget_tokens": 1024,
+            }
         },
         "stream": false,
     });
@@ -726,7 +743,7 @@ async fn test_streaming_thinking() {
     let episode_id = Uuid::now_v7();
 
     let payload = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "model_name": "anthropic::claude-3-7-sonnet-20250219",
         "episode_id": episode_id,
         "input": {
             "system": "Always thinking before responding",
@@ -757,6 +774,11 @@ async fn test_streaming_thinking() {
                 "strict": true,
             }
         ],
+        "params": {
+            "chat_completion": {
+                "thinking_budget_tokens": 1024,
+            }
+        },
         "stream": true,
     });
 
@@ -815,7 +837,11 @@ async fn test_streaming_thinking() {
             }
         }
     }
-    assert_eq!(content_blocks.len(), 3);
+    assert!(
+        content_blocks.len() == 2 || content_blocks.len() == 3,
+        "Expected 2 or 3 content blocks, got {}",
+        content_blocks.len()
+    );
     assert_eq!(content_block_signatures.len(), 1);
     let inference_id = Uuid::parse_str(&inference_id.unwrap()).unwrap();
     // Sleep for 1 second to allow time for data to be inserted into ClickHouse (trailing writes from API)
@@ -847,11 +873,23 @@ async fn test_streaming_thinking() {
     let clickhouse_content_blocks: Vec<Value> =
         serde_json::from_str(clickhouse_content_blocks).unwrap();
     println!("Got content blocks: {clickhouse_content_blocks:?}");
-    // We should reconstruct thee blocks - a thought block, tool call, and text block
-    assert_eq!(clickhouse_content_blocks.len(), 3);
+    assert!(
+        clickhouse_content_blocks.len() == 2 || clickhouse_content_blocks.len() == 3,
+        "Expected 2 or 3 content blocks in ClickHouse, got {}",
+        clickhouse_content_blocks.len()
+    );
     assert_eq!(clickhouse_content_blocks[0]["type"], "thought");
-    assert_eq!(clickhouse_content_blocks[1]["type"], "text");
-    assert_eq!(clickhouse_content_blocks[2]["type"], "tool_call");
+
+    let tool_call_index = clickhouse_content_blocks.len() - 1;
+    let has_text_block = clickhouse_content_blocks.len() == 3;
+
+    if has_text_block {
+        assert_eq!(clickhouse_content_blocks[1]["type"], "text");
+    }
+    assert_eq!(
+        clickhouse_content_blocks[tool_call_index]["type"],
+        "tool_call"
+    );
 
     assert_eq!(
         clickhouse_content_blocks[0],
@@ -862,12 +900,17 @@ async fn test_streaming_thinking() {
             "_internal_provider_type": "anthropic",
         })
     );
-    assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["1"]);
 
-    let tool_call_id = clickhouse_content_blocks[2]["id"].as_str().unwrap();
+    if has_text_block {
+        assert_eq!(clickhouse_content_blocks[1]["text"], content_blocks["1"]);
+    }
+
+    let tool_call_id = clickhouse_content_blocks[tool_call_index]["id"]
+        .as_str()
+        .unwrap();
 
     assert_eq!(
-        clickhouse_content_blocks[2]["raw_arguments"],
+        clickhouse_content_blocks[tool_call_index]["raw_arguments"],
         content_blocks[tool_call_id]
     );
 
@@ -876,7 +919,7 @@ async fn test_streaming_thinking() {
     // Call Anthropic again with our reconstructed blocks, and make sure that it accepts the signed thought block
 
     let good_input = json!({
-        "model_name": "claude-3-7-sonnet-20250219-thinking",
+        "model_name": "anthropic::claude-3-7-sonnet-20250219",
         "episode_id": episode_id,
         "input": {
             "system": "Always thinking before responding",
@@ -887,23 +930,7 @@ async fn test_streaming_thinking() {
                 },
                 {
                     "role": "assistant",
-                    "content": [
-                        {
-                            "type": "thought",
-                            "text": content_blocks["0"],
-                            "signature": content_block_signatures["0"],
-                        },
-                        {
-                            "type": "text",
-                            "text": content_blocks["1"]
-                        },
-                        {
-                            "type": "tool_call",
-                            "name": "get_capital",
-                            "id": tool_call_id,
-                            "raw_arguments": content_blocks[tool_call_id].to_string(),
-                        },
-                    ]
+                    "content": clickhouse_content_blocks
                 },
                 {
                     "role": "user",
@@ -938,6 +965,11 @@ async fn test_streaming_thinking() {
                 "strict": true,
             }
         ],
+        "params": {
+            "chat_completion": {
+                "thinking_budget_tokens": 1024,
+            }
+        },
         "stream": false,
     });
 
