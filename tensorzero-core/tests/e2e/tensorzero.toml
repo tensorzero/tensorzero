@@ -215,6 +215,14 @@ type = "aws_bedrock"
 model_id = "us.anthropic.claude-3-haiku-20240307-v1:0"
 region = "us-east-1"
 
+[models."claude-3-7-sonnet-20250219-thinking-aws-bedrock"]
+routing = ["aws_bedrock"]
+
+[models."claude-3-7-sonnet-20250219-thinking-aws-bedrock".providers.aws_bedrock]
+type = "aws_bedrock"
+model_id = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+region = "us-east-1"
+
 [models.gemma-3-1b-aws-sagemaker-openai]
 routing = ["aws_sagemaker"]
 
@@ -1025,6 +1033,12 @@ type = "chat_completion"
 model = "claude-3-haiku-20240307-aws-bedrock"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 100
+
+[functions.basic_test.variants.aws-bedrock-thinking]
+type = "chat_completion"
+model = "claude-3-7-sonnet-20250219-thinking-aws-bedrock"
+system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
+max_tokens = 2048
 
 [functions.basic_test.variants.aws-bedrock-deepseek-r1]
 type = "chat_completion"

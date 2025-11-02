@@ -297,3 +297,79 @@ async fn test_inference_with_empty_system() {
     assert_eq!(content_block_type, "text");
     content_block.get("text").unwrap().as_str().unwrap();
 }
+
+#[tokio::test]
+async fn test_inference_with_thinking_budget_tokens() {
+    let client = Client::new();
+    let episode_id = Uuid::now_v7();
+
+    let payload = json!({
+        "function_name": "basic_test",
+        "variant_name": "aws-bedrock-thinking",
+        "episode_id": episode_id,
+        "input": {
+            "system": {"assistant_name": "Bedrock Thinker"},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Share a short fun fact."
+                }
+            ]
+        },
+        "stream": false,
+        "params": {
+            "chat_completion": {
+                "thinking_budget_tokens": 1024
+            }
+        }
+    });
+
+    let response = client
+        .post(get_gateway_endpoint("/inference"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+
+    let inference_id = response_json
+        .get("inference_id")
+        .and_then(Value::as_str)
+        .unwrap();
+    let inference_id = Uuid::parse_str(inference_id).unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    let clickhouse = get_clickhouse().await;
+    let model_inference = select_model_inference_clickhouse(&clickhouse, inference_id)
+        .await
+        .unwrap();
+
+    let raw_request = model_inference
+        .get("raw_request")
+        .and_then(Value::as_str)
+        .unwrap();
+
+    let raw_request_json: Value =
+        serde_json::from_str(raw_request).expect("raw_request should be valid JSON");
+
+    let thinking = raw_request_json
+        .get("additionalModelRequestFields")
+        .and_then(|fields| fields.get("thinking"))
+        .expect("Expected `thinking` block to be forwarded to AWS Bedrock");
+
+    let thinking_type = thinking
+        .get("type")
+        .and_then(Value::as_str)
+        .expect("Expected thinking type");
+    assert_eq!(thinking_type, "enabled");
+
+    let budget_tokens = thinking
+        .get("budget_tokens")
+        .and_then(Value::as_i64)
+        .or_else(|| thinking.get("budgetTokens").and_then(Value::as_i64))
+        .expect("Expected thinking budget tokens");
+    assert_eq!(budget_tokens, 1024);
+}

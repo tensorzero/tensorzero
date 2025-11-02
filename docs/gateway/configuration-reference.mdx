@@ -2756,6 +2756,26 @@ temperature = 0.5
 # ...
 ```
 
+##### `thinking_budget_tokens`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Controls the thinking budget in tokens for reasoning models.
+
+<Warning>
+
+Only some model providers support this parameter. TensorZero will warn and ignore it if unsupported.
+
+</Warning>
+
+```toml title="tensorzero.toml"
+[functions.draft-email.variants.prompt-v1]
+# ...
+thinking_budget_tokens = 10000
+# ...
+```
+
 ##### `timeouts`
 
 - **Type:** object
