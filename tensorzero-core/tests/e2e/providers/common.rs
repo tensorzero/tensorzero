@@ -8861,7 +8861,7 @@ pub async fn test_dynamic_tool_use_inference_request_with_provider(
         },
         stream: Some(false),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::Tool {
+            additional_tools: Some(vec![tensorzero::ClientSideFunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the current temperature in a given location".to_string(),
                 parameters: json!({
@@ -9164,7 +9164,7 @@ pub async fn test_dynamic_tool_use_streaming_inference_request_with_provider(
         extra_headers: get_extra_headers(),
         stream: Some(true),
         dynamic_tool_params: tensorzero::DynamicToolParams {
-            additional_tools: Some(vec![tensorzero::Tool {
+            additional_tools: Some(vec![tensorzero::ClientSideFunctionTool {
                 name: "get_temperature".to_string(),
                 description: "Get the current temperature in a given location".to_string(),
                 parameters: json!({

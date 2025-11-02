@@ -44,7 +44,8 @@ use crate::inference::types::{
 };
 
 use crate::tool::{
-    DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
+    ClientSideFunctionTool, DynamicToolParams, ProviderTool, ToolCallInput, ToolCallOutput,
+    ToolChoice, ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -1052,7 +1053,7 @@ fn convert_openai_message_content(
     }
 }
 
-impl From<OpenAICompatibleTool> for Tool {
+impl From<OpenAICompatibleTool> for ClientSideFunctionTool {
     fn from(tool: OpenAICompatibleTool) -> Self {
         match tool {
             OpenAICompatibleTool::Function {
@@ -1060,7 +1061,7 @@ impl From<OpenAICompatibleTool> for Tool {
                 name,
                 parameters,
                 strict,
-            } => Tool {
+            } => ClientSideFunctionTool {
                 description: description.unwrap_or_default(),
                 parameters,
                 name,

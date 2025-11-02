@@ -3,7 +3,8 @@ use std::borrow::Cow;
 use crate::http::TensorzeroHttpClient;
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::{
-    http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID, tool::Tool,
+    http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID,
+    tool::ClientSideFunctionTool,
 };
 use futures::StreamExt;
 use lazy_static::lazy_static;
@@ -451,8 +452,8 @@ pub struct FireworksTool<'a> {
     function: OpenAIFunction<'a>,
 }
 
-impl<'a> From<&'a Tool> for FireworksTool<'a> {
-    fn from(tool: &'a Tool) -> Self {
+impl<'a> From<&'a ClientSideFunctionTool> for FireworksTool<'a> {
+    fn from(tool: &'a ClientSideFunctionTool) -> Self {
         FireworksTool {
             r#type: OpenAIToolType::Function,
             function: OpenAIFunction {

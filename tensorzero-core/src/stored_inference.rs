@@ -11,9 +11,9 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
-use crate::tool::{DynamicToolParams, StaticToolConfig};
 #[cfg(feature = "pyo3")]
-use crate::tool::{ProviderTool, Tool, ToolChoice};
+use crate::tool::{ClientSideFunctionTool, ProviderTool, ToolChoice};
+use crate::tool::{DynamicToolParams, StaticToolConfig};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -209,7 +209,7 @@ impl StoredInference {
                         .transpose()?;
 
                 // Build DynamicToolParams from flattened fields
-                let additional_tools: Option<Vec<Tool>> = additional_tools
+                let additional_tools: Option<Vec<ClientSideFunctionTool>> = additional_tools
                     .as_ref()
                     .map(|x| deserialize_from_pyobj(py, x))
                     .transpose()?;

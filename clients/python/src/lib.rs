@@ -63,10 +63,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, DynamicToolParams,
-    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, LaunchOptimizationParams,
-    ListInferencesParams, OptimizationJobHandle, RenderedSample, TensorZeroError, Tool,
-    WorkflowEvaluationRunParams,
+    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString,
+    ClientSideFunctionTool, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    InferenceStream, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
+    RenderedSample, TensorZeroError, WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
@@ -438,16 +438,17 @@ impl BaseTensorZeroGateway {
             None
         };
 
-        let additional_tools: Option<Vec<Tool>> = if let Some(tools) = additional_tools {
-            Some(
-                tools
-                    .into_iter()
-                    .map(|key_vals| parse_tool(py, key_vals))
-                    .collect::<Result<Vec<Tool>, PyErr>>()?,
-            )
-        } else {
-            None
-        };
+        let additional_tools: Option<Vec<ClientSideFunctionTool>> =
+            if let Some(tools) = additional_tools {
+                Some(
+                    tools
+                        .into_iter()
+                        .map(|key_vals| parse_tool(py, key_vals))
+                        .collect::<Result<Vec<ClientSideFunctionTool>, PyErr>>()?,
+                )
+            } else {
+                None
+            };
 
         let provider_tools: Option<Vec<ProviderTool>> = if let Some(provider_tools) = provider_tools
         {

@@ -138,7 +138,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use serde_json::json;
-    use tensorzero::Tool;
+    use tensorzero::ClientSideFunctionTool;
     use tensorzero_core::{
         config::SchemaData, experimentation::ExperimentationConfig, function::FunctionConfigChat,
         tool::ToolChoice,
@@ -152,7 +152,7 @@ mod tests {
         let tool_database_insert = ToolCallConfigDatabaseInsert {
             tool_choice: ToolChoice::Specific("tool_1".to_string()),
             parallel_tool_calls: None,
-            tools_available: vec![Tool {
+            tools_available: vec![ClientSideFunctionTool {
                 name: "tool_1".to_string(),
                 description: "Tool 1".to_string(),
                 parameters: json!({}),
@@ -176,7 +176,7 @@ mod tests {
                 tool_choice: Some(ToolChoice::Specific("tool_1".to_string())),
                 parallel_tool_calls: None,
                 allowed_tools: Some(Vec::new()),
-                additional_tools: Some(vec![Tool {
+                additional_tools: Some(vec![ClientSideFunctionTool {
                     name: "tool_1".to_string(),
                     description: "Tool 1".to_string(),
                     parameters: json!({}),
@@ -190,7 +190,7 @@ mod tests {
         let tool_database_insert = ToolCallConfigDatabaseInsert {
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: None,
-            tools_available: vec![Tool {
+            tools_available: vec![ClientSideFunctionTool {
                 name: "tool_1".to_string(),
                 description: "Tool 1".to_string(),
                 parameters: json!({}),

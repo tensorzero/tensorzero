@@ -32,7 +32,9 @@ use tensorzero_core::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
-    tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult},
+    tool::{
+        ClientSideFunctionTool, DynamicToolParams, ToolCall, ToolCallOutput, ToolChoice, ToolResult,
+    },
     variant::JsonMode,
 };
 
@@ -445,7 +447,7 @@ fn generate_tool_call_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(tool_call_output)),
         tool_params: DynamicToolParams {
             allowed_tools: None,
-            additional_tools: Some(vec![Tool {
+            additional_tools: Some(vec![ClientSideFunctionTool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({

@@ -851,8 +851,8 @@ mod tests {
         jsonschema_util::StaticJSONSchema,
         stored_inference::StoredOutput,
         tool::{
-            create_implicit_tool_call_config, DynamicToolParams, Tool, ToolCall, ToolCallConfig,
-            ToolChoice, ToolResult,
+            create_implicit_tool_call_config, ClientSideFunctionTool, DynamicToolParams, ToolCall,
+            ToolCallConfig, ToolChoice, ToolResult,
         },
     };
 
@@ -1080,7 +1080,9 @@ mod tests {
         }
     }
 
-    fn create_test_rendered_sample_with_tools(tools: Vec<Tool>) -> RenderedSample {
+    fn create_test_rendered_sample_with_tools(
+        tools: Vec<ClientSideFunctionTool>,
+    ) -> RenderedSample {
         let mut sample = create_test_rendered_sample();
         sample.tool_params = DynamicToolParams {
             allowed_tools: None,
@@ -1169,7 +1171,7 @@ mod tests {
 
     #[test]
     fn test_validate_train_examples_rejects_tools_available() {
-        let tool = Tool {
+        let tool = ClientSideFunctionTool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
             parameters: serde_json::json!({"type": "object", "properties": {}}),
@@ -1215,7 +1217,7 @@ mod tests {
     fn test_validate_train_examples_multiple_samples() {
         let valid_sample = create_test_rendered_sample();
 
-        let tool = Tool {
+        let tool = ClientSideFunctionTool {
             name: "test_tool".to_string(),
             description: "A test tool".to_string(),
             parameters: serde_json::json!({"type": "object", "properties": {}}),

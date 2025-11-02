@@ -2387,10 +2387,10 @@ mod tests {
 
     mod database_insert_to_dynamic_tool_params_tests {
         use super::*;
-        use crate::tool::{Tool, ToolCallConfigDatabaseInsert};
+        use crate::tool::{ClientSideFunctionTool, ToolCallConfigDatabaseInsert};
 
-        fn create_test_tool(name: &str, strict: bool) -> Tool {
-            Tool {
+        fn create_test_tool(name: &str, strict: bool) -> ClientSideFunctionTool {
+            ClientSideFunctionTool {
                 name: name.to_string(),
                 description: format!("Description for {name}"),
                 parameters: json!({"type": "object", "properties": {"input": {"type": "string"}}}),
@@ -2544,7 +2544,7 @@ mod tests {
         #[test]
         fn test_tool_metadata_preservation() {
             let function_config = create_chat_function(vec![]);
-            let tool = Tool {
+            let tool = ClientSideFunctionTool {
                 name: "test_tool".to_string(),
                 description: "A detailed description".to_string(),
                 parameters: json!({
