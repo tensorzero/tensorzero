@@ -330,15 +330,16 @@ fn apply_inference_params(
     _request: &mut HyperbolicRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
-    // TODO (GabrielBianconi): force handling of every parameter via trait?
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        verbosity,
+    } = inference_params;
 
-    // reasoning_effort
-    if inference_params.reasoning_effort.is_some() {
+    if reasoning_effort.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
     }
 
-    // verbosity
-    if inference_params.verbosity.is_some() {
+    if verbosity.is_some() {
         warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
     }
 }

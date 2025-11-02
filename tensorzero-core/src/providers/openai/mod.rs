@@ -787,16 +787,17 @@ fn apply_inference_params(
     request: &mut OpenAIRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
-    // TODO (GabrielBianconi): force handling of every parameter via trait?
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        verbosity,
+    } = inference_params;
 
-    // reasoning_effort
-    if inference_params.reasoning_effort.is_some() {
-        request.reasoning_effort = inference_params.reasoning_effort.clone();
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
     }
 
-    // verbosity
-    if inference_params.verbosity.is_some() {
-        request.verbosity = inference_params.verbosity.clone();
+    if verbosity.is_some() {
+        request.verbosity = verbosity.clone();
     }
 }
 
