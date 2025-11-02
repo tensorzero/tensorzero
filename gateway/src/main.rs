@@ -76,7 +76,7 @@ async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
 
     // Create connection pool (alpha version for tensorzero-auth)
-    let pool = sqlx_alpha::PgPool::connect(&postgres_url).await?;
+    let pool = sqlx::PgPool::connect(&postgres_url).await?;
 
     // Create the key with default organization and workspace
     let key =
