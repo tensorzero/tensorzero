@@ -34,7 +34,8 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{
-    DynamicToolParams, StaticToolConfig, ToolCallConfig, ToolCallConfigDatabaseInsert, ToolChoice,
+    DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig, ToolCallConfigConstructorArgs,
+    ToolCallConfigDatabaseInsert, ToolChoice, AllowedToolsChoice
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
@@ -330,13 +331,27 @@ impl FunctionConfig {
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<Option<ToolCallConfig>, Error> {
         match self {
-            FunctionConfig::Chat(params) => Ok(ToolCallConfig::new(
-                &params.tools,
-                &params.tool_choice,
-                params.parallel_tool_calls,
-                static_tools,
-                dynamic_tool_params,
-            )?),
+            FunctionConfig::Chat(params) => {
+                let DynamicToolParams {
+                    allowed_tools,
+                    additional_tools,
+                    parallel_tool_calls,
+                    provider_tools,
+                    tool_choice,
+                } = dynamic_tool_params;
+                Ok(ToolCallConfig::new(ToolCallConfigConstructorArgs {
+                    function_tools: &params.tools,
+                    function_tool_choice: &params.tool_choice,
+                    function_parallel_tool_calls: params.parallel_tool_calls,
+                    static_tools,
+                    dynamic_allowed_tools: allowed_tools,
+                    dynamic_additional_tools: additional_tools
+                        .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+                    dynamic_tool_choice: tool_choice,
+                    dynamic_parallel_tool_calls: parallel_tool_calls,
+                    dynamic_provider_tools: provider_tools,
+                })?)
+            }
             FunctionConfig::Json(_) => {
                 if dynamic_tool_params.allowed_tools.is_some() {
                     return Err(ErrorDetails::InvalidRequest {
@@ -374,9 +389,6 @@ impl FunctionConfig {
         dynamic_params: DynamicToolParams,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
-        let tool_config = self.prepare_tool_config(dynamic_params, static_tools)?;
-        Ok(tool_config.map(std::convert::Into::into))
-    }
 
     /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams by subtracting static tools
     /// Static tools (from function config) become allowed_tools, additional tools remain as additional_tools
@@ -384,6 +396,14 @@ impl FunctionConfig {
         &self,
         db_insert: ToolCallConfigDatabaseInsert,
     ) -> DynamicToolParams {
+        let ToolCallConfigDatabaseInsert {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            .. // TODO: Ideally we can say all but private fields must be destructured here.
+        } = db_insert;
         // Get static tool names from function config
         let static_tool_names: HashSet<&str> = match self {
             FunctionConfig::Chat(c) => c.tools.iter().map(std::string::String::as_str).collect(),
@@ -391,22 +411,18 @@ impl FunctionConfig {
         };
 
         // Partition tools into static (allowed) and dynamic (additional)
-        let (static_tools, additional_tools): (Vec<_>, Vec<_>) = db_insert
-            .tools_available
-            .into_iter()
-            .partition(|tool| static_tool_names.contains(tool.name.as_str()));
+        // let (static_tools, additional_tools): (Vec<_>, Vec<_>) = db_insert
+        //     .tools_available
+        //     .into_iter()
+        //     .partition(|tool| static_tool_names.contains(tool.name.as_str()));
+        let allowed_tools = match allowed_tools.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            AllowedToolsChoice::DynamicAllowedTools => Some(allowed_tools.tools),
+        };
 
         DynamicToolParams {
-            allowed_tools: if static_tools.is_empty() {
-                None
-            } else {
-                Some(static_tools.into_iter().map(|t| t.name).collect())
-            },
-            additional_tools: if additional_tools.is_empty() {
-                None
-            } else {
-                Some(additional_tools)
-            },
+            allowed_tools,
+            additional_tools: dynamic_tools,
             tool_choice: Some(db_insert.tool_choice),
             parallel_tool_calls: db_insert.parallel_tool_calls,
             // TODO(#4271): store and restore the provider_tools from DB
