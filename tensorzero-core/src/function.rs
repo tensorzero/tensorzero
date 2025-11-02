@@ -87,6 +87,13 @@ impl FunctionConfig {
             FunctionConfig::Json(config) => &config.experimentation,
         }
     }
+
+    pub fn tools(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+        match self {
+            FunctionConfig::Chat(config) => Box::new(config.tools.iter().map(|s| s.as_str())),
+            FunctionConfig::Json(_config) => Box::new(std::iter::empty()),
+        }
+    }
 }
 
 #[cfg(feature = "pyo3")]

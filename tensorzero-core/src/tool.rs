@@ -1,3 +1,4 @@
+use std::fmt;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -5,16 +6,20 @@ use std::{
 
 #[cfg(feature = "pyo3")]
 use pyo3::prelude::*;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::de::{self, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::serialize_to_dict;
 use crate::{
+    config::Config,
     error::{Error, ErrorDetails},
+    function::FunctionConfig,
     jsonschema_util::{DynamicJSONSchema, StaticJSONSchema},
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
+use strum::AsRefStr;
 
 /*  Key tool types in TensorZero
  * - DynamicToolParams: the wire format for tool configuration info (flattened into struct body)
@@ -40,32 +45,39 @@ use crate::{
  * If we are doing an implicit tool call for JSON schema enforcement, we can use the compiled schema from the output signature.
  */
 
-// #[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize)]
-// #[serde(tag = "type", rename_all = "snake_case")]
-// #[strum(serialize_all = "snake_case")]
-// #[cfg_attr(feature = "pyo3", pyclass(str))]
-// pub enum Tool {
-//     ClientSideFunction(ClientSideFunctionTool),
-// }
+#[derive(ts_rs::TS, AsRefStr, Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[strum(serialize_all = "snake_case")]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub enum Tool {
+    ClientSideFunction(ClientSideFunctionTool),
+}
 
-// impl Tool {
-//     fn name(&self) -> &str {
-//         match self {
-//             Tool::ClientSideFunction(tool) => &tool.name,
-//         }
-//     }
+impl std::fmt::Display for Tool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
 
-//     fn into_dynamic_tool_config(self) -> DynamicToolConfig {
-//         match self {
-//             Tool::ClientSideFunction(tool) => DynamicToolConfig {
-//                 description: tool.description,
-//                 parameters: DynamicJSONSchema::new(tool.parameters),
-//                 name: tool.name,
-//                 strict: tool.strict,
-//             },
-//         }
-//     }
-// }
+impl Tool {
+    fn name(&self) -> &str {
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.name,
+        }
+    }
+
+    fn into_dynamic_tool_config(self) -> DynamicToolConfig {
+        match self {
+            Tool::ClientSideFunction(tool) => DynamicToolConfig {
+                description: tool.description,
+                parameters: DynamicJSONSchema::new(tool.parameters),
+                name: tool.name,
+                strict: tool.strict,
+            },
+        }
+    }
+}
 
 /// A Tool object describes how a tool can be dynamically configured by the user.
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -89,25 +101,46 @@ impl std::fmt::Display for ClientSideFunctionTool {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ClientSideFunctionTool {
+impl Tool {
+    /*
+     * Note: as we add more tool types, we can throw AttributeError on fields that they don't have
+     * and ask the caller to check the type field.
+     * This avoids a breaking change to the Python interface as we go from a single tool type to potentially more in the future.
+     * most notably, MCP
+     */
+    #[getter]
+    pub fn get_type(&self) -> &str {
+        self.as_ref()
+    }
+
     #[getter]
     pub fn get_parameters<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        serialize_to_dict(py, self.parameters.clone()).map(|x| x.into_bound(py))
+        match self {
+            Tool::ClientSideFunction(tool) => {
+                serialize_to_dict(py, tool.parameters.clone()).map(|x| x.into_bound(py))
+            }
+        }
     }
 
     #[getter]
     pub fn get_description(&self) -> &str {
-        &self.description
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.description,
+        }
     }
 
     #[getter]
     pub fn get_name(&self) -> &str {
-        &self.name
+        match self {
+            Tool::ClientSideFunction(tool) => &tool.name,
+        }
     }
 
     #[getter]
     pub fn get_strict(&self) -> bool {
-        self.strict
+        match self {
+            Tool::ClientSideFunction(tool) => tool.strict,
+        }
     }
 
     pub fn __repr__(&self) -> String {
@@ -140,6 +173,7 @@ impl ProviderToolScope {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ProviderTool {
     #[serde(default)]
@@ -207,10 +241,20 @@ pub struct DynamicImplicitToolConfig {
 /// Records / lists the tools that were allowed in the request
 /// Also lists how they were set (default, dynamically set)
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
 #[cfg_attr(test, ts(export))]
 pub struct AllowedTools {
     pub tools: Vec<String>,
     pub choice: AllowedToolsChoice,
+}
+
+impl AllowedTools {
+    fn into_dynamic_allowed_tools(self) -> Option<Vec<String>> {
+        match self.choice {
+            AllowedToolsChoice::FunctionDefault => None,
+            AllowedToolsChoice::DynamicAllowedTools => Some(self.tools),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, ts_rs::TS)]
@@ -235,23 +279,40 @@ pub enum AllowedToolsChoice {
 pub struct ToolCallConfig {
     pub(crate) static_tools_available: Vec<ToolConfig>,
     pub(crate) dynamic_tools_available: Vec<ToolConfig>,
-    pub provider_tools: Vec<ProviderTool>,
+    pub provider_tools: Option<Vec<ProviderTool>>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
     pub allowed_tools: AllowedTools,
 }
 
+pub struct ToolCallConfigConstructorArgs<'a> {
+    pub function_tools: &'a [String],
+    pub function_tool_choice: &'a ToolChoice,
+    pub function_parallel_tool_calls: Option<bool>,
+    pub static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
+    pub dynamic_allowed_tools: Option<Vec<String>>,
+    pub dynamic_additional_tools: Option<Vec<Tool>>,
+    pub dynamic_tool_choice: Option<ToolChoice>,
+    pub dynamic_parallel_tool_calls: Option<bool>,
+    pub dynamic_provider_tools: Option<Vec<ProviderTool>>,
+}
+
 impl ToolCallConfig {
-    pub fn new(
-        function_tools: &[String],
-        function_tool_choice: &ToolChoice,
-        function_parallel_tool_calls: Option<bool>,
-        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-        dynamic_tool_params: DynamicToolParams,
-    ) -> Result<Option<Self>, Error> {
+    pub fn new(args: ToolCallConfigConstructorArgs<'_>) -> Result<Option<Self>, Error> {
+        let ToolCallConfigConstructorArgs {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools,
+            dynamic_additional_tools,
+            dynamic_tool_choice,
+            dynamic_parallel_tool_calls,
+            dynamic_provider_tools,
+        } = args;
         // If `allowed_tools` is not provided, use the function's configured tools.
         // This means we allow all tools for the function.
-        let mut allowed_tools = match dynamic_tool_params.allowed_tools {
+        let mut allowed_tools = match dynamic_allowed_tools {
             Some(allowed_tools) => AllowedTools {
                 tools: allowed_tools,
                 choice: AllowedToolsChoice::DynamicAllowedTools,
@@ -263,10 +324,9 @@ impl ToolCallConfig {
         };
 
         // Make a set for all names in additional tools
-        let additional_tool_names: HashSet<&str> = dynamic_tool_params
-            .additional_tools
+        let additional_tool_names: HashSet<&str> = dynamic_additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(|t| t.name.as_str()).collect())
+            .map(|tools| tools.iter().map(|t| t.name()).collect())
             .unwrap_or_default();
 
         // Get each tool from the static tool config.
@@ -292,27 +352,23 @@ impl ToolCallConfig {
             .collect::<Result<Vec<_>, _>>()?;
 
         let mut dynamic_tools_available = vec![];
-        if let Some(additional_tools) = dynamic_tool_params.additional_tools {
+        if let Some(additional_tools) = dynamic_additional_tools {
             for tool in additional_tools {
                 // Today we automatically add dynamically configured tools to the allowed tools list but in future we may
                 // change this behavior to be more in line with OpenAI's (if allowed_tools is set do not add tools.
                 // This warning is unusable today.
-                if !allowed_tools.tools.contains(&tool.name) {
+                let name = tool.name().to_string();
+                if !allowed_tools.tools.contains(&name) {
                     tracing::info!(
-                        tool_name = %tool.name,
+                        tool_name = %name,
                         "Currently, the gateway automatically includes all dynamic tools in the list of allowed tools. \
                          In a near-future release, dynamic tools will no longer be included automatically. \
                          If you intend for your dynamic tools to be allowed, please allow them explicitly; \
                          otherwise, disregard this warning."
                     );
                 }
-                dynamic_tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
-                    description: tool.description,
-                    parameters: DynamicJSONSchema::new(tool.parameters),
-                    name: tool.name.clone(),
-                    strict: tool.strict,
-                }));
-                allowed_tools.tools.push(tool.name);
+                dynamic_tools_available.push(ToolConfig::Dynamic(tool.into_dynamic_tool_config()));
+                allowed_tools.tools.push(name);
             }
         }
 
@@ -331,9 +387,7 @@ impl ToolCallConfig {
             }
         }
 
-        let tool_choice = dynamic_tool_params
-            .tool_choice
-            .unwrap_or_else(|| function_tool_choice.clone());
+        let tool_choice = dynamic_tool_choice.unwrap_or_else(|| function_tool_choice.clone());
 
         // If the tool choice is a specific tool, make sure it's in the list of available tools
         if let ToolChoice::Specific(tool_name) = &tool_choice {
@@ -355,13 +409,11 @@ impl ToolCallConfig {
             }
         }
 
-        let parallel_tool_calls = dynamic_tool_params
-            .parallel_tool_calls
-            .or(function_parallel_tool_calls);
+        let parallel_tool_calls = dynamic_parallel_tool_calls.or(function_parallel_tool_calls);
 
         let tool_call_config_option = if static_tools_available.is_empty()
             && dynamic_tools_available.is_empty()
-            && dynamic_tool_params.provider_tools.is_none()
+            && dynamic_provider_tools.is_none()
         {
             None
         } else {
@@ -369,7 +421,7 @@ impl ToolCallConfig {
                 static_tools_available,
                 dynamic_tools_available,
                 tool_choice,
-                provider_tools: dynamic_tool_params.provider_tools.unwrap_or_default(),
+                provider_tools: dynamic_provider_tools,
                 parallel_tool_calls,
                 allowed_tools,
             })
@@ -398,12 +450,27 @@ impl ToolCallConfig {
         })
     }
 
+    #[cfg(test)]
+    pub fn with_tools_available(
+        static_tools_available: Vec<ToolConfig>,
+        dynamic_tools_available: Vec<ToolConfig>,
+    ) -> Self {
+        Self {
+            static_tools_available,
+            dynamic_tools_available,
+            ..Default::default()
+        }
+    }
+
     pub fn get_scoped_provider_tools(
         &self,
         model_name: &str,
         model_provider_name: &str,
     ) -> Vec<&ProviderTool> {
-        self.provider_tools
+        let Some(provider_tools) = self.provider_tools.as_ref() else {
+            return vec![];
+        };
+        provider_tools
             .iter()
             .filter(|t| t.scope.matches(model_name, model_provider_name))
             .collect()
@@ -421,6 +488,8 @@ impl ToolCallConfig {
         }
     }
 }
+
+/// TODO (Viraj): improve documentation
 /// Storage representation of tool call configuration for database persistence.
 ///
 /// This type is the **database/storage format** for tool configurations, designed to be stored
@@ -444,8 +513,344 @@ impl ToolCallConfig {
 /// - **To ToolCallConfig**: Use the `into_tool_call_config()` method for a direct conversion to `ToolCallConfig`
 ///
 /// See also: [`DynamicToolParams`] for the wire/API format
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct ToolCallConfigDatabaseInsert {
+    pub dynamic_tools: Vec<Tool>,
+    pub dynamic_provider_tools: Vec<ProviderTool>,
+    pub allowed_tools: AllowedTools,
+    pub tool_choice: ToolChoice,
+    pub parallel_tool_calls: Option<bool>,
+    // We write this in case any legacy code reads the database; it should not be read in new code
+    #[serde(default)]
+    tool_config: LegacyToolCallConfigDatabaseInsert,
+}
+
+/// TODO(Viraj): do we still need this to be optional?
+/// Custom deserializer implementation for ToolCallConfigDatabaseInsert that handles three formats:
+/// 1. Full format: Contains all fields (dynamic_tools, dynamic_provider_tools, allowed_tools, etc.)
+/// 2. Legacy format: Contains only tool_config field (for backwards compatibility)
+/// 3. Missing/Empty: Returns None
+///
+/// This deserializer is strict: if any tool-related fields are present, they must be valid and complete.
+/// It supports flatten by only consuming tool-related fields and leaving others for the parent struct.
+pub fn deserialize_optional_tool_info<'de, D>(
+    deserializer: D,
+) -> Result<Option<ToolCallConfigDatabaseInsert>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct ToolInfoVisitor;
+
+    impl<'de> Visitor<'de> for ToolInfoVisitor {
+        type Value = Option<ToolCallConfigDatabaseInsert>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("tool call configuration")
+        }
+
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+        where
+            A: MapAccess<'de>,
+        {
+            // Collect only tool-related fields
+            let tool_fields = [
+                "dynamic_tools",
+                "dynamic_provider_tools",
+                "allowed_tools",
+                "tool_choice",
+                "parallel_tool_calls",
+                "tool_params",
+            ];
+
+            let mut values: HashMap<String, Value> = HashMap::new();
+
+            while let Some(key) = map.next_key::<String>()? {
+                if tool_fields.contains(&key.as_str()) {
+                    let value: Value = map.next_value()?;
+                    values.insert(key, value);
+                } else {
+                    // Skip non-tool fields (for flatten support)
+                    map.next_value::<serde::de::IgnoredAny>()?;
+                }
+            }
+
+            // If no tool fields present, return None
+            if values.is_empty() {
+                return Ok(None);
+            }
+
+            // Determine format based on which fields are present
+            let has_full_fields = values.contains_key("dynamic_tools")
+                || values.contains_key("dynamic_provider_tools")
+                || values.contains_key("allowed_tools")
+                || values.contains_key("tool_choice");
+
+            if has_full_fields {
+                // Full format: require ALL full format fields
+                let dynamic_tools_value = values
+                    .get("dynamic_tools")
+                    .ok_or_else(|| de::Error::missing_field("dynamic_tools"))?;
+                let dynamic_tools: Vec<Tool> = serde_json::from_value(dynamic_tools_value.clone())
+                    .map_err(|e| de::Error::custom(format!("invalid dynamic_tools: {}", e)))?;
+
+                let dynamic_provider_tools_value = values
+                    .get("dynamic_provider_tools")
+                    .ok_or_else(|| de::Error::missing_field("dynamic_provider_tools"))?;
+                let dynamic_provider_tools: Vec<ProviderTool> =
+                    serde_json::from_value(dynamic_provider_tools_value.clone()).map_err(|e| {
+                        de::Error::custom(format!("invalid dynamic_provider_tools: {}", e))
+                    })?;
+
+                let allowed_tools_value = values
+                    .get("allowed_tools")
+                    .ok_or_else(|| de::Error::missing_field("allowed_tools"))?;
+                let allowed_tools: AllowedTools =
+                    serde_json::from_value(allowed_tools_value.clone())
+                        .map_err(|e| de::Error::custom(format!("invalid allowed_tools: {}", e)))?;
+
+                let tool_choice_value = values
+                    .get("tool_choice")
+                    .ok_or_else(|| de::Error::missing_field("tool_choice"))?;
+                let tool_choice: ToolChoice = serde_json::from_value(tool_choice_value.clone())
+                    .map_err(|e| de::Error::custom(format!("invalid tool_choice: {}", e)))?;
+
+                let parallel_tool_calls: Option<bool> = values
+                    .get("parallel_tool_calls")
+                    .map(|v| {
+                        if v.is_null() {
+                            Ok(None)
+                        } else {
+                            serde_json::from_value::<bool>(v.clone())
+                                .map(Some)
+                                .map_err(|e| {
+                                    de::Error::custom(format!("invalid parallel_tool_calls: {}", e))
+                                })
+                        }
+                    })
+                    .transpose()?
+                    .flatten();
+                // The tool params are serialized as a string in ClickHouse
+                // but an Object in Python
+                let tool_config_value = values
+                    .get("tool_params")
+                    .ok_or_else(|| de::Error::missing_field("tool_params"))?;
+
+                let tool_config: LegacyToolCallConfigDatabaseInsert =
+                    if let Some(tool_config_str) = tool_config_value.as_str() {
+                        // Handle string case (ClickHouse serialization)
+                        // ClickHouse empty string is None
+                        if tool_config_str.is_empty() {
+                            return Ok(None);
+                        }
+                        serde_json::from_str(tool_config_str).map_err(|e| {
+                            de::Error::custom(format!("invalid tool_params string: {}", e))
+                        })?
+                    } else {
+                        // Handle object case (Python serialization)
+                        serde_json::from_value(tool_config_value.clone()).map_err(|e| {
+                            de::Error::custom(format!("invalid tool_params object: {}", e))
+                        })?
+                    };
+                Ok(Some(ToolCallConfigDatabaseInsert {
+                    dynamic_tools,
+                    dynamic_provider_tools,
+                    allowed_tools,
+                    tool_choice,
+                    parallel_tool_calls,
+                    tool_config,
+                }))
+            } else if values.contains_key("tool_params") {
+                // Legacy format: only tool_config should be present
+                // The tool params are serialized as a string in ClickHouse
+                let tool_config_value = values
+                    .get("tool_params")
+                    .ok_or_else(|| de::Error::missing_field("tool_params"))?;
+                let tool_config: LegacyToolCallConfigDatabaseInsert =
+                    if let Some(tool_config_str) = tool_config_value.as_str() {
+                        // Handle string case (ClickHouse serialization)
+                        // ClickHouse empty string is None
+                        if tool_config_str.is_empty() {
+                            return Ok(None);
+                        }
+                        serde_json::from_str(tool_config_str).map_err(|e| {
+                            de::Error::custom(format!("invalid tool_params string: {}", e))
+                        })?
+                    } else {
+                        // Handle object case (Python serialization)
+                        serde_json::from_value(tool_config_value.clone()).map_err(|e| {
+                            de::Error::custom(format!("invalid tool_params object: {}", e))
+                        })?
+                    };
+
+                Ok(Some(ToolCallConfigDatabaseInsert {
+                    dynamic_tools: vec![],
+                    dynamic_provider_tools: vec![],
+                    allowed_tools: AllowedTools::default(),
+                    tool_choice: tool_config.tool_choice.clone(),
+                    parallel_tool_calls: tool_config.parallel_tool_calls,
+                    tool_config,
+                }))
+            } else {
+                // Unknown tool fields without proper structure
+                Err(de::Error::custom(
+                    "invalid tool configuration: unrecognized field combination",
+                ))
+            }
+        }
+    }
+
+    deserializer.deserialize_map(ToolInfoVisitor)
+}
+
+/// Non-optional deserializer that uses the optional deserializer and defaults to empty if None
+pub fn deserialize_tool_info<'de, D>(
+    deserializer: D,
+) -> Result<ToolCallConfigDatabaseInsert, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserialize_optional_tool_info(deserializer).map(|opt| opt.unwrap_or_default())
+}
+
+impl std::fmt::Display for ToolCallConfigDatabaseInsert {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl ToolCallConfigDatabaseInsert {
+    /// Updates the fields of this ToolCallConfigDatabaseInsert with the provided values.
+    /// Each parameter is a double option:
+    /// - `None` means no update (leave unchanged)
+    /// - `Some(None)` means set to the default/empty value
+    /// - `Some(Some(value))` means set to the provided value
+    pub fn update(
+        &mut self,
+        dynamic_tools: Option<Option<Vec<Tool>>>,
+        dynamic_provider_tools: Option<Option<Vec<ProviderTool>>>,
+        allowed_tools: Option<Option<AllowedTools>>,
+        tool_choice: Option<Option<ToolChoice>>,
+        parallel_tool_calls: Option<Option<bool>>,
+    ) {
+        if let Some(value) = dynamic_tools {
+            self.dynamic_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = dynamic_provider_tools {
+            self.dynamic_provider_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = allowed_tools {
+            self.allowed_tools = value.unwrap_or_default();
+        }
+        if let Some(value) = tool_choice {
+            self.tool_choice = value.unwrap_or_default();
+        }
+        if let Some(value) = parallel_tool_calls {
+            self.parallel_tool_calls = value;
+        }
+    }
+
+    #[cfg(any(test, feature = "e2e_tests"))]
+    pub fn new_for_test(
+        dynamic_tools: Vec<Tool>,
+        dynamic_provider_tools: Vec<ProviderTool>,
+        allowed_tools: AllowedTools,
+        tool_choice: ToolChoice,
+        parallel_tool_calls: Option<bool>,
+    ) -> Self {
+        // Compute the legacy tool_config field
+        let tool_config = LegacyToolCallConfigDatabaseInsert {
+            tools_available: dynamic_tools
+                .iter()
+                .map(|t| match t {
+                    Tool::ClientSideFunction(csf) => csf.clone(),
+                })
+                .collect(),
+            tool_choice: tool_choice.clone(),
+            parallel_tool_calls,
+        };
+
+        Self {
+            dynamic_tools,
+            dynamic_provider_tools,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            tool_config,
+        }
+    }
+
+    /// TODO (Viraj): document extensively
+    pub fn into_tool_call_config(
+        self,
+        function_config: &FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<Option<ToolCallConfig>, Error> {
+        match function_config {
+            FunctionConfig::Chat(params) => ToolCallConfig::new(ToolCallConfigConstructorArgs {
+                function_tools: &params.tools,
+                function_tool_choice: &params.tool_choice,
+                function_parallel_tool_calls: params.parallel_tool_calls,
+                static_tools,
+                dynamic_allowed_tools: self.allowed_tools.into_dynamic_allowed_tools(),
+                dynamic_additional_tools: Some(self.dynamic_tools),
+                dynamic_parallel_tool_calls: self.parallel_tool_calls,
+                dynamic_provider_tools: Some(self.dynamic_provider_tools),
+                // Note to reviewer: should we store this as an option so that
+                dynamic_tool_choice: Some(self.tool_choice),
+            }),
+            FunctionConfig::Json(_) => Ok(None),
+        }
+    }
+
+    pub fn tools_available(
+        &self,
+        function_name: &str,
+        config: &Config,
+    ) -> Result<impl Iterator<Item = Tool> + '_, Error> {
+        let function_config = config.get_function(function_name)?;
+
+        // Get the list of tool names from allowed_tools based on whether they were dynamically set
+        let tool_names = match self.allowed_tools.choice {
+            AllowedToolsChoice::FunctionDefault => {
+                // Use the function's configured tool names
+                function_config
+                    .tools()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            }
+            AllowedToolsChoice::DynamicAllowedTools => {
+                // Use the dynamically specified tool names
+                self.allowed_tools.tools.clone()
+            }
+        };
+
+        // Collect static tools from config
+        let static_tools: Vec<Tool> = tool_names
+            .iter()
+            .filter_map(|tool_name| {
+                config.tools.get(tool_name).map(|static_tool| {
+                    Tool::ClientSideFunction(ClientSideFunctionTool {
+                        description: static_tool.description.clone(),
+                        parameters: static_tool.parameters.value.clone(),
+                        name: static_tool.name.clone(),
+                        strict: static_tool.strict,
+                    })
+                })
+            })
+            .collect();
+
+        // Combine static tools and dynamic tools
+        let all_tools = static_tools
+            .into_iter()
+            .chain(self.dynamic_tools.iter().cloned());
+
+        Ok(all_tools)
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct LegacyToolCallConfigDatabaseInsert {
     /// All tools available for this inference (merged static + dynamic tools)
     pub tools_available: Vec<ClientSideFunctionTool>,
     /// The tool choice strategy
@@ -455,48 +860,6 @@ pub struct ToolCallConfigDatabaseInsert {
     // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
     /// Whether parallel tool calls are enabled
     pub parallel_tool_calls: Option<bool>,
-}
-
-impl ToolCallConfigDatabaseInsert {
-    /// Converts this database representation back into a `ToolCallConfig`.
-    /// Errors if there are tools specified in the function that are not in the
-    /// static tools (shouldn't happen). Or if the function is a JSON function (no tools).
-    ///
-    /// This method performs the reverse transformation of the lossy conversion that occurs
-    /// when storing `ToolCallConfig` in the database. It reconstructs the tool configuration
-    /// by:
-    /// 1. Converting the stored tools into `DynamicToolParams`
-    /// 2. Using the function config to prepare a full `ToolCallConfig`
-    ///
-    ///
-    /// # Lossy Conversion
-    /// Note that this conversion cannot fully restore the original `ToolCallConfig`:
-    /// - `provider_tools` are not stored in the database and will be `None`
-    /// - The distinction between static/dynamic tools is reconstructed based on function config
-    /// This will be fixed in a follow-up PR.
-    ///
-    /// # Parameters
-    /// - `function_config`: The function configuration containing static tool definitions
-    /// - `static_tools`: Map of static tool names to their compiled configurations
-    ///
-    /// # Returns
-    /// - `Ok(Some(ToolCallConfig))` if tools were configured
-    /// - `Ok(None)` if no tools were available (e.g., JSON functions)
-    /// - `Err(Error)` if reconstruction fails (e.g., tool not found, duplicate tools)
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let db_insert = get_tool_config_from_database();
-    /// let tool_config = db_insert.into_tool_call_config(&function_config, &static_tools)?;
-    /// ```
-    pub fn into_tool_call_config(
-        self,
-        function_config: &crate::function::FunctionConfig,
-        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
-    ) -> Result<Option<ToolCallConfig>, Error> {
-        let dynamic_params = function_config.database_insert_to_dynamic_tool_params(self);
-        function_config.prepare_tool_config(dynamic_params, static_tools)
-    }
 }
 
 /// Wire/API representation of dynamic tool parameters for inference requests.
@@ -801,7 +1164,7 @@ impl ToolCallConfig {
             dynamic_tools_available: vec![],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
-            provider_tools: vec![],
+            provider_tools: None,
             allowed_tools: AllowedTools::default(),
         }
     }
@@ -933,29 +1296,69 @@ impl ToolConfig {
     }
 }
 
-impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
-    fn from(tool_call_config: ToolCallConfig) -> Self {
-        Self {
-            tools_available: tool_call_config
-                .static_tools_available
-                .into_iter()
-                .chain(tool_call_config.dynamic_tools_available)
-                .map(ToolConfig::into)
-                .collect(),
-            tool_choice: tool_call_config.tool_choice,
-            parallel_tool_calls: tool_call_config.parallel_tool_calls,
-        }
+fn tool_call_config_to_legacy_tool_database_insert(
+    tool_call_config: &ToolCallConfig,
+) -> LegacyToolCallConfigDatabaseInsert {
+    LegacyToolCallConfigDatabaseInsert {
+        tools_available: tool_call_config
+            .static_tools_available
+            .iter()
+            .chain(tool_call_config.dynamic_tools_available.iter())
+            .cloned()
+            .map(ToolConfig::into)
+            .collect(),
+        tool_choice: tool_call_config.tool_choice.clone(),
+        parallel_tool_calls: tool_call_config.parallel_tool_calls,
     }
 }
 
+// For now, this is required to convert to LegacyToolCallConfigDatabaseInsert for writing to the databse
 impl From<ToolConfig> for ClientSideFunctionTool {
     fn from(tool_config: ToolConfig) -> Self {
-        Self {
+        ClientSideFunctionTool {
             description: tool_config.description().to_string(),
             parameters: tool_config.parameters().clone(),
             name: tool_config.name().to_string(),
             strict: tool_config.strict(),
         }
+    }
+}
+
+impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
+    fn from(tool_call_config: ToolCallConfig) -> Self {
+        let legacy_config = tool_call_config_to_legacy_tool_database_insert(&tool_call_config);
+        let ToolCallConfig {
+            // We explicitly don't store static_tools_available in the new ToolCallConfigDatabaseInsert
+            // because we want these to be specified by the function and eventually function version.
+            static_tools_available: _,
+            dynamic_tools_available,
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+            provider_tools,
+        } = tool_call_config;
+        Self {
+            tool_config: legacy_config,
+            dynamic_tools: dynamic_tools_available
+                .into_iter()
+                .map(Tool::from)
+                .collect(),
+            dynamic_provider_tools: provider_tools.unwrap_or_default(),
+            allowed_tools,
+            tool_choice,
+            parallel_tool_calls,
+        }
+    }
+}
+
+impl From<ToolConfig> for Tool {
+    fn from(tool_config: ToolConfig) -> Self {
+        Self::ClientSideFunction(ClientSideFunctionTool {
+            description: tool_config.description().to_string(),
+            parameters: tool_config.parameters().clone(),
+            name: tool_config.name().to_string(),
+            strict: tool_config.strict(),
+        })
     }
 }
 
@@ -969,7 +1372,7 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         dynamic_tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: vec![],
+        provider_tools: None,
         allowed_tools: AllowedTools::default(),
     }
 }
@@ -1109,7 +1512,7 @@ pub fn create_implicit_tool_call_config_with_allowed_tools(
         dynamic_tools_available: vec![],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
-        provider_tools: vec![],
+        provider_tools: None,
         allowed_tools,
     }
 }
