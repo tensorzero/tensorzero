@@ -186,6 +186,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_cache_with_provider;
         use $crate::providers::embeddings::test_embedding_cache_options_with_provider;
         use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
+        use $crate::providers::embeddings::test_single_token_array_with_provider;
+        use $crate::providers::embeddings::test_batch_token_arrays_semantic_similarity_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -702,6 +704,22 @@ macro_rules! generate_provider_tests {
             let providers = $func().await.embeddings;
             for provider in providers {
                 test_embedding_dryrun_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_single_token_array() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_single_token_array_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_batch_token_arrays_semantic_similarity() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_batch_token_arrays_semantic_similarity_with_provider(provider).await;
             }
         }
 

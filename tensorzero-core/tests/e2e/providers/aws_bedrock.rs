@@ -333,6 +333,28 @@ async fn test_inference_with_thinking_budget_tokens() {
 
     assert_eq!(response.status(), StatusCode::OK);
     let response_json = response.json::<Value>().await.unwrap();
+    let content_blocks = response_json
+        .get("content")
+        .and_then(Value::as_array)
+        .expect("content must be an array");
+    assert!(
+        content_blocks.iter().any(|block| {
+            block
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|t| t == "thought")
+        }),
+        "response should include at least one thought block: {response_json:#?}"
+    );
+    assert!(
+        content_blocks.iter().any(|block| {
+            block
+                .get("type")
+                .and_then(Value::as_str)
+                .is_some_and(|t| t == "text")
+        }),
+        "response should include at least one text block: {response_json:#?}"
+    );
 
     let inference_id = response_json
         .get("inference_id")
