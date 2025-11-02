@@ -10,7 +10,16 @@ import {
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type {
+  ClientInput,
+  ContentBlockChatOutput,
+  Datapoint as TensorZeroDatapoint,
+  JsonInferenceOutput,
+  JsonValue,
+  ProviderTool,
+  Tool,
+  ToolChoice,
+} from "tensorzero-node";
 
 /**
  * Roles for input messages.
@@ -300,6 +309,30 @@ export const DatapointSchema = z.union([
 ]);
 export type Datapoint = z.infer<typeof DatapointSchema>;
 
+export type InsertChatDatapoint = {
+  function_name: string;
+  name?: string | null;
+  input: ClientInput;
+  output?: ContentBlockChatOutput[] | null;
+  allowed_tools?: string[];
+  additional_tools?: Tool[];
+  tool_choice?: ToolChoice;
+  parallel_tool_calls?: boolean;
+  provider_tools?: ProviderTool[];
+  tags?: Record<string, string>;
+};
+
+export type InsertJsonDatapoint = {
+  function_name: string;
+  name?: string | null;
+  input: ClientInput;
+  output?: JsonInferenceOutput | null;
+  output_schema?: JsonValue | null;
+  tags?: Record<string, string>;
+};
+
+export type InsertDatapoint = InsertChatDatapoint | InsertJsonDatapoint;
+
 /**
  * Schema for datapoint response
  */
@@ -520,6 +553,54 @@ export class TensorZeroClient {
 
     const body = await response.json();
     return DatapointResponseSchema.parse(body);
+  }
+
+  async getDatapoint(
+    datasetName: string,
+    datapointId: string,
+  ): Promise<TensorZeroDatapoint> {
+    if (!datasetName || typeof datasetName !== "string") {
+      throw new Error("Dataset name must be a non-empty string");
+    }
+
+    if (!datapointId || typeof datapointId !== "string") {
+      throw new Error("Datapoint ID must be a non-empty string");
+    }
+
+    const endpoint = `/datasets/${encodeURIComponent(datasetName)}/datapoints/${encodeURIComponent(datapointId)}`;
+
+    const response = await this.fetch(endpoint, { method: "GET" });
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+    return (await response.json()) as TensorZeroDatapoint;
+  }
+
+  async createDatapoints(
+    datasetName: string,
+    datapoints: InsertDatapoint[],
+  ): Promise<string[]> {
+    if (!datasetName || typeof datasetName !== "string") {
+      throw new Error("Dataset name must be a non-empty string");
+    }
+
+    if (!Array.isArray(datapoints) || datapoints.length === 0) {
+      throw new Error("At least one datapoint is required");
+    }
+
+    const endpoint = `/datasets/${encodeURIComponent(datasetName)}/datapoints`;
+    const response = await this.fetch(endpoint, {
+      method: "POST",
+      body: JSON.stringify({ datapoints }),
+    });
+
+    if (!response.ok) {
+      const message = await this.getErrorText(response);
+      this.handleHttpError({ message, response });
+    }
+
+    return (await response.json()) as string[];
   }
 
   async listDatapoints(

@@ -43,8 +43,15 @@ import type { Route } from "./+types/route";
 import { DatapointActions } from "./DatapointActions";
 import DatapointBasicInfo from "./DatapointBasicInfo";
 import type {
-  JsonInferenceOutput,
+  ClientInput,
+  ClientInputMessage,
+  ClientInputMessageContent,
   ContentBlockChatOutput,
+  Datapoint as TensorZeroDatapoint,
+  JsonInferenceOutput,
+  StoredInput as TensorZeroStoredInput,
+  StoredInputMessage as TensorZeroStoredInputMessage,
+  StoredInputMessageContent as TensorZeroStoredInputMessageContent,
 } from "tensorzero-node";
 import {
   deleteDatapoint,
@@ -55,6 +62,13 @@ import {
   parseDatapointFormData,
   serializeDatapointToFormData,
 } from "./formDataUtils";
+import { CopyToDatasetButton } from "./CopyToDatasetButton";
+import { getTensorZeroClient } from "~/utils/tensorzero.server";
+import type {
+  InsertChatDatapoint,
+  InsertDatapoint,
+  InsertJsonDatapoint,
+} from "~/utils/tensorzero";
 
 export function validateJsonOutput(
   output: ContentBlockChatOutput[] | JsonInferenceOutput | null,
@@ -112,8 +126,71 @@ export function hasDatapointChanged(params: {
   return hasInputChanged || hasOutputChanged || hasTagsChanged;
 }
 
-export async function action({ request }: ActionFunctionArgs) {
+export async function action({ request, params }: ActionFunctionArgs) {
   const formData = await request.formData();
+
+  if (formData.get("_action") === "copy_to_dataset") {
+    const targetDataset = formData.get("target_dataset")?.toString().trim();
+    const datasetName = params.dataset_name;
+    const datapointId = params.id;
+
+    if (!targetDataset) {
+      return data(
+        { success: false, error: "Select a dataset to copy into." },
+        { status: 400 },
+      );
+    }
+
+    if (!datasetName || !datapointId) {
+      return data(
+        {
+          success: false,
+          error: "Missing dataset or datapoint information.",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (targetDataset === datasetName) {
+      return data(
+        {
+          success: false,
+          error: "Choose a different dataset to copy this datapoint.",
+        },
+        { status: 400 },
+      );
+    }
+
+    try {
+      const client = getTensorZeroClient();
+      const sourceDatapoint = await client.getDatapoint(
+        datasetName,
+        datapointId,
+      );
+      const insertPayload = tensorZeroDatapointToInsertPayload(sourceDatapoint);
+      const [newDatapointId] = await client.createDatapoints(targetDataset, [
+        insertPayload,
+      ]);
+
+      return data({
+        success: true,
+        dataset: targetDataset,
+        redirectTo: toDatapointUrl(targetDataset, newDatapointId),
+      });
+    } catch (error) {
+      logger.error("Failed to copy datapoint", error);
+      return data(
+        {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to copy datapoint.",
+        },
+        { status: 400 },
+      );
+    }
+  }
 
   // TODO(shuyangli): Limit the try-catch to a smaller scope so it's clear what we're catching.
   try {
@@ -465,6 +542,13 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
             onReset={handleReset}
             showTryWithButton={datapoint.function_name !== DEFAULT_FUNCTION}
             isStale={!!datapoint.staled_at}
+            copyAction={
+              <CopyToDatasetButton
+                currentDataset={datapoint.dataset_name}
+                datapointId={datapoint.id}
+                functionName={datapoint.function_name}
+              />
+            }
           />
         </SectionLayout>
 
@@ -516,6 +600,152 @@ export default function DatapointPage({ loaderData }: Route.ComponentProps) {
       )}
     </PageLayout>
   );
+}
+
+function tensorZeroDatapointToInsertPayload(
+  datapoint: TensorZeroDatapoint,
+): InsertDatapoint {
+  if (datapoint.type === "chat") {
+    const input = storedInputToClientInput(datapoint.input);
+    const toolParams = datapoint.tool_params ?? {};
+
+    const payload: InsertChatDatapoint = {
+      function_name: datapoint.function_name,
+      name: datapoint.name ?? undefined,
+      input,
+      tags: datapoint.tags ?? undefined,
+    };
+
+    if (datapoint.output !== undefined) {
+      payload.output = datapoint.output ?? null;
+    }
+
+    if (toolParams.allowed_tools) {
+      payload.allowed_tools = toolParams.allowed_tools;
+    }
+    if (toolParams.additional_tools) {
+      payload.additional_tools = toolParams.additional_tools;
+    }
+    if (toolParams.tool_choice !== undefined) {
+      payload.tool_choice = toolParams.tool_choice;
+    }
+    if (toolParams.parallel_tool_calls !== undefined) {
+      payload.parallel_tool_calls = toolParams.parallel_tool_calls;
+    }
+    if (toolParams.provider_tools) {
+      payload.provider_tools = toolParams.provider_tools;
+    }
+
+    return payload;
+  }
+
+  if (datapoint.type === "json") {
+    const input = storedInputToClientInput(datapoint.input);
+    const payload: InsertJsonDatapoint = {
+      function_name: datapoint.function_name,
+      name: datapoint.name ?? undefined,
+      input,
+      tags: datapoint.tags ?? undefined,
+      output_schema: datapoint.output_schema ?? null,
+    };
+
+    if (datapoint.output !== undefined) {
+      payload.output = datapoint.output ?? null;
+    }
+
+    return payload;
+  }
+
+  throw new Error(`Unsupported datapoint type: ${datapoint.type}`);
+}
+
+function storedInputToClientInput(input: TensorZeroStoredInput): ClientInput {
+  return {
+    system: input.system ?? undefined,
+    messages: input.messages.map(storedMessageToClientMessage),
+  };
+}
+
+function storedMessageToClientMessage(
+  message: TensorZeroStoredInputMessage,
+): ClientInputMessage {
+  return {
+    role: message.role,
+    content: message.content.map(storedContentToClientContent),
+  };
+}
+
+function storedContentToClientContent(
+  content: TensorZeroStoredInputMessageContent,
+): ClientInputMessageContent {
+  switch (content.type) {
+    case "text":
+      return { type: "text", text: content.text };
+    case "template":
+      return {
+        type: "template",
+        name: content.name,
+        arguments: content.arguments,
+      };
+    case "tool_call": {
+      let parsedArguments: unknown = null;
+      try {
+        parsedArguments = content.arguments
+          ? JSON.parse(content.arguments)
+          : null;
+      } catch {
+        parsedArguments = null;
+      }
+      return {
+        type: "tool_call",
+        id: content.id,
+        name: content.name,
+        arguments: parsedArguments,
+        raw_arguments: content.arguments,
+        raw_name: content.name,
+      };
+    }
+    case "tool_result":
+      return {
+        type: "tool_result",
+        id: content.id,
+        name: content.name,
+        result: content.result,
+      };
+    case "raw_text":
+      return { type: "raw_text", value: content.value };
+    case "thought":
+      return {
+        type: "thought",
+        text: content.text,
+        _internal_provider_type: content._internal_provider_type,
+        signature: content.signature,
+      };
+    case "file": {
+      const storageKind = content.storage_path.kind;
+      const normalizedKind =
+        storageKind.type === "s3_compatible"
+          ? { ...storageKind, bucket_name: storageKind.bucket_name || "" }
+          : storageKind;
+
+      return {
+        type: "file",
+        file_type: "object_storage_pointer",
+        source_url: content.source_url ?? undefined,
+        mime_type: content.mime_type,
+        storage_path: {
+          path: content.storage_path.path,
+          kind: normalizedKind,
+        },
+      };
+    }
+    case "unknown":
+      return {
+        type: "unknown",
+        data: content.data,
+        model_provider_name: content.model_provider_name,
+      };
+  }
 }
 
 function getUserFacingError(error: unknown): {

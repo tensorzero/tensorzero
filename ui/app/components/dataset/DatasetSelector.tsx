@@ -27,6 +27,7 @@ interface DatasetSelectorProps {
   allowCreation?: boolean;
   buttonProps?: React.ComponentProps<typeof Button>;
   disabled?: boolean;
+  exclude?: string[];
 }
 
 // TODO Create new datasets within this component
@@ -39,6 +40,7 @@ export function DatasetSelector({
   className,
   buttonProps,
   disabled = false,
+  exclude = [],
 }: DatasetSelectorProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -49,22 +51,36 @@ export function DatasetSelector({
     isError,
   } = useDatasetCounts(functionName);
 
+  const exclusionSet = useMemo(() => {
+    return new Set(exclude.map((name) => name.toLowerCase()));
+  }, [exclude]);
+
   // Datasets sorted by last updated date for initial display
-  const recentlyUpdatedDatasets = useMemo(
-    () =>
-      [...(datasets ?? [])].sort((a, b) => {
-        return (
-          new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
-        );
-      }),
-    [datasets],
-  );
+  const filteredDatasets = useMemo(() => {
+    return (datasets ?? []).filter(
+      (dataset) => !exclusionSet.has(dataset.name.toLowerCase()),
+    );
+  }, [datasets, exclusionSet]);
+
+  const recentlyUpdatedDatasets = useMemo(() => {
+    return [...filteredDatasets].sort((a, b) => {
+      return (
+        new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+      );
+    });
+  }, [filteredDatasets]);
 
   // Selected dataset, if an existing one was selected
   const existingSelectedDataset = useMemo(
     () => datasets?.find((dataset) => dataset.name === selected),
     [datasets, selected],
   );
+
+  const datasetExists = useMemo(() => {
+    return new Set(
+      (datasets ?? []).map((dataset) => dataset.name.toLowerCase()),
+    );
+  }, [datasets]);
 
   return (
     <div className={clsx("flex flex-col space-y-2", className)}>
@@ -197,11 +213,7 @@ export function DatasetSelector({
                 // ...and the user has typed something...
                 inputValue.trim() &&
                 // ...and the dataset doesn't exist in the list of recently updated datasets...
-                !recentlyUpdatedDatasets.some(
-                  (dataset) =>
-                    dataset.name.toLowerCase() ===
-                    inputValue.trim().toLowerCase(),
-                ) && (
+                !datasetExists.has(inputValue.trim().toLowerCase()) && (
                   // ...then show the "New dataset" group
                   <CommandGroup heading="New dataset">
                     <CommandItem

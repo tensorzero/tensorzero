@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ActionBar } from "~/components/layout/ActionBar";
 import { TryWithButton } from "~/components/inference/TryWithButton";
 import { EditButton } from "~/components/utils/EditButton";
@@ -19,6 +20,7 @@ interface DatapointActionsProps {
   onReset: () => void;
   showTryWithButton: boolean;
   isStale: boolean;
+  copyAction?: ReactNode;
 }
 
 export function DatapointActions({
@@ -34,6 +36,7 @@ export function DatapointActions({
   onReset,
   showTryWithButton,
   isStale,
+  copyAction,
 }: DatapointActionsProps) {
   const isReadOnly = useReadOnly();
   const handleCancel = () => {
@@ -79,6 +82,7 @@ export function DatapointActions({
               : "Delete"
         }
       />
+      {copyAction}
     </ActionBar>
   );
 }

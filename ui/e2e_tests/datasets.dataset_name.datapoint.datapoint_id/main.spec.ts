@@ -296,3 +296,42 @@ test("should be able to cancel renaming a datapoint", async ({ page }) => {
     page.getByText("Renamed Datapoint Name", { exact: false }),
   ).not.toBeVisible();
 });
+
+test("should copy a datapoint to another dataset", async ({ page }) => {
+  const newDataset = `copied_dataset_${v7()}`;
+
+  await page.goto(
+    "/datasets/foo/datapoint/0196374b-d575-77b3-ac22-91806c67745c",
+  );
+  await page.waitForLoadState("networkidle");
+
+  const copyButton = page.getByRole("button", { name: "Copy to dataset" });
+  await expect(copyButton).toBeVisible();
+  await copyButton.click();
+
+  const datasetOption = page
+    .locator("[cmdk-item][data-dataset-name='foo']")
+    .first();
+  await expect(datasetOption).toHaveCount(0);
+
+  const commandInput = page.getByPlaceholder("Create or find a dataset...");
+  await commandInput.waitFor({ state: "visible" });
+  await commandInput.fill(newDataset);
+
+  const createOption = page
+    .locator("[cmdk-item]")
+    .filter({ hasText: newDataset });
+  await createOption.waitFor({ state: "visible" });
+  await createOption.click();
+
+  const notifications = page.getByRole("region", { name: /notifications/i });
+  await expect(
+    notifications.getByText("Datapoint copied", { exact: true }),
+  ).toBeVisible();
+
+  const viewLink = notifications.getByText("View");
+  await viewLink.click();
+
+  await page.waitForURL(`/datasets/${newDataset}/datapoint/**`);
+  await expect(page.getByRole("heading", { name: "Datapoint" })).toBeVisible();
+});
