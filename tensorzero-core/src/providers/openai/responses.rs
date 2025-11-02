@@ -25,7 +25,7 @@ use crate::{
         ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
         ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, Usage,
+        TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
     },
     model::fully_qualified_name,
     providers::openai::{
@@ -983,9 +983,13 @@ pub fn stream_openai_responses(
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let mut current_tool_id: Option<String> = None;
     let mut current_tool_name: Option<String> = None;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
 
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
@@ -1038,6 +1042,8 @@ pub fn stream_openai_responses(
                             &mut current_tool_id,
                             &mut current_tool_name,
                             discard_unknown_chunks,
+                            &model_name,
+                            &provider_name,
                         );
 
                         match stream_message {
@@ -1065,6 +1071,7 @@ pub fn stream_openai_responses(
 /// Maps an OpenAI Responses API stream event to a TensorZero chunk
 /// Similar to anthropic_to_tensorzero_stream_message in anthropic.rs
 /// Tool calls require tracking the current tool ID and name across chunks
+#[expect(clippy::too_many_arguments)]
 pub(super) fn openai_responses_to_tensorzero_chunk(
     raw_message: String,
     event: OpenAIResponsesStreamEvent,
@@ -1072,6 +1079,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match event {
         // Text delta - the main content streaming event
@@ -1184,11 +1193,14 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 } else {
                     // Unknown item type - return as unknown chunk
                     return Ok(Some(ProviderInferenceResponseChunk::new(
-                        vec![ContentBlockChunk::Unknown {
+                        vec![ContentBlockChunk::Unknown(UnknownChunk {
                             id: output_index.to_string(),
                             data: item,
-                            provider_type: Some(PROVIDER_TYPE.to_string()),
-                        }],
+                            model_provider_name: Some(fully_qualified_name(
+                                model_name,
+                                provider_name,
+                            )),
+                        })],
                         None,
                         raw_message,
                         message_latency,
@@ -1307,11 +1319,11 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 json!({ "raw": raw_message.clone() })
             });
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "unknown".to_string(),
                     data,
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1566,6 +1578,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1599,6 +1613,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1643,6 +1659,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1682,6 +1700,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1718,6 +1738,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1761,6 +1783,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1792,6 +1816,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1820,6 +1846,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1846,6 +1874,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1882,6 +1912,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -1912,6 +1944,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1955,6 +1989,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1994,6 +2030,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -2018,6 +2056,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -2042,6 +2082,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -2079,6 +2121,8 @@ mod tests {
                 &mut tool_id,
                 &mut tool_name,
                 false,
+                "test_model",
+                "test_provider",
             )
             .unwrap();
 
@@ -2104,6 +2148,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -2111,7 +2157,7 @@ mod tests {
         // Unknown events should return an Unknown chunk
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data, .. } => {
+            ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                 assert_eq!(id, "unknown");
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
@@ -2141,6 +2187,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             true,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
 

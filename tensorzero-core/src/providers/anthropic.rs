@@ -30,7 +30,8 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
+    UnknownChunk, Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
@@ -256,7 +257,7 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -291,7 +292,14 @@ impl InferenceProvider for AnthropicProvider {
             builder,
         )
         .await?;
-        let mut stream = stream_anthropic(event_source, start_time, model_provider).peekable();
+        let mut stream = stream_anthropic(
+            event_source,
+            start_time,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
@@ -335,8 +343,12 @@ fn stream_anthropic(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
@@ -372,6 +384,8 @@ fn stream_anthropic(
                                 &mut current_tool_id,
                                 &mut current_tool_name,
                                 discard_unknown_chunks,
+                                &model_name,
+                                &provider_name,
                             )
                         });
 
@@ -1224,6 +1238,7 @@ enum AnthropicStreamMessage {
 /// subsequent InputJSONDelta chunks can be initialized with this information as well.
 /// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
+#[expect(clippy::too_many_arguments)]
 fn anthropic_to_tensorzero_stream_message(
     raw_message: String,
     message: AnthropicStreamMessage,
@@ -1231,6 +1246,8 @@ fn anthropic_to_tensorzero_stream_message(
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
         AnthropicStreamMessage::ContentBlockDelta {
@@ -1416,11 +1433,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: delta.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1436,11 +1453,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: content_block.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1456,11 +1473,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "message_delta".to_string(),
                     data: delta.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -2646,6 +2663,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2676,6 +2695,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2706,6 +2727,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2738,6 +2761,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2770,6 +2795,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2792,6 +2819,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2808,6 +2837,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2837,6 +2868,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2860,6 +2893,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2880,6 +2915,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2894,6 +2931,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -3165,13 +3204,15 @@ mod tests {
             &mut Default::default(),
             &mut Default::default(),
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
 
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data, .. } => {
+            ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                 assert_eq!(id, "0");
                 assert_eq!(
                     data.get("my_unknown").and_then(|v| v.as_str()),
@@ -3197,6 +3238,8 @@ mod tests {
             &mut Default::default(),
             &mut Default::default(),
             true,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
         assert_eq!(res, None);
