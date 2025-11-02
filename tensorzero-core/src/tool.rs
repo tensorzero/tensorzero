@@ -510,7 +510,7 @@ pub struct ToolCallConfigDatabaseInsert {
     pub parallel_tool_calls: Option<bool>,
     // We write this in case any legacy code reads the database; it should not be read in new code
     #[serde(default)]
-    tool_config: LegacyToolCallConfigDatabaseInsert,
+    tool_params: LegacyToolCallConfigDatabaseInsert,
 }
 
 /// TODO(Viraj): do we still need this to be optional?
@@ -645,7 +645,7 @@ where
                     allowed_tools,
                     tool_choice,
                     parallel_tool_calls,
-                    tool_config,
+                    tool_params: tool_config,
                 }))
             } else if values.contains_key("tool_params") {
                 // Legacy format: only tool_config should be present
@@ -676,7 +676,7 @@ where
                     allowed_tools: AllowedTools::default(),
                     tool_choice: tool_config.tool_choice.clone(),
                     parallel_tool_calls: tool_config.parallel_tool_calls,
-                    tool_config,
+                    tool_params: tool_config,
                 }))
             } else {
                 // Unknown tool fields without proper structure
@@ -839,7 +839,7 @@ impl ToolCallConfigDatabaseInsert {
             allowed_tools,
             tool_choice,
             parallel_tool_calls,
-            tool_config,
+            tool_params: tool_config,
         }
     }
 
@@ -1401,7 +1401,7 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
             provider_tools,
         } = tool_call_config;
         Self {
-            tool_config: legacy_config,
+            tool_params: legacy_config,
             dynamic_tools: dynamic_tools_available
                 .into_iter()
                 .map(Tool::from)
