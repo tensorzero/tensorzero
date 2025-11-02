@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::inference::types::{ProviderInferenceResponseStreamInner, ThoughtSummaryBlock};
+use crate::inference::types::{
+    chat_completion_inference_params::ChatCompletionInferenceParamsV2,
+    ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
+};
 use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
@@ -53,6 +56,8 @@ pub struct OpenAIResponsesRequest<'a> {
     frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     include: Option<Vec<OpenAIResponsesInclude>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<OpenAIResponsesReasoningConfig>,
     stream: bool,
 }
 
@@ -65,6 +70,14 @@ pub enum OpenAIResponsesInclude {
 #[derive(Serialize, Debug, Clone)]
 pub struct OpenAIResponsesTextConfig {
     format: OpenAIResponsesTextConfigFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct OpenAIResponsesReasoningConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effort: Option<String>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -380,7 +393,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             tracing::warn!("Stop sequences are not supported in the OpenAI Responses API");
         }
 
-        let text = match request.json_mode {
+        let text_format = match request.json_mode {
             ModelInferenceRequestJsonMode::On => OpenAIResponsesTextConfigFormat::JsonObject,
             ModelInferenceRequestJsonMode::Off => OpenAIResponsesTextConfigFormat::Text,
             ModelInferenceRequestJsonMode::Strict => {
@@ -397,7 +410,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             }
         };
 
-        Ok(Self {
+        let mut openai_responses_request = Self {
             model: openai_model,
             input: prepare_openai_responses_messages(
                 request
@@ -413,7 +426,10 @@ impl<'a> OpenAIResponsesRequest<'a> {
                 },
             )
             .await?,
-            text: OpenAIResponsesTextConfig { format: text },
+            text: OpenAIResponsesTextConfig {
+                format: text_format,
+                verbosity: None, // handled below
+            },
             tools,
             parallel_tool_calls,
             tool_choice,
@@ -428,8 +444,31 @@ impl<'a> OpenAIResponsesRequest<'a> {
             } else {
                 None
             },
+            reasoning: None, // handled below
             stream: request.stream,
-        })
+        };
+        apply_inference_params(&mut openai_responses_request, &request.inference_params_v2);
+        Ok(openai_responses_request)
+    }
+}
+
+fn apply_inference_params(
+    request: &mut OpenAIResponsesRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning = Some(OpenAIResponsesReasoningConfig {
+            effort: reasoning_effort.clone(),
+        });
+    }
+
+    if verbosity.is_some() {
+        request.text.verbosity = verbosity.clone();
     }
 }
 
@@ -2344,5 +2383,62 @@ mod tests {
             }
             _ => panic!("Expected ContentBlockOutput::Unknown for another_unknown_type"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_openai_responses_apply_inference_params_called() {
+        use crate::inference::types::{
+            FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode, RequestMessage,
+            Role,
+        };
+        use uuid::Uuid;
+
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Test".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: Some("high".to_string()),
+                verbosity: Some("detailed".to_string()),
+            },
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let openai_responses_request = OpenAIResponsesRequest::new(
+            "gpt-4o",
+            &request,
+            false,
+            &[],
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .expect("Failed to create OpenAI responses request");
+
+        // Verify that inference params were applied
+        assert!(openai_responses_request.reasoning.is_some());
+        assert_eq!(
+            openai_responses_request.reasoning.unwrap().effort,
+            Some("high".to_string())
+        );
+        assert_eq!(
+            openai_responses_request.text.verbosity,
+            Some("detailed".to_string())
+        );
     }
 }

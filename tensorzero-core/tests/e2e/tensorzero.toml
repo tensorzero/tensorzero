@@ -1426,7 +1426,7 @@ system_template = "../../fixtures/config/functions/basic_test/prompt/system_temp
 type = "chat_completion"
 model = "o3-mini"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
-extra_body = [{ pointer = "/reasoning_effort", value = "low" }]
+reasoning_effort = "low"
 
 ## OpenRouter
 
