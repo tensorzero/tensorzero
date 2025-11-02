@@ -40,7 +40,7 @@ use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-use super::gcp_vertex_gemini::process_output_schema;
+use super::gcp_vertex_gemini::process_jsonschema_for_gcp_vertex_gemini;
 use super::helpers::{convert_stream_error, inject_extra_request_data_and_send};
 
 const PROVIDER_NAME: &str = "Google AI Studio Gemini";
@@ -839,7 +839,7 @@ impl<'a> GeminiRequest<'a> {
                 match request.output_schema {
                     Some(output_schema) => (
                         Some(GeminiResponseMimeType::ApplicationJson),
-                        Some(process_output_schema(output_schema)?),
+                        Some(process_jsonschema_for_gcp_vertex_gemini(output_schema)),
                     ),
                     None => (Some(GeminiResponseMimeType::ApplicationJson), None),
                 }
@@ -2247,7 +2247,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_output_schema() {
+    fn test_process_jsonschema_for_gcp_vertex_gemini() {
         let output_schema = json!({
             "type": "object",
             "properties": {
@@ -2256,7 +2256,7 @@ mod tests {
                 "email": {"type": "string", "format": "email"}
             }
         });
-        let processed_schema = process_output_schema(&output_schema).unwrap();
+        let processed_schema = process_jsonschema_for_gcp_vertex_gemini(&output_schema);
         assert_eq!(processed_schema, output_schema);
 
         // Test with a schema that includes additionalProperties
@@ -2276,7 +2276,7 @@ mod tests {
             },
         });
         let processed_schema_with_additional =
-            process_output_schema(&output_schema_with_additional).unwrap();
+            process_jsonschema_for_gcp_vertex_gemini(&output_schema_with_additional);
         assert_eq!(
             processed_schema_with_additional,
             output_schema_without_additional
@@ -2292,7 +2292,7 @@ mod tests {
             "additionalProperties": false
         });
         let processed_schema_no_additional =
-            process_output_schema(&output_schema_no_additional).unwrap();
+            process_jsonschema_for_gcp_vertex_gemini(&output_schema_no_additional);
         assert_eq!(
             processed_schema_no_additional,
             output_schema_without_additional
@@ -2336,7 +2336,8 @@ mod tests {
                 }
             }
         });
-        let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
+        let processed_schema_recursive =
+            process_jsonschema_for_gcp_vertex_gemini(&output_schema_recursive);
         assert_eq!(processed_schema_recursive, expected_processed_schema);
     }
 

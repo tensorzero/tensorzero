@@ -1620,16 +1620,10 @@ pub enum GCPVertexGeminiTool<'a> {
 
 impl<'a> From<&'a ToolConfig> for GCPVertexGeminiFunctionDeclaration<'a> {
     fn from(tool: &'a ToolConfig) -> Self {
-        let mut parameters = tool.parameters().clone();
-        if let Some(obj) = parameters.as_object_mut() {
-            obj.remove("additionalProperties");
-            obj.remove("$schema");
-        }
-
         GCPVertexGeminiFunctionDeclaration {
             name: tool.name(),
             description: Some(tool.description()),
-            parameters: Some(parameters),
+            parameters: Some(process_jsonschema_for_gcp_vertex_gemini(tool.parameters())),
         }
     }
 }
@@ -1912,7 +1906,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
                 match request.output_schema {
                     Some(output_schema) => (
                         Some(GCPVertexGeminiResponseMimeType::ApplicationJson),
-                        Some(process_output_schema(output_schema)?),
+                        Some(process_jsonschema_for_gcp_vertex_gemini(output_schema)),
                     ),
                     None => (Some(GCPVertexGeminiResponseMimeType::ApplicationJson), None),
                 }
@@ -2181,11 +2175,11 @@ pub async fn tensorzero_to_gcp_vertex_gemini_content<'a>(
     Ok(message)
 }
 
-#[expect(clippy::unnecessary_wraps)]
-pub(crate) fn process_output_schema(output_schema: &Value) -> Result<Value, Error> {
-    let mut schema = output_schema.clone();
+/// Recursively removes `$schema` and `additionalProperties` from JSON schemas
+/// for GCP Vertex API compatibility.
+pub(crate) fn process_jsonschema_for_gcp_vertex_gemini(schema: &Value) -> Value {
+    let mut schema = schema.clone();
 
-    /// Recursively remove all instances of "additionalProperties" and "$schema"
     fn remove_properties(value: &mut Value) {
         match value {
             Value::Object(obj) => {
@@ -2205,7 +2199,7 @@ pub(crate) fn process_output_schema(output_schema: &Value) -> Result<Value, Erro
     }
 
     remove_properties(&mut schema);
-    Ok(schema)
+    schema
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -2664,15 +2658,16 @@ fn handle_gcp_vertex_gemini_error(
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
-
+    use super::*;
     use serde_json::json;
+    use std::borrow::Cow;
+    use std::sync::Arc;
     use tracing_test::traced_test;
 
-    use super::*;
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::jsonschema_util::StaticJSONSchema;
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
-    use crate::tool::{ToolCallConfig, ToolResult};
+    use crate::tool::{StaticToolConfig, ToolCallConfig, ToolConfig, ToolResult};
 
     #[tokio::test]
     async fn test_gcp_vertex_content_try_from() {
@@ -3712,7 +3707,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_output_schema() {
+    fn test_process_jsonschema_for_gcp_vertex_gemini() {
         let output_schema = json!({
             "type": "object",
             "properties": {
@@ -3721,7 +3716,7 @@ mod tests {
                 "email": {"type": "string", "format": "email"}
             }
         });
-        let processed_schema = process_output_schema(&output_schema).unwrap();
+        let processed_schema = process_jsonschema_for_gcp_vertex_gemini(&output_schema);
         assert_eq!(processed_schema, output_schema);
 
         // Test with a schema that includes additionalProperties
@@ -3741,7 +3736,7 @@ mod tests {
             },
         });
         let processed_schema_with_additional =
-            process_output_schema(&output_schema_with_additional).unwrap();
+            process_jsonschema_for_gcp_vertex_gemini(&output_schema_with_additional);
         assert_eq!(
             processed_schema_with_additional,
             output_schema_without_additional
@@ -3757,7 +3752,7 @@ mod tests {
             "additionalProperties": false
         });
         let processed_schema_no_additional =
-            process_output_schema(&output_schema_no_additional).unwrap();
+            process_jsonschema_for_gcp_vertex_gemini(&output_schema_no_additional);
         assert_eq!(
             processed_schema_no_additional,
             output_schema_without_additional
@@ -3802,7 +3797,8 @@ mod tests {
                 }
             }
         });
-        let processed_schema_recursive = process_output_schema(&output_schema_recursive).unwrap();
+        let processed_schema_recursive =
+            process_jsonschema_for_gcp_vertex_gemini(&output_schema_recursive);
         assert_eq!(processed_schema_recursive, expected_processed_schema);
 
         // Test with schema containing $schema at top level and in child objects
@@ -3845,8 +3841,88 @@ mod tests {
                 }
             }
         });
-        let processed_schema = process_output_schema(&output_schema_with_schema_fields).unwrap();
+        let processed_schema =
+            process_jsonschema_for_gcp_vertex_gemini(&output_schema_with_schema_fields);
         assert_eq!(processed_schema, expected_schema_without_schema_fields);
+    }
+
+    #[test]
+    fn test_tool_parameters_recursive_cleaning() {
+        // Create a tool schema with nested $schema and additionalProperties
+        let tool_schema_value = json!({
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "address": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                        "street": {"type": "string"},
+                        "city": {"type": "string"}
+                    },
+                    "additionalProperties": false
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "$schema": "http://json-schema.org/draft-07/schema#",
+                        "type": "object",
+                        "properties": {
+                            "key": {"type": "string"},
+                            "value": {"type": "string"}
+                        },
+                        "additionalProperties": true
+                    }
+                }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+        });
+
+        let tool_schema = StaticJSONSchema::from_value(tool_schema_value).unwrap();
+
+        let static_tool = StaticToolConfig {
+            name: "test_tool".to_string(),
+            description: "A test tool".to_string(),
+            parameters: tool_schema,
+            strict: false,
+        };
+
+        let tool_config = ToolConfig::Static(Arc::new(static_tool));
+
+        // Convert the tool config to GCPVertexGeminiFunctionDeclaration
+        let function_declaration = GCPVertexGeminiFunctionDeclaration::from(&tool_config);
+
+        // The parameters should have all $schema and additionalProperties removed recursively
+        let expected_parameters = json!({
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "address": {
+                    "type": "object",
+                    "properties": {
+                        "street": {"type": "string"},
+                        "city": {"type": "string"}
+                    }
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "key": {"type": "string"},
+                            "value": {"type": "string"}
+                        }
+                    }
+                }
+            },
+            "required": ["name"]
+        });
+
+        assert_eq!(function_declaration.name, "test_tool");
+        assert_eq!(function_declaration.description, Some("A test tool"));
+        assert_eq!(function_declaration.parameters, Some(expected_parameters));
     }
 
     #[test]
