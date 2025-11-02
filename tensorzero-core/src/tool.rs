@@ -513,7 +513,7 @@ impl ToolCallConfig {
 /// - **To ToolCallConfig**: Use the `into_tool_call_config()` method for a direct conversion to `ToolCallConfig`
 ///
 /// See also: [`DynamicToolParams`] for the wire/API format
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct ToolCallConfigDatabaseInsert {
     pub dynamic_tools: Vec<Tool>,
     pub dynamic_provider_tools: Vec<ProviderTool>,
@@ -1574,29 +1574,67 @@ mod tests {
             ToolChoice::Specific("get_temperature".to_string());
     }
 
+    // Helper to create ClientSideFunctionTool quickly
+    fn make_client_side_tool(
+        name: &str,
+        description: &str,
+        parameters: Value,
+        strict: bool,
+    ) -> ClientSideFunctionTool {
+        ClientSideFunctionTool {
+            name: name.to_string(),
+            description: description.to_string(),
+            parameters,
+            strict,
+        }
+    }
+
+    // Helper to construct ToolCallConfigConstructorArgs with defaults
+    fn make_tool_call_config_args<'a>(
+        function_tools: &'a [String],
+        function_tool_choice: &'a ToolChoice,
+        function_parallel_tool_calls: Option<bool>,
+        static_tools: &'a HashMap<String, Arc<StaticToolConfig>>,
+        dynamic_tool_params: DynamicToolParams,
+    ) -> ToolCallConfigConstructorArgs<'a> {
+        ToolCallConfigConstructorArgs {
+            function_tools,
+            function_tool_choice,
+            function_parallel_tool_calls,
+            static_tools,
+            dynamic_allowed_tools: dynamic_tool_params.allowed_tools,
+            dynamic_additional_tools: dynamic_tool_params
+                .additional_tools
+                .map(|tools| tools.into_iter().map(Tool::ClientSideFunction).collect()),
+            dynamic_tool_choice: dynamic_tool_params.tool_choice,
+            dynamic_parallel_tool_calls: dynamic_tool_params.parallel_tool_calls,
+            dynamic_provider_tools: dynamic_tool_params.provider_tools,
+        }
+    }
+
     #[tokio::test]
     async fn test_tool_call_config_new() {
         // Empty tools in function, no dynamic tools, tools are configured in the config
         // This should return no tools because the function does not specify any tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap();
         assert!(tool_call_config.is_none());
 
         // All tools available, no dynamic tools, tools are configured in the config
         // This should return all tools because the function specifies all tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1611,13 +1649,13 @@ mod tests {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
             ..Default::default()
         };
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(make_tool_call_config_args(
             &EMPTY_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &EMPTY_TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
         assert_eq!(
             err,
@@ -1632,13 +1670,13 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("get_temperature".to_string())),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1653,13 +1691,13 @@ mod tests {
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
         assert_eq!(
             err,
@@ -1673,21 +1711,21 @@ mod tests {
         // This should remove all configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({}),
+                false,
+            )]),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 1);
@@ -1699,22 +1737,22 @@ mod tests {
         // This should remove the other configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({}),
+                false,
+            )]),
             parallel_tool_calls: Some(false),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 2);
@@ -1729,22 +1767,22 @@ mod tests {
         // This should remove all configured tools and add the new tool
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec![]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({}),
+                false,
+            )]),
             tool_choice: Some(ToolChoice::Specific("establish_campground".to_string())),
             ..Default::default()
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
         assert_eq!(tool_call_config.tools_available().count(), 1);
@@ -1765,13 +1803,13 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "123".to_string(),
         };
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams::default(),
-        )
+        ))
         .unwrap()
         .unwrap();
         // Tool call is valid, so we should get a valid ToolCallOutput
@@ -1824,21 +1862,21 @@ mod tests {
         );
 
         // Make sure validation works with dynamic tools
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             DynamicToolParams {
-                additional_tools: Some(vec![ClientSideFunctionTool {
-                    name: "establish_campground".to_string(),
-                    description: "Establish a campground".to_string(),
-                    parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
-                    strict: false,
-                }]),
+                additional_tools: Some(vec![make_client_side_tool(
+                    "establish_campground",
+                    "Establish a campground",
+                    json!({"type": "object", "properties": {"location": {"type": "string"}}, "required": ["location"]}),
+                    false,
+                )]),
                 ..Default::default()
             },
-        )
+        ))
         .unwrap()
         .unwrap();
         let tool_call = ToolCall {
@@ -1969,28 +2007,28 @@ mod tests {
     async fn test_duplicate_tool_names_error() {
         // Test case where dynamic tool params add a tool with the same name as a static tool
         let dynamic_tool_params = DynamicToolParams {
-            additional_tools: Some(vec![ClientSideFunctionTool {
-                name: "get_temperature".to_string(), // Same name as static tool
-                description: "Another temperature tool".to_string(),
-                parameters: json!({
+            additional_tools: Some(vec![make_client_side_tool(
+                "get_temperature", // Same name as static tool
+                "Another temperature tool",
+                json!({
                     "type": "object",
                     "properties": {
                         "city": {"type": "string"}
                     },
                     "required": ["city"]
                 }),
-                strict: false,
-            }]),
+                false,
+            )]),
             ..Default::default()
         };
 
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
 
         assert_eq!(
@@ -2027,7 +2065,7 @@ mod tests {
         ];
 
         let config = ToolCallConfig {
-            provider_tools,
+            provider_tools: Some(provider_tools),
             ..Default::default()
         };
 
@@ -2068,22 +2106,22 @@ mod tests {
                 "get_temperature".to_string(),
                 "establish_campground".to_string(),
             ]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                false,
+            )]),
             ..Default::default()
         };
 
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
 
@@ -2110,22 +2148,22 @@ mod tests {
                 "get_temperature".to_string(),
                 "nonexistent_tool".to_string(),
             ]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({"type": "object"}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({"type": "object"}),
+                false,
+            )]),
             ..Default::default()
         };
 
-        let err = ToolCallConfig::new(
+        let err = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap_err();
 
         assert_eq!(
@@ -2143,22 +2181,22 @@ mod tests {
         // Test that dynamic tools are still auto-added even when not in allowed_tools (with warning)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),
-            additional_tools: Some(vec![ClientSideFunctionTool {
-                name: "establish_campground".to_string(),
-                description: "Establish a campground".to_string(),
-                parameters: json!({"type": "object", "properties": {"location": {"type": "string"}}}),
-                strict: false,
-            }]),
+            additional_tools: Some(vec![make_client_side_tool(
+                "establish_campground",
+                "Establish a campground",
+                json!({"type": "object", "properties": {"location": {"type": "string"}}}),
+                false,
+            )]),
             ..Default::default()
         };
 
-        let tool_call_config = ToolCallConfig::new(
+        let tool_call_config = ToolCallConfig::new(make_tool_call_config_args(
             &ALL_FUNCTION_TOOLS,
             &AUTO_TOOL_CHOICE,
             Some(true),
             &TOOLS,
             dynamic_tool_params,
-        )
+        ))
         .unwrap()
         .unwrap();
 
@@ -2175,5 +2213,422 @@ mod tests {
         assert!(logs_contain(
             "Currently, the gateway automatically includes all dynamic tools"
         ));
+    }
+
+    // Helper struct to test deserialization with flattening
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct ToolCallConfigDeserializeTestHelper {
+        baz: String,
+        #[serde(flatten)]
+        #[serde(deserialize_with = "deserialize_optional_tool_info")]
+        tool_info: Option<ToolCallConfigDatabaseInsert>,
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_with_flatten() {
+        // Test with a flattened struct (ragged case)
+        let json = json!({
+            "baz": "test_value",
+            "dynamic_tools": [
+                {
+                    "type": "client_side_function",
+                    "name": "ragged_tool",
+                    "description": "A ragged tool",
+                    "parameters": {"type": "string"},
+                    "strict": true
+                }
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": ["ragged_tool"],
+                "choice": "function_default"
+            },
+            "tool_choice": {"specific": "ragged_tool"},
+            "parallel_tool_calls": null,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": {"specific": "ragged_tool"},
+                "parallel_tool_calls": null
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.baz, "test_value");
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.dynamic_tools.len(), 1);
+        assert_eq!(tool_info.dynamic_tools[0].name(), "ragged_tool");
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
+        assert_eq!(tool_info.allowed_tools.tools, vec!["ragged_tool"]);
+        assert_eq!(
+            tool_info.tool_choice,
+            ToolChoice::Specific("ragged_tool".to_string())
+        );
+        assert_eq!(tool_info.parallel_tool_calls, None);
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_legacy() {
+        // Test legacy format with flattening
+        let json = json!({
+            "baz": "legacy_value",
+            "tool_params": {
+                "tools_available": [
+                    {
+                        "name": "legacy_ragged_tool",
+                        "description": "A legacy ragged tool",
+                        "parameters": {"type": "number"},
+                        "strict": false
+                    }
+                ],
+                "tool_choice": "none",
+                "parallel_tool_calls": true
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.baz, "legacy_value");
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.dynamic_tools.len(), 0);
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 0);
+        assert_eq!(tool_info.tool_choice, ToolChoice::None);
+        assert_eq!(tool_info.parallel_tool_calls, Some(true));
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_ragged_empty() {
+        // Test empty format with flattening
+        let json = json!({
+            "baz": "empty_value"
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+
+        assert_eq!(result.baz, "empty_value");
+        assert_eq!(result.tool_info, None);
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_invalid_tool_type() {
+        // Test with an invalid tool type
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                {
+                    "type": "invalid_type",
+                    "name": "test_tool",
+                    "description": "A test tool",
+                    "parameters": {"type": "object"}
+                }
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": ["test_tool"],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_missing_tool_name() {
+        // Test with missing required tool name field
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                {
+                    "type": "client_side_function",
+                    "description": "A test tool",
+                    "parameters": {"type": "object"}
+                }
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": ["test_tool"],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_invalid_tool_choice() {
+        // Test with invalid tool_choice enum value
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": [],
+                "choice": "function_default"
+            },
+            "tool_choice": "invalid_choice",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_invalid_allowed_tools_choice() {
+        // Test with invalid allowed_tools.choice enum value
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": [],
+                "choice": "invalid_choice"
+            },
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_wrong_type_for_tools() {
+        // Test with wrong type for dynamic_tools (string instead of array)
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": "not_an_array",
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": [],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_wrong_type_for_parallel_tool_calls() {
+        // Test with wrong type for parallel_tool_calls (string instead of bool)
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": [],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "parallel_tool_calls": "not_a_bool",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_malformed_provider_tool() {
+        // Test with provider tool missing scope field - should use default
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [
+                {
+                    "tool": {"type": "test"}
+                    // Missing scope field - should default to Unscoped
+                }
+            ],
+            "allowed_tools": {
+                "tools": [],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "test");
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(tool_info.dynamic_provider_tools.len(), 1);
+        // Verify that scope defaulted to Unscoped
+        assert_eq!(
+            tool_info.dynamic_provider_tools[0].scope,
+            ProviderToolScope::Unscoped
+        );
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_null_required_field() {
+        // Test with null for a required field (tool_choice)
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": [],
+                "choice": "function_default"
+            },
+            "tool_choice": null,
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_empty_tool_name() {
+        // Test with empty string for tool name
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                {
+                    "type": "client_side_function",
+                    "name": "",
+                    "description": "A test tool",
+                    "parameters": {"type": "object"}
+                }
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": [""],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        // Empty strings should deserialize successfully but may be caught by validation logic elsewhere
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_specific_tool_choice_with_value() {
+        // Test with specific tool choice that has a value
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                {
+                    "type": "client_side_function",
+                    "name": "specific_tool",
+                    "description": "A specific tool",
+                    "parameters": {"type": "object"}
+                }
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": ["specific_tool"],
+                "choice": "function_default"
+            },
+            "tool_choice": {"specific": "specific_tool"},
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": {"specific": "specific_tool"}
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "test");
+        let tool_info = result.tool_info.unwrap();
+        assert_eq!(
+            tool_info.tool_choice,
+            ToolChoice::Specific("specific_tool".to_string())
+        );
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_mixed_valid_invalid_tools() {
+        // Test with some valid and some invalid tools
+        let json = json!({
+            "baz": "test",
+            "dynamic_tools": [
+                {
+                    "type": "client_side_function",
+                    "name": "valid_tool",
+                    "description": "A valid tool",
+                    "parameters": {"type": "object"}
+                },
+                {
+                    "type": "invalid_type",
+                    "name": "invalid_tool"
+                }
+            ],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": ["valid_tool"],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: Result<ToolCallConfigDeserializeTestHelper, _> = serde_json::from_value(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_call_config_database_insert_deserialize_extra_fields_ignored() {
+        // Test that extra unknown fields are ignored (thanks to flatten)
+        let json = json!({
+            "baz": "test",
+            "unknown_field": "should_be_ignored",
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {
+                "tools": [],
+                "choice": "function_default"
+            },
+            "tool_choice": "auto",
+            "tool_params": {
+                "tools_available": [],
+                "tool_choice": "auto"
+            }
+        });
+
+        let result: ToolCallConfigDeserializeTestHelper = serde_json::from_value(json).unwrap();
+        assert_eq!(result.baz, "test");
+        assert!(result.tool_info.is_some());
     }
 }
