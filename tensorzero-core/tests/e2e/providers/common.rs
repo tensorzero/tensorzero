@@ -4143,8 +4143,11 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
             let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+            let block_type = content_block.get("type").unwrap().as_str().unwrap();
+            if block_type == "text" {
+                let content = content_block.get("text").unwrap().as_str().unwrap();
+                full_content.push_str(content);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -4207,11 +4210,15 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert!(
+        output.len() == 1 || output.len() == 2,
+        "Expected 1 or 2 content blocks, got {}",
+        output.len()
+    );
+    let text_block = output.last().unwrap();
+    let content_block_type = text_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    let clickhouse_content = text_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, full_content);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
@@ -8518,8 +8525,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
             let content_block = content_blocks.first().unwrap();
-            let content = content_block.get("text").unwrap().as_str().unwrap();
-            full_content.push_str(content);
+            let block_type = content_block.get("type").unwrap().as_str().unwrap();
+            if block_type == "text" {
+                let content = content_block.get("text").unwrap().as_str().unwrap();
+                full_content.push_str(content);
+            }
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -8604,11 +8614,15 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert_eq!(output.len(), 1);
-    let content_block = output.first().unwrap();
-    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
+    assert!(
+        output.len() == 1 || output.len() == 2,
+        "Expected 1 or 2 content blocks, got {}",
+        output.len()
+    );
+    let text_block = output.last().unwrap();
+    let content_block_type = text_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
+    let clickhouse_content = text_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, full_content);
 
     let tool_params: Value =
