@@ -330,6 +330,7 @@ export class TensorZeroClient {
    */
   constructor(baseUrl: string, apiKey?: string | null) {
     // Remove any trailing slash for consistency.
+    console.log("API Key:", apiKey);
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKey = apiKey ?? null;
   }
