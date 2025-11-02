@@ -1792,15 +1792,25 @@ struct GCPVertexGeminiThinkingConfig {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiGenerationConfig<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     thinking_config: Option<GCPVertexGeminiThinkingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_mime_type: Option<GCPVertexGeminiResponseMimeType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_schema: Option<Value>,
 }
 
@@ -1808,9 +1818,13 @@ struct GCPVertexGeminiGenerationConfig<'a> {
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiRequest<'a> {
     contents: Vec<GCPVertexGeminiContent<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<GCPVertexGeminiTool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     system_instruction: Option<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     labels: HashMap<String, String>,

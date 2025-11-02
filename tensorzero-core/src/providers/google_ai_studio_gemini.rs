@@ -726,15 +726,25 @@ struct GeminiThinkingConfig {
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GeminiGenerationConfig<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     thinking_config: Option<GeminiThinkingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_mime_type: Option<GeminiResponseMimeType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_schema: Option<Value>,
 }
 
@@ -743,8 +753,11 @@ struct GeminiGenerationConfig<'a> {
 struct GeminiRequest<'a> {
     contents: Vec<GeminiContent<'a>>,
     tools: Option<Vec<GeminiTool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_config: Option<GoogleAIStudioGeminiToolConfig<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     generation_config: Option<GeminiGenerationConfig<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     system_instruction: Option<GeminiContent<'a>>,
 }
 
