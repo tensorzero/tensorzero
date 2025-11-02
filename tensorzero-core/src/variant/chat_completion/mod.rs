@@ -173,7 +173,10 @@ pub struct UninitializedChatTemplates {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
-#[serde(deny_unknown_fields)]
+// TODO: Re-enable this once we finish migrating to inference_params_v2 format
+// and remove the #[serde(flatten)]. The combination of flatten + deny_unknown_fields
+// causes serde to reject valid fields before custom validation can run.
+// #[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
