@@ -253,7 +253,7 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -286,8 +286,14 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
             builder,
         )
         .await?;
-        let stream =
-            stream_google_ai_studio_gemini(event_source, start_time, model_provider).peekable();
+        let stream = stream_google_ai_studio_gemini(
+            event_source,
+            start_time,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -320,8 +326,12 @@ fn stream_google_ai_studio_gemini(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
@@ -363,6 +373,8 @@ fn stream_google_ai_studio_gemini(
                                 last_thought_id: &mut last_thought_id,
                                 last_unknown_chunk_id: &mut last_unknown_chunk_id,
                                 discard_unknown_chunks,
+                                model_name: &model_name,
+                                provider_name: &provider_name,
                             },
                         )
                     }
@@ -858,6 +870,7 @@ enum GeminiResponseContentPartData {
     // TODO (if needed): VideoMetadata { video_metadata: VideoMetadata },
 }
 
+#[expect(clippy::too_many_arguments)]
 fn content_part_to_tensorzero_chunk(
     part: GeminiResponseContentPart,
     last_tool_name: &mut Option<String>,
@@ -866,6 +879,8 @@ fn content_part_to_tensorzero_chunk(
     discard_unknown_chunks: bool,
     output: &mut Vec<ContentBlockChunk>,
     last_unknown_chunk_id: &mut u32,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<(), Error> {
     if part.thought {
         match part.data {
@@ -970,7 +985,7 @@ fn content_part_to_tensorzero_chunk(
             output.push(ContentBlockChunk::Unknown(UnknownChunk {
                 id: last_unknown_chunk_id.to_string(),
                 data: part.into_owned(),
-                provider_type: Some(PROVIDER_TYPE.to_string()),
+                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
             }));
             *last_unknown_chunk_id += 1;
         }
@@ -1223,6 +1238,8 @@ struct ConvertStreamResponseArgs<'a> {
     last_thought_id: &'a mut u32,
     last_unknown_chunk_id: &'a mut u32,
     discard_unknown_chunks: bool,
+    model_name: &'a str,
+    provider_name: &'a str,
 }
 
 fn convert_stream_response_with_metadata_to_chunk(
@@ -1237,6 +1254,8 @@ fn convert_stream_response_with_metadata_to_chunk(
         last_thought_id,
         last_unknown_chunk_id,
         discard_unknown_chunks,
+        model_name,
+        provider_name,
     } = args;
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -1260,6 +1279,8 @@ fn convert_stream_response_with_metadata_to_chunk(
                     discard_unknown_chunks,
                     &mut output,
                     last_unknown_chunk_id,
+                    model_name,
+                    provider_name,
                 )?;
             }
             output
@@ -1369,6 +1390,8 @@ mod tests {
             last_thought_id: &mut last_thought_id,
             last_unknown_chunk_id: &mut last_unknown_chunk_id,
             discard_unknown_chunks: true,
+            model_name: "test_model",
+            provider_name: "test_provider",
         })
         .unwrap();
         assert_eq!(res.content, []);
@@ -2332,6 +2355,8 @@ mod tests {
                 last_thought_id: &mut last_thought_id,
                 last_unknown_chunk_id: &mut last_unknown_chunk_id,
                 discard_unknown_chunks: false,
+                model_name: "test_model",
+                provider_name: "test_provider",
             })
             .unwrap();
 
@@ -2395,6 +2420,8 @@ mod tests {
                 last_thought_id: &mut last_thought_id,
                 last_unknown_chunk_id: &mut last_unknown_chunk_id,
                 discard_unknown_chunks: false,
+                model_name: "test_model",
+                provider_name: "test_provider",
             })
             .unwrap();
 
@@ -2462,6 +2489,8 @@ mod tests {
                 last_thought_id: &mut last_thought_id,
                 last_unknown_chunk_id: &mut last_unknown_chunk_id,
                 discard_unknown_chunks: false,
+                model_name: "test_model",
+                provider_name: "test_provider",
             })
             .unwrap();
 
@@ -2519,6 +2548,8 @@ mod tests {
                 last_thought_id: &mut last_thought_id,
                 last_unknown_chunk_id: &mut last_unknown_chunk_id,
                 discard_unknown_chunks: false,
+                model_name: "test_model",
+                provider_name: "test_provider",
             })
             .unwrap();
 
@@ -2573,6 +2604,8 @@ mod tests {
                 last_thought_id: &mut last_thought_id,
                 last_unknown_chunk_id: &mut last_unknown_chunk_id,
                 discard_unknown_chunks: false,
+                model_name: "test_model",
+                provider_name: "test_provider",
             })
             .unwrap();
 
@@ -2617,6 +2650,8 @@ mod tests {
             last_thought_id: &mut last_thought_id,
             last_unknown_chunk_id: &mut last_unknown_chunk_id,
             discard_unknown_chunks: false,
+            model_name: "test_model",
+            provider_name: "test_provider",
         });
 
         // Should remain None when there's an error
@@ -2695,6 +2730,8 @@ mod tests {
                         last_thought_id: &mut last_thought_id,
                         last_unknown_chunk_id: &mut last_unknown_chunk_id,
                         discard_unknown_chunks: false,
+                        model_name: "test_model",
+                        provider_name: "test_provider",
                     });
                 // Verify tool call tracking state
                 assert_eq!(last_tool_idx, None);

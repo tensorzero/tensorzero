@@ -287,7 +287,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -324,7 +324,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             builder,
         )
         .await?;
-        let mut stream = stream_anthropic(event_source, start_time, model_provider).peekable();
+        let mut stream = stream_anthropic(
+            event_source,
+            start_time,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
@@ -368,8 +375,12 @@ fn stream_anthropic(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         while let Some(ev) = event_source.next().await {
@@ -402,6 +413,8 @@ fn stream_anthropic(
                                 start_time.elapsed(),
                                 &mut current_tool_id,
                                 discard_unknown_chunks,
+                                &model_name,
+                                &provider_name,
                             )
                         });
 
@@ -1118,6 +1131,8 @@ fn anthropic_to_tensorzero_stream_message(
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
         GCPVertexAnthropicStreamMessage::ContentBlockDelta {
@@ -1321,7 +1336,7 @@ fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: delta.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
                 })],
                 None,
                 raw_message,
@@ -1341,7 +1356,7 @@ fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: content_block.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
                 })],
                 None,
                 raw_message,
@@ -1361,7 +1376,7 @@ fn anthropic_to_tensorzero_stream_message(
                 vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "message_delta".to_string(),
                     data: delta.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
                 })],
                 None,
                 raw_message,
@@ -2571,6 +2586,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2599,6 +2616,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2627,6 +2646,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2657,6 +2678,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2686,6 +2709,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2713,6 +2738,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2735,6 +2762,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2750,6 +2779,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2778,6 +2809,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2799,6 +2832,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2818,6 +2853,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2831,6 +2868,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2922,6 +2961,8 @@ mod tests {
             Duration::from_secs(0),
             &mut Default::default(),
             true,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
         assert_eq!(res, None);

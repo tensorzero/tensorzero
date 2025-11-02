@@ -71,7 +71,7 @@ pub struct ThoughtChunk {
 pub struct UnknownChunk {
     pub id: String,
     pub data: Value,
-    pub provider_type: Option<String>,
+    pub model_provider_name: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -479,7 +479,11 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 }
                             }
                         }
-                        ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
+                        ContentBlockChunk::Unknown(UnknownChunk {
+                            id,
+                            data,
+                            model_provider_name,
+                        }) => {
                             // Unknown chunks are not merged/coalesced - each one gets a unique entry
                             // We use the chunk ID as part of the key to ensure uniqueness
                             if ttft.is_none() {
@@ -489,10 +493,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 (ContentBlockOutputType::Unknown, id.clone()),
                                 ContentBlockOutput::Unknown {
                                     data: data.clone(),
-                                    model_provider_name: Some(crate::model::fully_qualified_name(
-                                        &model_name,
-                                        &model_provider_name,
-                                    )),
+                                    model_provider_name: model_provider_name.clone(),
                                 },
                             );
                         }

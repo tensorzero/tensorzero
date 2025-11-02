@@ -1113,7 +1113,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -1151,7 +1151,14 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             builder,
         )
         .await?;
-        let stream = stream_gcp_vertex_gemini(event_source, start_time, model_provider).peekable();
+        let stream = stream_gcp_vertex_gemini(
+            event_source,
+            start_time,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -1482,8 +1489,12 @@ fn stream_gcp_vertex_gemini(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
@@ -1520,6 +1531,8 @@ fn stream_gcp_vertex_gemini(
                             &mut last_tool_name,
                             &mut last_tool_idx,
                             discard_unknown_chunks,
+                            &model_name,
+                            &provider_name,
                         )
                     }
                 }
@@ -2162,6 +2175,8 @@ fn content_part_to_tensorzero_chunk(
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<Option<ContentBlockChunk>, Error> {
     if part.thought {
         match part.data {
@@ -2251,7 +2266,7 @@ fn content_part_to_tensorzero_chunk(
             Ok(Some(ContentBlockChunk::Unknown(UnknownChunk {
                 id: "0".to_string(),
                 data: part.into_owned(),
-                provider_type: Some(PROVIDER_TYPE.to_string()),
+                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
             })))
         }
     }
@@ -2506,6 +2521,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn convert_stream_response_with_metadata_to_chunk(
     raw_response: String,
     response: GCPVertexGeminiResponse,
@@ -2513,6 +2529,8 @@ fn convert_stream_response_with_metadata_to_chunk(
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -2534,6 +2552,8 @@ fn convert_stream_response_with_metadata_to_chunk(
                     last_tool_name,
                     last_tool_idx,
                     discard_unknown_chunks,
+                    model_name,
+                    provider_name,
                 )
                 .transpose()
             })
@@ -3981,6 +4001,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
 
@@ -4039,6 +4061,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             true,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
         assert_eq!(res.content, []);
@@ -4085,6 +4109,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4134,6 +4160,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4180,6 +4208,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4238,6 +4268,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4299,6 +4331,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4329,6 +4363,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -4362,6 +4398,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4389,6 +4427,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4421,6 +4461,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4456,6 +4498,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert_eq!(last_tool_idx, Some(0));
@@ -4486,6 +4530,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4517,6 +4563,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4548,6 +4596,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4578,6 +4628,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -4609,6 +4661,8 @@ mod tests {
             &mut last_tool_name,
             &mut None,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -4637,6 +4691,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
