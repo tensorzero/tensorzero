@@ -127,8 +127,12 @@ impl ChatCompletionConfig {
         self.stop_sequences.as_ref()
     }
 
-    pub fn inference_params_v2(&self) -> &ChatCompletionInferenceParamsV2 {
-        &self.inference_params_v2
+    pub fn reasoning_effort(&self) -> Option<&String> {
+        self.inference_params_v2.reasoning_effort.as_ref()
+    }
+
+    pub fn verbosity(&self) -> Option<&String> {
+        self.inference_params_v2.verbosity.as_ref()
     }
 
     pub fn json_mode(&self) -> Option<&JsonMode> {
@@ -173,10 +177,7 @@ pub struct UninitializedChatTemplates {
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
-// TODO: Re-enable this once we finish migrating to inference_params_v2 format
-// and remove the #[serde(flatten)]. The combination of flatten + deny_unknown_fields
-// causes serde to reject valid fields before custom validation can run.
-// #[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedChatCompletionConfig {
     #[serde(default)]
     pub weight: Option<f64>,
@@ -194,8 +195,12 @@ pub struct UninitializedChatCompletionConfig {
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
     pub stop_sequences: Option<Vec<String>>,
-    #[serde(flatten)]
-    pub inference_params_v2: ChatCompletionInferenceParamsV2,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
     #[serde(default)]
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
@@ -226,7 +231,10 @@ impl UninitializedChatCompletionConfig {
             frequency_penalty: self.frequency_penalty,
             seed: self.seed,
             stop_sequences: self.stop_sequences,
-            inference_params_v2: self.inference_params_v2,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: self.reasoning_effort,
+                verbosity: self.verbosity,
+            },
             json_mode: self.json_mode,
             retries: self.retries,
             extra_body: self.extra_body,

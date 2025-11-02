@@ -7,7 +7,6 @@ use super::{
     ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, StoredInput, Usage,
 };
 
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::StoredRequestMessage;
 use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::{
@@ -513,10 +512,8 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
                 frequency_penalty: frequency_penalty_iter.next().unwrap_or(None),
                 stop_sequences: stop_sequences_iter.next(),
                 json_mode: None,
-                inference_params_v2: ChatCompletionInferenceParamsV2 {
-                    reasoning_effort: reasoning_effort_iter.next().unwrap_or(None),
-                    verbosity: verbosity_iter.next().unwrap_or(None),
-                },
+                reasoning_effort: reasoning_effort_iter.next().unwrap_or(None),
+                verbosity: verbosity_iter.next().unwrap_or(None),
             });
         }
         Ok(all_inference_params)

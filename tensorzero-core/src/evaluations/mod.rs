@@ -17,10 +17,7 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     function::{FunctionConfig, FunctionConfigJson},
-    inference::types::{
-        chat_completion_inference_params::ChatCompletionInferenceParamsV2,
-        extra_body::ExtraBodyConfig, extra_headers::ExtraHeadersConfig,
-    },
+    inference::types::{extra_body::ExtraBodyConfig, extra_headers::ExtraHeadersConfig},
     jsonschema_util::StaticJSONSchema,
     tool::create_implicit_tool_call_config,
     variant::{
@@ -559,8 +556,10 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     seed: Option<u32>,
     json_mode: JsonMode, // This is a JSON function
     stop_sequences: Option<Vec<String>>,
-    #[serde(flatten)]
-    inference_params_v2: ChatCompletionInferenceParamsV2,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
     #[serde(default)]
     retries: RetryConfig,
     #[serde(default)]
@@ -622,7 +621,8 @@ fn convert_chat_completion_judge_to_variant(
         retries: params.retries,
         extra_body: params.extra_body,
         extra_headers: params.extra_headers,
-        inference_params_v2: params.inference_params_v2,
+        reasoning_effort: params.reasoning_effort,
+        verbosity: params.verbosity,
     }
     .load(
         &SchemaData::load(
@@ -790,7 +790,8 @@ impl UninitializedLLMJudgeVariantInfo {
                                 frequency_penalty: params.evaluator.frequency_penalty,
                                 seed: params.evaluator.seed,
                                 stop_sequences: params.evaluator.stop_sequences,
-                                inference_params_v2: ChatCompletionInferenceParamsV2::default(),
+                                reasoning_effort: params.evaluator.reasoning_effort,
+                                verbosity: params.evaluator.verbosity,
                                 json_mode: Some(params.evaluator.json_mode),
                                 retries: params.evaluator.retries,
                                 extra_body: params.evaluator.extra_body,
@@ -859,7 +860,8 @@ impl UninitializedLLMJudgeVariantInfo {
                                 frequency_penalty: params.fuser.frequency_penalty,
                                 seed: params.fuser.seed,
                                 stop_sequences: params.fuser.stop_sequences,
-                                inference_params_v2: ChatCompletionInferenceParamsV2::default(), // TODO: fix
+                                reasoning_effort: params.fuser.reasoning_effort,
+                                verbosity: params.fuser.verbosity,
                                 json_mode: Some(params.fuser.json_mode),
                                 retries: params.fuser.retries,
                                 extra_body: params.fuser.extra_body,
@@ -968,7 +970,8 @@ fn check_convert_variant_to_llm_judge_variant(
                     stop_sequences: variant.stop_sequences().cloned(),
                     extra_body: variant.extra_body().cloned(),
                     extra_headers: variant.extra_headers().cloned(),
-                    inference_params_v2: variant.inference_params_v2().clone(),
+                    reasoning_effort: variant.reasoning_effort().cloned(),
+                    verbosity: variant.verbosity().cloned(),
                 },
             ))
         }
@@ -996,7 +999,8 @@ fn check_convert_variant_to_llm_judge_variant(
                         stop_sequences: variant.evaluator().inner.stop_sequences().cloned(),
                         extra_body: variant.evaluator().inner.extra_body().cloned(),
                         extra_headers: variant.evaluator().inner.extra_headers().cloned(),
-                        inference_params_v2: variant.evaluator().inner.inference_params_v2.clone(),
+                        reasoning_effort: variant.evaluator().inner.reasoning_effort().cloned(),
+                        verbosity: variant.evaluator().inner.verbosity().cloned(),
                     },
                 },
             ))
@@ -1025,7 +1029,13 @@ fn check_convert_variant_to_llm_judge_variant(
                         stop_sequences: variant.fuser().inner.stop_sequences().cloned(),
                         extra_body: variant.fuser().inner.extra_body().cloned(),
                         extra_headers: variant.fuser().inner.extra_headers().cloned(),
-                        inference_params_v2: variant.fuser().inner.inference_params_v2.clone(),
+                        reasoning_effort: variant
+                            .fuser()
+                            .inner
+                            .inference_params_v2
+                            .reasoning_effort
+                            .clone(),
+                        verbosity: variant.fuser().inner.inference_params_v2.verbosity.clone(),
                     },
                 },
             ))
@@ -1071,7 +1081,12 @@ fn check_convert_variant_to_llm_judge_variant(
                         stop_sequences: variant.inner.stop_sequences().cloned(),
                         extra_body: variant.inner.extra_body().cloned(),
                         extra_headers: variant.inner.extra_headers().cloned(),
-                        inference_params_v2: variant.inner.inference_params_v2.clone(),
+                        reasoning_effort: variant
+                            .inner
+                            .inference_params_v2
+                            .reasoning_effort
+                            .clone(),
+                        verbosity: variant.inner.inference_params_v2.verbosity.clone(),
                     },
                 },
             ))
@@ -1173,7 +1188,8 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
-                            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
+                            reasoning_effort: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1298,7 +1314,8 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
-                            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
+                            reasoning_effort: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1450,7 +1467,8 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
-                            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
+                            reasoning_effort: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1479,7 +1497,8 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
-                            inference_params_v2: Default::default(),
+                            reasoning_effort: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1597,7 +1616,8 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
-                            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
+                            reasoning_effort: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1669,7 +1689,8 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
-                            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
+                            reasoning_effort: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1743,7 +1764,8 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
-                            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
+                            reasoning_effort: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,

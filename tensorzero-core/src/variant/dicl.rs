@@ -176,8 +176,12 @@ pub struct UninitializedDiclConfig {
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
-    #[serde(flatten)]
-    pub inference_params_v2: ChatCompletionInferenceParamsV2,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
     pub json_mode: Option<JsonMode>,
     #[serde(default)]
     #[ts(skip)]
@@ -908,7 +912,10 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             frequency_penalty: self.frequency_penalty,
             max_tokens: self.max_tokens,
             seed: self.seed,
-            inference_params_v2: self.inference_params_v2,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: self.reasoning_effort,
+                verbosity: self.verbosity,
+            },
             json_mode: self.json_mode,
             retries: self.retries,
             stop_sequences: self.stop_sequences,

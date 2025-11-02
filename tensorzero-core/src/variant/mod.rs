@@ -24,6 +24,7 @@ use crate::error::ErrorDetails;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
@@ -649,7 +650,10 @@ fn prepare_model_inference_request<'request>(
                 fetch_and_encode_input_files_before_inference: inference_config
                     .fetch_and_encode_input_files_before_inference,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
-                inference_params_v2: inference_params.chat_completion.inference_params_v2.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -693,7 +697,10 @@ fn prepare_model_inference_request<'request>(
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
-                inference_params_v2: inference_params.chat_completion.inference_params_v2.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             }
         }
     })

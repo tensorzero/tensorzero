@@ -1338,8 +1338,12 @@ pub struct ChatCompletionInferenceParams {
     pub json_mode: Option<JsonMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_sequences: Option<Vec<String>>,
-    #[serde(flatten)]
-    pub inference_params_v2: ChatCompletionInferenceParamsV2,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
 }
 
 impl ChatCompletionInferenceParams {
@@ -1376,11 +1380,11 @@ impl ChatCompletionInferenceParams {
         if self.stop_sequences.is_none() {
             self.stop_sequences = stop_sequences;
         }
-        if self.inference_params_v2.reasoning_effort.is_none() {
-            self.inference_params_v2.reasoning_effort = inference_params_v2.reasoning_effort;
+        if self.reasoning_effort.is_none() {
+            self.reasoning_effort = inference_params_v2.reasoning_effort;
         }
-        if self.inference_params_v2.verbosity.is_none() {
-            self.inference_params_v2.verbosity = inference_params_v2.verbosity;
+        if self.verbosity.is_none() {
+            self.verbosity = inference_params_v2.verbosity;
         }
     }
 }

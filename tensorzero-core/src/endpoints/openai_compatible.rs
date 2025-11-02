@@ -34,7 +34,6 @@ use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
@@ -726,10 +725,8 @@ impl Params {
             frequency_penalty: openai_compatible_params.frequency_penalty,
             stop_sequences: openai_compatible_params.stop,
             json_mode,
-            inference_params_v2: ChatCompletionInferenceParamsV2 {
-                reasoning_effort: openai_compatible_params.reasoning_effort,
-                verbosity: openai_compatible_params.verbosity,
-            },
+            reasoning_effort: openai_compatible_params.reasoning_effort,
+            verbosity: openai_compatible_params.verbosity,
         };
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,

@@ -14,6 +14,7 @@ use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -98,10 +99,7 @@ pub struct BestOfNEvaluatorConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
-// TODO: Re-enable this once we finish migrating to inference_params_v2 format
-// and remove the #[serde(flatten)]. The combination of flatten + deny_unknown_fields
-// causes serde to reject valid fields before custom validation can run.
-// #[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct UninitializedBestOfNEvaluatorConfig {
     #[serde(flatten)]
     pub inner: UninitializedChatCompletionConfig,
@@ -800,7 +798,10 @@ impl BestOfNEvaluatorConfig {
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
-                inference_params_v2: inference_params.chat_completion.inference_params_v2.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             },
             skipped_indices,
         ))
