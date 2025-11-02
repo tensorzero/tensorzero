@@ -17,9 +17,7 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
-};
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
@@ -606,10 +604,14 @@ struct AzureRequest<'a> {
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AzureToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
 }
 
 fn apply_inference_params(
-    _request: &mut AzureRequest,
+    request: &mut AzureRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
@@ -618,11 +620,11 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        request.reasoning_effort = reasoning_effort.clone();
     }
 
     if verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+        request.verbosity = verbosity.clone();
     }
 }
 
@@ -657,6 +659,8 @@ impl<'a> AzureRequest<'a> {
             seed: request.seed,
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
+            reasoning_effort: None,
+            verbosity: None,
         };
 
         apply_inference_params(&mut azure_request, &request.inference_params_v2);
@@ -796,7 +800,6 @@ mod tests {
     use std::borrow::Cow;
     use std::collections::HashMap;
     use std::time::Duration;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -1126,7 +1129,6 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_azure_apply_inference_params_called() {
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
@@ -1145,15 +1147,13 @@ mod tests {
             response_format: None,
             tools: None,
             tool_choice: None,
+            reasoning_effort: None,
+            verbosity: None,
         };
 
         apply_inference_params(&mut request, &inference_params);
 
-        assert!(logs_contain(
-            "Azure does not support the inference parameter `reasoning_effort`"
-        ));
-        assert!(logs_contain(
-            "Azure does not support the inference parameter `verbosity`"
-        ));
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
+        assert_eq!(request.verbosity, Some("detailed".to_string()));
     }
 }

@@ -897,10 +897,12 @@ struct GroqRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 fn apply_inference_params(
-    _request: &mut GroqRequest,
+    request: &mut GroqRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
@@ -909,7 +911,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        request.reasoning_effort = reasoning_effort.clone();
     }
 
     if verbosity.is_some() {
@@ -969,6 +971,7 @@ impl<'a> GroqRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
+            reasoning_effort: None,
         };
 
         apply_inference_params(&mut groq_request, &request.inference_params_v2);
@@ -1651,6 +1654,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1748,6 +1752,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
@@ -1815,6 +1820,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -1872,6 +1878,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_multiple_choices,
@@ -2489,13 +2496,12 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
 
         apply_inference_params(&mut request, &inference_params);
 
-        assert!(logs_contain(
-            "Groq does not support the inference parameter `reasoning_effort`"
-        ));
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
         assert!(logs_contain(
             "Groq does not support the inference parameter `verbosity`"
         ));

@@ -375,10 +375,12 @@ struct FireworksRequest<'a> {
     tools: Option<Vec<FireworksTool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<OpenAIToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 fn apply_inference_params(
-    _request: &mut FireworksRequest,
+    request: &mut FireworksRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
@@ -387,7 +389,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        request.reasoning_effort = reasoning_effort.clone();
     }
 
     if verbosity.is_some() {
@@ -437,6 +439,7 @@ impl<'a> FireworksRequest<'a> {
             response_format,
             tools,
             tool_choice,
+            reasoning_effort: None,
         };
 
         apply_inference_params(&mut fireworks_request, &request.inference_params_v2);

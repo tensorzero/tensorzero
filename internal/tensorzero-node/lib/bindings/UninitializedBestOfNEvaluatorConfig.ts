@@ -20,8 +20,8 @@ export type UninitializedBestOfNEvaluatorConfig = {
   frequency_penalty: number | null;
   seed: number | null;
   stop_sequences: Array<string> | null;
-  json_mode: JsonMode | null;
-  retries: RetryConfig;
   reasoning_effort?: string;
   verbosity?: string;
+  json_mode: JsonMode | null;
+  retries: RetryConfig;
 };

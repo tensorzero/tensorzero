@@ -324,10 +324,12 @@ struct HyperbolicRequest<'a> {
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 fn apply_inference_params(
-    _request: &mut HyperbolicRequest,
+    request: &mut HyperbolicRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
@@ -336,7 +338,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        request.reasoning_effort = reasoning_effort.clone();
     }
 
     if verbosity.is_some() {
@@ -386,6 +388,7 @@ impl<'a> HyperbolicRequest<'a> {
             temperature: *temperature,
             top_p: *top_p,
             stop: stop_sequences.clone(),
+            reasoning_effort: None,
         };
 
         apply_inference_params(&mut hyperbolic_request, &request.inference_params_v2);
@@ -644,13 +647,12 @@ mod tests {
             temperature: None,
             top_p: None,
             stop: None,
+            reasoning_effort: None,
         };
 
         apply_inference_params(&mut request, &inference_params);
 
-        assert!(logs_contain(
-            "Hyperbolic does not support the inference parameter `reasoning_effort`"
-        ));
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
         assert!(logs_contain(
             "Hyperbolic does not support the inference parameter `verbosity`"
         ));

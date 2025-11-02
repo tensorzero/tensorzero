@@ -365,10 +365,12 @@ struct TogetherRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 fn apply_inference_params(
-    _request: &mut TogetherRequest,
+    request: &mut TogetherRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
@@ -377,7 +379,7 @@ fn apply_inference_params(
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        request.reasoning_effort = reasoning_effort.clone();
     }
 
     if verbosity.is_some() {
@@ -440,6 +442,7 @@ impl<'a> TogetherRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
+            reasoning_effort: None,
         };
 
         apply_inference_params(&mut together_request, &request.inference_params_v2);
