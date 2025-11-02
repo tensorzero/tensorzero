@@ -2838,7 +2838,7 @@ mod tests {
 
         // Test that reasoning_effort warns with tip about thinking_budget_tokens
         assert!(logs_contain(
-            "GCP Vertex Anthropic does not support the inference parameter `reasoning_effort` Tip: You might want to use `thinking_budget_tokens` for this provider."
+            "GCP Vertex Anthropic does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
         ));
 
         // Test that thinking_budget_tokens is applied correctly
@@ -2852,7 +2852,7 @@ mod tests {
 
         // Test that verbosity warns
         assert!(logs_contain(
-            "GCP Vertex Anthropic does not support the inference parameter `verbosity`"
+            "GCP Vertex Anthropic does not support the inference parameter `verbosity`, so it will be ignored."
         ));
     }
 }

@@ -1079,7 +1079,7 @@ mod tests {
 
         // Test that thinking_budget_tokens warns with tip about reasoning_effort
         assert!(logs_contain(
-            "SGLang does not support the inference parameter `thinking_budget_tokens` Tip: You might want to use `reasoning_effort` for this provider."
+            "SGLang does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
         ));
 
         // Test that verbosity warns

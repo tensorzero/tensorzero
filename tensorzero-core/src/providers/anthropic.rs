@@ -3210,7 +3210,7 @@ mod tests {
 
         // Test that reasoning_effort warns with tip about thinking_budget_tokens
         assert!(logs_contain(
-            "Anthropic does not support the inference parameter `reasoning_effort` Tip: You might want to use `thinking_budget_tokens` for this provider."
+            "Anthropic does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
         ));
 
         // Test that thinking_budget_tokens is applied correctly

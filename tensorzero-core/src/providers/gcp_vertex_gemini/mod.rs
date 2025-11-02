@@ -1840,6 +1840,21 @@ fn apply_inference_params(
             gen_config.thinking_config = Some(GCPVertexGeminiThinkingConfig {
                 thinking_budget: *budget_tokens,
             });
+        } else {
+            request.generation_config = Some(GCPVertexGeminiGenerationConfig {
+                stop_sequences: None,
+                temperature: None,
+                thinking_config: Some(GCPVertexGeminiThinkingConfig {
+                    thinking_budget: *budget_tokens,
+                }),
+                max_output_tokens: None,
+                top_p: None,
+                presence_penalty: None,
+                frequency_penalty: None,
+                seed: None,
+                response_mime_type: None,
+                response_schema: None,
+            });
         }
     }
 
@@ -4644,7 +4659,7 @@ mod tests {
 
         // Test that reasoning_effort warns with tip about thinking_budget_tokens
         assert!(logs_contain(
-            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort` Tip: You might want to use `thinking_budget_tokens` for this provider."
+            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
         ));
 
         // Test that thinking_budget_tokens is applied correctly in generation_config
