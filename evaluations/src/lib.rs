@@ -7,7 +7,7 @@ use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use dataset::query_dataset;
 use evaluators::{evaluate_inference, EvaluateInferenceParams};
-use helpers::{get_cache_options, get_tool_params_args};
+use helpers::get_cache_options;
 use serde::{Deserialize, Serialize};
 use stats::{EvaluationError, EvaluationInfo, EvaluationStats, EvaluationUpdate};
 use tensorzero::{
@@ -402,7 +402,7 @@ pub async fn run_evaluation_core_streaming(
     for datapoint in dataset {
         let clients_clone = clients.clone();
         let variant_name = variant_name.clone();
-        let function_config = function_config.clone();
+        let config = args.config.clone();
         let evaluation_config = evaluation_config.clone();
         let dataset_name = dataset_name.clone();
         let function_name = inference_evaluation_config.function_name.clone();
@@ -422,7 +422,7 @@ pub async fn run_evaluation_core_streaming(
                     dataset_name: &dataset_name,
                     datapoint: &datapoint,
                     evaluation_name: &evaluation_name,
-                    function_config: &function_config,
+                    config: &config,
                     input: &input,
                     inference_cache,
                 })
@@ -548,7 +548,7 @@ struct InferDatapointParams<'a> {
     datapoint: &'a StoredDatapoint,
     input: &'a ClientInput,
     evaluation_name: &'a str,
-    function_config: &'a FunctionConfig,
+    config: &'a Config,
     inference_cache: CacheEnabledMode,
 }
 
@@ -562,16 +562,18 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         dataset_name,
         datapoint,
         evaluation_name,
-        function_config,
+        config,
         input,
         inference_cache,
     } = params;
 
     debug!("Processing tool parameters");
+    let function_config = config.get_function(function_name)?;
     let dynamic_tool_params = match datapoint.tool_call_config() {
         Some(tool_params) => {
             debug!("Tool parameters found, processing");
-            get_tool_params_args(tool_params, function_config).await
+            let function_config = config.get_function(function_name)?;
+            function_config.database_insert_to_dynamic_tool_params(tool_params.clone())
         }
         None => {
             debug!("No tool parameters found");
@@ -579,7 +581,7 @@ async fn infer_datapoint(params: InferDatapointParams<'_>) -> Result<InferenceRe
         }
     };
     debug!("Processing output schema");
-    let output_schema = match (datapoint.output_schema(), function_config) {
+    let output_schema = match (datapoint.output_schema(), &**function_config) {
         // If the datapoint has an output schema, use it only in the case where it is not the same as the output schema of the function
         (Some(output_schema), FunctionConfig::Json(json_function_config)) => {
             if output_schema == &json_function_config.output_schema.value {

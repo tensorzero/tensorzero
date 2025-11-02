@@ -475,18 +475,6 @@ impl ToolCallConfig {
             .filter(|t| t.scope.matches(model_name, model_provider_name))
             .collect()
     }
-
-    #[cfg(test)]
-    pub fn with_tools_available(
-        static_tools_available: Vec<ToolConfig>,
-        dynamic_tools_available: Vec<ToolConfig>,
-    ) -> Self {
-        Self {
-            static_tools_available,
-            dynamic_tools_available,
-            ..Default::default()
-        }
-    }
 }
 
 /// TODO (Viraj): improve documentation

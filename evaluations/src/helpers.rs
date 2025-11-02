@@ -3,56 +3,15 @@ use std::collections::HashMap;
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::Value;
-use tensorzero::{CacheParamsOptions, DynamicToolParams, InferenceResponse};
+use tensorzero::{CacheParamsOptions, InferenceResponse};
 use tensorzero_core::db::clickhouse::escape_string_for_clickhouse_literal;
 use tensorzero_core::serde_util::deserialize_json_string;
-use tensorzero_core::{
-    cache::CacheEnabledMode, db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig,
-    tool::ToolCallConfigDatabaseInsert,
-};
+use tensorzero_core::{cache::CacheEnabledMode, db::clickhouse::ClickHouseConnectionInfo};
 use tracing::debug;
 use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 use crate::{Args, OutputFormat};
-
-/// Given the function config for the evaluation and the tool call config that was written to the database,
-/// recover the dynamic tool params that were used to generate the tool call config.
-/// This will be used to help full out the params for the inference request in this evaluation.
-pub async fn get_tool_params_args(
-    tool_params: &ToolCallConfigDatabaseInsert,
-    function_config: &FunctionConfig,
-) -> DynamicToolParams {
-    match function_config {
-        FunctionConfig::Chat(function_config) => {
-            let mut additional_tools = Vec::new();
-            let mut allowed_tools = Vec::new();
-            for tool in &tool_params.tools_available {
-                if function_config.tools.contains(&tool.name) {
-                    allowed_tools.push(tool.name.clone());
-                } else {
-                    additional_tools.push(tool.clone());
-                }
-            }
-            DynamicToolParams {
-                allowed_tools: Some(allowed_tools),
-                additional_tools: Some(additional_tools),
-                tool_choice: Some(tool_params.tool_choice.clone()),
-                parallel_tool_calls: tool_params.parallel_tool_calls,
-                // TODO (Viraj): once we have this stored in the database, be sure to add it
-                provider_tools: None,
-            }
-        }
-        // This branch is actually unreachable
-        FunctionConfig::Json(_function_config) => DynamicToolParams {
-            allowed_tools: None,
-            additional_tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            provider_tools: None,
-        },
-    }
-}
 
 pub fn setup_logging(args: &Args) -> Result<()> {
     match args.format {

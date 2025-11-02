@@ -34,8 +34,8 @@ use crate::jsonschema_util::{JsonSchemaRef, StaticJSONSchema};
 use crate::minijinja_util::TemplateConfig;
 use crate::model::ModelTable;
 use crate::tool::{
-    DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig, ToolCallConfigConstructorArgs,
-    ToolCallConfigDatabaseInsert, ToolChoice, AllowedToolsChoice
+    AllowedToolsChoice, DynamicToolParams, StaticToolConfig, Tool, ToolCallConfig,
+    ToolCallConfigConstructorArgs, ToolCallConfigDatabaseInsert, ToolChoice,
 };
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantInfo};
 
@@ -389,6 +389,9 @@ impl FunctionConfig {
         dynamic_params: DynamicToolParams,
         static_tools: &HashMap<String, Arc<StaticToolConfig>>,
     ) -> Result<Option<ToolCallConfigDatabaseInsert>, Error> {
+        let tool_config = self.prepare_tool_config(dynamic_params, static_tools)?;
+        Ok(tool_config.map(std::convert::Into::into))
+    }
 
     /// Convert ToolCallConfigDatabaseInsert back to DynamicToolParams by subtracting static tools
     /// Static tools (from function config) become allowed_tools, additional tools remain as additional_tools
@@ -405,7 +408,7 @@ impl FunctionConfig {
             .. // TODO: Ideally we can say all but private fields must be destructured here.
         } = db_insert;
         // Get static tool names from function config
-        let static_tool_names: HashSet<&str> = match self {
+        let _static_tool_names: HashSet<&str> = match self {
             FunctionConfig::Chat(c) => c.tools.iter().map(std::string::String::as_str).collect(),
             FunctionConfig::Json(_) => HashSet::new(),
         };
@@ -420,13 +423,27 @@ impl FunctionConfig {
             AllowedToolsChoice::DynamicAllowedTools => Some(allowed_tools.tools),
         };
 
+        let additional_tools = if dynamic_tools.is_empty() {
+            None
+        } else {
+            Some(
+                dynamic_tools
+                    .into_iter()
+                    .map(|tool| match tool {
+                        Tool::ClientSideFunction(client_tool) => client_tool,
+                        // When new Tool variants are added, this will cause a compile error,
+                        // forcing us to handle them explicitly
+                    })
+                    .collect(),
+            )
+        };
+
         DynamicToolParams {
             allowed_tools,
-            additional_tools: dynamic_tools,
-            tool_choice: Some(db_insert.tool_choice),
-            parallel_tool_calls: db_insert.parallel_tool_calls,
-            // TODO(#4271): store and restore the provider_tools from DB
-            provider_tools: None,
+            additional_tools,
+            tool_choice: Some(tool_choice),
+            parallel_tool_calls,
+            provider_tools: Some(dynamic_provider_tools),
         }
     }
 
