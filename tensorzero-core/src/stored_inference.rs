@@ -12,7 +12,7 @@ use crate::inference::types::pyo3_helpers::{
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
 #[cfg(feature = "pyo3")]
-use crate::tool::{ClientSideFunctionTool, ProviderTool, ToolChoice};
+use crate::tool::{deserialize_tool_info, ClientSideFunctionTool, ProviderTool, ToolChoice};
 use crate::tool::{DynamicToolParams, StaticToolConfig};
 use crate::{
     config::Config,
@@ -581,7 +581,7 @@ pub struct StoredChatInferenceDatabase {
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
-    #[serde(default)]
+    #[serde(flatten, deserialize_with = "deserialize_tool_info")]
     pub tool_params: ToolCallConfigDatabaseInsert,
     #[serde(default)]
     pub tags: HashMap<String, String>,

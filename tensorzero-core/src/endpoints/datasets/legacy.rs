@@ -32,7 +32,10 @@ use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
-    tool::{DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert},
+    tool::{
+        deserialize_optional_tool_info, DynamicToolParams, StaticToolConfig,
+        ToolCallConfigDatabaseInsert,
+    },
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
 };
@@ -1543,9 +1546,7 @@ pub struct StoredChatInferenceDatapoint {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
