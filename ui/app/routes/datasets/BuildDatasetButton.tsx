@@ -12,7 +12,7 @@ export function BuildDatasetButton(props: BuildDatasetButtonProps) {
   const isReadOnly = useReadOnly();
 
   return (
-    <ReadOnlyGuard>
+    <ReadOnlyGuard asChild>
       <Button variant="outline" size="sm" disabled={isReadOnly} {...props}>
         <Plus className="text-fg-tertiary mr-2 h-4 w-4" />
         Build Dataset

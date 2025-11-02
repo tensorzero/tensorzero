@@ -2049,6 +2049,18 @@ mod tests {
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
+        let model = "claude-haiku-4-5-20251001".to_string();
+        let body = AnthropicRequestBody::new(&model, &request).await;
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-sonnet-4-5-20250929".to_string();
+        let body = AnthropicRequestBody::new(&model, &request).await;
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
         let model = "claude-3-5-ballad-latest".to_string(); // fake model
         let body = AnthropicRequestBody::new(&model, &request).await;
         assert!(body.is_err());

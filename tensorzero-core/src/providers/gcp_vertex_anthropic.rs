@@ -17,10 +17,7 @@ use super::helpers::{
 use crate::cache::ModelProviderRequest;
 use crate::config::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{
-    warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
-    ErrorDetails,
-};
+use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
@@ -34,7 +31,7 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, Thought, ThoughtChunk, Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
@@ -501,6 +498,13 @@ enum GCPVertexAnthropicMessageContent<'a> {
         tool_use_id: &'a str,
         content: Vec<GCPVertexAnthropicMessageContent<'a>>,
     },
+    Thinking {
+        thinking: Option<&'a str>,
+        signature: Option<&'a str>,
+    },
+    RedactedThinking {
+        data: &'a str,
+    },
     ToolUse {
         id: &'a str,
         name: &'a str,
@@ -571,14 +575,21 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
                     },
                 )))
             }
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
             ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(PROVIDER_TYPE, thought);
-                Ok(None)
+                if let Some(text) = thought.text.as_deref() {
+                    Ok(Some(FlattenUnknown::Normal(
+                        GCPVertexAnthropicMessageContent::Thinking {
+                            thinking: Some(text),
+                            signature: thought.signature.as_deref(),
+                        },
+                    )))
+                } else if let Some(signature) = thought.signature.as_deref() {
+                    Ok(Some(FlattenUnknown::Normal(
+                        GCPVertexAnthropicMessageContent::RedactedThinking { data: signature },
+                    )))
+                } else {
+                    Ok(None)
+                }
             }
             ContentBlock::Unknown {
                 data,
@@ -735,7 +746,10 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
     } else if model_id.starts_with("claude-3-7-sonnet@") {
         // GCP docs say 128k but that causes `max_tokens: XXX > 64000, which is the maximum allowed number of output tokens for claude-3-7-sonnet-20250219`
         Ok(64_000)
-    } else if model_id.starts_with("claude-sonnet-4@") {
+    } else if model_id.starts_with("claude-sonnet-4@")
+        || model_id.starts_with("claude-haiku-4-5@")
+        || model_id.starts_with("claude-sonnet-4-5@")
+    {
         Ok(64_000)
     } else if model_id.starts_with("claude-opus-4@") || model_id.starts_with("claude-opus-4-1@") {
         Ok(32_000)
@@ -857,6 +871,13 @@ pub enum GCPVertexAnthropicContentBlock {
         name: String,
         input: serde_json::Value,
     },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
+    RedactedThinking {
+        data: String,
+    },
 }
 
 fn convert_to_output(
@@ -878,6 +899,23 @@ fn convert_to_output(
                         ),
                     })
                 })?,
+            }))
+        }
+        FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::Thinking {
+            thinking,
+            signature,
+        }) => Ok(ContentBlockOutput::Thought(Thought {
+            text: Some(thinking),
+            signature: Some(signature),
+            summary: None,
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+        })),
+        FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::RedactedThinking { data }) => {
+            Ok(ContentBlockOutput::Thought(Thought {
+                text: None,
+                signature: Some(data),
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
         FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown {
@@ -1024,6 +1062,19 @@ enum GCPVertexAnthropicMessageBlock {
     InputJsonDelta {
         partial_json: String,
     },
+    ThinkingDelta {
+        thinking: String,
+    },
+    SignatureDelta {
+        signature: String,
+    },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
+    RedactedThinking {
+        data: String,
+    },
 }
 
 #[derive(Deserialize, Debug, Serialize)]
@@ -1105,6 +1156,38 @@ fn anthropic_to_tensorzero_stream_message(
                     None,
                 )))
             }
+            GCPVertexAnthropicMessageBlock::ThinkingDelta { thinking } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(thinking),
+                        signature: None,
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::SignatureDelta { signature } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(signature),
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
             _ => Err(ErrorDetails::InferenceServer {
                 message: "Unsupported content block type for ContentBlockDelta".to_string(),
                 provider_type: PROVIDER_TYPE.to_string(),
@@ -1139,6 +1222,39 @@ fn anthropic_to_tensorzero_stream_message(
                         raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
                         raw_arguments: String::new(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::Thinking {
+                thinking,
+                signature,
+            } => Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    text: Some(thinking),
+                    signature: Some(signature),
+                    id: index.to_string(),
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            ))),
+            GCPVertexAnthropicMessageBlock::RedactedThinking { data } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(data),
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1762,6 +1878,18 @@ mod tests {
         let model = "claude-3-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-haiku-4-5@20251001".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-sonnet-4-5@20250929".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        assert_eq!(body.unwrap().max_tokens, 64_000);
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
