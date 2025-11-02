@@ -22,6 +22,9 @@ use crate::{
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
+            chat_completion_inference_params::{
+                warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+            },
             ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
             ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
             ProviderInferenceResponse, ProviderInferenceResponseArgs,
@@ -507,6 +510,23 @@ struct MistralRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut MistralRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> MistralRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -530,7 +550,7 @@ impl<'a> MistralRequest<'a> {
         .await?;
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
 
-        Ok(MistralRequest {
+        let mut mistral_request = MistralRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -544,7 +564,11 @@ impl<'a> MistralRequest<'a> {
             tools,
             tool_choice,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut mistral_request, &request.inference_params_v2);
+
+        Ok(mistral_request)
     }
 }
 

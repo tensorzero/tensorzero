@@ -27,6 +27,9 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
@@ -40,7 +43,6 @@ use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-#[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
@@ -54,6 +56,21 @@ pub struct AWSBedrockProvider {
     client: aws_sdk_bedrockruntime::Client,
     #[serde(skip)]
     base_config: aws_sdk_bedrockruntime::config::Builder,
+}
+
+// TODO: we need to figure out how we're going to handle AWS Bedrock's weird request builder
+fn apply_inference_params(inference_params: &ChatCompletionInferenceParamsV2) {
+    // TODO: force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
 }
 
 impl AWSBedrockProvider {
@@ -119,12 +136,14 @@ impl InferenceProvider for AWSBedrockProvider {
             inference_config =
                 inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
         }
+        let inference_config = inference_config.build();
+
         let mut bedrock_request = self
             .client
             .converse()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
-            .inference_config(inference_config.build());
+            .inference_config(inference_config);
 
         if let Some(system) = &request.system {
             // AWS Bedrock does not support system message "" so we remove it
@@ -164,6 +183,8 @@ impl InferenceProvider for AWSBedrockProvider {
                 bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
             }
         }
+
+        apply_inference_params(&request.inference_params_v2);
 
         let InterceptorAndRawBody {
             interceptor,
@@ -260,13 +281,15 @@ impl InferenceProvider for AWSBedrockProvider {
             inference_config =
                 inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
         }
+        let inference_config = inference_config.build();
+        apply_inference_params(&request.inference_params_v2);
 
         let mut bedrock_request = self
             .client
             .converse_stream()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
-            .inference_config(inference_config.build());
+            .inference_config(inference_config);
 
         if let Some(system) = &request.system {
             // AWS Bedrock does not support system message "" so we remove it

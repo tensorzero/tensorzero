@@ -2670,6 +2670,24 @@ presence_penalty = 0.5
 # ...
 ```
 
+##### `reasoning_effort`
+
+- **Type:** string
+- **Required:** no (default: `null`)
+
+Controls the reasoning effort level for reasoning models.
+
+<Warning>
+Only some model providers support this parameter. TensorZero will warn and ignore it if unsupported.
+</Warning>
+
+```toml title="tensorzero.toml"
+[functions.draft-email.variants.prompt-v1]
+# ...
+reasoning_effort = "medium"
+# ...
+```
+
 ##### `retries`
 
 - **Type:** object with optional keys `num_retries` and `max_delay_s`
@@ -2770,6 +2788,24 @@ Typically at most one of `top_p` and `temperature` is set.
 [functions.draft-email.variants.prompt-v1]
 # ...
 top_p = 0.3
+# ...
+```
+
+##### `verbosity`
+
+- **Type:** string
+- **Required:** no (default: `null`)
+
+Controls the verbosity level of model outputs.
+
+<Warning>
+Only some model providers support this parameter. TensorZero will warn and ignore it if unsupported.
+</Warning>
+
+```toml title="tensorzero.toml"
+[functions.draft-email.variants.prompt-v1]
+# ...
+verbosity = "concise"
 # ...
 ```
 

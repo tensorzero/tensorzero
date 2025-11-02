@@ -13,6 +13,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -337,6 +340,23 @@ struct XAIRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut XAIRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> XAIRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -379,7 +399,7 @@ impl<'a> XAIRequest<'a> {
         .await?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        Ok(XAIRequest {
+        let mut xai_request = XAIRequest {
             messages,
             model,
             temperature,
@@ -394,7 +414,11 @@ impl<'a> XAIRequest<'a> {
             tools,
             tool_choice,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut xai_request, &request.inference_params_v2);
+
+        Ok(xai_request)
     }
 }
 

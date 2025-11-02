@@ -15,6 +15,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -896,6 +899,23 @@ struct GroqRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut GroqRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> GroqRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -932,7 +952,7 @@ impl<'a> GroqRequest<'a> {
             }
         }
 
-        Ok(GroqRequest {
+        let mut groq_request = GroqRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -948,7 +968,11 @@ impl<'a> GroqRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut groq_request, &request.inference_params_v2);
+
+        Ok(groq_request)
     }
 }
 

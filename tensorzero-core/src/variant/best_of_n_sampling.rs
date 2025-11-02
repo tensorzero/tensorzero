@@ -745,6 +745,7 @@ impl BestOfNEvaluatorConfig {
                 self.inner.presence_penalty(),
                 self.inner.frequency_penalty(),
                 self.inner.stop_sequences().cloned(),
+                self.inner.inference_params_v2.clone(),
             );
         let json_mode = inference_params
             .chat_completion

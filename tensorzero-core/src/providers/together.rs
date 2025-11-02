@@ -1,5 +1,8 @@
 use std::{borrow::Cow, time::Duration};
 
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::RequestMessage;
 use crate::providers::openai::{OpenAIMessagesConfig, OpenAIToolChoiceString};
 use futures::{future::try_join_all, StreamExt};
@@ -362,6 +365,23 @@ struct TogetherRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut TogetherRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> TogetherRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -402,7 +422,7 @@ impl<'a> TogetherRequest<'a> {
             tool_choice = Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto));
         }
 
-        Ok(TogetherRequest {
+        let mut together_request = TogetherRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -417,7 +437,11 @@ impl<'a> TogetherRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut together_request, &request.inference_params_v2);
+
+        Ok(together_request)
     }
 }
 

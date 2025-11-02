@@ -1353,6 +1353,7 @@ impl ChatCompletionInferenceParams {
         presence_penalty: Option<f32>,
         frequency_penalty: Option<f32>,
         stop_sequences: Option<Vec<String>>,
+        inference_params_v2: ChatCompletionInferenceParamsV2,
     ) {
         if self.temperature.is_none() {
             self.temperature = temperature;
@@ -1374,6 +1375,12 @@ impl ChatCompletionInferenceParams {
         }
         if self.stop_sequences.is_none() {
             self.stop_sequences = stop_sequences;
+        }
+        if self.inference_params_v2.reasoning_effort.is_none() {
+            self.inference_params_v2.reasoning_effort = inference_params_v2.reasoning_effort;
+        }
+        if self.inference_params_v2.verbosity.is_none() {
+            self.inference_params_v2.verbosity = inference_params_v2.verbosity;
         }
     }
 }

@@ -788,9 +788,9 @@ fn apply_inference_params(
     _request: &mut AnthropicRequestBody,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
-    // TODO: force handling of every parameter via trait?
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
 
-    // reasoning_content
+    // reasoning_effort
     if inference_params.reasoning_effort.is_some() {
         tracing::warn!(
             "{} does not support the inference parameter `reasoning_effort`, so it'll be ignored.",

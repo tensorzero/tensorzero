@@ -16,4 +16,6 @@ export type ChatCompletionConfig = {
   stop_sequences: Array<string> | null;
   json_mode: JsonMode | null;
   retries: RetryConfig;
+  reasoning_effort?: string;
+  verbosity?: string;
 };

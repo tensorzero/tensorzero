@@ -43,6 +43,9 @@ use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -1807,6 +1810,23 @@ struct GCPVertexGeminiRequest<'a> {
     // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
 }
 
+fn apply_inference_params(
+    _request: &mut GCPVertexGeminiRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO: force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> GCPVertexGeminiRequest<'a> {
     pub async fn new(
         request: &'a ModelInferenceRequest<'a>,
@@ -1872,7 +1892,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         } else {
             HashMap::new()
         };
-        Ok(GCPVertexGeminiRequest {
+        let mut gcp_vertex_gemini_request = GCPVertexGeminiRequest {
             contents,
             tools,
             tool_config,
@@ -1882,7 +1902,11 @@ impl<'a> GCPVertexGeminiRequest<'a> {
                 parts: vec![FlattenUnknown::Normal(content)],
             }),
             labels,
-        })
+        };
+
+        apply_inference_params(&mut gcp_vertex_gemini_request, &request.inference_params_v2);
+
+        Ok(gcp_vertex_gemini_request)
     }
 }
 

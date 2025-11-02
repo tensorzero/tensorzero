@@ -8,8 +8,18 @@ use serde::{Deserialize, Serialize};
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct ChatCompletionInferenceParamsV2 {
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+    #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
+}
+
+pub fn warn_inference_parameter_not_supported(model_provider_name: &str, parameter_name: &str) {
+    tracing::warn!(
+        "{} does not support the inference parameter `{}`, so it'll be ignored.",
+        model_provider_name,
+        parameter_name
+    );
 }

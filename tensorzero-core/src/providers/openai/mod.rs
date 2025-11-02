@@ -787,9 +787,9 @@ fn apply_inference_params(
     request: &mut OpenAIRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
-    // TODO: force handling of every parameter via trait?
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
 
-    // reasoning_content
+    // reasoning_effort
     if inference_params.reasoning_effort.is_some() {
         request.reasoning_effort = inference_params.reasoning_effort.clone();
     }

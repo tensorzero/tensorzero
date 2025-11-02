@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::providers::openai::OpenAIMessagesConfig;
 use crate::{
     http::TensorZeroEventSource, providers::helpers_thinking_block::THINK_CHUNK_ID, tool::Tool,
@@ -374,6 +377,23 @@ struct FireworksRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
 }
 
+fn apply_inference_params(
+    _request: &mut FireworksRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> FireworksRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -403,7 +423,7 @@ impl<'a> FireworksRequest<'a> {
         let (tools, tool_choice, _) = prepare_openai_tools(request);
         let tools = tools.map(|t| t.into_iter().map(OpenAITool::into).collect());
 
-        Ok(FireworksRequest {
+        let mut fireworks_request = FireworksRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -416,7 +436,11 @@ impl<'a> FireworksRequest<'a> {
             response_format,
             tools,
             tool_choice,
-        })
+        };
+
+        apply_inference_params(&mut fireworks_request, &request.inference_params_v2);
+
+        Ok(fireworks_request)
     }
 }
 

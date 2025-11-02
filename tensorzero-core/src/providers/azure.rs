@@ -17,6 +17,9 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
@@ -605,6 +608,23 @@ struct AzureRequest<'a> {
     tool_choice: Option<AzureToolChoice<'a>>,
 }
 
+fn apply_inference_params(
+    _request: &mut AzureRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> AzureRequest<'a> {
     pub async fn new(request: &'a ModelInferenceRequest<'_>) -> Result<AzureRequest<'a>, Error> {
         let response_format = AzureResponseFormat::new(request.json_mode, request.output_schema);
@@ -623,7 +643,7 @@ impl<'a> AzureRequest<'a> {
         )
         .await?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        Ok(AzureRequest {
+        let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,
             top_p: request.top_p,
@@ -636,7 +656,11 @@ impl<'a> AzureRequest<'a> {
             seed: request.seed,
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
-        })
+        };
+
+        apply_inference_params(&mut azure_request, &request.inference_params_v2);
+
+        Ok(azure_request)
     }
 }
 

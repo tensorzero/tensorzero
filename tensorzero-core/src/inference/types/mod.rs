@@ -44,24 +44,6 @@
 //!
 //! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
 //! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
-use crate::endpoints::object_storage::get_object;
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::file::Base64FileMetadata;
-use crate::inference::types::resolved_input::{
-    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
-    LazyResolvedInputMessageContent,
-};
-use crate::inference::types::storage::StorageKind;
-use crate::inference::types::stored_input::StoredFile;
-use crate::rate_limiting::{
-    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
-    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
-};
-use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
-};
-use crate::tool::ToolCallInput;
-use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
@@ -79,6 +61,7 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Borrow;
@@ -92,10 +75,28 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
+use crate::endpoints::object_storage::get_object;
 use crate::function::FunctionConfigType;
+use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::file::Base64FileMetadata;
+use crate::inference::types::resolved_input::{
+    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
+    LazyResolvedInputMessageContent,
+};
+use crate::inference::types::storage::StorageKind;
+use crate::inference::types::stored_input::StoredFile;
+use crate::rate_limiting::{
+    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
+    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+};
+use crate::serde_util::{
+    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
+};
 use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::ToolCallInput;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
+use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
 use crate::{cache::CacheData, config::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
 use crate::{
@@ -103,7 +104,6 @@ use crate::{
     error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
 };
 use crate::{error::Error, variant::JsonMode};
-use serde::de::Error as _;
 
 pub mod batch;
 pub mod chat_completion_inference_params;

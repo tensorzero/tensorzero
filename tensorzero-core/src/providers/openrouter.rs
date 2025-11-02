@@ -21,6 +21,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::file::require_image;
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
@@ -989,6 +992,23 @@ struct OpenRouterRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut OpenRouterRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> OpenRouterRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -1023,7 +1043,7 @@ impl<'a> OpenRouterRequest<'a> {
             }
         }
 
-        Ok(OpenRouterRequest {
+        let mut openrouter_request = OpenRouterRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -1039,7 +1059,11 @@ impl<'a> OpenRouterRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut openrouter_request, &request.inference_params_v2);
+
+        Ok(openrouter_request)
     }
 }
 

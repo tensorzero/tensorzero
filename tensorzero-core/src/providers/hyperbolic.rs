@@ -5,6 +5,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -323,6 +326,23 @@ struct HyperbolicRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut HyperbolicRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> HyperbolicRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -354,7 +374,7 @@ impl<'a> HyperbolicRequest<'a> {
             },
         )
         .await?;
-        Ok(HyperbolicRequest {
+        let mut hyperbolic_request = HyperbolicRequest {
             messages,
             model,
             frequency_penalty: *frequency_penalty,
@@ -365,7 +385,11 @@ impl<'a> HyperbolicRequest<'a> {
             temperature: *temperature,
             top_p: *top_p,
             stop: stop_sequences.clone(),
-        })
+        };
+
+        apply_inference_params(&mut hyperbolic_request, &request.inference_params_v2);
+
+        Ok(hyperbolic_request)
     }
 }
 

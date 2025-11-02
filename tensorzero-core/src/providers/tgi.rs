@@ -36,6 +36,9 @@ use crate::error::{Error, ErrorDetails};
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -441,6 +444,23 @@ struct TGIRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut TGIRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO: force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> TGIRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -478,7 +498,7 @@ impl<'a> TGIRequest<'a> {
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
-        Ok(TGIRequest {
+        let mut tgi_request = TGIRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -493,7 +513,11 @@ impl<'a> TGIRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut tgi_request, &request.inference_params_v2);
+
+        Ok(tgi_request)
     }
 }
 

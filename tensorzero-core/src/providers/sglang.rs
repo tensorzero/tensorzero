@@ -14,6 +14,9 @@ use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -555,6 +558,23 @@ struct SGLangRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut SGLangRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> SGLangRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -584,7 +604,7 @@ impl<'a> SGLangRequest<'a> {
         .await?;
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
-        Ok(SGLangRequest {
+        let mut sglang_request = SGLangRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -600,7 +620,11 @@ impl<'a> SGLangRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut sglang_request, &request.inference_params_v2);
+
+        Ok(sglang_request)
     }
 }
 

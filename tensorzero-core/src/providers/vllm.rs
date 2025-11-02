@@ -18,6 +18,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::Thought;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -323,6 +326,23 @@ struct VLLMRequest<'a> {
     parallel_tool_calls: Option<bool>,
 }
 
+fn apply_inference_params(
+    _request: &mut VLLMRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> VLLMRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -355,7 +375,7 @@ impl<'a> VLLMRequest<'a> {
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
-        Ok(VLLMRequest {
+        let mut vllm_request = VLLMRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -371,7 +391,11 @@ impl<'a> VLLMRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
-        })
+        };
+
+        apply_inference_params(&mut vllm_request, &request.inference_params_v2);
+
+        Ok(vllm_request)
     }
 }
 

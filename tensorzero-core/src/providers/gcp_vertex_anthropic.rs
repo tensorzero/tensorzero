@@ -24,6 +24,9 @@ use crate::error::{
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::file::require_image;
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
@@ -52,7 +55,6 @@ use super::helpers::{convert_stream_error, peek_first_chunk};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
-#[expect(unused)]
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
@@ -645,6 +647,23 @@ struct GCPVertexAnthropicRequestBody<'a> {
     tools: Option<Vec<GCPVertexAnthropicTool<'a>>>,
 }
 
+fn apply_inference_params(
+    _request: &mut GCPVertexAnthropicRequestBody,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO: force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> GCPVertexAnthropicRequestBody<'a> {
     async fn new(
         model_id: &'a str,
@@ -704,7 +723,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         }?;
 
         // NOTE: Anthropic does not support seed
-        Ok(GCPVertexAnthropicRequestBody {
+        let mut gcp_vertex_anthropic_request = GCPVertexAnthropicRequestBody {
             anthropic_version: ANTHROPIC_API_VERSION,
             messages,
             max_tokens,
@@ -715,7 +734,14 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             stop_sequences: request.borrow_stop_sequences(),
             tool_choice,
             tools,
-        })
+        };
+
+        apply_inference_params(
+            &mut gcp_vertex_anthropic_request,
+            &request.inference_params_v2,
+        );
+
+        Ok(gcp_vertex_anthropic_request)
     }
 }
 

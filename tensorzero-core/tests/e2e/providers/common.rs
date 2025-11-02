@@ -3796,6 +3796,8 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
                 "top_p": 0.9,
                 "presence_penalty": 0.1,
                 "frequency_penalty": 0.2,
+                "reasoning_effort": "low",
+                "verbosity": "low",
             }
         },
         "stream": false,
@@ -3939,6 +3941,14 @@ pub async fn check_inference_params_response(
         .as_f64()
         .unwrap();
     assert_eq!(frequency_penalty, 0.2);
+    let reasoning_effort = inference_params
+        .get("reasoning_effort")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(reasoning_effort, "low");
+    let verbosity = inference_params.get("verbosity").unwrap().as_str().unwrap();
+    assert_eq!(verbosity, "low");
 
     if is_batch {
         assert!(result.get("processing_time_ms").unwrap().is_null());
@@ -3968,10 +3978,28 @@ pub async fn check_inference_params_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
-    assert!(
-        serde_json::from_str::<Value>(raw_request).is_ok(),
-        "raw_request is not a valid JSON"
-    );
+    let raw_request_val: Value =
+        serde_json::from_str(raw_request).expect("raw_request is not a valid JSON");
+
+    // Check reasoning_effort in raw_request
+    let reasoning_effort = raw_request_val.get("reasoning_effort");
+    if let Some(reasoning_effort) = reasoning_effort {
+        assert_eq!(
+            reasoning_effort
+                .as_str()
+                .expect("reasoning_effort is not a string"),
+            "low"
+        );
+    }
+
+    // Check verbosity in raw_request
+    let verbosity = raw_request_val.get("verbosity");
+    if let Some(verbosity) = verbosity {
+        assert_eq!(
+            verbosity.as_str().expect("verbosity is not a string"),
+            "low"
+        );
+    }
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -4038,6 +4066,8 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
                 "top_p": 0.9,
                 "presence_penalty": 0.1,
                 "frequency_penalty": 0.2,
+                "reasoning_effort": "low",
+                "verbosity": "low",
             }
         },
         "stream": true,

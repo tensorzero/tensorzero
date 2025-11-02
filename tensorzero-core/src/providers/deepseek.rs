@@ -16,6 +16,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ProviderInferenceResponse,
@@ -363,6 +366,23 @@ struct DeepSeekRequest<'a> {
     response_format: Option<DeepSeekResponseFormat>,
 }
 
+fn apply_inference_params(
+    _request: &mut DeepSeekRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO (GabrielBianconi): force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> DeepSeekRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -410,7 +430,7 @@ impl<'a> DeepSeekRequest<'a> {
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
-        Ok(DeepSeekRequest {
+        let mut deepseek_request = DeepSeekRequest {
             messages,
             model,
             temperature,
@@ -425,7 +445,11 @@ impl<'a> DeepSeekRequest<'a> {
             response_format,
             tools,
             tool_choice,
-        })
+        };
+
+        apply_inference_params(&mut deepseek_request, &request.inference_params_v2);
+
+        Ok(deepseek_request)
     }
 }
 

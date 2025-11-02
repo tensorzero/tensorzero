@@ -22,6 +22,9 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -738,6 +741,23 @@ struct GeminiRequest<'a> {
     system_instruction: Option<GeminiContent<'a>>,
 }
 
+fn apply_inference_params(
+    _request: &mut GeminiRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO: force handling of every parameter via trait?
+
+    // reasoning_effort
+    if inference_params.reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+    }
+}
+
 impl<'a> GeminiRequest<'a> {
     pub async fn new(request: &'a ModelInferenceRequest<'a>) -> Result<Self, Error> {
         if request.messages.is_empty() {
@@ -788,7 +808,7 @@ impl<'a> GeminiRequest<'a> {
             response_mime_type,
             response_schema,
         });
-        Ok(GeminiRequest {
+        let mut gemini_request = GeminiRequest {
             contents,
             tools,
             tool_config,
@@ -801,7 +821,11 @@ impl<'a> GeminiRequest<'a> {
                     data: FlattenUnknown::Normal(content),
                 }],
             }),
-        })
+        };
+
+        apply_inference_params(&mut gemini_request, &request.inference_params_v2);
+
+        Ok(gemini_request)
     }
 }
 
