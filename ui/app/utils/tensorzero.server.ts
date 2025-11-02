@@ -19,7 +19,7 @@ export function getTensorZeroClient() {
 
   _tensorZeroClient = new TensorZeroClient(
     getEnv().TENSORZERO_GATEWAY_URL,
-    getEnv().TENSORZERO_GATEWAY_API_KEY,
+    getEnv().TENSORZERO_API_KEY,
   );
   return _tensorZeroClient;
 }

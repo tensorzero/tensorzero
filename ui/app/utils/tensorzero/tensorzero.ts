@@ -330,7 +330,6 @@ export class TensorZeroClient {
    */
   constructor(baseUrl: string, apiKey?: string | null) {
     // Remove any trailing slash for consistency.
-    console.log("API Key:", apiKey);
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.apiKey = apiKey ?? null;
   }
@@ -600,7 +599,6 @@ export class TensorZeroClient {
     // Add bearer auth for all endpoints except /status
     if (this.apiKey && path !== "/status") {
       headers.set("authorization", `Bearer ${this.apiKey}`);
-      console.log("Added authorization header");
     }
 
     return await fetch(url, { method, headers, body });
