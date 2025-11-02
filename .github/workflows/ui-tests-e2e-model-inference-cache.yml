@@ -24,6 +24,11 @@ on:
       is_merge_group:
         required: true
         type: boolean
+      force_no_auth:
+        description: 'Force auth_enabled to be false only (skip auth matrix)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +45,7 @@ jobs:
 
     strategy:
       matrix:
-        auth_enabled: ${{ inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]') }}
+        auth_enabled: ${{ inputs.force_no_auth && fromJSON('[false]') || (inputs.is_merge_group && fromJSON('[true, false]') || fromJSON('[false]')) }}
 
     steps:
       # TODO - investigate why using the Namespace checkout action causes
