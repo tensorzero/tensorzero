@@ -1,3 +1,14 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::{borrow::Cow, collections::HashMap, sync::Arc};
+use uuid::Uuid;
+
+use super::{
+    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, StoredInput, Usage,
+};
+
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::StoredRequestMessage;
 use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
 use crate::{
     endpoints::{
@@ -9,15 +20,6 @@ use crate::{
     tool::{ToolCallConfig, ToolCallConfigDatabaseInsert},
     utils::uuid::validate_tensorzero_uuid,
 };
-
-use super::{
-    ContentBlockOutput, FinishReason, ModelInferenceRequest, RequestMessage, StoredInput, Usage,
-};
-use crate::inference::types::StoredRequestMessage;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::{borrow::Cow, collections::HashMap, sync::Arc};
-use uuid::Uuid;
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -329,6 +331,10 @@ pub struct BatchChatCompletionInferenceParams {
     pub frequency_penalty: Option<Vec<Option<f32>>>,
     #[serde(default)]
     pub stop_sequences: Option<Vec<Vec<String>>>,
+    #[serde(default)]
+    pub reasoning_effort: Option<Vec<Option<String>>>,
+    #[serde(default)]
+    pub verbosity: Option<Vec<Option<String>>>,
 }
 
 pub struct BatchInferenceParamsWithSize(pub BatchInferenceParams, pub usize);
@@ -365,6 +371,8 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
             presence_penalty,
             frequency_penalty,
             stop_sequences,
+            reasoning_effort,
+            verbosity,
         } = params;
         // Verify all provided Vecs have the same length
         if let Some(temperature) = &temperature {
@@ -445,6 +453,32 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
             }
         }
 
+        if let Some(reasoning_effort) = &reasoning_effort {
+            if reasoning_effort.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "reasoning_effort vector length ({}) does not match number of inferences ({})",
+                        reasoning_effort.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
+        if let Some(verbosity) = &verbosity {
+            if verbosity.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "verbosity vector length ({}) does not match number of inferences ({})",
+                        verbosity.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
         // Convert Option<Vec<Option<T>>> into Vec<Option<T>> by unwrapping or creating empty vec
         let temperature = temperature.unwrap_or_default();
         let max_tokens = max_tokens.unwrap_or_default();
@@ -453,6 +487,8 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
         let presence_penalty = presence_penalty.unwrap_or_default();
         let frequency_penalty = frequency_penalty.unwrap_or_default();
         let stop_sequences = stop_sequences.unwrap_or_default();
+        let reasoning_effort = reasoning_effort.unwrap_or_default();
+        let verbosity = verbosity.unwrap_or_default();
 
         // Create iterators that take ownership
         let mut temperature_iter = temperature.into_iter();
@@ -462,6 +498,8 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
         let mut presence_penalty_iter = presence_penalty.into_iter();
         let mut frequency_penalty_iter = frequency_penalty.into_iter();
         let mut stop_sequences_iter = stop_sequences.into_iter();
+        let mut reasoning_effort_iter = reasoning_effort.into_iter();
+        let mut verbosity_iter = verbosity.into_iter();
 
         // Build params using the iterators
         let mut all_inference_params = Vec::with_capacity(num_inferences);
@@ -475,6 +513,10 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
                 frequency_penalty: frequency_penalty_iter.next().unwrap_or(None),
                 stop_sequences: stop_sequences_iter.next(),
                 json_mode: None,
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: reasoning_effort_iter.next().unwrap_or(None),
+                    verbosity: verbosity_iter.next().unwrap_or(None),
+                },
             });
         }
         Ok(all_inference_params)
@@ -604,6 +646,8 @@ mod tests {
                     presence_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     stop_sequences: None,
+                    reasoning_effort: None,
+                    verbosity: None,
                 },
             },
             3,
@@ -671,6 +715,8 @@ mod tests {
                     presence_penalty: Some(vec![Some(0.5)]), // Too short
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7), Some(0.8)]), // Too long
                     stop_sequences: None,
+                    reasoning_effort: None,
+                    verbosity: None,
                 },
             },
             3,
@@ -696,6 +742,8 @@ mod tests {
                     presence_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     stop_sequences: None,
+                    reasoning_effort: None,
+                    verbosity: None,
                 },
             },
             4, // Wrong size - arrays are length 3 but size is 4

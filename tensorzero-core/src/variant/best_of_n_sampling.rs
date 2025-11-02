@@ -796,6 +796,7 @@ impl BestOfNEvaluatorConfig {
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: inference_params.chat_completion.inference_params_v2.clone(),
             },
             skipped_indices,
         ))

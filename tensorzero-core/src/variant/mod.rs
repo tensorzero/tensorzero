@@ -649,6 +649,7 @@ fn prepare_model_inference_request<'request>(
                 fetch_and_encode_input_files_before_inference: inference_config
                     .fetch_and_encode_input_files_before_inference,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: inference_params.chat_completion.inference_params_v2.clone(),
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -692,6 +693,7 @@ fn prepare_model_inference_request<'request>(
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: inference_params.chat_completion.inference_params_v2.clone(),
             }
         }
     })
@@ -929,6 +931,7 @@ mod tests {
                 seed: Some(42),
                 json_mode: None,
                 stop_sequences: None,
+                ..Default::default()
             },
         };
 

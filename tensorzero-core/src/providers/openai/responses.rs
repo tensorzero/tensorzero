@@ -2176,6 +2176,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
+            ..Default::default()
         };
 
         let result = response.into_provider_response(
@@ -2274,6 +2275,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
+            ..Default::default()
         };
 
         let result = response.into_provider_response(

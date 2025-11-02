@@ -93,6 +93,7 @@ use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
 use crate::function::FunctionConfigType;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::tool::ToolCallConfigDatabaseInsert;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{cache::CacheData, config::ObjectStoreInfo};
@@ -105,6 +106,7 @@ use crate::{error::Error, variant::JsonMode};
 use serde::de::Error as _;
 
 pub mod batch;
+pub mod chat_completion_inference_params;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod file;
@@ -1174,6 +1176,8 @@ pub struct ModelInferenceRequest<'a> {
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
     pub extra_cache_key: Option<String>,
+    #[serde(flatten)]
+    pub inference_params_v2: ChatCompletionInferenceParamsV2,
 }
 
 impl<'a> ModelInferenceRequest<'a> {
@@ -1207,6 +1211,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             fetch_and_encode_input_files_before_inference: _,
             extra_headers: _,
             extra_cache_key: _,
+            inference_params_v2: _,
         } = self;
 
         let tokens = if resources.contains(&RateLimitResource::Token) {

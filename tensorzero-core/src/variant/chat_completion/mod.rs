@@ -1950,6 +1950,7 @@ mod tests {
                 frequency_penalty: Some(0.2),
                 json_mode: None,
                 stop_sequences: None,
+                ..Default::default()
             },
         };
         // Will dynamically set "answer" instead of "response"
@@ -2172,6 +2173,7 @@ mod tests {
                         frequency_penalty: Some(0.2),
                         json_mode: None,
                         stop_sequences: None,
+                        ..Default::default()
                     },
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
@@ -2560,6 +2562,7 @@ mod tests {
                 frequency_penalty: Some(0.2),
                 json_mode: None,
                 stop_sequences: None,
+                ..Default::default()
             },
         };
         let model_request = chat_completion_config

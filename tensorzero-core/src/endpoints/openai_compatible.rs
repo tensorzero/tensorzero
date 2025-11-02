@@ -34,6 +34,7 @@ use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
@@ -549,7 +550,7 @@ struct OpenAICompatibleStreamOptions {
     include_usage: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct OpenAICompatibleParams {
     messages: Vec<OpenAICompatibleMessage>,
     model: String,
@@ -567,6 +568,8 @@ pub struct OpenAICompatibleParams {
     top_p: Option<f32>,
     parallel_tool_calls: Option<bool>,
     stop: Option<Vec<String>>,
+    reasoning_effort: Option<String>,
+    verbosity: Option<String>,
     #[serde(rename = "tensorzero::variant_name")]
     tensorzero_variant_name: Option<String>,
     #[serde(rename = "tensorzero::dryrun")]
@@ -723,6 +726,10 @@ impl Params {
             frequency_penalty: openai_compatible_params.frequency_penalty,
             stop_sequences: openai_compatible_params.stop,
             json_mode,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: openai_compatible_params.reasoning_effort,
+                verbosity: openai_compatible_params.verbosity,
+            },
         };
         let inference_params = InferenceParams {
             chat_completion: chat_completion_inference_params,
@@ -1477,6 +1484,7 @@ mod tests {
             stop: None,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(params.function_name, Some("test_function".to_string()));
@@ -2173,6 +2181,7 @@ mod tests {
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(params.cache_options, CacheParamsOptions::default());
@@ -2212,6 +2221,7 @@ mod tests {
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(
@@ -2257,6 +2267,7 @@ mod tests {
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(
@@ -2302,6 +2313,7 @@ mod tests {
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(

@@ -32,7 +32,7 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
@@ -780,6 +780,23 @@ impl InferenceProvider for OpenAIProvider {
                 raw_response,
             }),
         }
+    }
+}
+
+fn apply_inference_params(
+    request: &mut OpenAIRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO: force handling of every parameter via trait?
+
+    // reasoning_content
+    if inference_params.reasoning_effort.is_some() {
+        request.reasoning_effort = inference_params.reasoning_effort.clone();
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        request.verbosity = inference_params.verbosity.clone();
     }
 }
 
@@ -1965,7 +1982,7 @@ pub(super) struct StreamOptions {
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct OpenAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -1994,6 +2011,10 @@ struct OpenAIRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
 }
 
 impl<'a> OpenAIRequest<'a> {
@@ -2043,7 +2064,7 @@ impl<'a> OpenAIRequest<'a> {
             }
         }
 
-        Ok(OpenAIRequest {
+        let mut openai_request = OpenAIRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -2059,7 +2080,13 @@ impl<'a> OpenAIRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+            reasoning_effort: None, // handled below
+            verbosity: None,        // handled below
+        };
+
+        apply_inference_params(&mut openai_request, &request.inference_params_v2);
+
+        Ok(openai_request)
     }
 }
 
@@ -3118,13 +3145,8 @@ mod tests {
             frequency_penalty: Some(0.5),
             max_completion_tokens: Some(100),
             seed: Some(69),
-            stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
-            stream_options: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -3216,13 +3238,8 @@ mod tests {
             frequency_penalty: Some(0.5),
             max_completion_tokens: Some(100),
             seed: Some(69),
-            stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
-            stream_options: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
@@ -3283,13 +3300,8 @@ mod tests {
             frequency_penalty: Some(0.2),
             max_completion_tokens: Some(100),
             seed: Some(69),
-            stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
-            stream_options: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
+            ..Default::default()
         };
         let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -3342,13 +3354,8 @@ mod tests {
             frequency_penalty: Some(0.2),
             max_completion_tokens: Some(100),
             seed: Some(69),
-            stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
-            stream_options: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
+            ..Default::default()
         };
         let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: invalid_response_multiple_choices,

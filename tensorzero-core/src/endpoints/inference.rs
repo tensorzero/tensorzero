@@ -32,6 +32,7 @@ use crate::experimentation::ExperimentationConfig;
 use crate::function::FunctionConfig;
 use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -1337,6 +1338,8 @@ pub struct ChatCompletionInferenceParams {
     pub json_mode: Option<JsonMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_sequences: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub inference_params_v2: ChatCompletionInferenceParamsV2,
 }
 
 impl ChatCompletionInferenceParams {

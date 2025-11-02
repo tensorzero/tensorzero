@@ -18,6 +18,7 @@ use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, E
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
@@ -764,7 +765,7 @@ impl<'a> AnthropicRequestBody<'a> {
         }?;
 
         // NOTE: Anthropic does not support seed
-        Ok(AnthropicRequestBody {
+        let mut anthropic_request = AnthropicRequestBody {
             model: model_name,
             messages,
             max_tokens,
@@ -775,7 +776,34 @@ impl<'a> AnthropicRequestBody<'a> {
             tool_choice,
             tools,
             stop_sequences: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut anthropic_request, &request.inference_params_v2);
+
+        Ok(anthropic_request)
+    }
+}
+
+fn apply_inference_params(
+    _request: &mut AnthropicRequestBody,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    // TODO: force handling of every parameter via trait?
+
+    // reasoning_content
+    if inference_params.reasoning_effort.is_some() {
+        tracing::warn!(
+            "{} does not support the inference parameter `reasoning_effort`, so it'll be ignored.",
+            PROVIDER_NAME
+        );
+    }
+
+    // verbosity
+    if inference_params.verbosity.is_some() {
+        tracing::warn!(
+            "{} does not support the inference parameter `verbosity`, so it'll be ignored.",
+            PROVIDER_NAME
+        );
     }
 }
 
