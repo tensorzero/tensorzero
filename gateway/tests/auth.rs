@@ -25,7 +25,7 @@ async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
         .expect("Failed to connect to PostgreSQL")
 }
 
-#[sqlx::test]
+#[tokio::test]
 async fn test_tensorzero_auth_enabled() {
     let pool = get_postgres_pool_for_testing().await;
     let child_data = start_gateway_on_random_port(
@@ -147,7 +147,7 @@ async fn test_tensorzero_unauthenticated_routes() {
     );
 }
 
-#[sqlx::test]
+#[tokio::test]
 async fn test_tensorzero_missing_auth() {
     let pool = get_postgres_pool_for_testing().await;
     let child_data = start_gateway_on_random_port(
@@ -291,7 +291,7 @@ async fn test_tensorzero_missing_auth() {
     }
 }
 
-#[sqlx::test]
+#[tokio::test]
 async fn test_auth_cache_hides_disabled_key_until_ttl() {
     let pool = get_postgres_pool_for_testing().await;
     // Test that a disabled key continues to work until the cache TTL expires (demonstrates caching trade-off)
@@ -393,7 +393,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     );
 }
 
-#[sqlx::test]
+#[tokio::test]
 async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
     let pool = get_postgres_pool_for_testing().await;
     // Test that when cache is disabled, disabled keys fail immediately (no delayed visibility)
@@ -466,7 +466,7 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
     );
 }
 
-#[sqlx::test]
+#[tokio::test]
 async fn test_auth_cache_requires_full_key_match() {
     let pool = get_postgres_pool_for_testing().await;
     // Test that the cache includes the secret portion of the API key, not just the public_id.
