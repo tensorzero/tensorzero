@@ -181,6 +181,9 @@ pub struct UninitializedDiclConfig {
     pub reasoning_effort: Option<String>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget_tokens: Option<i32>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
     pub json_mode: Option<JsonMode>,
     #[serde(default)]
@@ -914,6 +917,7 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             seed: self.seed,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: self.reasoning_effort,
+                thinking_budget_tokens: self.thinking_budget_tokens,
                 verbosity: self.verbosity,
             },
             json_mode: self.json_mode,

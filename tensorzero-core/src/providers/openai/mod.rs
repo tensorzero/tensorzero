@@ -32,7 +32,9 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
@@ -789,11 +791,20 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
     }
 
     if verbosity.is_some() {
@@ -4352,6 +4363,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
     async fn test_openai_apply_inference_params_called() {
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
@@ -4373,7 +4385,8 @@ mod tests {
             output_schema: None,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: Some("high".to_string()),
-                verbosity: Some("detailed".to_string()),
+                thinking_budget_tokens: Some(1024),
+                verbosity: Some("low".to_string()),
             },
             extra_body: Default::default(),
             ..Default::default()
@@ -4383,8 +4396,15 @@ mod tests {
             .await
             .expect("Failed to create OpenAI request");
 
-        // Verify that inference params were applied
+        // Test that reasoning_effort is applied correctly
         assert_eq!(openai_request.reasoning_effort, Some("high".to_string()));
-        assert_eq!(openai_request.verbosity, Some("detailed".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "OpenAI does not support the inference parameter `thinking_budget_tokens` Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity is applied correctly
+        assert_eq!(openai_request.verbosity, Some("low".to_string()));
     }
 }

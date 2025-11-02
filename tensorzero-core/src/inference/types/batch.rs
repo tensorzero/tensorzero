@@ -333,6 +333,8 @@ pub struct BatchChatCompletionInferenceParams {
     #[serde(default)]
     pub reasoning_effort: Option<Vec<Option<String>>>,
     #[serde(default)]
+    pub thinking_budget_tokens: Option<Vec<Option<i32>>>,
+    #[serde(default)]
     pub verbosity: Option<Vec<Option<String>>>,
 }
 
@@ -371,6 +373,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
             frequency_penalty,
             stop_sequences,
             reasoning_effort,
+            thinking_budget_tokens,
             verbosity,
         } = params;
         // Verify all provided Vecs have the same length
@@ -465,6 +468,19 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
             }
         }
 
+        if let Some(thinking_budget_tokens) = &thinking_budget_tokens {
+            if thinking_budget_tokens.len() != num_inferences {
+                return Err(ErrorDetails::InvalidRequest {
+                    message: format!(
+                        "thinking_budget_tokens vector length ({}) does not match number of inferences ({})",
+                        thinking_budget_tokens.len(),
+                        num_inferences
+                    ),
+                }
+                .into());
+            }
+        }
+
         if let Some(verbosity) = &verbosity {
             if verbosity.len() != num_inferences {
                 return Err(ErrorDetails::InvalidRequest {
@@ -487,6 +503,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
         let frequency_penalty = frequency_penalty.unwrap_or_default();
         let stop_sequences = stop_sequences.unwrap_or_default();
         let reasoning_effort = reasoning_effort.unwrap_or_default();
+        let thinking_budget_tokens = thinking_budget_tokens.unwrap_or_default();
         let verbosity = verbosity.unwrap_or_default();
 
         // Create iterators that take ownership
@@ -498,6 +515,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
         let mut frequency_penalty_iter = frequency_penalty.into_iter();
         let mut stop_sequences_iter = stop_sequences.into_iter();
         let mut reasoning_effort_iter = reasoning_effort.into_iter();
+        let mut thinking_budget_tokens_iter = thinking_budget_tokens.into_iter();
         let mut verbosity_iter = verbosity.into_iter();
 
         // Build params using the iterators
@@ -513,6 +531,7 @@ impl TryFrom<BatchChatCompletionParamsWithSize> for Vec<ChatCompletionInferenceP
                 stop_sequences: stop_sequences_iter.next(),
                 json_mode: None,
                 reasoning_effort: reasoning_effort_iter.next().unwrap_or(None),
+                thinking_budget_tokens: thinking_budget_tokens_iter.next().unwrap_or(None),
                 verbosity: verbosity_iter.next().unwrap_or(None),
             });
         }
@@ -644,6 +663,7 @@ mod tests {
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     stop_sequences: None,
                     reasoning_effort: None,
+                    thinking_budget_tokens: None,
                     verbosity: None,
                 },
             },
@@ -713,6 +733,7 @@ mod tests {
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7), Some(0.8)]), // Too long
                     stop_sequences: None,
                     reasoning_effort: None,
+                    thinking_budget_tokens: None,
                     verbosity: None,
                 },
             },
@@ -740,6 +761,7 @@ mod tests {
                     frequency_penalty: Some(vec![Some(0.5), Some(0.6), Some(0.7)]),
                     stop_sequences: None,
                     reasoning_effort: None,
+                    thinking_budget_tokens: None,
                     verbosity: None,
                 },
             },

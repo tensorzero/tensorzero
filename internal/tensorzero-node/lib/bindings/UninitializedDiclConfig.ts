@@ -17,6 +17,7 @@ export type UninitializedDiclConfig = {
   max_tokens: number | null;
   seed: number | null;
   reasoning_effort?: string;
+  thinking_budget_tokens?: number;
   verbosity?: string;
   json_mode: JsonMode | null;
   retries: RetryConfig;

@@ -868,7 +868,7 @@ pub(super) struct StreamOptions {
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct GroqRequest<'a> {
     messages: Vec<GroqRequestMessage<'a>>,
     model: &'a str,
@@ -907,6 +907,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
@@ -914,8 +915,16 @@ fn apply_inference_params(
         request.reasoning_effort = reasoning_effort.clone();
     }
 
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
     if verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
 }
 
@@ -2478,30 +2487,25 @@ mod tests {
     fn test_groq_apply_inference_params_called() {
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
-            verbosity: Some("detailed".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
         };
         let mut request = GroqRequest {
-            messages: vec![],
             model: "test-model",
-            temperature: None,
-            max_completion_tokens: None,
-            seed: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            stream: false,
-            stream_options: None,
-            response_format: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
-            reasoning_effort: None,
+            ..Default::default()
         };
 
         apply_inference_params(&mut request, &inference_params);
 
+        // Test that reasoning_effort is applied correctly
         assert_eq!(request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "Groq does not support the inference parameter `thinking_budget_tokens` Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity warns
         assert!(logs_contain(
             "Groq does not support the inference parameter `verbosity`"
         ));

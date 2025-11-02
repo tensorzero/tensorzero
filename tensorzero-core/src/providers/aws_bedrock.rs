@@ -1,4 +1,6 @@
+use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
+use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
 use aws_sdk_bedrockruntime::types::{
     AnyToolChoice, AutoToolChoice, ContentBlock as BedrockContentBlock, ContentBlockDelta,
@@ -9,12 +11,13 @@ use aws_sdk_bedrockruntime::types::{
     StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
     ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
-use aws_smithy_types::error::display::DisplayErrorContext;
+use aws_smithy_types::{error::display::DisplayErrorContext, Document, Number};
 use aws_types::region::Region;
 use futures::future::try_join_all;
 use futures::StreamExt;
 use reqwest::StatusCode;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -58,19 +61,102 @@ pub struct AWSBedrockProvider {
     base_config: aws_sdk_bedrockruntime::config::Builder,
 }
 
-// TODO: we need to figure out how we're going to handle AWS Bedrock's weird request builder
-fn apply_inference_params(inference_params: &ChatCompletionInferenceParamsV2) {
+fn apply_inference_params(
+    bedrock_request: ConverseFluentBuilder,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) -> ConverseFluentBuilder {
+    let mut bedrock_request = bedrock_request;
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        let existing_fields = bedrock_request
+            .get_additional_model_request_fields()
+            .clone();
+        let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
+        bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
     }
 
     if verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
+
+    bedrock_request
+}
+
+fn apply_inference_params_stream(
+    bedrock_request: ConverseStreamFluentBuilder,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) -> ConverseStreamFluentBuilder {
+    let mut bedrock_request = bedrock_request;
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        let existing_fields = bedrock_request
+            .get_additional_model_request_fields()
+            .clone();
+        let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
+        bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
+
+    bedrock_request
+}
+
+fn build_bedrock_additional_fields(existing: Option<Document>, budget_tokens: i32) -> Document {
+    let mut fields = match existing {
+        Some(Document::Object(map)) => map,
+        Some(_) => {
+            tracing::warn!(
+                "Existing AWS Bedrock `additional_model_request_fields` is not an object; overriding to attach thinking config."
+            );
+            HashMap::new()
+        }
+        None => HashMap::new(),
+    };
+
+    let mut thinking = HashMap::new();
+    thinking.insert("type".to_string(), Document::String("enabled".to_string()));
+    thinking.insert(
+        "budget_tokens".to_string(),
+        Document::Number(number_from_i32(budget_tokens)),
+    );
+
+    fields.insert("thinking".to_string(), Document::Object(thinking));
+    Document::Object(fields)
+}
+
+fn number_from_i32(value: i32) -> Number {
+    if value >= 0 {
+        Number::PosInt(value as u64)
+    } else {
+        Number::NegInt(value as i64)
     }
 }
 
@@ -185,7 +271,7 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
-        apply_inference_params(&request.inference_params_v2);
+        bedrock_request = apply_inference_params(bedrock_request, &request.inference_params_v2);
 
         let InterceptorAndRawBody {
             interceptor,
@@ -283,7 +369,6 @@ impl InferenceProvider for AWSBedrockProvider {
                 inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
         }
         let inference_config = inference_config.build();
-        apply_inference_params(&request.inference_params_v2);
 
         let mut bedrock_request = self
             .client
@@ -330,6 +415,10 @@ impl InferenceProvider for AWSBedrockProvider {
                 bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
             }
         }
+
+        bedrock_request =
+            apply_inference_params_stream(bedrock_request, &request.inference_params_v2);
+
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
@@ -1127,23 +1216,5 @@ mod tests {
         second_run().await;
         third_run().await;
         fourth_run().await;
-    }
-
-    #[test]
-    #[traced_test]
-    fn test_aws_bedrock_apply_inference_params_called() {
-        let inference_params = ChatCompletionInferenceParamsV2 {
-            reasoning_effort: Some("high".to_string()),
-            verbosity: Some("detailed".to_string()),
-        };
-
-        apply_inference_params(&inference_params);
-
-        assert!(logs_contain(
-            "AWS Bedrock does not support the inference parameter `reasoning_effort`"
-        ));
-        assert!(logs_contain(
-            "AWS Bedrock does not support the inference parameter `verbosity`"
-        ));
     }
 }

@@ -2,9 +2,13 @@ use std::borrow::Cow;
 use std::time::Duration;
 
 use crate::inference::types::{
-    chat_completion_inference_params::ChatCompletionInferenceParamsV2,
+    chat_completion_inference_params::{
+        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    },
     ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
 };
+
+const PROVIDER_NAME: &str = "OpenAI Responses";
 use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
@@ -458,6 +462,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
@@ -465,6 +470,14 @@ fn apply_inference_params(
         request.reasoning = Some(OpenAIResponsesReasoningConfig {
             effort: reasoning_effort.clone(),
         });
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
     }
 
     if verbosity.is_some() {
@@ -1310,10 +1323,12 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
-    use crate::inference::types::FunctionType;
-
     use super::*;
     use std::time::Duration;
+    use tracing_test::traced_test;
+    use uuid::Uuid;
+
+    use crate::inference::types::{FunctionType, ModelInferenceRequest, RequestMessage, Role};
 
     #[test]
     fn test_deserialize_response_created() {
@@ -2386,36 +2401,20 @@ mod tests {
     }
 
     #[tokio::test]
+    #[traced_test]
     async fn test_openai_responses_apply_inference_params_called() {
-        use crate::inference::types::{
-            FunctionType, ModelInferenceRequest, ModelInferenceRequestJsonMode, RequestMessage,
-            Role,
-        };
-        use uuid::Uuid;
-
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {
                 role: Role::User,
                 content: vec!["Test".to_string().into()],
             }],
-            system: None,
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stream: false,
-            json_mode: ModelInferenceRequestJsonMode::Off,
-            tool_config: None,
             function_type: FunctionType::Chat,
-            output_schema: None,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: Some("high".to_string()),
-                verbosity: Some("detailed".to_string()),
+                thinking_budget_tokens: Some(1024),
+                verbosity: Some("low".to_string()),
             },
-            extra_body: Default::default(),
             ..Default::default()
         };
 
@@ -2430,12 +2429,19 @@ mod tests {
         .await
         .expect("Failed to create OpenAI responses request");
 
-        // Verify that inference params were applied
+        // Verify that reasoning_effort is applied correctly
         assert!(openai_responses_request.reasoning.is_some());
         assert_eq!(
             openai_responses_request.reasoning.unwrap().effort,
             Some("high".to_string())
         );
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "OpenAI Responses does not support the inference parameter `thinking_budget_tokens` Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Verify that verbosity is applied correctly
         assert_eq!(
             openai_responses_request.text.verbosity,
             Some("detailed".to_string())

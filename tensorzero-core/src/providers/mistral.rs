@@ -516,15 +516,20 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "thinking_budget_tokens", None);
     }
 
     if verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
 }
 
@@ -1273,7 +1278,8 @@ mod tests {
     fn test_mistral_apply_inference_params_called() {
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
-            verbosity: Some("detailed".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
         };
         let mut request = MistralRequest {
             messages: vec![],
@@ -1293,9 +1299,17 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
+        // Test that reasoning_effort warns
         assert!(logs_contain(
             "Mistral does not support the inference parameter `reasoning_effort`"
         ));
+
+        // Test that thinking_budget_tokens warns
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `thinking_budget_tokens`"
+        ));
+
+        // Test that verbosity warns
         assert!(logs_contain(
             "Mistral does not support the inference parameter `verbosity`"
         ));

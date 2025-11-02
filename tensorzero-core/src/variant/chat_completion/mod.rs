@@ -131,6 +131,10 @@ impl ChatCompletionConfig {
         self.inference_params_v2.reasoning_effort.as_ref()
     }
 
+    pub fn thinking_budget_tokens(&self) -> Option<i32> {
+        self.inference_params_v2.thinking_budget_tokens
+    }
+
     pub fn verbosity(&self) -> Option<&String> {
         self.inference_params_v2.verbosity.as_ref()
     }
@@ -200,6 +204,9 @@ pub struct UninitializedChatCompletionConfig {
     pub reasoning_effort: Option<String>,
     #[cfg_attr(test, ts(optional))]
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget_tokens: Option<i32>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<String>,
     #[serde(default)]
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
@@ -233,6 +240,7 @@ impl UninitializedChatCompletionConfig {
             stop_sequences: self.stop_sequences,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: self.reasoning_effort,
+                thinking_budget_tokens: self.thinking_budget_tokens,
                 verbosity: self.verbosity,
             },
             json_mode: self.json_mode,

@@ -652,6 +652,7 @@ fn prepare_model_inference_request<'request>(
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 inference_params_v2: ChatCompletionInferenceParamsV2 {
                     reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
                     verbosity: inference_params.chat_completion.verbosity.clone(),
                 },
             }
@@ -699,6 +700,7 @@ fn prepare_model_inference_request<'request>(
                 extra_cache_key: inference_config.extra_cache_key.clone(),
                 inference_params_v2: ChatCompletionInferenceParamsV2 {
                     reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
                     verbosity: inference_params.chat_completion.verbosity.clone(),
                 },
             }

@@ -21,7 +21,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::file::require_image;
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
@@ -1000,11 +1002,20 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
     }
 
     if verbosity.is_some() {
@@ -1363,10 +1374,10 @@ fn openrouter_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
-
-    use std::borrow::Cow;
-
+    use super::*;
     use serde_json::json;
+    use std::borrow::Cow;
+    use tracing_test::traced_test;
 
     use crate::{
         inference::types::{FunctionType, RequestMessage},
@@ -1375,8 +1386,6 @@ mod tests {
         },
         tool::ToolCallConfig,
     };
-
-    use super::*;
 
     #[test]
     fn test_get_chat_url() {
@@ -2762,10 +2771,12 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_openrouter_apply_inference_params_called() {
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
-            verbosity: Some("detailed".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
         };
         let mut request = OpenRouterRequest {
             messages: vec![],
@@ -2789,7 +2800,15 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
+        // Test that reasoning_effort is applied correctly
         assert_eq!(request.reasoning_effort, Some("high".to_string()));
-        assert_eq!(request.verbosity, Some("detailed".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "OpenRouter does not support the inference parameter `thinking_budget_tokens` Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity is applied correctly
+        assert_eq!(request.verbosity, Some("low".to_string()));
     }
 }

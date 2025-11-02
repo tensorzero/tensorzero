@@ -1785,9 +1785,16 @@ enum GCPVertexGeminiResponseMimeType {
 // TODO (if needed): add the other options [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerationConfig)
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct GCPVertexGeminiThinkingConfig {
+    thinking_budget: i32,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiGenerationConfig<'a> {
     stop_sequences: Option<Cow<'a, [String]>>,
     temperature: Option<f32>,
+    thinking_config: Option<GCPVertexGeminiThinkingConfig>,
     max_output_tokens: Option<u32>,
     top_p: Option<f32>,
     presence_penalty: Option<f32>,
@@ -1811,20 +1818,33 @@ struct GCPVertexGeminiRequest<'a> {
 }
 
 fn apply_inference_params(
-    _request: &mut GCPVertexGeminiRequest,
+    request: &mut GCPVertexGeminiRequest,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        if let Some(gen_config) = &mut request.generation_config {
+            gen_config.thinking_config = Some(GCPVertexGeminiThinkingConfig {
+                thinking_budget: *budget_tokens,
+            });
+        }
     }
 
     if verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
 }
 
@@ -1873,6 +1893,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         let generation_config = Some(GCPVertexGeminiGenerationConfig {
             stop_sequences: request.borrow_stop_sequences(),
             temperature: request.temperature,
+            thinking_config: None,
             max_output_tokens: request.max_tokens,
             seed: request.seed,
             top_p: request.top_p,
@@ -4607,7 +4628,8 @@ mod tests {
     fn test_gcp_vertex_gemini_apply_inference_params_called() {
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
-            verbosity: Some("detailed".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
         };
         let mut request = GCPVertexGeminiRequest {
             contents: vec![],
@@ -4620,9 +4642,22 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
+        // Test that reasoning_effort warns with tip about thinking_budget_tokens
         assert!(logs_contain(
-            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort`"
+            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort` Tip: You might want to use `thinking_budget_tokens` for this provider."
         ));
+
+        // Test that thinking_budget_tokens is applied correctly in generation_config
+        assert!(request.generation_config.is_some());
+        let gen_config = request.generation_config.unwrap();
+        assert_eq!(
+            gen_config.thinking_config,
+            Some(GCPVertexGeminiThinkingConfig {
+                thinking_budget: 1024,
+            })
+        );
+
+        // Test that verbosity warns
         assert!(logs_contain(
             "GCP Vertex Gemini does not support the inference parameter `verbosity`"
         ));

@@ -2,5 +2,6 @@
 
 export type ChatCompletionInferenceParamsV2 = {
   reasoning_effort?: string;
+  thinking_budget_tokens?: number;
   verbosity?: string;
 };

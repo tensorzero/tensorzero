@@ -25,5 +25,6 @@ export type DiclConfig = {
   retries: RetryConfig;
   max_distance: number | null;
   reasoning_effort?: string;
+  thinking_budget_tokens?: number;
   verbosity?: string;
 };

@@ -625,6 +625,12 @@ enum GCPVertexAnthropicSystemBlock<'a> {
     },
 }
 
+#[derive(Debug, PartialEq, Serialize)]
+struct GCPVertexAnthropicThinkingConfig {
+    r#type: &'static str,
+    budget_tokens: i32,
+}
+
 #[derive(Debug, Default, PartialEq, Serialize)]
 struct GCPVertexAnthropicRequestBody<'a> {
     anthropic_version: &'static str,
@@ -638,6 +644,8 @@ struct GCPVertexAnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<GCPVertexAnthropicThinkingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
@@ -648,20 +656,32 @@ struct GCPVertexAnthropicRequestBody<'a> {
 }
 
 fn apply_inference_params(
-    _request: &mut GCPVertexAnthropicRequestBody,
+    request: &mut GCPVertexAnthropicRequestBody,
     inference_params: &ChatCompletionInferenceParamsV2,
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort");
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        request.thinking = Some(GCPVertexAnthropicThinkingConfig {
+            r#type: "enabled",
+            budget_tokens: *budget_tokens,
+        });
     }
 
     if verbosity.is_some() {
-        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity");
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
 }
 
@@ -731,6 +751,7 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
+            thinking: None,
             top_p: request.top_p,
             stop_sequences: request.borrow_stop_sequences(),
             tool_choice,
@@ -1570,11 +1591,7 @@ mod tests {
                 system: Some(vec![GCPVertexAnthropicSystemBlock::Text {
                     text: "test_system"
                 }]),
-                temperature: None,
-                top_p: None,
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -1643,9 +1660,7 @@ mod tests {
                 }]),
                 temperature: Some(0.5),
                 top_p: Some(0.9),
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -1721,7 +1736,7 @@ mod tests {
                     description: Some(WEATHER_TOOL.description()),
                     input_schema: WEATHER_TOOL.parameters(),
                 }]),
-                stop_sequences: None,
+                ..Default::default()
             }
         );
     }
@@ -2210,15 +2225,10 @@ mod tests {
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
-            system: None,
             messages: vec![],
             stream: Some(false),
             max_tokens: 1000,
-            temperature: None,
-            top_p: None,
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test response".to_string();
@@ -2304,15 +2314,9 @@ mod tests {
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
-            system: None,
             messages: vec![],
-            stream: Some(false),
             max_tokens: 1000,
-            temperature: None,
-            top_p: None,
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
@@ -2397,15 +2401,9 @@ mod tests {
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
-            system: None,
             messages: vec![],
-            stream: Some(false),
             max_tokens: 1000,
-            temperature: None,
-            top_p: None,
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
@@ -2831,15 +2829,28 @@ mod tests {
     fn test_gcp_vertex_anthropic_apply_inference_params_called() {
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
-            verbosity: Some("detailed".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
         };
         let mut request = GCPVertexAnthropicRequestBody::default();
 
         apply_inference_params(&mut request, &inference_params);
 
+        // Test that reasoning_effort warns with tip about thinking_budget_tokens
         assert!(logs_contain(
-            "GCP Vertex Anthropic does not support the inference parameter `reasoning_effort`"
+            "GCP Vertex Anthropic does not support the inference parameter `reasoning_effort` Tip: You might want to use `thinking_budget_tokens` for this provider."
         ));
+
+        // Test that thinking_budget_tokens is applied correctly
+        assert_eq!(
+            request.thinking,
+            Some(GCPVertexAnthropicThinkingConfig {
+                r#type: "enabled",
+                budget_tokens: 1024,
+            })
+        );
+
+        // Test that verbosity warns
         assert!(logs_contain(
             "GCP Vertex Anthropic does not support the inference parameter `verbosity`"
         ));

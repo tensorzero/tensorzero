@@ -17,7 +17,9 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
-use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
@@ -616,11 +618,20 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
     }
 
     if verbosity.is_some() {
@@ -796,13 +807,13 @@ impl<'a> AzureEmbeddingRequest<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use secrecy::SecretString;
     use std::borrow::Cow;
     use std::collections::HashMap;
     use std::time::Duration;
+    use tracing_test::traced_test;
     use uuid::Uuid;
-
-    use super::*;
 
     use crate::config::SKIP_CREDENTIAL_VALIDATION;
     use crate::inference::types::{
@@ -1129,10 +1140,12 @@ mod tests {
     }
 
     #[test]
+    #[traced_test]
     fn test_azure_apply_inference_params_called() {
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
-            verbosity: Some("detailed".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
         };
         let mut request = AzureRequest {
             messages: vec![],
@@ -1153,7 +1166,15 @@ mod tests {
 
         apply_inference_params(&mut request, &inference_params);
 
+        // Test that reasoning_effort is applied correctly
         assert_eq!(request.reasoning_effort, Some("high".to_string()));
-        assert_eq!(request.verbosity, Some("detailed".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "Azure does not support the inference parameter `thinking_budget_tokens` Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity is applied correctly
+        assert_eq!(request.verbosity, Some("low".to_string()));
     }
 }
