@@ -600,6 +600,7 @@ export class TensorZeroClient {
     // Add bearer auth for all endpoints except /status
     if (this.apiKey && path !== "/status") {
       headers.set("authorization", `Bearer ${this.apiKey}`);
+      console.log("Added authorization header");
     }
 
     return await fetch(url, { method, headers, body });
