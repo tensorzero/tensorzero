@@ -1,4 +1,4 @@
-use crate::serde_util::{deserialize_json_string, deserialize_optional_json_string};
+use crate::serde_util::deserialize_json_string;
 use crate::{
     endpoints::{
         batch_inference::{BatchEpisodeIdInput, BatchOutputSchemas},
@@ -6,7 +6,7 @@ use crate::{
     },
     error::{Error, ErrorDetails},
     jsonschema_util::DynamicJSONSchema,
-    tool::{ToolCallConfig, ToolCallConfigDatabaseInsert},
+    tool::{deserialize_optional_tool_info, ToolCallConfig, ToolCallConfigDatabaseInsert},
     utils::uuid::validate_tensorzero_uuid,
 };
 
@@ -204,8 +204,7 @@ pub struct BatchModelInferenceRow<'a> {
     #[serde(deserialize_with = "deserialize_json_string")]
     pub input_messages: Vec<StoredRequestMessage>,
     pub system: Option<Cow<'a, str>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(deserialize_with = "deserialize_optional_json_string")]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(deserialize_with = "deserialize_json_string")]
     pub inference_params: Cow<'a, InferenceParams>,

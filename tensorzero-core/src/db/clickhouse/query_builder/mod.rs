@@ -548,7 +548,7 @@ mod tests {
         ContentBlockChatOutput, JsonInferenceOutput, StoredInput, System,
     };
     use crate::stored_inference::StoredInferenceDatabase;
-    use crate::tool::ToolCallConfigDatabaseInsert;
+    use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfigDatabaseInsert};
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
     use super::*;
@@ -2036,11 +2036,16 @@ FORMAT JSONEachRow";
         assert!(chat_inference.dispreferred_outputs.is_empty());
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            }
+            ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::None,
+                Some(false),
+            )
         );
 
         // Test the Python version (singly serialized)
@@ -2077,11 +2082,16 @@ FORMAT JSONEachRow";
         );
         assert_eq!(
             chat_inference.tool_params,
-            ToolCallConfigDatabaseInsert {
-                tools_available: vec![],
-                tool_choice: ToolChoice::None,
-                parallel_tool_calls: Some(false),
-            }
+            ToolCallConfigDatabaseInsert::new_for_test(
+                vec![],
+                vec![],
+                AllowedTools {
+                    tools: vec![],
+                    choice: AllowedToolsChoice::FunctionDefault,
+                },
+                ToolChoice::None,
+                Some(false),
+            )
         );
         assert!(chat_inference.dispreferred_outputs.is_empty());
     }

@@ -20,7 +20,9 @@ use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, Role, StoredInput, StoredInputMessage,
     StoredInputMessageContent, System, Text,
 };
-use tensorzero_core::tool::{ToolCallConfigDatabaseInsert, ToolChoice};
+use tensorzero_core::tool::{
+    AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolChoice,
+};
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -69,12 +71,20 @@ async fn test_datapoint_full_tool_params_round_trip() {
     };
 
     // Create tool_params in storage format (ToolCallConfigDatabaseInsert)
-    // This has ALL tools in tools_available (merged static + dynamic)
-    let tool_params = Some(ToolCallConfigDatabaseInsert {
-        tools_available: vec![get_temp_tool, custom_tool],
-        tool_choice: ToolChoice::Specific("get_temperature".to_string()),
-        parallel_tool_calls: Some(false),
-    });
+    // This has ALL tools in dynamic_tools (merged static + dynamic)
+    let tool_params = Some(ToolCallConfigDatabaseInsert::new_for_test(
+        vec![
+            Tool::ClientSideFunction(get_temp_tool.clone()),
+            Tool::ClientSideFunction(custom_tool.clone()),
+        ],
+        vec![],
+        AllowedTools {
+            tools: vec![get_temp_tool.name.clone(), custom_tool.name.clone()],
+            choice: AllowedToolsChoice::DynamicAllowedTools,
+        },
+        ToolChoice::Specific("get_temperature".to_string()),
+        Some(false),
+    ));
 
     // Create datapoint via ClickHouse
     let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
@@ -197,11 +207,16 @@ async fn test_datapoint_update_tool_params() {
         strict: false,
     };
 
-    let original_tool_params = Some(ToolCallConfigDatabaseInsert {
-        tools_available: vec![get_temp_tool],
-        tool_choice: ToolChoice::Auto,
-        parallel_tool_calls: Some(false),
-    });
+    let original_tool_params = Some(ToolCallConfigDatabaseInsert::new_for_test(
+        vec![Tool::ClientSideFunction(get_temp_tool.clone())],
+        vec![],
+        AllowedTools {
+            tools: vec![get_temp_tool.name.clone()],
+            choice: AllowedToolsChoice::DynamicAllowedTools,
+        },
+        ToolChoice::Auto,
+        Some(false),
+    ));
 
     let datapoint_insert = DatapointInsert::Chat(ChatInferenceDatapointInsert {
         dataset_name: dataset_name.clone(),
@@ -393,11 +408,16 @@ async fn test_list_datapoints_with_tool_params() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![base_tool.clone()],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![Tool::ClientSideFunction(base_tool.clone())],
+            vec![],
+            AllowedTools {
+                tools: vec![base_tool.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -422,11 +442,19 @@ async fn test_list_datapoints_with_tool_params() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![base_tool.clone(), custom_tool_1],
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: Some(false),
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![
+                Tool::ClientSideFunction(base_tool.clone()),
+                Tool::ClientSideFunction(custom_tool_1.clone()),
+            ],
+            vec![],
+            AllowedTools {
+                tools: vec![base_tool.name.clone(), custom_tool_1.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Required,
+            Some(false),
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -451,11 +479,19 @@ async fn test_list_datapoints_with_tool_params() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![base_tool, custom_tool_2],
-            tool_choice: ToolChoice::None,
-            parallel_tool_calls: Some(true),
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![
+                Tool::ClientSideFunction(base_tool.clone()),
+                Tool::ClientSideFunction(custom_tool_2.clone()),
+            ],
+            vec![],
+            AllowedTools {
+                tools: vec![base_tool.name.clone(), custom_tool_2.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::None,
+            Some(true),
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -563,11 +599,16 @@ async fn test_datapoint_only_static_tools() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![static_tool],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![Tool::ClientSideFunction(static_tool.clone())],
+            vec![],
+            AllowedTools {
+                tools: vec![static_tool.name.clone()],
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -659,12 +700,19 @@ async fn test_datapoint_only_dynamic_tools() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            // In storage, both tools are in tools_available
-            tools_available: vec![static_tool, dynamic_tool],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![
+                Tool::ClientSideFunction(static_tool.clone()),
+                Tool::ClientSideFunction(dynamic_tool.clone()),
+            ],
+            vec![],
+            AllowedTools {
+                tools: vec![static_tool.name.clone(), dynamic_tool.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,
@@ -746,11 +794,16 @@ async fn test_datapoint_tool_params_three_states() {
             }],
         },
         output: None,
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![tool],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-        }),
+        tool_params: Some(ToolCallConfigDatabaseInsert::new_for_test(
+            vec![Tool::ClientSideFunction(tool.clone())],
+            vec![],
+            AllowedTools {
+                tools: vec![tool.name.clone()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Auto,
+            None,
+        )),
         tags: None,
         auxiliary: String::new(),
         staled_at: None,

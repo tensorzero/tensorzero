@@ -97,27 +97,40 @@ mod tests {
     use std::collections::{HashMap, HashSet};
 
     use serde_json::json;
-    use tensorzero::ClientSideFunctionTool;
+    use tensorzero::{ClientSideFunctionTool, DynamicToolParams};
     use tensorzero_core::{
-        config::SchemaData, experimentation::ExperimentationConfig, function::FunctionConfigChat,
-        tool::ToolChoice,
+        config::SchemaData,
+        experimentation::ExperimentationConfig,
+        function::{FunctionConfig, FunctionConfigChat},
+        tool::{AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolChoice},
     };
 
-    use super::*;
+    fn get_tool_params_args(
+        tool_database_insert: &ToolCallConfigDatabaseInsert,
+        function_config: &FunctionConfig,
+    ) -> DynamicToolParams {
+        function_config.database_insert_to_dynamic_tool_params(tool_database_insert.clone())
+    }
 
     #[tokio::test]
     async fn test_get_tool_params_args() {
         // Dynamic tool params with tool_choice set to "tool_1"
-        let tool_database_insert = ToolCallConfigDatabaseInsert {
-            tool_choice: ToolChoice::Specific("tool_1".to_string()),
-            parallel_tool_calls: None,
-            tools_available: vec![ClientSideFunctionTool {
+        // Function has no tools, tool_1 is provided dynamically
+        let tool_database_insert = ToolCallConfigDatabaseInsert::new_for_test(
+            vec![Tool::ClientSideFunction(ClientSideFunctionTool {
                 name: "tool_1".to_string(),
                 description: "Tool 1".to_string(),
                 parameters: json!({}),
                 strict: true,
-            }],
-        };
+            })],
+            vec![],
+            AllowedTools {
+                tools: vec![],  // Explicitly empty (no static tools)
+                choice: AllowedToolsChoice::DynamicAllowedTools,
+            },
+            ToolChoice::Specific("tool_1".to_string()),
+            None,
+        );
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -128,7 +141,7 @@ mod tests {
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
         });
-        let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
+        let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config);
         assert_eq!(
             tool_params_args,
             DynamicToolParams {
@@ -141,21 +154,22 @@ mod tests {
                     parameters: json!({}),
                     strict: true,
                 }]),
-                provider_tools: None,
+                provider_tools: Some(vec![]),  // Empty vec, not None
             }
         );
 
         // Static tool params with a tool choice set to required
-        let tool_database_insert = ToolCallConfigDatabaseInsert {
-            tool_choice: ToolChoice::Required,
-            parallel_tool_calls: None,
-            tools_available: vec![ClientSideFunctionTool {
-                name: "tool_1".to_string(),
-                description: "Tool 1".to_string(),
-                parameters: json!({}),
-                strict: true,
-            }],
-        };
+        // tool_1 is in function config (static), so don't store in dynamic_tools
+        let tool_database_insert = ToolCallConfigDatabaseInsert::new_for_test(
+            vec![],  // Empty - tool_1 is static
+            vec![],
+            AllowedTools {
+                tools: vec!["tool_1".to_string()],
+                choice: AllowedToolsChoice::DynamicAllowedTools,  // Explicit list
+            },
+            ToolChoice::Required,
+            None,
+        );
         let function_config = FunctionConfig::Chat(FunctionConfigChat {
             variants: HashMap::new(),
             schemas: SchemaData::default(),
@@ -166,15 +180,15 @@ mod tests {
             all_explicit_templates_names: HashSet::new(),
             experimentation: ExperimentationConfig::legacy_from_variants_map(&HashMap::new()),
         });
-        let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config).await;
+        let tool_params_args = get_tool_params_args(&tool_database_insert, &function_config);
         assert_eq!(
             tool_params_args,
             DynamicToolParams {
                 tool_choice: Some(ToolChoice::Required),
                 parallel_tool_calls: None,
                 allowed_tools: Some(vec!["tool_1".to_string()]),
-                additional_tools: Some(vec![]),
-                provider_tools: None,
+                additional_tools: None,  // Empty dynamic_tools becomes None
+                provider_tools: Some(vec![]),
             }
         );
     }

@@ -1765,7 +1765,7 @@ pub struct UpdateChatInferenceDatapointRequest {
     #[serde(default)]
     #[serde(deserialize_with = "deserialize_optional_json_value")]
     pub output: Option<serde_json::Value>,
-    #[serde(default)]
+    #[serde(flatten, deserialize_with = "deserialize_optional_tool_info")]
     pub tool_params: Option<ToolCallConfigDatabaseInsert>,
     #[serde(default)]
     pub tags: Option<HashMap<String, String>>,
@@ -1885,11 +1885,17 @@ mod test {
 
     #[test]
     fn test_synthetic_chat_datapoint_with_some_output() {
+        // Test with tool config fields flattened at top level (new Migration 0041 format)
         let json_str = r#"{
             "function_name": "test_function",
             "input": {"system": {"assistant_name": "Test"}, "messages": []},
             "output": [{"type": "text", "value": "Hello"}],
-            "tool_params": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
+            "tool_config": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
+            "dynamic_tools": [],
+            "dynamic_provider_tools": [],
+            "allowed_tools": {"tools": [], "choice": "function_default"},
+            "tool_choice": "auto",
+            "parallel_tool_calls": false,
             "tags": {"source": "test"},
             "auxiliary": "extra data",
             "is_custom": true

@@ -738,6 +738,81 @@ impl ToolCallConfigDatabaseInsert {
         }
     }
 
+    /// Creates a `ToolCallConfigDatabaseInsert` for testing purposes.
+    ///
+    /// # Understanding the Data Model
+    ///
+    /// `ToolCallConfigDatabaseInsert` stores tool configuration for database persistence.
+    /// The key insight is that **static tools are NOT stored** - they come from the function
+    /// config and are reconstructed when converting back to `ToolCallConfig`.
+    ///
+    /// ## Fields Explained
+    ///
+    /// - **`dynamic_tools`**: Tools provided at runtime (not in function config).
+    ///   These are the *only* tool definitions we store in the database.
+    ///
+    /// - **`allowed_tools`**: Which tools (by name) are allowed to be used.
+    ///   - `tools`: List of tool names (can be static, dynamic, or mixed)
+    ///   - `choice`: How the allowed tools were determined:
+    ///     - `FunctionDefault`: Use function's default tool list
+    ///     - `DynamicAllowedTools`: Explicitly specified tool list (possibly different from function defaults)
+    ///
+    /// ## Conversion Back to DynamicToolParams
+    ///
+    /// When `database_insert_to_dynamic_tool_params()` is called:
+    /// - If `choice == FunctionDefault` → `allowed_tools = None` (use function defaults)
+    /// - If `choice == DynamicAllowedTools` → `allowed_tools = Some(tools)` (explicit override)
+    /// - `additional_tools = Some(dynamic_tools)` if dynamic_tools is non-empty, else None
+    ///
+    /// ## Test Scenarios
+    ///
+    /// **Scenario 1: Only static tools (from function config)**
+    /// ```
+    /// // Function has: tools = ["tool1", "tool2"]
+    /// // User doesn't provide additional tools, just uses the function's tools
+    /// ToolCallConfigDatabaseInsert::new_for_test(
+    ///     vec![],  // No dynamic tools
+    ///     vec![],
+    ///     AllowedTools {
+    ///         tools: vec!["tool1".to_string(), "tool2".to_string()],
+    ///         choice: AllowedToolsChoice::DynamicAllowedTools,  // Explicit list
+    ///     },
+    ///     ...
+    /// )
+    /// // Converts back to: allowed_tools=Some(["tool1", "tool2"]), additional_tools=None
+    /// ```
+    ///
+    /// **Scenario 2: Only dynamic tools (not in function config)**
+    /// ```
+    /// // Function has: tools = ["static1"]
+    /// // User provides new tools at runtime
+    /// ToolCallConfigDatabaseInsert::new_for_test(
+    ///     vec![Tool::ClientSideFunction(dynamic1), Tool::ClientSideFunction(dynamic2)],
+    ///     vec![],
+    ///     AllowedTools {
+    ///         tools: vec![],  // Empty because these are dynamic, not in function config
+    ///         choice: AllowedToolsChoice::DynamicAllowedTools,
+    ///     },
+    ///     ...
+    /// )
+    /// // Converts back to: allowed_tools=Some([]), additional_tools=Some([dynamic1, dynamic2])
+    /// ```
+    ///
+    /// **Scenario 3: Mixed static and dynamic tools**
+    /// ```
+    /// // Function has: tools = ["a", "b"]
+    /// // User also provides dynamic tools x, y
+    /// ToolCallConfigDatabaseInsert::new_for_test(
+    ///     vec![Tool::ClientSideFunction(x), Tool::ClientSideFunction(y)],
+    ///     vec![],
+    ///     AllowedTools {
+    ///         tools: vec!["a".to_string(), "b".to_string()],
+    ///         choice: AllowedToolsChoice::DynamicAllowedTools,
+    ///     },
+    ///     ...
+    /// )
+    /// // Converts back to: allowed_tools=Some(["a", "b"]), additional_tools=Some([x, y])
+    /// ```
     #[cfg(any(test, feature = "e2e_tests"))]
     pub fn new_for_test(
         dynamic_tools: Vec<Tool>,

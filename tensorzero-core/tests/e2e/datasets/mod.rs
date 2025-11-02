@@ -16,6 +16,7 @@ use tensorzero_core::{
     },
     endpoints::datasets::{DatapointKind, CLICKHOUSE_DATETIME_FORMAT},
     inference::types::{ContentBlockChatOutput, StoredInputMessageContent},
+    tool::Tool,
 };
 
 use uuid::Uuid;
@@ -334,9 +335,9 @@ async fn test_create_delete_datapoint_chat() {
         // Verify tool_params if present
         if let Some(tool_params) = &datapoint.tool_params {
             assert!(is_tool);
-            let tools_available = &tool_params.tools_available;
+            let tools_available = &tool_params.dynamic_tools;
             assert!(!tools_available.is_empty());
-            let first_tool = tools_available[0].clone();
+            let Tool::ClientSideFunction(first_tool) = &tools_available[0];
             assert_eq!(first_tool.name, "get_temperature");
             assert_eq!(
                 first_tool.description,
