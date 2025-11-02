@@ -108,6 +108,7 @@ export * from "./GCPVertexAnthropicProvider";
 export * from "./GCPVertexGeminiProvider";
 export * from "./GCPVertexGeminiSFTConfig";
 export * from "./GCPVertexGeminiSFTJobHandle";
+export * from "./GatewayAuthCacheConfig";
 export * from "./GatewayConfig";
 export * from "./GetAdjacentDatapointIdsParams";
 export * from "./GetCumulativeFeedbackTimeseriesParams";
