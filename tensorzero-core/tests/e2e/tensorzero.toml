@@ -141,9 +141,6 @@ routing = ["anthropic-extra-body"]
 [models."claude-3-7-sonnet-20250219-thinking".providers.anthropic-extra-body]
 type = "anthropic"
 model_name = "claude-3-7-sonnet-20250219"
-extra_body = [
-    { pointer = "/thinking", value = { type = "enabled", budget_tokens = 1024 } },
-]
 
 [models."claude-3-7-sonnet-20250219-thinking-128k"]
 routing = ["anthropic"]
@@ -1039,6 +1036,7 @@ type = "chat_completion"
 model = "claude-3-7-sonnet-20250219-thinking-aws-bedrock"
 system_template = "../../fixtures/config/functions/basic_test/prompt/system_template.minijinja"
 max_tokens = 2048
+thinking_budget_tokens = 1024
 
 [functions.basic_test.variants.aws-bedrock-deepseek-r1]
 type = "chat_completion"
@@ -3136,7 +3134,7 @@ type = "chat_completion"
 weight = 0
 model = "claude-3-7-sonnet-20250219-thinking"
 system_template = "../../fixtures/config/functions/weather_helper/prompt/system_template.minijinja"
-# This must be at least as large as `thinking.budget_tokens`
+thinking_budget_tokens = 1024
 max_tokens = 1200
 
 [functions.weather_helper.variants.variant]

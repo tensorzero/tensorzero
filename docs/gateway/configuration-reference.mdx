@@ -2683,6 +2683,12 @@ Only some model providers support this parameter. TensorZero will warn and ignor
 
 </Warning>
 
+<Tip>
+
+Some providers (e.g. Anthropic, Gemini) support `thinking_budget_tokens` instead.
+
+</Tip>
+
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]
 # ...
@@ -2763,11 +2769,20 @@ temperature = 0.5
 
 Controls the thinking budget in tokens for reasoning models.
 
+For Anthropic, this value corresponds to `thinking.budget_tokens`.
+For Gemini, this value corresponds to `generationConfig.thinkingConfig.thinkingBudget`.
+
 <Warning>
 
 Only some model providers support this parameter. TensorZero will warn and ignore it if unsupported.
 
 </Warning>
+
+<Tip>
+
+Some providers (e.g. OpenAI) support `reasoning_effort` instead.
+
+</Tip>
 
 ```toml title="tensorzero.toml"
 [functions.draft-email.variants.prompt-v1]

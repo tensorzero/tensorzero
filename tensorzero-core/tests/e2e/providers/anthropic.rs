@@ -270,11 +270,6 @@ async fn test_thinking_inference_extra_header_128k() {
                     "content": "Output a haiku that ends in the word 'my_custom_stop'"
                 }
             ]},
-        "params": {
-            "chat_completion": {
-                "max_tokens": 128000,
-            }
-        },
         "extra_headers": [
             {
                 "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
@@ -285,24 +280,21 @@ async fn test_thinking_inference_extra_header_128k() {
         "extra_body": [
             {
                 "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
-                "pointer": "/thinking",
-                // We use a budget tokens of 1024 to make sure that it doesn't think for too long,
-                // since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
-                // to 128k in 'test_thinking_128k'
-                "value": {
-                    "type": "enabled",
-                    "budget_tokens": 1024,
-                }
-            },
-            {
-                "model_provider_name": "tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic",
                 "pointer": "/stop_sequences",
                 "value": [
                     "my_custom_stop",
                 ]
             }
         ],
-        "stream": false,
+        // We use a budget tokens of 1024 to make sure that it doesn't think for too long,
+        // since 'stop_sequences' does not seem to apply to thinking. We set 'max_tokens'
+        // to 128k in 'test_thinking_128k'
+        "params": {
+            "chat_completion": {
+                "max_tokens": 128000,
+                "thinking_budget_tokens": 1024,
+            }
+        },
     });
 
     let response = test_thinking_helper(&client, &payload).await;
@@ -320,12 +312,14 @@ async fn test_thinking_inference_extra_header_128k() {
         .await
         .unwrap();
 
-    // Check that 'extra_body' was written out correctly to ClickHouse (we don't store 'extra_headers'))
+    // Check that thinking_budget_tokens was stored correctly
+    let inference_params: Value =
+        serde_json::from_str(result["inference_params"].as_str().unwrap()).unwrap();
+    println!("inference_params: {inference_params:?}");
     assert_eq!(
-        result["extra_body"],
-        r#"[{"model_provider_name":"tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic","pointer":"/thinking","value":{"type":"enabled","budget_tokens":1024}},{"model_provider_name":"tensorzero::model_name::anthropic::claude-3-7-sonnet-20250219::provider_name::anthropic","pointer":"/stop_sequences","value":["my_custom_stop"]}]"#
+        inference_params["chat_completion"]["thinking_budget_tokens"],
+        1024
     );
-    // We don't check anything else in the database, as we already do that in lots of places.
 }
 
 #[tokio::test]
