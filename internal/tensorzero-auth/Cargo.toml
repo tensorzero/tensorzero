@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 hex = "0.4.3"
 secrecy.workspace = true
+serde.workspace = true
 sha2 = "0.10.9"
 # Unfortunately, this cannot be a workspace dependency, since renaming the 'sqlx' package breaks all of the macros
 # (which emit '::sqlx' tokens)
@@ -16,6 +17,7 @@ thiserror = "2.0.17"
 rand = { workspace = true }
 chrono.workspace = true
 futures = { workspace = true }
+ts-rs.workspace = true
 
 [lints]
 workspace = true

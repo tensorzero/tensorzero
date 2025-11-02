@@ -155,6 +155,8 @@ pub struct ClientBuilder {
     mode: ClientBuilderMode,
     http_client: Option<reqwest::Client>,
     verbose_errors: bool,
+    api_key: Option<String>,
+    timeout: Option<Duration>,
 }
 
 /// An error type representing an error from within the TensorZero gateway
@@ -262,6 +264,8 @@ impl ClientBuilder {
             mode,
             http_client: None,
             verbose_errors: false,
+            api_key: None,
+            timeout: None,
         }
     }
 
@@ -281,6 +285,21 @@ impl ClientBuilder {
     /// This is `false` by default.
     pub fn with_verbose_errors(mut self, verbose_errors: bool) -> Self {
         self.verbose_errors = verbose_errors;
+        self
+    }
+
+    /// Sets the API key to use for authentication with the TensorZero gateway.
+    /// This is only used in `HTTPGateway` mode.
+    /// If not set, the client will attempt to read from the `TENSORZERO_API_KEY` environment variable.
+    pub fn with_api_key(mut self, api_key: String) -> Self {
+        self.api_key = Some(api_key);
+        self
+    }
+
+    /// Sets the timeout for HTTP requests to the TensorZero gateway.
+    /// This is only used in `HTTPGateway` mode.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 
@@ -457,10 +476,71 @@ impl ClientBuilder {
         if !url.path().ends_with('/') {
             url.set_path(&format!("{}/", url.path()));
         }
+
+        // Try to get API key from constructor parameter, otherwise try environment variable
+        let api_key = self.api_key.or_else(|| env::var("TENSORZERO_API_KEY").ok());
+
+        // Build the HTTP client, applying timeout and/or API key
+        let http_client = if let Some(client) = self.http_client {
+            // Use custom client provided by advanced users
+
+            // TODO: Later we can decide if we want to override the custom HTTP clients.
+
+            if self.timeout.is_some() {
+                tracing::warn!("A timeout is set but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the timeout to the custom client.");
+            }
+
+            if api_key.is_some() {
+                tracing::warn!("A TensorZero API key is available but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the authentication header to the custom client.");
+            }
+
+            client
+        } else {
+            // Build client from scratch, composing timeout and api_key
+            let mut builder = reqwest::Client::builder();
+
+            // Apply timeout if provided
+            if let Some(timeout) = self.timeout {
+                builder = builder.timeout(timeout);
+            }
+
+            // Apply API key as default Authorization header if provided
+            if let Some(ref key) = api_key {
+                let mut headers = HeaderMap::new();
+                headers.insert(
+                    reqwest::header::AUTHORIZATION,
+                    reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")).map_err(
+                        |e| {
+                            ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                                source: tensorzero_core::error::Error::new(
+                                    ErrorDetails::InternalError {
+                                        message: format!(
+                                            "Failed to create authorization header: {e}"
+                                        ),
+                                    },
+                                )
+                                .into(),
+                            })
+                        },
+                    )?,
+                );
+                builder = builder.default_headers(headers);
+            }
+
+            builder.build().map_err(|e| {
+                ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to build HTTP client: {e}"),
+                    })
+                    .into(),
+                })
+            })?
+        };
+
         Ok(Client {
             mode: Arc::new(ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
-                http_client: self.http_client.unwrap_or_default(),
+                http_client,
                 gateway_version: Mutex::new(None),
             })),
             verbose_errors: self.verbose_errors,
