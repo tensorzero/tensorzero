@@ -1016,8 +1016,6 @@ pub async fn test_start_inference_params_batch_inference_request_with_provider(
                 "top_p": [0.9],
                 "presence_penalty": [0.1],
                 "frequency_penalty": [0.2],
-                "reasoning_effort": ["low"],
-                "verbosity": ["low"],
             },
             "fake_variant_type": {
                 "temperature": [0.8],
