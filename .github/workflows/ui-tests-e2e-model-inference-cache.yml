@@ -209,20 +209,12 @@ jobs:
             exit 1
           }
 
-          echo "Starting gateway postgres migrations..."
-          docker compose -f fixtures/docker-compose.e2e.yml up gateway-postgres-migrations -d
-
-          echo "Tailing migration logs while waiting for completion..."
-          # Tail logs in background
-          docker compose -f fixtures/docker-compose.e2e.yml logs -f gateway-postgres-migrations &
-          LOGS_PID=$!
-
-          # Wait for migrations to complete
-          docker compose -f fixtures/docker-compose.e2e.yml wait gateway-postgres-migrations
-
-          # Stop tailing logs
-          kill $LOGS_PID 2>/dev/null || true
-          wait $LOGS_PID 2>/dev/null || true
+          echo "Running gateway postgres migrations..."
+          docker run --rm \
+            --network fixtures_default \
+            -e TENSORZERO_POSTGRES_URL="postgres://postgres:postgres@postgres:5432/tensorzero_ui_fixtures" \
+            tensorzero/gateway:sha-${{ github.sha }} \
+            --run-postgres-migrations
 
           echo "Migrations complete"
 
