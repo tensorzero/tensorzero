@@ -326,7 +326,7 @@ impl ToolCallConfig {
         // Make a set for all names in additional tools
         let additional_tool_names: HashSet<&str> = dynamic_additional_tools
             .as_ref()
-            .map(|tools| tools.iter().map(|t| t.name()).collect())
+            .map(|tools| tools.iter().map(Tool::name).collect())
             .unwrap_or_default();
 
         // Get each tool from the static tool config.
@@ -579,14 +579,14 @@ where
                     .get("dynamic_tools")
                     .ok_or_else(|| de::Error::missing_field("dynamic_tools"))?;
                 let dynamic_tools: Vec<Tool> = serde_json::from_value(dynamic_tools_value.clone())
-                    .map_err(|e| de::Error::custom(format!("invalid dynamic_tools: {}", e)))?;
+                    .map_err(|e| de::Error::custom(format!("invalid dynamic_tools: {e}")))?;
 
                 let dynamic_provider_tools_value = values
                     .get("dynamic_provider_tools")
                     .ok_or_else(|| de::Error::missing_field("dynamic_provider_tools"))?;
                 let dynamic_provider_tools: Vec<ProviderTool> =
                     serde_json::from_value(dynamic_provider_tools_value.clone()).map_err(|e| {
-                        de::Error::custom(format!("invalid dynamic_provider_tools: {}", e))
+                        de::Error::custom(format!("invalid dynamic_provider_tools: {e}"))
                     })?;
 
                 let allowed_tools_value = values
@@ -594,13 +594,13 @@ where
                     .ok_or_else(|| de::Error::missing_field("allowed_tools"))?;
                 let allowed_tools: AllowedTools =
                     serde_json::from_value(allowed_tools_value.clone())
-                        .map_err(|e| de::Error::custom(format!("invalid allowed_tools: {}", e)))?;
+                        .map_err(|e| de::Error::custom(format!("invalid allowed_tools: {e}")))?;
 
                 let tool_choice_value = values
                     .get("tool_choice")
                     .ok_or_else(|| de::Error::missing_field("tool_choice"))?;
                 let tool_choice: ToolChoice = serde_json::from_value(tool_choice_value.clone())
-                    .map_err(|e| de::Error::custom(format!("invalid tool_choice: {}", e)))?;
+                    .map_err(|e| de::Error::custom(format!("invalid tool_choice: {e}")))?;
 
                 let parallel_tool_calls: Option<bool> = values
                     .get("parallel_tool_calls")
@@ -611,33 +611,39 @@ where
                             serde_json::from_value::<bool>(v.clone())
                                 .map(Some)
                                 .map_err(|e| {
-                                    de::Error::custom(format!("invalid parallel_tool_calls: {}", e))
+                                    de::Error::custom(format!("invalid parallel_tool_calls: {e}"))
                                 })
                         }
                     })
                     .transpose()?
                     .flatten();
                 // The tool params are serialized as a string in ClickHouse
-                // but an Object in Python
-                let tool_config_value = values
-                    .get("tool_params")
-                    .ok_or_else(|| de::Error::missing_field("tool_params"))?;
-
+                // but an Object in Python. In the full format, tool_params is optional
+                // since the data is stored in the decomposed fields.
                 let tool_config: LegacyToolCallConfigDatabaseInsert =
-                    if let Some(tool_config_str) = tool_config_value.as_str() {
-                        // Handle string case (ClickHouse serialization)
-                        // ClickHouse empty string is None
-                        if tool_config_str.is_empty() {
-                            return Ok(None);
+                    if let Some(tool_config_value) = values.get("tool_params") {
+                        // Handle null case
+                        if tool_config_value.is_null() {
+                            LegacyToolCallConfigDatabaseInsert::default()
+                        } else if let Some(tool_config_str) = tool_config_value.as_str() {
+                            // Handle string case (ClickHouse serialization)
+                            // ClickHouse empty string is None
+                            if tool_config_str.is_empty() {
+                                LegacyToolCallConfigDatabaseInsert::default()
+                            } else {
+                                serde_json::from_str(tool_config_str).map_err(|e| {
+                                    de::Error::custom(format!("invalid tool_params string: {e}"))
+                                })?
+                            }
+                        } else {
+                            // Handle object case (Python serialization)
+                            serde_json::from_value(tool_config_value.clone()).map_err(|e| {
+                                de::Error::custom(format!("invalid tool_params object: {e}"))
+                            })?
                         }
-                        serde_json::from_str(tool_config_str).map_err(|e| {
-                            de::Error::custom(format!("invalid tool_params string: {}", e))
-                        })?
                     } else {
-                        // Handle object case (Python serialization)
-                        serde_json::from_value(tool_config_value.clone()).map_err(|e| {
-                            de::Error::custom(format!("invalid tool_params object: {}", e))
-                        })?
+                        // tool_params not present - use default
+                        LegacyToolCallConfigDatabaseInsert::default()
                     };
                 Ok(Some(ToolCallConfigDatabaseInsert {
                     dynamic_tools,
@@ -653,6 +659,12 @@ where
                 let tool_config_value = values
                     .get("tool_params")
                     .ok_or_else(|| de::Error::missing_field("tool_params"))?;
+
+                // Handle null case - return None if tool_params is explicitly null
+                if tool_config_value.is_null() {
+                    return Ok(None);
+                }
+
                 let tool_config: LegacyToolCallConfigDatabaseInsert =
                     if let Some(tool_config_str) = tool_config_value.as_str() {
                         // Handle string case (ClickHouse serialization)
@@ -661,12 +673,12 @@ where
                             return Ok(None);
                         }
                         serde_json::from_str(tool_config_str).map_err(|e| {
-                            de::Error::custom(format!("invalid tool_params string: {}", e))
+                            de::Error::custom(format!("invalid tool_params string: {e}"))
                         })?
                     } else {
                         // Handle object case (Python serialization)
                         serde_json::from_value(tool_config_value.clone()).map_err(|e| {
-                            de::Error::custom(format!("invalid tool_params object: {}", e))
+                            de::Error::custom(format!("invalid tool_params object: {e}"))
                         })?
                     };
 
@@ -697,7 +709,7 @@ pub fn deserialize_tool_info<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    deserialize_optional_tool_info(deserializer).map(|opt| opt.unwrap_or_default())
+    deserialize_optional_tool_info(deserializer).map(Option::unwrap_or_default)
 }
 
 impl std::fmt::Display for ToolCallConfigDatabaseInsert {
@@ -879,7 +891,7 @@ impl ToolCallConfigDatabaseInsert {
                 // Use the function's configured tool names
                 function_config
                     .tools()
-                    .map(|s| s.to_string())
+                    .map(str::to_string)
                     .collect::<Vec<_>>()
             }
             AllowedToolsChoice::DynamicAllowedTools => {

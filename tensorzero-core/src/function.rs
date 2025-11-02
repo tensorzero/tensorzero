@@ -91,7 +91,7 @@ impl FunctionConfig {
 
     pub fn tools(&self) -> Box<dyn Iterator<Item = &str> + '_> {
         match self {
-            FunctionConfig::Chat(config) => Box::new(config.tools.iter().map(|s| s.as_str())),
+            FunctionConfig::Chat(config) => Box::new(config.tools.iter().map(String::as_str)),
             FunctionConfig::Json(_config) => Box::new(std::iter::empty()),
         }
     }
@@ -2458,11 +2458,11 @@ mod tests {
             // Static tools are NOT stored in dynamic_tools, only their names in allowed_tools
             let function_config = create_chat_function(vec!["tool1", "tool2"]);
             let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![],  // No dynamic tools - these are static from function config
+                vec![], // No dynamic tools - these are static from function config
                 vec![],
                 AllowedTools {
                     tools: vec!["tool1".to_string(), "tool2".to_string()],
-                    choice: AllowedToolsChoice::DynamicAllowedTools,  // Explicit list
+                    choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
                 },
                 ToolChoice::Required,
                 Some(false),
@@ -2484,8 +2484,8 @@ mod tests {
                 ],
                 vec![],
                 AllowedTools {
-                    tools: vec![],  // Empty, will use function's defaults (static1)
-                    choice: AllowedToolsChoice::FunctionDefault,  // Use function defaults
+                    tools: vec![], // Empty, will use function's defaults (static1)
+                    choice: AllowedToolsChoice::FunctionDefault, // Use function defaults
                 },
                 ToolChoice::None,
                 Some(true),
@@ -2512,7 +2512,7 @@ mod tests {
                 ],
                 vec![],
                 AllowedTools {
-                    tools: vec!["a".to_string(), "b".to_string()],  // Only static tools
+                    tools: vec!["a".to_string(), "b".to_string()], // Only static tools
                     choice: AllowedToolsChoice::DynamicAllowedTools,
                 },
                 ToolChoice::Auto,
@@ -2556,7 +2556,7 @@ mod tests {
                 ],
                 vec![],
                 AllowedTools {
-                    tools: vec![],  // Function has no defaults
+                    tools: vec![], // Function has no defaults
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::Auto,
@@ -2580,7 +2580,7 @@ mod tests {
                 ToolChoice::Specific("tool1".to_string()),
             ] {
                 let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                    vec![],  // Empty - tool1 is static
+                    vec![], // Empty - tool1 is static
                     vec![],
                     AllowedTools {
                         tools: vec!["tool1".to_string()],
@@ -2596,7 +2596,7 @@ mod tests {
             // Test parallel_tool_calls variants
             for ptc in [None, Some(true), Some(false)] {
                 let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                    vec![],  // Empty - tool1 is static
+                    vec![], // Empty - tool1 is static
                     vec![],
                     AllowedTools {
                         tools: vec!["tool1".to_string()],
@@ -2611,8 +2611,8 @@ mod tests {
 
             // Test provider_tools are preserved (no longer lossy!)
             let db_insert = ToolCallConfigDatabaseInsert::new_for_test(
-                vec![],  // Empty - tool1 is static
-                vec![],  // Empty provider tools
+                vec![], // Empty - tool1 is static
+                vec![], // Empty provider tools
                 AllowedTools {
                     tools: vec!["tool1".to_string()],
                     choice: AllowedToolsChoice::DynamicAllowedTools,
@@ -2642,7 +2642,7 @@ mod tests {
                 vec![Tool::ClientSideFunction(tool.clone())],
                 vec![],
                 AllowedTools {
-                    tools: vec![],  // Function has no defaults
+                    tools: vec![], // Function has no defaults
                     choice: AllowedToolsChoice::FunctionDefault,
                 },
                 ToolChoice::Auto,

@@ -125,7 +125,7 @@ mod tests {
             })],
             vec![],
             AllowedTools {
-                tools: vec![],  // Explicitly empty (no static tools)
+                tools: vec![], // Explicitly empty (no static tools)
                 choice: AllowedToolsChoice::DynamicAllowedTools,
             },
             ToolChoice::Specific("tool_1".to_string()),
@@ -154,18 +154,18 @@ mod tests {
                     parameters: json!({}),
                     strict: true,
                 }]),
-                provider_tools: Some(vec![]),  // Empty vec, not None
+                provider_tools: Some(vec![]), // Empty vec, not None
             }
         );
 
         // Static tool params with a tool choice set to required
         // tool_1 is in function config (static), so don't store in dynamic_tools
         let tool_database_insert = ToolCallConfigDatabaseInsert::new_for_test(
-            vec![],  // Empty - tool_1 is static
+            vec![], // Empty - tool_1 is static
             vec![],
             AllowedTools {
                 tools: vec!["tool_1".to_string()],
-                choice: AllowedToolsChoice::DynamicAllowedTools,  // Explicit list
+                choice: AllowedToolsChoice::DynamicAllowedTools, // Explicit list
             },
             ToolChoice::Required,
             None,
@@ -187,7 +187,7 @@ mod tests {
                 tool_choice: Some(ToolChoice::Required),
                 parallel_tool_calls: None,
                 allowed_tools: Some(vec!["tool_1".to_string()]),
-                additional_tools: None,  // Empty dynamic_tools becomes None
+                additional_tools: None, // Empty dynamic_tools becomes None
                 provider_tools: Some(vec![]),
             }
         );

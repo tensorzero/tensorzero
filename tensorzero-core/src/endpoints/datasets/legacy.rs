@@ -1756,7 +1756,6 @@ where
 //
 // TODO(shuyangli): this is currently being manually kept in sync with `ChatInferenceDatapoint`. Can we fix this?
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct UpdateChatInferenceDatapointRequest {
     pub function_name: String,
     #[serde(default)]
@@ -1890,7 +1889,7 @@ mod test {
             "function_name": "test_function",
             "input": {"system": {"assistant_name": "Test"}, "messages": []},
             "output": [{"type": "text", "value": "Hello"}],
-            "tool_config": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
+            "tool_params": {"tools_available": [], "tool_choice": "auto", "parallel_tool_calls": false},
             "dynamic_tools": [],
             "dynamic_provider_tools": [],
             "allowed_tools": {"tools": [], "choice": "function_default"},
