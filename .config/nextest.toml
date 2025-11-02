@@ -25,7 +25,6 @@ slow-timeout = { period = "20s", terminate-after = 3 }
 # The profile can be set with '--profile <profile-name>' when using 'cargo nextest run',
 # We also define cargo aliases for common use-cases (e.g. `cargo test-e2e`)
 [profile.e2e]
-fail-fast = false
 retries = { backoff = "exponential", count = 4, delay = "5s", jitter = true, max-delay = "60s" }
 default-filter = "not (test(batch)) and not (test(test_dummy_only) | test(clickhouse) | test(db::))"
 junit.path = "junit.xml"

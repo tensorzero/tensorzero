@@ -2439,11 +2439,13 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         })
         .await;
 
-    if "anthropic" == provider.model_provider_name.as_str() {
+    if provider.model_provider_name.as_str() == "anthropic"
+        || provider.model_provider_name.as_str() == "gcp_vertex_anthropic"
+    {
         // Anthropic rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
-    } else if "openai-responses" == provider.variant_name.as_str() {
+    } else if provider.variant_name.as_str() == "openai-responses" {
         // OpenAI Responses rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
@@ -2451,14 +2453,16 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         let _ = res.unwrap();
     }
 
-    if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
+    if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic"]
+        .contains(&provider.model_provider_name.as_str())
+    {
         assert!(
-            !logs_contain("does not support input thought blocks"),
+            !logs_contain("TensorZero doesn't support input thought blocks for the"),
             "Should not have warned about dropping thought blocks"
         );
     } else {
         assert!(
-            logs_contain("does not support input thought blocks"),
+            logs_contain("TensorZero doesn't support input thought blocks for the"),
             "Missing expected warning"
         );
     }
@@ -3814,8 +3818,6 @@ pub async fn test_inference_params_inference_request_with_provider(provider: E2E
                 "top_p": 0.9,
                 "presence_penalty": 0.1,
                 "frequency_penalty": 0.2,
-                "reasoning_effort": "low",
-                "verbosity": "low",
             }
         },
         "stream": false,
@@ -3959,14 +3961,6 @@ pub async fn check_inference_params_response(
         .as_f64()
         .unwrap();
     assert_eq!(frequency_penalty, 0.2);
-    let reasoning_effort = inference_params
-        .get("reasoning_effort")
-        .unwrap()
-        .as_str()
-        .unwrap();
-    assert_eq!(reasoning_effort, "low");
-    let verbosity = inference_params.get("verbosity").unwrap().as_str().unwrap();
-    assert_eq!(verbosity, "low");
 
     if is_batch {
         assert!(result.get("processing_time_ms").unwrap().is_null());
@@ -3996,28 +3990,10 @@ pub async fn check_inference_params_response(
 
     let raw_request = result.get("raw_request").unwrap().as_str().unwrap();
     assert!(raw_request.to_lowercase().contains("japan"));
-    let raw_request_val: Value =
-        serde_json::from_str(raw_request).expect("raw_request is not a valid JSON");
-
-    // Check reasoning_effort in raw_request
-    let reasoning_effort = raw_request_val.get("reasoning_effort");
-    if let Some(reasoning_effort) = reasoning_effort {
-        assert_eq!(
-            reasoning_effort
-                .as_str()
-                .expect("reasoning_effort is not a string"),
-            "low"
-        );
-    }
-
-    // Check verbosity in raw_request
-    let verbosity = raw_request_val.get("verbosity");
-    if let Some(verbosity) = verbosity {
-        assert_eq!(
-            verbosity.as_str().expect("verbosity is not a string"),
-            "low"
-        );
-    }
+    assert!(
+        serde_json::from_str::<Value>(raw_request).is_ok(),
+        "raw_request is not a valid JSON"
+    );
 
     let raw_response = result.get("raw_response").unwrap().as_str().unwrap();
     assert!(raw_response.to_lowercase().contains("tokyo"));
@@ -4051,11 +4027,7 @@ pub async fn check_inference_params_response(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert!(
-        output.len() == 1 || output.len() == 2,
-        "Expected 1 or 2 content blocks in ModelInference output, got {}",
-        output.len()
-    );
+    assert_eq!(output.len(), 1);
 }
 
 pub async fn test_inference_params_streaming_inference_request_with_provider(
@@ -4088,8 +4060,6 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
                 "top_p": 0.9,
                 "presence_penalty": 0.1,
                 "frequency_penalty": 0.2,
-                "reasoning_effort": "low",
-                "verbosity": "low",
             }
         },
         "stream": true,
@@ -4147,11 +4117,8 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
             let content_block = content_blocks.first().unwrap();
-            let block_type = content_block.get("type").unwrap().as_str().unwrap();
-            if block_type == "text" {
-                let content = content_block.get("text").unwrap().as_str().unwrap();
-                full_content.push_str(content);
-            }
+            let content = content_block.get("text").unwrap().as_str().unwrap();
+            full_content.push_str(content);
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -4214,15 +4181,11 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert!(
-        output.len() == 1 || output.len() == 2,
-        "Expected 1 or 2 content blocks, got {}",
-        output.len()
-    );
-    let text_block = output.last().unwrap();
-    let content_block_type = text_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(output.len(), 1);
+    let content_block = output.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let clickhouse_content = text_block.get("text").unwrap().as_str().unwrap();
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, full_content);
 
     let tool_params = result.get("tool_params").unwrap().as_str().unwrap();
@@ -4333,11 +4296,7 @@ pub async fn test_inference_params_streaming_inference_request_with_provider(
     assert_eq!(input_messages, expected_input_messages);
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<StoredContentBlock> = serde_json::from_str(output).unwrap();
-    assert!(
-        output.len() == 1 || output.len() == 2,
-        "Expected 1 or 2 content blocks in ModelInference output, got {}",
-        output.len()
-    );
+    assert_eq!(output.len(), 1);
 }
 
 pub async fn test_tool_use_tool_choice_auto_used_inference_request_with_provider(
@@ -8533,11 +8492,8 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
         let content_blocks = chunk_json.get("content").unwrap().as_array().unwrap();
         if !content_blocks.is_empty() {
             let content_block = content_blocks.first().unwrap();
-            let block_type = content_block.get("type").unwrap().as_str().unwrap();
-            if block_type == "text" {
-                let content = content_block.get("text").unwrap().as_str().unwrap();
-                full_content.push_str(content);
-            }
+            let content = content_block.get("text").unwrap().as_str().unwrap();
+            full_content.push_str(content);
         }
 
         if let Some(usage) = chunk_json.get("usage") {
@@ -8622,15 +8578,11 @@ pub async fn test_tool_multi_turn_streaming_inference_request_with_provider(
 
     let output = result.get("output").unwrap().as_str().unwrap();
     let output: Vec<Value> = serde_json::from_str(output).unwrap();
-    assert!(
-        output.len() == 1 || output.len() == 2,
-        "Expected 1 or 2 content blocks, got {}",
-        output.len()
-    );
-    let text_block = output.last().unwrap();
-    let content_block_type = text_block.get("type").unwrap().as_str().unwrap();
+    assert_eq!(output.len(), 1);
+    let content_block = output.first().unwrap();
+    let content_block_type = content_block.get("type").unwrap().as_str().unwrap();
     assert_eq!(content_block_type, "text");
-    let clickhouse_content = text_block.get("text").unwrap().as_str().unwrap();
+    let clickhouse_content = content_block.get("text").unwrap().as_str().unwrap();
     assert_eq!(clickhouse_content, full_content);
 
     let tool_params: Value =
