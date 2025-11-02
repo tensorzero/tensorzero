@@ -256,6 +256,8 @@ impl EmbeddingModelConfig {
 pub enum EmbeddingInput {
     Single(String),
     Batch(Vec<String>),
+    SingleTokens(Vec<u32>),
+    BatchTokens(Vec<Vec<u32>>),
 }
 
 impl EmbeddingInput {
@@ -263,6 +265,8 @@ impl EmbeddingInput {
         match self {
             EmbeddingInput::Single(_) => 1,
             EmbeddingInput::Batch(texts) => texts.len(),
+            EmbeddingInput::SingleTokens(_) => 1,
+            EmbeddingInput::BatchTokens(tokens) => tokens.len(),
         }
     }
 
@@ -270,6 +274,8 @@ impl EmbeddingInput {
         match self {
             EmbeddingInput::Single(text) => Some(text),
             EmbeddingInput::Batch(texts) => texts.first(),
+            EmbeddingInput::SingleTokens(_) => None,
+            EmbeddingInput::BatchTokens(_) => None,
         }
     }
 }
@@ -281,6 +287,12 @@ impl RateLimitedInputContent for EmbeddingInput {
             EmbeddingInput::Batch(texts) => texts
                 .iter()
                 .map(|text| get_estimated_tokens(text))
+                .sum::<u64>(),
+            // For token arrays, we have exact counts, not estimates
+            EmbeddingInput::SingleTokens(tokens) => tokens.len() as u64,
+            EmbeddingInput::BatchTokens(token_arrays) => token_arrays
+                .iter()
+                .map(|tokens| tokens.len() as u64)
                 .sum::<u64>(),
         }
     }

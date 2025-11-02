@@ -161,11 +161,7 @@ async fn test_log_early_drop_streaming_dummy_slow_delay_second_chunk() {
 /// Test that the gateway logs a warning when a client connection is closed early.
 #[tokio::test]
 async fn test_log_early_drop_non_streaming() {
-    let mut child_data = start_gateway_on_random_port(
-        r"debug = true",
-        Some("gateway=debug,tower_http::trace=debug,warn"),
-    )
-    .await;
+    let mut child_data = start_gateway_on_random_port("", Some("gateway=debug,warn")).await;
     let response_fut = reqwest::Client::new()
         .post(format!("http://{}/inference", child_data.addr))
         .json(&serde_json::json!({
@@ -181,21 +177,11 @@ async fn test_log_early_drop_non_streaming() {
         }))
         .send();
 
-    // Cancel the request early, and verify that the gateway logs a warning.
+    // Cancel the request early, and verify that the gateway logs a warning,
+    // even though we aren't logging the request start/stop
     let _elapsed = tokio::time::timeout(Duration::from_millis(500), response_fut)
         .await
         .unwrap_err();
-
-    let start_line = child_data
-        .stdout
-        .next_line()
-        .await
-        .unwrap()
-        .expect("Didn't find a log line after cancelling the request");
-    assert!(
-        start_line.contains("started processing request"),
-        "Log line missing start: {start_line}"
-    );
 
     let next_line = child_data
         .stdout
@@ -206,6 +192,12 @@ async fn test_log_early_drop_non_streaming() {
     assert!(
         next_line.contains("Client closed the connection before the response was sent"),
         "Unexpected log line: {next_line}"
+    );
+    assert!(
+        next_line.contains(
+            r#""method":"POST","uri":"/inference","version":"HTTP/1.1","name":"request""#
+        ),
+        "Log line missing request information: {next_line}"
     );
     assert!(
         next_line.contains("WARN"),

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::{
+    body::Body,
     extract::{DefaultBodyLimit, MatchedPath, Request, State},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -64,7 +65,23 @@ pub fn build_axum_router(
         // This is only used to output request/response information to our logs
         // OTEL exporting is done by the `OtelAxumLayer` above, which is only enabled for certain routes (and includes much more information)
         // We log failed requests messages at 'DEBUG', since we already have our own error-logging code,
-        .layer(TraceLayer::new_for_http().on_failure(DefaultOnFailure::new().level(Level::DEBUG)))
+        .layer(
+            TraceLayer::new_for_http()
+                .on_failure(DefaultOnFailure::new().level(Level::DEBUG))
+                .make_span_with(|request: &Request<Body>| {
+                    // This is a copy of `DefaultMakeSpan` from `tower-http`.
+                    // We invoke the `tracing` macro ourselves, so that the `target` is `gateway`,
+                    // which will cause the span to get emitted even when `debug = false` in the gateway config.
+                    // This ensures that warnings will have proper HTTP request information attached when logged to the console
+                    // Entering and exiting the span itself does not produce any new console logs
+                    tracing::info_span!(
+                        "request",
+                        method = %request.method(),
+                        uri = %request.uri(),
+                        version = ?request.version(),
+                    )
+                }),
+        )
         // This should always be the very last layer in the stack, so that we start counting as soon as we begin processing a request
         .layer(in_flight_requests_layer)
         .with_state(app_state.clone());
@@ -126,6 +143,26 @@ async fn tensorzero_auth_middleware(
                 message: "PostgreSQL connection is disabled".to_string(),
             }));
         };
+
+        // Check cache first if available
+        if let Some(cache) = &app_state.auth_cache {
+            let cache_key = parsed_key.cache_key();
+            if let Some(cached_result) = cache.get(&cache_key) {
+                return match cached_result {
+                    AuthResult::Success(key_info) => Ok(key_info),
+                    AuthResult::Disabled(disabled_at) => {
+                        Err(Error::new(ErrorDetails::TensorZeroAuth {
+                            message: format!("API key was disabled at: {disabled_at}"),
+                        }))
+                    }
+                    AuthResult::MissingKey => Err(Error::new(ErrorDetails::TensorZeroAuth {
+                        message: "Provided API key does not exist in the database".to_string(),
+                    })),
+                };
+            }
+        }
+
+        // Cache miss or no cache - query database
         let postgres_key = match tensorzero_auth::postgres::check_key(&parsed_key, pool).await {
             Ok(key) => key,
             Err(e) => {
@@ -134,6 +171,13 @@ async fn tensorzero_auth_middleware(
                 }));
             }
         };
+
+        // Store result in cache if available
+        if let Some(cache) = &app_state.auth_cache {
+            let cache_key = parsed_key.cache_key();
+            cache.insert(cache_key, postgres_key.clone());
+        }
+
         match postgres_key {
             AuthResult::Success(key_info) => Ok(key_info),
             AuthResult::Disabled(disabled_at) => Err(Error::new(ErrorDetails::TensorZeroAuth {

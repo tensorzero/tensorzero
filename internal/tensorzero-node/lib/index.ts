@@ -36,10 +36,12 @@ import type {
   GetDatapointParams,
   Datapoint,
   GetCumulativeFeedbackTimeseriesParams,
+  KeyInfo,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
   DatabaseClient as NativeDatabaseClientType,
+  PostgresClient as NativePostgresClientType,
 } from "../index";
 import { logger } from "./utils/logger";
 
@@ -54,6 +56,7 @@ const {
   TensorZeroClient: NativeTensorZeroClient,
   getConfig: nativeGetConfig,
   DatabaseClient: NativeDatabaseClient,
+  PostgresClient: NativePostgresClient,
   getQuantiles,
   runEvaluationStreaming: nativeRunEvaluationStreaming,
 } = require("../index.cjs") as typeof import("../index");
@@ -412,5 +415,34 @@ export class DatabaseClient {
     const result =
       await this.nativeDatabaseClient.getFeedbackByVariant(paramsString);
     return JSON.parse(result) as FeedbackByVariant[];
+  }
+}
+
+/**
+ * Wrapper class for type safety and convenience
+ * around the native PostgresClient
+ */
+export class PostgresClient {
+  private nativePostgresClient: NativePostgresClientType;
+
+  constructor(client: NativePostgresClientType) {
+    this.nativePostgresClient = client;
+  }
+
+  static async fromPostgresUrl(url: string): Promise<PostgresClient> {
+    return new PostgresClient(await NativePostgresClient.fromPostgresUrl(url));
+  }
+
+  async createApiKey(description?: string | null): Promise<string> {
+    return this.nativePostgresClient.createApiKey(description);
+  }
+
+  async listApiKeys(limit?: number, offset?: number): Promise<KeyInfo[]> {
+    const result = await this.nativePostgresClient.listApiKeys(limit, offset);
+    return JSON.parse(result) as KeyInfo[];
+  }
+
+  async disableApiKey(publicId: string): Promise<string> {
+    return this.nativePostgresClient.disableApiKey(publicId);
   }
 }

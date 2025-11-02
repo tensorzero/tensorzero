@@ -14,6 +14,7 @@ import {
   toWorkflowEvaluationRunUrl,
   toWorkflowEvaluationProjectUrl,
 } from "~/utils/urls";
+import { TableItemShortUuid } from "~/components/ui/TableItems";
 
 export default function WorkflowEvaluationRunsTable({
   workflowEvaluationRuns,
@@ -53,9 +54,7 @@ export default function WorkflowEvaluationRunsTable({
                     to={toWorkflowEvaluationRunUrl(run.id)}
                     className="block no-underline"
                   >
-                    <code className="block overflow-hidden rounded font-mono text-ellipsis whitespace-nowrap transition-colors duration-300 hover:text-gray-500">
-                      {run.id}
-                    </code>
+                    <TableItemShortUuid id={run.id} />
                   </Link>
                 </TableCell>
                 <TableCell>

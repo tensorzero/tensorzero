@@ -183,6 +183,14 @@ impl DynamicJSONSchema {
             })
     }
 
+    /// Ensures that the schema is valid by forcing compilation.
+    /// This is useful when you want to validate the schema itself without validating any instance.
+    /// Returns an error if the schema is invalid.
+    pub async fn ensure_valid(&self) -> Result<(), Error> {
+        self.get_or_init_compiled_schema().await?;
+        Ok(())
+    }
+
     async fn get_or_init_compiled_schema(&self) -> Result<&Validator, Error> {
         self.compiled_schema
             .get_or_try_init(|| {

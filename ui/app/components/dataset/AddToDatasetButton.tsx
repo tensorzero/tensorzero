@@ -152,7 +152,7 @@ export function AddToDatasetButton({
 
   return (
     <>
-      <ReadOnlyGuard>{datasetSelector}</ReadOnlyGuard>
+      <ReadOnlyGuard asChild>{datasetSelector}</ReadOnlyGuard>
       {alertDialog}
     </>
   );

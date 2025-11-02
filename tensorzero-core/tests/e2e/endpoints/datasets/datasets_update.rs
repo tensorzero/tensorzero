@@ -213,7 +213,9 @@ async fn test_update_json_datapoint_output() {
             "datapoints": [{
                 "type": "json",
                 "id": datapoint_id.to_string(),
-                "output": {"answer": "updated"},
+                "output": {
+                    "raw": "{\"answer\": \"updated\"}",
+                },
             }]
         }))
         .send()

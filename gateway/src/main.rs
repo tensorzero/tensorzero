@@ -1,6 +1,7 @@
 use clap::{Args, Parser};
 use futures::{FutureExt, StreamExt};
 use mimalloc::MiMalloc;
+use secrecy::ExposeSecret;
 use std::fmt::Display;
 use std::future::{Future, IntoFuture};
 use std::io::ErrorKind;
@@ -12,6 +13,7 @@ use tokio::signal;
 use tokio_stream::wrappers::IntervalStream;
 use tower_http::metrics::in_flight_requests::InFlightRequestsCounter;
 
+use tensorzero_auth::constants::{DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE};
 use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::migration_manager::manual_run_clickhouse_migrations;
 use tensorzero_core::db::postgres::{manual_run_postgres_migrations, PostgresConnectionInfo};
@@ -57,6 +59,34 @@ struct MigrationCommands {
     /// Run PostgreSQL migrations manually then exit.
     #[arg(long)]
     run_postgres_migrations: bool,
+
+    /// Create an API key then exit.
+    #[arg(long)]
+    create_api_key: bool,
+}
+
+#[expect(clippy::print_stdout)]
+fn print_key(key: &secrecy::SecretString) {
+    println!("{}", key.expose_secret());
+}
+
+async fn handle_create_api_key() -> Result<(), Box<dyn std::error::Error>> {
+    // Read the Postgres URL from the environment
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .map_err(|_| "TENSORZERO_POSTGRES_URL environment variable not set")?;
+
+    // Create connection pool (alpha version for tensorzero-auth)
+    let pool = sqlx_alpha::PgPool::connect(&postgres_url).await?;
+
+    // Create the key with default organization and workspace
+    let key =
+        tensorzero_auth::postgres::create_key(DEFAULT_ORGANIZATION, DEFAULT_WORKSPACE, None, &pool)
+            .await?;
+
+    // Print only the API key to stdout for easy machine parsing
+    print_key(&key);
+
+    Ok(())
 }
 
 #[tokio::main]
@@ -70,6 +100,14 @@ async fn main() {
         .expect_pretty("Failed to set up logs");
 
     let git_sha = tensorzero_core::built_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown");
+
+    if args.migration_commands.create_api_key {
+        handle_create_api_key()
+            .await
+            .expect_pretty("Failed to create API key");
+        return;
+    }
+
     if args.migration_commands.run_clickhouse_migrations {
         manual_run_clickhouse_migrations()
             .await
@@ -102,7 +140,14 @@ async fn main() {
         }
         (true, None) => {
             tracing::warn!("No config file provided, so only default functions will be available. Use `--config-file path/to/tensorzero.toml` to specify a config file.");
-            (Arc::new(Config::default()), None)
+            (
+                Arc::new(
+                    Config::new_empty()
+                        .await
+                        .expect_pretty("Failed to load default config"),
+                ),
+                None,
+            )
         }
         (false, Some(path)) => {
             let glob = ConfigFileGlob::new_from_path(&path)
