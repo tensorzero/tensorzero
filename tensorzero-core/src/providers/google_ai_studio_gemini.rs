@@ -22,6 +22,9 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -716,15 +719,32 @@ enum GeminiResponseMimeType {
 // TODO (if needed): add the other options [here](https://ai.google.dev/api/generate-content#v1beta.GenerationConfig)
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct GeminiThinkingConfig {
+    thinking_budget: i32,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GeminiGenerationConfig<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_config: Option<GeminiThinkingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_mime_type: Option<GeminiResponseMimeType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_schema: Option<Value>,
 }
 
@@ -733,9 +753,58 @@ struct GeminiGenerationConfig<'a> {
 struct GeminiRequest<'a> {
     contents: Vec<GeminiContent<'a>>,
     tools: Option<Vec<GeminiTool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_config: Option<GoogleAIStudioGeminiToolConfig<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     generation_config: Option<GeminiGenerationConfig<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     system_instruction: Option<GeminiContent<'a>>,
+}
+
+fn apply_inference_params(
+    request: &mut GeminiRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        if let Some(gen_config) = &mut request.generation_config {
+            gen_config.thinking_config = Some(GeminiThinkingConfig {
+                thinking_budget: *budget_tokens,
+            });
+        } else {
+            request.generation_config = Some(GeminiGenerationConfig {
+                stop_sequences: None,
+                temperature: None,
+                thinking_config: Some(GeminiThinkingConfig {
+                    thinking_budget: *budget_tokens,
+                }),
+                top_p: None,
+                presence_penalty: None,
+                frequency_penalty: None,
+                max_output_tokens: None,
+                seed: None,
+                response_mime_type: None,
+                response_schema: None,
+            });
+        }
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> GeminiRequest<'a> {
@@ -780,15 +849,16 @@ impl<'a> GeminiRequest<'a> {
         let generation_config = Some(GeminiGenerationConfig {
             stop_sequences: request.borrow_stop_sequences(),
             temperature: request.temperature,
-            max_output_tokens: request.max_tokens,
+            thinking_config: None,
             top_p: request.top_p,
             presence_penalty: request.presence_penalty,
             frequency_penalty: request.frequency_penalty,
+            max_output_tokens: request.max_tokens,
             seed: request.seed,
             response_mime_type,
             response_schema,
         });
-        Ok(GeminiRequest {
+        let mut gemini_request = GeminiRequest {
             contents,
             tools,
             tool_config,
@@ -801,7 +871,11 @@ impl<'a> GeminiRequest<'a> {
                     data: FlattenUnknown::Normal(content),
                 }],
             }),
-        })
+        };
+
+        apply_inference_params(&mut gemini_request, &request.inference_params_v2);
+
+        Ok(gemini_request)
     }
 }
 
@@ -2703,5 +2777,44 @@ mod tests {
             .unwrap();
             assert_eq!(chunk.finish_reason, Some(expected_reason));
         }
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_google_ai_studio_gemini_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = GeminiRequest {
+            contents: vec![],
+            generation_config: None,
+            tools: None,
+            tool_config: None,
+            system_instruction: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns with tip about thinking_budget_tokens
+        assert!(logs_contain(
+            "Google AI Studio Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
+        ));
+
+        // Test that thinking_budget_tokens is applied correctly in generation_config
+        assert!(request.generation_config.is_some());
+        let gen_config = request.generation_config.unwrap();
+        assert_eq!(
+            gen_config.thinking_config,
+            Some(GeminiThinkingConfig {
+                thinking_budget: 1024,
+            })
+        );
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Google AI Studio Gemini does not support the inference parameter `verbosity`"
+        ));
     }
 }

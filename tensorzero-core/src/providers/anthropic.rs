@@ -18,6 +18,9 @@ use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, E
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
@@ -675,6 +678,12 @@ enum AnthropicSystemBlock<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+struct AnthropicThinkingConfig {
+    r#type: &'static str,
+    budget_tokens: i32,
+}
+
+#[derive(Debug, Default, PartialEq, Serialize)]
 struct AnthropicRequestBody<'a> {
     model: &'a str,
     messages: Vec<AnthropicMessage<'a>>,
@@ -686,6 +695,8 @@ struct AnthropicRequestBody<'a> {
     system: Option<Vec<AnthropicSystemBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<AnthropicThinkingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -764,18 +775,53 @@ impl<'a> AnthropicRequestBody<'a> {
         }?;
 
         // NOTE: Anthropic does not support seed
-        Ok(AnthropicRequestBody {
+        let mut anthropic_request = AnthropicRequestBody {
             model: model_name,
             messages,
             max_tokens,
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
+            thinking: None,
             top_p: request.top_p,
             tool_choice,
             tools,
             stop_sequences: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut anthropic_request, &request.inference_params_v2);
+
+        Ok(anthropic_request)
+    }
+}
+
+fn apply_inference_params(
+    request: &mut AnthropicRequestBody,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        request.thinking = Some(AnthropicThinkingConfig {
+            r#type: "enabled",
+            budget_tokens: *budget_tokens,
+        });
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
 }
 
@@ -1744,11 +1790,7 @@ mod tests {
                 system: Some(vec![AnthropicSystemBlock::Text {
                     text: "test_system"
                 }]),
-                temperature: None,
-                top_p: None,
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -1812,10 +1854,7 @@ mod tests {
                     text: "test_system"
                 }]),
                 temperature: Some(0.5),
-                top_p: None,
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -1873,12 +1912,7 @@ mod tests {
                 messages: expected_messages,
                 max_tokens: 64_000,
                 stream: Some(false),
-                system: None,
-                temperature: None,
-                top_p: None,
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -2417,10 +2451,7 @@ mod tests {
             stream: Some(false),
             system: None,
             top_p: Some(0.5),
-            temperature: None,
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let raw_response = "{\"foo\": \"bar\"}".to_string();
         let input_messages = vec![RequestMessage {
@@ -2478,12 +2509,8 @@ mod tests {
             messages: vec![],
             max_tokens: 100,
             stream: Some(false),
-            system: None,
-            temperature: None,
             top_p: Some(0.5),
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let input_messages = vec![RequestMessage {
             role: Role::Assistant,
@@ -2553,12 +2580,8 @@ mod tests {
             messages: vec![],
             max_tokens: 100,
             stream: Some(false),
-            system: None,
-            temperature: None,
             top_p: Some(0.5),
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
@@ -3178,5 +3201,42 @@ mod tests {
         .unwrap();
         assert_eq!(res, None);
         assert!(logs_contain("Discarding unknown chunk"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_anthropic_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = AnthropicRequestBody {
+            model: "claude-3-5-sonnet-20241022",
+            messages: vec![],
+            max_tokens: 1024,
+            ..Default::default()
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns with tip about thinking_budget_tokens
+        assert!(logs_contain(
+            "Anthropic does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
+        ));
+
+        // Test that thinking_budget_tokens is applied correctly
+        assert_eq!(
+            request.thinking,
+            Some(AnthropicThinkingConfig {
+                r#type: "enabled",
+                budget_tokens: 1024,
+            })
+        );
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Anthropic does not support the inference parameter `verbosity`"
+        ));
     }
 }

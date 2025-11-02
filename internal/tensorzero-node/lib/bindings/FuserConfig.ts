@@ -16,4 +16,7 @@ export type FuserConfig = {
   stop_sequences: Array<string> | null;
   json_mode: JsonMode | null;
   retries: RetryConfig;
+  reasoning_effort?: string;
+  thinking_budget_tokens?: number;
+  verbosity?: string;
 };
