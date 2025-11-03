@@ -1,7 +1,7 @@
 use reqwest::Client;
 use serde_json::json;
 use std::sync::Arc;
-use tensorzero::{Role, StoredDatapoint};
+use tensorzero::{ClientExt, Role, StoredDatapoint};
 use tensorzero_core::inference::types::{
     Arguments, ContentBlockChatOutput, JsonInferenceOutput, StoredInput, StoredInputMessage,
     StoredInputMessageContent, Template, Text,
