@@ -17,7 +17,7 @@ curl -X POST http://localhost:3000/openai/v1/chat/completions \
     ]
   }'
 
-echo "\n\n"
+echo ""
 
 # Bad request
 

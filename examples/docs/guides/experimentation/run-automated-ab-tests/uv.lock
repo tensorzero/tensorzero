@@ -706,33 +706,6 @@ wheels = [
 ]
 
 [[package]]
-name = "run-automated-ab-tests"
-version = "0.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "openai" },
-    { name = "pandas" },
-    { name = "tensorzero" },
-    { name = "tqdm" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pyright" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "openai", specifier = ">=2.6.1" },
-    { name = "pandas", specifier = ">=2.3.3" },
-    { name = "tensorzero", directory = "../../../../../clients/python" },
-    { name = "tqdm", specifier = ">=4.66.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pyright", specifier = ">=1.1.0" }]
-
-[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -752,35 +725,50 @@ wheels = [
 
 [[package]]
 name = "tensorzero"
-source = { directory = "../../../../../clients/python" }
+version = "2025.11.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
     { name = "typing-extensions" },
     { name = "uuid-utils" },
 ]
+sdist = { url = "https://files.pythonhosted.org/packages/0d/1d/8df3ae27f898f2500fbf2d1aa1eb0820a37fdf863ae8f88fed9a92727231/tensorzero-2025.11.0.tar.gz", hash = "sha256:999d5cb6be09700457b39d69be70fa712767d87e5c86bb3fdff00a0832a04ad7", size = 1853696, upload_time = "2025-11-03T15:17:45.107Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/70/dd/8011f6acfa86039e41c8c67f66b9b293b2c1f187c187d8a0532cbbcd37ca/tensorzero-2025.11.0-cp39-abi3-macosx_10_12_x86_64.whl", hash = "sha256:6f162f5f8ce837f9242271bfb33f9379470c6e28cf1e13cf8a4b16ac6b6937cb", size = 26941109, upload_time = "2025-11-03T15:17:37.109Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/e5/c0191c5d6004ecf436d607ae512b4d608d405397a9eff36c586e173efe81/tensorzero-2025.11.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:ef0027fa01a78cbc3295e2f2fa9b98c1d6adedafff93fb5fed4393eed1a679e4", size = 25778342, upload_time = "2025-11-03T15:17:34.816Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/51/daa5b35c5f5ea6fc7a03457810144831899145a0badcc39af2bce514ee4c/tensorzero-2025.11.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:69d3d3c177002728576bf1c912db0c0620d1141ebfbad20c8d0e182a68ae5858", size = 28423067, upload_time = "2025-11-03T15:17:28.965Z" },
+    { url = "https://files.pythonhosted.org/packages/30/c3/0b3502e78cb75590b1d5d6037b1eca827ccdeebf3c0f2e857fd08e175665/tensorzero-2025.11.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ffb64a1aa3eb8f26653eb9bc52ea9e5fe04f243b78f176292d54011fb4b1270d", size = 28814872, upload_time = "2025-11-03T15:17:31.944Z" },
+    { url = "https://files.pythonhosted.org/packages/38/c0/e58eb7aa414d68bc2cd6ec7402a1f7831930b26ed942989ec0c1aa1c3687/tensorzero-2025.11.0-cp39-abi3-musllinux_1_2_aarch64.whl", hash = "sha256:c3cb67862b5aa969f1bd105713f346a1b32cf9afd4199ab0977a6d58d5155def", size = 28638781, upload_time = "2025-11-03T15:17:39.541Z" },
+    { url = "https://files.pythonhosted.org/packages/4b/52/73c6987d959cbb88f3ce83712e068b7489eb91527e04ef02b14f8cecc8a1/tensorzero-2025.11.0-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:9ae6433d2e1fd96fbeac4c889f4736be4dab13fee193aa6f1e62f8186368e7f0", size = 29352291, upload_time = "2025-11-03T15:17:42.03Z" },
+    { url = "https://files.pythonhosted.org/packages/7e/29/8de6d8f858be56ee2f5c77e236eff33c0e9e839c3aebeabc374850f50f07/tensorzero-2025.11.0-cp39-abi3-win_amd64.whl", hash = "sha256:0933436380a50e803e6b50350f29d0d9f2167e9ad2ba75e7d8c89bb9e4f8115d", size = 24913032, upload_time = "2025-11-03T15:17:46.601Z" },
+]
+
+[[package]]
+name = "tensorzero-examples-docs-guides-experimentation-run-automated-ab-tests"
+version = "0.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "openai" },
+    { name = "pandas" },
+    { name = "tensorzero" },
+    { name = "tqdm" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pyright" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "typing-extensions", specifier = ">=4.12.2" },
-    { name = "uuid-utils", specifier = ">=0.9.0" },
+    { name = "openai", specifier = ">=2.6.1" },
+    { name = "pandas", specifier = ">=2.3.3" },
+    { name = "tensorzero", specifier = ">=2025.11.0" },
+    { name = "tqdm", specifier = ">=4.66.0" },
 ]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "clickhouse-connect" },
-    { name = "maturin" },
-    { name = "mypy" },
-    { name = "openai" },
-    { name = "pandas" },
-    { name = "pyright" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-httpserver" },
-    { name = "pytest-rerunfailures" },
-    { name = "pytest-xdist" },
-    { name = "requests" },
-]
+dev = [{ name = "pyright", specifier = ">=1.1.0" }]
 
 [[package]]
 name = "tqdm"

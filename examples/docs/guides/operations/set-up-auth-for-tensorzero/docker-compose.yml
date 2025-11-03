@@ -40,7 +40,7 @@ services:
       timeout: 1s
 
   gateway:
-    image: tensorzero/gateway:keys # TODO: DO NOT MERGE
+    image: tensorzero/gateway
     volumes:
       - ./config:/app/config:ro
     command: --config-file /app/config/tensorzero.toml
@@ -64,7 +64,7 @@ services:
         condition: service_healthy
 
   ui:
-    image: tensorzero/ui:keys # TODO: DO NOT MERGE
+    image: tensorzero/ui
     volumes:
       - ./config:/app/config:ro
     environment:
@@ -72,7 +72,7 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
-      TENSORZERO_API_KEY: ${TENSORZERO_API_KEY:?Environment variable TENSORZERO_API_KEY must be set.}
+      TENSORZERO_API_KEY: $TENSORZERO_API_KEY
     ports:
       - "4000:4000"
     depends_on:

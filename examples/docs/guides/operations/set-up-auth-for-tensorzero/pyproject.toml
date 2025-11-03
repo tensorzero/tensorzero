@@ -1,5 +1,5 @@
 [project]
-name = "set-up-auth-for-tensorzero"
+name = "tensorzero-examples-docs-guides-operations-set-up-auth-for-tensorzero"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -7,6 +7,3 @@ dependencies = [
     "openai>=2.6.1",
     "tensorzero>=2025.11.0",
 ]
-
-[tool.uv.sources]
-tensorzero = { path = "../../../../../clients/python" }  # TODO: DO NOT MERGE
