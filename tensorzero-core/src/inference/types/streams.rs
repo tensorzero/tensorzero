@@ -42,11 +42,7 @@ pub enum ContentBlockChunk {
     Text(TextChunk),
     ToolCall(ToolCallChunk),
     Thought(ThoughtChunk),
-    Unknown {
-        id: String,
-        data: Value,
-        provider_type: Option<String>,
-    },
+    Unknown(UnknownChunk),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -69,6 +65,13 @@ pub struct ThoughtChunk {
         skip_serializing_if = "Option::is_none"
     )]
     pub provider_type: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UnknownChunk {
+    pub id: String,
+    pub data: Value,
+    pub model_provider_name: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -168,7 +171,7 @@ impl From<ProviderInferenceResponseChunk> for JsonInferenceResultChunk {
                 ContentBlockChunk::Thought(thought_chunk) => {
                     thought = thought_chunk.text;
                 }
-                ContentBlockChunk::Unknown { .. } => {
+                ContentBlockChunk::Unknown(_) => {
                     // Unknown chunks are ignored for JSON functions
                     // They don't contribute to the JSON output
                 }
@@ -476,7 +479,11 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 }
                             }
                         }
-                        ContentBlockChunk::Unknown { id, data, .. } => {
+                        ContentBlockChunk::Unknown(UnknownChunk {
+                            id,
+                            data,
+                            model_provider_name,
+                        }) => {
                             // Unknown chunks are not merged/coalesced - each one gets a unique entry
                             // We use the chunk ID as part of the key to ensure uniqueness
                             if ttft.is_none() {
@@ -486,10 +493,7 @@ pub async fn collect_chunks(args: CollectChunksArgs) -> Result<InferenceResult, 
                                 (ContentBlockOutputType::Unknown, id.clone()),
                                 ContentBlockOutput::Unknown {
                                     data: data.clone(),
-                                    model_provider_name: Some(crate::model::fully_qualified_name(
-                                        &model_name,
-                                        &model_provider_name,
-                                    )),
+                                    model_provider_name: model_provider_name.clone(),
                                 },
                             );
                         }

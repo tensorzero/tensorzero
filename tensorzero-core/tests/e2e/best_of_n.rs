@@ -344,16 +344,7 @@ async fn e2e_test_best_of_n_dummy_candidates_real_judge() {
                     ]
                   }
                 ],
-                "tools": null,
-                "toolConfig": null,
                 "generationConfig": {
-                  "stopSequences": null,
-                  "temperature": null,
-                  "maxOutputTokens": null,
-                  "topP": null,
-                  "presencePenalty": null,
-                  "frequencyPenalty": null,
-                  "seed": null,
                   "responseMimeType": "application/json",
                   "responseSchema": {
                     "type": "object",
@@ -742,16 +733,7 @@ async fn e2e_test_best_of_n_json_real_judge() {
                   ]
                 }
               ],
-              "tools": null,
-              "toolConfig": null,
               "generationConfig": {
-                "stopSequences": null,
-                "temperature": null,
-                "topP": null,
-                "presencePenalty": null,
-                "frequencyPenalty": null,
-                "maxOutputTokens": null,
-                "seed": null,
                 "responseMimeType": "application/json",
                 "responseSchema": {
                     "type": "object",
@@ -1170,16 +1152,8 @@ async fn e2e_test_best_of_n_judge_extra_body() {
                     ]
                   }
                 ],
-                "tools": null,
-                "toolConfig": null,
                 "generationConfig": {
-                    "stopSequences": null,
                     "temperature": 0.123,
-                    "maxOutputTokens": null,
-                    "topP": null,
-                    "presencePenalty": null,
-                    "frequencyPenalty": null,
-                    "seed": null,
                     "responseMimeType": "application/json",
                     "responseSchema": {
                         "type": "object",

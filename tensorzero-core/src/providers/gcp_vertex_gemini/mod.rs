@@ -43,6 +43,9 @@ use crate::inference::types::batch::{
     BatchRequestRow, BatchStatus, PollBatchInferenceResponse, ProviderBatchInferenceOutput,
     ProviderBatchInferenceResponse,
 };
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, serialize_or_log, ModelInferenceRequest,
     ObjectStorageFile, PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -52,6 +55,7 @@ use crate::inference::types::{
     ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
     ModelInferenceRequestJsonMode, ProviderInferenceResponseArgs,
     ProviderInferenceResponseStreamInner, Role, Text, TextChunk, Thought, ThoughtChunk,
+    UnknownChunk,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{
@@ -1112,7 +1116,7 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -1150,7 +1154,14 @@ impl InferenceProvider for GCPVertexGeminiProvider {
             builder,
         )
         .await?;
-        let stream = stream_gcp_vertex_gemini(event_source, start_time, model_provider).peekable();
+        let stream = stream_gcp_vertex_gemini(
+            event_source,
+            start_time,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .peekable();
         Ok((stream, raw_request))
     }
 
@@ -1481,8 +1492,12 @@ fn stream_gcp_vertex_gemini(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
         let mut last_tool_name = None;
         let mut last_tool_idx = None;
@@ -1519,6 +1534,8 @@ fn stream_gcp_vertex_gemini(
                             &mut last_tool_name,
                             &mut last_tool_idx,
                             discard_unknown_chunks,
+                            &model_name,
+                            &provider_name,
                         )
                     }
                 }
@@ -1776,15 +1793,32 @@ enum GCPVertexGeminiResponseMimeType {
 // TODO (if needed): add the other options [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/GenerationConfig)
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct GCPVertexGeminiThinkingConfig {
+    thinking_budget: i32,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiGenerationConfig<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_config: Option<GCPVertexGeminiThinkingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     frequency_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     seed: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_mime_type: Option<GCPVertexGeminiResponseMimeType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     response_schema: Option<Value>,
 }
 
@@ -1792,13 +1826,63 @@ struct GCPVertexGeminiGenerationConfig<'a> {
 #[serde(rename_all = "camelCase")]
 struct GCPVertexGeminiRequest<'a> {
     contents: Vec<GCPVertexGeminiContent<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<GCPVertexGeminiTool<'a>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     tool_config: Option<GCPVertexGeminiToolConfig<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     generation_config: Option<GCPVertexGeminiGenerationConfig<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     system_instruction: Option<GCPVertexGeminiContent<'a>>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
     labels: HashMap<String, String>,
     // TODO (if needed): [Safety Settings](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/SafetySetting)
+}
+
+fn apply_inference_params(
+    request: &mut GCPVertexGeminiRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        if let Some(gen_config) = &mut request.generation_config {
+            gen_config.thinking_config = Some(GCPVertexGeminiThinkingConfig {
+                thinking_budget: *budget_tokens,
+            });
+        } else {
+            request.generation_config = Some(GCPVertexGeminiGenerationConfig {
+                stop_sequences: None,
+                temperature: None,
+                thinking_config: Some(GCPVertexGeminiThinkingConfig {
+                    thinking_budget: *budget_tokens,
+                }),
+                max_output_tokens: None,
+                top_p: None,
+                presence_penalty: None,
+                frequency_penalty: None,
+                seed: None,
+                response_mime_type: None,
+                response_schema: None,
+            });
+        }
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> GCPVertexGeminiRequest<'a> {
@@ -1846,6 +1930,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         let generation_config = Some(GCPVertexGeminiGenerationConfig {
             stop_sequences: request.borrow_stop_sequences(),
             temperature: request.temperature,
+            thinking_config: None,
             max_output_tokens: request.max_tokens,
             seed: request.seed,
             top_p: request.top_p,
@@ -1866,7 +1951,7 @@ impl<'a> GCPVertexGeminiRequest<'a> {
         } else {
             HashMap::new()
         };
-        Ok(GCPVertexGeminiRequest {
+        let mut gcp_vertex_gemini_request = GCPVertexGeminiRequest {
             contents,
             tools,
             tool_config,
@@ -1876,7 +1961,11 @@ impl<'a> GCPVertexGeminiRequest<'a> {
                 parts: vec![FlattenUnknown::Normal(content)],
             }),
             labels,
-        })
+        };
+
+        apply_inference_params(&mut gcp_vertex_gemini_request, &request.inference_params_v2);
+
+        Ok(gcp_vertex_gemini_request)
     }
 }
 
@@ -2161,6 +2250,8 @@ fn content_part_to_tensorzero_chunk(
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<Option<ContentBlockChunk>, Error> {
     if part.thought {
         match part.data {
@@ -2247,11 +2338,11 @@ fn content_part_to_tensorzero_chunk(
                 warn_discarded_unknown_chunk(PROVIDER_TYPE, &part.to_string());
                 return Ok(None);
             }
-            Ok(Some(ContentBlockChunk::Unknown {
+            Ok(Some(ContentBlockChunk::Unknown(UnknownChunk {
                 id: "0".to_string(),
                 data: part.into_owned(),
-                provider_type: Some(PROVIDER_TYPE.to_string()),
-            }))
+                model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+            })))
         }
     }
 }
@@ -2505,6 +2596,7 @@ impl<'a> TryFrom<GCPVertexGeminiResponseWithMetadata<'a>> for ProviderInferenceR
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn convert_stream_response_with_metadata_to_chunk(
     raw_response: String,
     response: GCPVertexGeminiResponse,
@@ -2512,6 +2604,8 @@ fn convert_stream_response_with_metadata_to_chunk(
     last_tool_name: &mut Option<String>,
     last_tool_idx: &mut Option<u32>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<ProviderInferenceResponseChunk, Error> {
     let first_candidate = response.candidates.into_iter().next().ok_or_else(|| {
         Error::new(ErrorDetails::InferenceServer {
@@ -2533,6 +2627,8 @@ fn convert_stream_response_with_metadata_to_chunk(
                     last_tool_name,
                     last_tool_idx,
                     discard_unknown_chunks,
+                    model_name,
+                    provider_name,
                 )
                 .transpose()
             })
@@ -3980,12 +4076,14 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
 
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data, .. } => {
+            ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                 assert_eq!(id, "0");
                 assert_eq!(
                     data.get("unknown_field").and_then(|v| v.as_str()),
@@ -4038,6 +4136,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             true,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
         assert_eq!(res.content, []);
@@ -4084,6 +4184,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4133,6 +4235,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4179,6 +4283,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4237,6 +4343,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4298,6 +4406,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4328,6 +4438,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -4361,6 +4473,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_ok());
@@ -4388,6 +4502,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4420,6 +4536,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4455,6 +4573,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert_eq!(last_tool_idx, Some(0));
@@ -4485,6 +4605,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4516,6 +4638,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4547,6 +4671,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
@@ -4577,6 +4703,8 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -4608,6 +4736,8 @@ mod tests {
             &mut last_tool_name,
             &mut None,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_err());
         let error = result.unwrap_err();
@@ -4636,11 +4766,13 @@ mod tests {
             &mut last_tool_name,
             &mut last_tool_idx,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap();
         match chunk {
-            Some(ContentBlockChunk::Unknown { id, data, .. }) => {
+            Some(ContentBlockChunk::Unknown(UnknownChunk { id, data, .. })) => {
                 assert_eq!(id, "0");
                 assert_eq!(
                     data.get("unknown_field").and_then(|v| v.as_str()),
@@ -4651,5 +4783,45 @@ mod tests {
         }
         // Verify tool call tracking state - should remain None for error cases
         assert_eq!(last_tool_idx, None);
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_gcp_vertex_gemini_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = GCPVertexGeminiRequest {
+            contents: vec![],
+            generation_config: None,
+            tools: None,
+            tool_config: None,
+            system_instruction: None,
+            labels: HashMap::new(),
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns with tip about thinking_budget_tokens
+        assert!(logs_contain(
+            "GCP Vertex Gemini does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
+        ));
+
+        // Test that thinking_budget_tokens is applied correctly in generation_config
+        assert!(request.generation_config.is_some());
+        let gen_config = request.generation_config.unwrap();
+        assert_eq!(
+            gen_config.thinking_config,
+            Some(GCPVertexGeminiThinkingConfig {
+                thinking_budget: 1024,
+            })
+        );
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "GCP Vertex Gemini does not support the inference parameter `verbosity`"
+        ));
     }
 }
