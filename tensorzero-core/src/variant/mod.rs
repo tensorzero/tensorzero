@@ -24,6 +24,7 @@ use crate::error::ErrorDetails;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
@@ -649,6 +650,11 @@ fn prepare_model_inference_request<'request>(
                 fetch_and_encode_input_files_before_inference: inference_config
                     .fetch_and_encode_input_files_before_inference,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -692,6 +698,11 @@ fn prepare_model_inference_request<'request>(
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             }
         }
     })
@@ -898,13 +909,7 @@ mod tests {
         let stream = false;
 
         // Define a dummy tool config for testing
-        let tool_config = ToolCallConfig {
-            tools_available: vec![],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            provider_tools: vec![],
-            allowed_tools: crate::tool::AllowedTools::default(),
-        };
+        let tool_config = ToolCallConfig::default();
         let tool_config_arc = Arc::new(tool_config.clone());
 
         // Create a sample inference config
@@ -935,6 +940,7 @@ mod tests {
                 seed: Some(42),
                 json_mode: None,
                 stop_sequences: None,
+                ..Default::default()
             },
         };
 
@@ -1286,13 +1292,7 @@ mod tests {
                 "required": ["answer"]
             }))
             .unwrap(),
-            implicit_tool_call_config: crate::tool::ToolCallConfig {
-                tools_available: vec![],
-                tool_choice: ToolChoice::Auto,
-                parallel_tool_calls: None,
-                provider_tools: vec![],
-                allowed_tools: crate::tool::AllowedTools::default(),
-            },
+            implicit_tool_call_config: ToolCallConfig::default(),
             description: None,
             all_explicit_template_names: HashSet::new(),
             experimentation: ExperimentationConfig::default(),

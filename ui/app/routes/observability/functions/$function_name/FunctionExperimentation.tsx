@@ -13,75 +13,20 @@ import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackM
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 import { transformFeedbackTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { CHART_COLORS } from "~/utils/chart";
 
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
   functionName: string;
-  optimalProbabilities?: Record<string, number>;
   feedbackTimeseries?: CumulativeFeedbackTimeSeriesPoint[];
-}
-
-function extractVariantWeights(
-  functionConfig: FunctionConfig,
-  optimalProbabilities?: Record<string, number>,
-): VariantWeight[] {
-  const experimentationConfig = functionConfig.experimentation;
-
-  let variantWeights: VariantWeight[];
-
-  if (experimentationConfig.type === "static_weights") {
-    // Extract candidate variants and their weights
-    const candidateVariants = experimentationConfig.candidate_variants;
-    variantWeights = Object.entries(candidateVariants)
-      .filter(([, weight]) => weight !== undefined)
-      .map(([variant_name, weight]) => ({
-        variant_name,
-        weight: weight!,
-      }))
-      .sort((a, b) => a.variant_name.localeCompare(b.variant_name));
-  } else if (experimentationConfig.type === "uniform") {
-    // For uniform distribution, all variants get equal weight
-    const variantNames = Object.keys(functionConfig.variants);
-    const equalWeight = 1.0 / variantNames.length;
-    variantWeights = variantNames.map((variant_name) => ({
-      variant_name,
-      weight: equalWeight,
-    }));
-  } else if (experimentationConfig.type === "track_and_stop") {
-    // For track_and_stop, use optimal probabilities if available
-    if (optimalProbabilities) {
-      variantWeights = Object.entries(optimalProbabilities).map(
-        ([variant_name, weight]) => ({
-          variant_name,
-          weight,
-        }),
-      );
-    } else {
-      // If no optimal probabilities yet (e.g., due to null variances or insufficient data),
-      // show equal weights for all candidate variants (nursery phase)
-      const candidateVariants = experimentationConfig.candidate_variants;
-      const equalWeight = 1.0 / candidateVariants.length;
-      variantWeights = candidateVariants.map((variant_name) => ({
-        variant_name,
-        weight: equalWeight,
-      }));
-    }
-  } else {
-    // Default case (shouldn't happen, but TypeScript requires it)
-    variantWeights = [];
-  }
-
-  // Sort alphabetically for consistent display order (affects pie chart segment order and reload stability)
-  return variantWeights.sort((a, b) =>
-    a.variant_name.localeCompare(b.variant_name),
-  );
+  variantSamplingProbabilities: Record<string, number>;
 }
 
 export const FunctionExperimentation = memo(function FunctionExperimentation({
   functionConfig,
   functionName,
-  optimalProbabilities,
   feedbackTimeseries,
+  variantSamplingProbabilities,
 }: FunctionExperimentationProps) {
   const [timeGranularity, onTimeGranularityChange] = useTimeGranularityParam(
     "cumulative_feedback_time_granularity",
@@ -93,10 +38,15 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
     return null;
   }
 
-  const variantWeights = extractVariantWeights(
-    functionConfig,
-    optimalProbabilities,
-  );
+  // Convert the probabilities from the loader to VariantWeight format
+  const variantWeights: VariantWeight[] = Object.entries(
+    variantSamplingProbabilities,
+  )
+    .map(([variant_name, weight]) => ({
+      variant_name,
+      weight,
+    }))
+    .sort((a, b) => a.variant_name.localeCompare(b.variant_name));
 
   // Don't render if there are no variant weights
   if (variantWeights.length === 0) {
@@ -119,6 +69,29 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
       ? functionConfig.experimentation.metric
       : "";
 
+  // Create a centralized chart config to ensure consistent colors across all panels
+  // Use union of variant names from current weights and historical feedback data
+  // to handle recently disabled variants that still appear in historical timeseries
+  const allVariantNames = new Set([
+    ...variantWeights.map((v) => v.variant_name),
+    ...variantNames,
+  ]);
+  const sortedVariantNames = Array.from(allVariantNames).sort((a, b) =>
+    a.localeCompare(b),
+  );
+
+  const chartConfig: Record<string, { label: string; color: string }> =
+    sortedVariantNames.reduce(
+      (config, variantName, index) => ({
+        ...config,
+        [variantName]: {
+          label: variantName,
+          color: CHART_COLORS[index % CHART_COLORS.length],
+        },
+      }),
+      {},
+    );
+
   return (
     <Tabs defaultValue="weights" className="w-full">
       {shouldShowTimeseries && (
@@ -129,7 +102,10 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
         </TabsList>
       )}
       <TabsContent value="weights">
-        <ExperimentationPieChart variantWeights={variantWeights} />
+        <ExperimentationPieChart
+          variantWeights={variantWeights}
+          chartConfig={chartConfig}
+        />
       </TabsContent>
       {shouldShowTimeseries && (
         <>
@@ -142,6 +118,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
               metricName={metricName}
               time_granularity={timeGranularity}
               onTimeGranularityChange={onTimeGranularityChange}
+              chartConfig={chartConfig}
             />
           </TabsContent>
           <TabsContent value="counts">
@@ -152,6 +129,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
               metricName={metricName}
               time_granularity={timeGranularity}
               onTimeGranularityChange={onTimeGranularityChange}
+              chartConfig={chartConfig}
             />
           </TabsContent>
         </>

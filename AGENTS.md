@@ -13,6 +13,7 @@
 
 - Prefer using `#[cfg_attr(test, ts_rs::TS)]` for ts-rs exports.
 - For any Option types visible from the frontend, include `#[cfg_attr(test, ts(export, optional_fields))]` and `#[serde(skip_serializing_if = "Option::is_none")]` so None values are not returned over the wire. In very rare cases we may decide do return `null`s, but in general we want to omit them.
+- Some tests make HTTP requests to the gateway; to start the gateway, you can run `cargo run-e2e`. (This gateway has dependencies on some docker containers, and it's appropriate to ask the user to run `docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up`.)
 
 ## The responsibility between API handlers and database interfaces
 
@@ -36,7 +37,7 @@ The pre-commit hooks automatically handle this by running `uv lock` and `uv expo
 
 We use `ts-rs` and `n-api` for TypeScript-Rust interoperability.
 
-- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`.
+- To generate TypeScript type definitions from Rust types, run `pnpm build-bindings`. Then, rebuild `tensorzero-node` with `pnpm -r build`.
 - To generate implementations for `n-api` functions to be called in TypeScript, and package types in `internal/tensorzero-node` for UI, run `pnpm --filter=tensorzero-node run build`.
 - Remember to run `pnpm -r typecheck` to make sure TypeScript and Rust implementations agree on types. Prefer to maintain all types in Rust.
 

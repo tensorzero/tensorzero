@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt;
+use std::future::Future;
 use std::sync::Arc;
 
 use futures::future::{join_all, try_join_all};
@@ -26,6 +27,7 @@ use crate::inference::types::{
 };
 use crate::model::ModelTable;
 use crate::tool::ToolCallChunk;
+use crate::utils::unbounded_recursion_wrapper;
 use crate::{
     endpoints::inference::InferenceParams,
     error::{Error, ErrorDetails},
@@ -132,7 +134,10 @@ impl UninitializedMixtureOfNConfig {
 }
 
 impl Variant for MixtureOfNConfig {
-    async fn infer(
+    // The compiler gives us 'cycle detected when looking up the hidden types stored across await points in a coroutine'
+    // if we try to use 'async fn' here
+    #[expect(refining_impl_trait, clippy::manual_async_fn)]
+    fn infer(
         &self,
         input: Arc<LazyResolvedInput>,
         models: InferenceModels,
@@ -140,17 +145,18 @@ impl Variant for MixtureOfNConfig {
         inference_config: Arc<InferenceConfig>,
         clients: InferenceClients,
         _inference_params: InferenceParams,
-    ) -> Result<InferenceResult, Error> {
-        let candidate_inference_results = self
-            .infer_candidates(
-                &input,
-                &models,
-                &function,
-                Arc::clone(&inference_config),
-                clients.clone(),
-            )
-            .await?;
-        match self
+    ) -> impl Future<Output = Result<InferenceResult, Error>> + Send {
+        async move {
+            let candidate_inference_results = self
+                .infer_candidates(
+                    &input,
+                    &models,
+                    &function,
+                    Arc::clone(&inference_config),
+                    clients.clone(),
+                )
+                .await?;
+            match self
             .fuse_candidates(
                 &input,
                 &function,
@@ -167,6 +173,7 @@ impl Variant for MixtureOfNConfig {
             },
             InferenceOrStreamResult::Stream(..) => {
                 Err(ErrorDetails::InternalError { message: format!("MixtureOfNConfig.fuse_candidates returned a stream for a non-streaming request. {IMPOSSIBLE_ERROR_MESSAGE}") }.into())
+                }
             }
         }
     }
@@ -469,25 +476,33 @@ impl MixtureOfNConfig {
                     extra_cache_key: Some(format!("candidate_{i}")),
                     ..inference_config.as_ref().clone()
                 };
-                Ok((candidate.to_string(), variant, Arc::new(config)))
+                Ok((candidate.to_string(), variant.clone(), Arc::new(config)))
             })
             .collect::<Result<Vec<_>, Error>>()?;
 
         // Start the inference tasks (we keep the names around for logging)
         let mut inference_futures = Vec::new();
-        for (candidate_name, candidate_variant, config) in &candidate_variants {
+        for (candidate_name, candidate_variant, config) in candidate_variants {
+            let input = Arc::new(input.clone());
+            let models = models.clone();
+            let function = Arc::clone(function);
+            let clients = clients.clone();
             inference_futures.push((
                 candidate_name.clone(),
                 timeout(
                     Duration::from_secs_f64(self.timeout_s),
-                    candidate_variant.infer(
-                        Arc::new(input.clone()),
-                        models.clone(),
-                        Arc::clone(function),
-                        Arc::clone(config),
-                        clients.clone(),
-                        InferenceParams::default(),
-                    ),
+                    unbounded_recursion_wrapper(async move {
+                        candidate_variant
+                            .infer(
+                                input,
+                                models,
+                                function,
+                                config,
+                                clients,
+                                InferenceParams::default(),
+                            )
+                            .await
+                    }),
                 ),
             ));
         }
@@ -861,6 +876,7 @@ impl FuserConfig {
                 self.inner.presence_penalty(),
                 self.inner.frequency_penalty(),
                 self.inner.stop_sequences().cloned(),
+                self.inner.inference_params_v2.clone(),
             );
 
         if !inference_config.extra_body.is_empty() {

@@ -4156,3 +4156,5 @@ async fn test_internal_tag_auto_injection() {
         inference_id.to_string()
     );
 }
+
+pub mod tool_params;

@@ -1,13 +1,16 @@
 use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::endpoints::openai_compatible::RouterExt;
 use axum::extract::{rejection::JsonRejection, DefaultBodyLimit, FromRequest, Json, Request};
 use axum::Router;
+use moka::sync::Cache;
 use serde::de::DeserializeOwned;
 use sqlx::postgres::PgPoolOptions;
+use tensorzero_auth::postgres::AuthResult;
 use tokio::runtime::Handle;
 use tokio::sync::oneshot::Sender;
 use tokio_util::sync::CancellationToken;
@@ -111,12 +114,40 @@ pub struct AppStateData {
     /// Holds any background tasks that we want to wait on during shutdown
     /// We wait for these tasks to finish when `GatewayHandle` is dropped
     pub deferred_tasks: TaskTracker,
+    /// Optional cache for TensorZero API key authentication
+    pub auth_cache: Option<Cache<String, AuthResult>>,
     // Prevent `AppStateData` from being directly constructed outside of this module
     // This ensures that `AppStateData` is only ever constructed via explicit `new` methods,
     // which can ensure that we update global state.
     _private: (),
 }
 pub type AppState = axum::extract::State<AppStateData>;
+
+/// Creates an auth cache based on the configuration.
+/// Returns None if auth is disabled or cache is disabled.
+fn create_auth_cache_from_config(config: &Config) -> Option<Cache<String, AuthResult>> {
+    if !config.gateway.auth.enabled {
+        return None;
+    }
+
+    let default_cache_config = Default::default();
+    let cache_config = config
+        .gateway
+        .auth
+        .cache
+        .as_ref()
+        .unwrap_or(&default_cache_config);
+
+    if !cache_config.enabled {
+        return None;
+    }
+
+    Some(
+        Cache::builder()
+            .time_to_live(Duration::from_millis(cache_config.ttl_ms))
+            .build(),
+    )
+}
 
 impl GatewayHandle {
     pub async fn new(config: Arc<Config>) -> Result<Self, Error> {
@@ -152,6 +183,7 @@ impl GatewayHandle {
         let postgres_connection_info =
             PostgresConnectionInfo::new_mock(test_options.postgres_healthy);
         let cancel_token = CancellationToken::new();
+        let auth_cache = create_auth_cache_from_config(&config);
         Self {
             app_state: AppStateData {
                 config,
@@ -159,6 +191,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
+                auth_cache,
                 _private: (),
             },
             cancel_token,
@@ -168,13 +201,14 @@ impl GatewayHandle {
 
     #[cfg(feature = "pyo3")]
     pub fn new_dummy(http_client: TensorzeroHttpClient) -> Self {
-        let config = Arc::new(Config::default());
+        let config = Arc::new(Config::new_dummy_for_pyo3());
         let clickhouse_connection_info = ClickHouseConnectionInfo::new_fake();
         #[cfg(test)]
         let postgres_connection_info = PostgresConnectionInfo::new_mock(true);
         #[cfg(not(test))]
         let postgres_connection_info = PostgresConnectionInfo::new_disabled();
         let cancel_token = CancellationToken::new();
+        let auth_cache = create_auth_cache_from_config(&config);
         Self {
             app_state: AppStateData {
                 config,
@@ -182,6 +216,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
+                auth_cache,
                 _private: (),
             },
             cancel_token,
@@ -213,6 +248,7 @@ impl GatewayHandle {
                 )
                 .await?;
         }
+        let auth_cache = create_auth_cache_from_config(&config);
         Ok(Self {
             app_state: AppStateData {
                 config,
@@ -220,6 +256,7 @@ impl GatewayHandle {
                 clickhouse_connection_info,
                 postgres_connection_info,
                 deferred_tasks: TaskTracker::new(),
+                auth_cache,
                 _private: (),
             },
             cancel_token,
@@ -231,7 +268,7 @@ impl GatewayHandle {
 pub async fn setup_clickhouse_without_config(
     clickhouse_url: String,
 ) -> Result<ClickHouseConnectionInfo, Error> {
-    setup_clickhouse(&Config::default(), Some(clickhouse_url), true).await
+    setup_clickhouse(&Config::new_empty().await?, Some(clickhouse_url), true).await
 }
 
 pub async fn setup_clickhouse(
@@ -306,6 +343,8 @@ pub async fn setup_postgres(
         return Ok(PostgresConnectionInfo::Disabled);
     };
 
+    // TODO - decide how we should handle apply `connection_pool_size` to two pools
+    // Hopefully, sqlx does a stable release before we actually start using `alpha_pool`
     let pool = PgPoolOptions::new()
         .max_connections(config.postgres.connection_pool_size)
         .connect(&postgres_url)
@@ -315,7 +354,18 @@ pub async fn setup_postgres(
                 message: err.to_string(),
             })
         })?;
-    let connection_info = PostgresConnectionInfo::new_with_pool(pool);
+
+    let alpha_pool = sqlx_alpha::postgres::PgPoolOptions::new()
+        .max_connections(config.postgres.connection_pool_size)
+        .connect(&postgres_url)
+        .await
+        .map_err(|err| {
+            Error::new(ErrorDetails::PostgresConnectionInitialization {
+                message: err.to_string(),
+            })
+        })?;
+
+    let connection_info = PostgresConnectionInfo::new_with_pool(pool, Some(alpha_pool));
     connection_info.check_migrations().await?;
     Ok(connection_info)
 }
@@ -398,7 +448,7 @@ pub async fn start_openai_compatible_gateway(
     let config = if let Some(config_file) = config_file {
         Arc::new(Config::load_and_verify_from_path(&ConfigFileGlob::new(config_file)?).await?)
     } else {
-        Arc::new(Config::default())
+        Arc::new(Config::new_empty().await?)
     };
     let gateway_handle =
         GatewayHandle::new_with_databases(config, clickhouse_url, postgres_url).await?;
@@ -407,6 +457,9 @@ pub async fn start_openai_compatible_gateway(
         .register_openai_compatible_routes()
         .fallback(endpoints::fallback::handle_404)
         .layer(DefaultBodyLimit::max(100 * 1024 * 1024)) // increase the default body limit from 2MB to 100MB
+        .layer(axum::middleware::from_fn(
+            crate::observability::warn_early_drop::warn_on_early_connection_drop,
+        ))
         .with_state(gateway_handle.app_state.clone());
 
     let (sender, recv) = tokio::sync::oneshot::channel::<()>();
@@ -463,6 +516,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -525,6 +579,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
 
         let config = Box::leak(Box::new(Config {
@@ -554,6 +609,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
         let config = Box::leak(Box::new(Config {
             gateway: gateway_config,
@@ -585,6 +641,7 @@ mod tests {
             unstable_disable_feedback_target_validation: false,
             disable_pseudonymous_usage_analytics: false,
             fetch_and_encode_input_files_before_inference: false,
+            auth: Default::default(),
         };
         let config = Config {
             gateway: gateway_config,

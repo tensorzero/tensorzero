@@ -2,6 +2,7 @@
 
 use crate::{Client, ClientBuilder, ClientBuilderMode};
 use tempfile::NamedTempFile;
+use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::clickhouse::test_helpers::CLICKHOUSE_URL;
 use url::Url;
 
@@ -14,9 +15,22 @@ pub async fn make_http_gateway() -> Client {
     .unwrap()
 }
 
-pub async fn make_embedded_gateway() -> Client {
+pub fn get_e2e_config_path() -> std::path::PathBuf {
     let mut config_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     config_path.push("../../tensorzero-core/tests/e2e/tensorzero.toml");
+    config_path
+}
+
+pub async fn get_e2e_config() -> Config {
+    let config_path = get_e2e_config_path();
+    let config_glob = ConfigFileGlob::new_from_path(&config_path).unwrap();
+    Config::load_from_path_optional_verify_credentials(&config_glob, false)
+        .await
+        .unwrap()
+}
+
+pub async fn make_embedded_gateway() -> Client {
+    let config_path = get_e2e_config_path();
     ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
         config_file: Some(config_path),
         clickhouse_url: Some(CLICKHOUSE_URL.clone()),

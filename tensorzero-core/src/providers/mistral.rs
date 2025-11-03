@@ -22,6 +22,9 @@ use crate::{
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
             },
+            chat_completion_inference_params::{
+                warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+            },
             ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
             ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
             ProviderInferenceResponse, ProviderInferenceResponseArgs,
@@ -440,8 +443,7 @@ fn prepare_mistral_tools<'a>(
         Some(tool_config) => match &tool_config.tool_choice {
             ToolChoice::Specific(tool_name) => {
                 let tool = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .find(|t| t.name() == tool_name)
                     .ok_or_else(|| {
                         Error::new(ErrorDetails::ToolNotFound {
@@ -453,8 +455,7 @@ fn prepare_mistral_tools<'a>(
             }
             ToolChoice::Auto | ToolChoice::Required => {
                 let tools = tool_config
-                    .tools_available
-                    .iter()
+                    .tools_available()
                     .map(|t| MistralTool::from(OpenAITool::from(t)))
                     .collect();
                 let tool_choice = match tool_config.tool_choice {
@@ -509,6 +510,29 @@ struct MistralRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut MistralRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "thinking_budget_tokens", None);
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
+}
+
 impl<'a> MistralRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -532,7 +556,7 @@ impl<'a> MistralRequest<'a> {
         .await?;
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
 
-        Ok(MistralRequest {
+        let mut mistral_request = MistralRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -546,7 +570,11 @@ impl<'a> MistralRequest<'a> {
             tools,
             tool_choice,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut mistral_request, &request.inference_params_v2);
+
+        Ok(mistral_request)
     }
 }
 
@@ -807,6 +835,7 @@ mod tests {
 
     use crate::inference::types::{FunctionType, RequestMessage, Role};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
+    use tracing_test::traced_test;
 
     #[tokio::test]
     async fn test_mistral_request_new() {
@@ -1241,6 +1270,48 @@ mod tests {
         assert!(matches!(
             result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_mistral_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = MistralRequest {
+            messages: vec![],
+            model: "test-model",
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            random_seed: None,
+            stream: false,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            stop: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `reasoning_effort`"
+        ));
+
+        // Test that thinking_budget_tokens warns
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `thinking_budget_tokens`"
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `verbosity`"
         ));
     }
 }

@@ -478,12 +478,13 @@ jobs:
       matrix:
         # Only include replicated: true when running in merge queue
         replicated: ${{ github.event_name == 'merge_group' && fromJSON('[true, false]') || fromJSON('[false]') }}
-        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"latest","prefix":"","allow_failure":false}]') || fromJSON('[{"tag":"latest","prefix":"","allow_failure":false}]') }}
+        # TODO: Temporarily using 25.9-alpine instead of latest
+        clickhouse_version: ${{ github.event_name == 'merge_group' && fromJSON('[{"tag":"24.12-alpine","prefix":"24.12","allow_failure":false},{"tag":"25.9-alpine","prefix":"25.9","allow_failure":false}]') || fromJSON('[{"tag":"25.9-alpine","prefix":"25.9","allow_failure":false}]') }}
         exclude:
-          # Use 25.7-alpine instead of latest for replicated tests in merge group
+          # Use 25.7-alpine instead of 25.9-alpine for replicated tests in merge group
           - replicated: true
             clickhouse_version:
-              { "tag": "latest", "prefix": "", "allow_failure": false }
+              { "tag": "25.9-alpine", "prefix": "25.9", "allow_failure": false }
           # Add 25.7-alpine for replicated tests in merge group
         include: ${{ github.event_name == 'merge_group' && fromJSON('[{"clickhouse_version":{"tag":"25.7-alpine","prefix":"25.7","allow_failure":false},"replicated":true}]') || fromJson('[]') }}
 
@@ -577,7 +578,7 @@ jobs:
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=20
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            while ! curl http://localhost:3000/health; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
               count=$((count + 1))
@@ -595,7 +596,7 @@ jobs:
           cargo run-e2e > e2e_logs.txt 2>&1 &
             count=0
             max_attempts=40
-            while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+            while ! curl http://localhost:3000/health; do
               echo "Waiting for gateway to be healthy..."
               sleep 1
               count=$((count + 1))
@@ -718,13 +719,24 @@ jobs:
       - name: Launch the gateway for E2E tests
         run: |
           cargo run-e2e > e2e_logs.txt 2>&1 &
-          while ! curl -s -f http://localhost:3000/health >/dev/null 2>&1; do
+          while ! curl http://localhost:3000/health; do
             echo "Waiting for gateway to be healthy..."
             sleep 1
           done
 
       - name: Test (Rust)
         run: cargo test-optimization-mock
+
+  build-gateway-e2e-container:
+    uses: ./.github/workflows/build-gateway-e2e-container.yml
+    permissions:
+      # Permission to checkout the repository
+      contents: read
+      # Permission to fetch GitHub OIDC token authentication
+      id-token: write
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   build-gateway-container:
     uses: ./.github/workflows/build-gateway-container.yml
@@ -779,13 +791,6 @@ jobs:
     uses: ./.github/workflows/merge-queue.yml
     secrets: inherit
 
-  check-all-live-tests-passed:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: github.repository == 'tensorzero/tensorzero'
-    steps:
-      - run: echo "This is a dummy job to satisfy branch protection checks"
-
   # See 'ci/README.md' at the repository root for more details.
   check-all-general-jobs-passed:
     permissions: {}
@@ -800,6 +805,7 @@ jobs:
         build-windows,
         build-ui-container,
         build-gateway-container,
+        build-gateway-e2e-container,
         validate,
         lint-rust,
         clickhouse-tests,

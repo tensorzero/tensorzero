@@ -5,118 +5,22 @@
 
 use super::{Arguments, InputMessage, InputMessageContent, Role, Template, Text, TextKind};
 use serde::de::Error as DeserializerError;
-use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
+use serde::de::SeqAccess;
 use serde::{Deserialize, Deserializer};
 use serde_json::{Map, Value};
 use serde_untagged::UntaggedEnumVisitor;
 
-/// Custom deserializer for `InputMessage` that handles legacy formats:
-/// - `"content": "text"` → `vec![Text { text }]`
-/// - `"content": {...}` → `vec![Template { name: role, arguments }]`
-/// - `"content": [{"type": "text", "arguments": {...}}]` → `vec![Template { name: role, arguments }]`
-impl<'de> Deserialize<'de> for InputMessage {
+// A helper struct with a custom deserialize impl that handles legacy formats
+struct MessageContent {
+    inner: Vec<IntermediaryInputMessageContent>,
+}
+
+impl<'de> Deserialize<'de> for MessageContent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(field_identifier, rename_all = "lowercase")]
-        enum Field {
-            Role,
-            Content,
-        }
-
-        struct InputMessageVisitor;
-
-        impl<'de> Visitor<'de> for InputMessageVisitor {
-            type Value = InputMessage;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("struct InputMessage")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<InputMessage, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut role: Option<Role> = None;
-                let mut content: Option<Vec<IntermediaryInputMessageContent>> = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Role => {
-                            if role.is_some() {
-                                return Err(de::Error::duplicate_field("role"));
-                            }
-                            role = Some(map.next_value()?);
-                        }
-                        Field::Content => {
-                            if content.is_some() {
-                                return Err(de::Error::duplicate_field("content"));
-                            }
-                            content = Some(map.next_value_seed(ContentSeed)?);
-                        }
-                    }
-                }
-
-                let role = role.ok_or_else(|| de::Error::missing_field("role"))?;
-                let content = content.ok_or_else(|| de::Error::missing_field("content"))?;
-                let content = finalize_intermediary_content(content, role);
-
-                Ok(InputMessage { role, content })
-            }
-        }
-
-        const FIELDS: &[&str] = &["role", "content"];
-        deserializer.deserialize_struct("InputMessage", FIELDS, InputMessageVisitor)
-    }
-}
-
-// We first deserialize into these intermediary variants so that we can keep the
-// original `serde_path_to_error` context provided by `StructuredJson`. Any data
-// that already maps to a modern `InputMessageContent` is boxed immediately,
-// while legacy `"content": {...}` shapes are postponed until we have access to
-// the message role (needed to synthesize the implicit template name).
-enum IntermediaryInputMessageContent {
-    Final(Box<InputMessageContent>),
-    TemplateFromArguments(Arguments),
-}
-
-fn finalize_intermediary_content(
-    intermediaries: Vec<IntermediaryInputMessageContent>,
-    role: Role,
-) -> Vec<InputMessageContent> {
-    // At this point we have already preserved serde's path information. Now we
-    // fold the intermediary variants into the final enum, inserting implicit
-    // templates for legacy shapes that did not include a template name.
-    intermediaries
-        .into_iter()
-        .map(|content| match content {
-            IntermediaryInputMessageContent::Final(content) => *content,
-            IntermediaryInputMessageContent::TemplateFromArguments(arguments) => {
-                InputMessageContent::Template(Template {
-                    name: role.implicit_template_name().to_string(),
-                    arguments,
-                })
-            }
-        })
-        .collect()
-}
-
-/// Seed used by the top-level `InputMessage` visitor to deserialize the
-/// `content` field. We keep this logic isolated so we can reuse the serde
-/// visitor state provided by `StructuredJson`, which is what allows us to emit
-/// full error paths like `input.messages[0].content[0]`.
-struct ContentSeed;
-
-impl<'de> DeserializeSeed<'de> for ContentSeed {
-    type Value = Vec<IntermediaryInputMessageContent>;
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        UntaggedEnumVisitor::new()
+        let inner: Vec<IntermediaryInputMessageContent> = UntaggedEnumVisitor::new()
             .expecting(format_args!("a string, object, or array"))
             .string(|text| {
                 Ok(vec![IntermediaryInputMessageContent::Final(Box::new(
@@ -137,24 +41,52 @@ impl<'de> DeserializeSeed<'de> for ContentSeed {
                 // Deserialize each element with its own seed so that serde_path_to_error
                 // tracks the array index and we can capture legacy shapes before they are
                 // converted into modern content blocks.
-                while let Some(content) = seq.next_element_seed(ContentElementSeed)? {
+                while let Some(content) = seq.next_element()? {
                     contents.push(content);
                 }
                 Ok(contents)
             })
-            .deserialize(deserializer)
+            .deserialize(deserializer)?;
+        Ok(MessageContent { inner })
     }
 }
 
-/// Seed used for individual items inside the `content` array. Items are read as
-/// `serde_json::Value` so we can apply legacy transformations while the serde
-/// tracker still knows the array index, then materialize an intermediary value.
-struct ContentElementSeed;
+/// Custom deserializer for `InputMessage` that handles legacy formats:
+/// - `"content": "text"` → `vec![Text { text }]`
+/// - `"content": {...}` → `vec![Template { name: role, arguments }]`
+/// - `"content": [{"type": "text", "arguments": {...}}]` → `vec![Template { name: role, arguments }]`
+impl<'de> Deserialize<'de> for InputMessage {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Helper {
+            role: Role,
+            content: MessageContent,
+        }
 
-impl<'de> DeserializeSeed<'de> for ContentElementSeed {
-    type Value = IntermediaryInputMessageContent;
+        let helper = Helper::deserialize(deserializer)?;
+        Ok(InputMessage {
+            role: helper.role,
+            content: finalize_intermediary_content(helper.content.inner, helper.role),
+        })
+    }
+}
 
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+// We first deserialize into these intermediary variants so that we can keep the
+// original `serde_path_to_error` context provided by `StructuredJson`. Any data
+// that already maps to a modern `InputMessageContent` is boxed immediately,
+// while legacy `"content": {...}` shapes are postponed until we have access to
+// the message role (needed to synthesize the implicit template name).
+enum IntermediaryInputMessageContent {
+    Final(Box<InputMessageContent>),
+    TemplateFromArguments(Arguments),
+}
+
+impl<'de> Deserialize<'de> for IntermediaryInputMessageContent {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -185,6 +117,27 @@ impl<'de> DeserializeSeed<'de> for ContentElementSeed {
             .map_err(|err| DeserializerError::custom(err.to_string()))?;
         Ok(IntermediaryInputMessageContent::Final(Box::new(content)))
     }
+}
+
+fn finalize_intermediary_content(
+    intermediaries: Vec<IntermediaryInputMessageContent>,
+    role: Role,
+) -> Vec<InputMessageContent> {
+    // At this point we have already preserved serde's path information. Now we
+    // fold the intermediary variants into the final enum, inserting implicit
+    // templates for legacy shapes that did not include a template name.
+    intermediaries
+        .into_iter()
+        .map(|content| match content {
+            IntermediaryInputMessageContent::Final(content) => *content,
+            IntermediaryInputMessageContent::TemplateFromArguments(arguments) => {
+                InputMessageContent::Template(Template {
+                    name: role.implicit_template_name().to_string(),
+                    arguments,
+                })
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]

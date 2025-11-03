@@ -1,16 +1,16 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, organization, workspace, description, disabled_at from tensorzero_auth_api_key WHERE short_id = $1 AND hash = $2",
+  "query": "SELECT public_id, organization, workspace, description, created_at, disabled_at from tensorzero_auth_api_key WHERE public_id = $1 AND hash = $2",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id",
-        "type_info": "Int8",
+        "name": "public_id",
+        "type_info": "Bpchar",
         "origin": {
           "Table": {
             "table": "tensorzero_auth_api_key",
-            "name": "id"
+            "name": "public_id"
           }
         }
       },
@@ -49,6 +49,17 @@
       },
       {
         "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "tensorzero_auth_api_key",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
         "name": "disabled_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -70,8 +81,9 @@
       false,
       false,
       true,
+      false,
       true
     ]
   },
-  "hash": "6d5d509fab9c81857df753f0ae30909ab85bddc79af8617feea60f857a463e5e"
+  "hash": "659d060b324bef8da0bbd4224540c90cb60ac01dbf9d5d4399665ac63c70c979"
 }

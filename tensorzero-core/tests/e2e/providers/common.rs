@@ -186,6 +186,8 @@ macro_rules! generate_provider_tests {
         use $crate::providers::embeddings::test_embedding_cache_with_provider;
         use $crate::providers::embeddings::test_embedding_cache_options_with_provider;
         use $crate::providers::embeddings::test_embedding_dryrun_with_provider;
+        use $crate::providers::embeddings::test_single_token_array_with_provider;
+        use $crate::providers::embeddings::test_batch_token_arrays_semantic_similarity_with_provider;
 
         #[tokio::test]
         async fn test_simple_inference_request() {
@@ -705,6 +707,22 @@ macro_rules! generate_provider_tests {
             }
         }
 
+        #[tokio::test]
+        async fn test_single_token_array() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_single_token_array_with_provider(provider).await;
+            }
+        }
+
+        #[tokio::test]
+        async fn test_batch_token_arrays_semantic_similarity() {
+            let providers = $func().await.embeddings;
+            for provider in providers {
+                test_batch_token_arrays_semantic_similarity_with_provider(provider).await;
+            }
+        }
+
     };
 }
 
@@ -730,7 +748,7 @@ model = "google_ai_studio_gemini::gemini-2.0-flash-lite"
 
 [functions.pdf_test.variants.anthropic]
 type = "chat_completion"
-model = "anthropic::claude-3-5-sonnet-20241022"
+model = "anthropic::claude-sonnet-4-5-20250929"
 
 [functions.pdf_test.variants.aws-bedrock]
 type = "chat_completion"
@@ -2332,7 +2350,12 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
                     || res["error"]
                         .as_str()
                         .unwrap()
-                        .contains("No auth credentials found"),
+                        .contains("No auth credentials found")
+                    || res["error"]
+                        .as_str()
+                        .unwrap()
+                        .to_lowercase()
+                        .contains("no cookie auth"),
                 "Unexpected error: {res}"
             );
         }
@@ -2416,11 +2439,13 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         })
         .await;
 
-    if "anthropic" == provider.model_provider_name.as_str() {
+    if provider.model_provider_name.as_str() == "anthropic"
+        || provider.model_provider_name.as_str() == "gcp_vertex_anthropic"
+    {
         // Anthropic rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
-    } else if "openai-responses" == provider.variant_name.as_str() {
+    } else if provider.variant_name.as_str() == "openai-responses" {
         // OpenAI Responses rejects requests with invalid thought signatures
         let err = res.unwrap_err();
         assert!(err.to_string().contains("signature"));
@@ -2428,14 +2453,16 @@ pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProv
         let _ = res.unwrap();
     }
 
-    if ["anthropic", "aws-bedrock"].contains(&provider.model_provider_name.as_str()) {
+    if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic"]
+        .contains(&provider.model_provider_name.as_str())
+    {
         assert!(
-            !logs_contain("does not support input thought blocks"),
+            !logs_contain("TensorZero doesn't support input thought blocks for the"),
             "Should not have warned about dropping thought blocks"
         );
     } else {
         assert!(
-            logs_contain("does not support input thought blocks"),
+            logs_contain("TensorZero doesn't support input thought blocks for the"),
             "Missing expected warning"
         );
     }

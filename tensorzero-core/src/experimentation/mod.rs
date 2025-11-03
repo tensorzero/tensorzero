@@ -46,6 +46,24 @@ impl UninitializedExperimentationConfig {
         variants: &HashMap<String, Arc<VariantInfo>>,
         metrics: &HashMap<String, crate::config::MetricConfig>,
     ) -> Result<ExperimentationConfig, Error> {
+        // Check if any variant has a weight specified
+        let variants_with_weights: Vec<&str> = variants
+            .iter()
+            .filter(|&(_name, variant)| variant.inner.weight().is_some())
+            .map(|(name, _variant)| name.as_str())
+            .collect();
+
+        if !variants_with_weights.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Cannot mix `experimentation` configuration with individual variant `weight` values. \
+                    The following variants have weights specified: {}. \
+                    Either use the `experimentation` section to control variant sampling, or specify `weight` on individual variants, but not both.",
+                    variants_with_weights.join(", ")
+                ),
+            }));
+        }
+
         match self {
             UninitializedExperimentationConfig::StaticWeights(config) => {
                 Ok(ExperimentationConfig::StaticWeights(config))
@@ -77,6 +95,13 @@ pub trait VariantSampler {
     // Return all variant names that are allowed to be used by this experimentation config
     // Used to enforce that we don't fall back to a disallowed variant.
     fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_;
+
+    fn get_current_display_probabilities<'a>(
+        &self,
+        function_name: &str,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
+    ) -> Result<HashMap<&'a str, f64>, Error>;
 }
 
 impl ExperimentationConfig {
@@ -169,6 +194,38 @@ impl ExperimentationConfig {
                 sample_uniform(function_name, &episode_id, active_variants, Some(&allowed))
             }
         })
+    }
+
+    pub fn get_current_display_probabilities<'a>(
+        &self,
+        function_name: &str,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
+        postgres: &PostgresConnectionInfo,
+    ) -> Result<HashMap<&'a str, f64>, Error> {
+        match self {
+            Self::StaticWeights(config) => {
+                config.get_current_display_probabilities(function_name, active_variants, postgres)
+            }
+            Self::Uniform => {
+                // Uniform distribution over all active variants
+                let num_variants = active_variants.len();
+                if num_variants == 0 {
+                    return Ok(HashMap::new());
+                }
+                let uniform_prob = 1.0 / num_variants as f64;
+                Ok(active_variants
+                    .keys()
+                    .map(|k| (k.as_str(), uniform_prob))
+                    .collect())
+            }
+            #[cfg(test)]
+            Self::AlwaysFails(config) => {
+                config.get_current_display_probabilities(function_name, active_variants, postgres)
+            }
+            Self::TrackAndStop(config) => {
+                config.get_current_display_probabilities(function_name, active_variants, postgres)
+            }
+        }
     }
 }
 
@@ -273,11 +330,41 @@ impl VariantSampler for AlwaysFailsConfig {
     fn allowed_variants(&self) -> impl Iterator<Item = &str> + '_ {
         self.allowed_variants.iter().map(String::as_str)
     }
+
+    // AlwaysFailsConfig always fails and falls back to uniform sampling
+    // probabilities over allowed variants
+    fn get_current_display_probabilities<'a>(
+        &self,
+        _function_name: &str,
+        active_variants: &'a HashMap<String, Arc<VariantInfo>>,
+        _postgres: &PostgresConnectionInfo,
+    ) -> Result<HashMap<&'a str, f64>, Error> {
+        // Find intersection of active_variants and allowed_variants
+        let intersection: Vec<&str> = active_variants
+            .keys()
+            .filter(|k| self.allowed_variants.contains(&k.to_string()))
+            .map(String::as_str)
+            .collect();
+
+        if intersection.is_empty() {
+            return Err(Error::new(ErrorDetails::InvalidFunctionVariants {
+                message: "No allowed variants in active variants".to_string(),
+            }));
+        }
+
+        let uniform_prob = 1.0 / intersection.len() as f64;
+        Ok(intersection
+            .into_iter()
+            .map(|variant_name| (variant_name, uniform_prob))
+            .collect())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{ErrorContext, SchemaData};
+    use crate::variant::{chat_completion::UninitializedChatCompletionConfig, VariantConfig};
     use uuid::Uuid;
 
     #[test]
@@ -455,5 +542,58 @@ mod tests {
                 "Variant {variant_name}: expected {expected_prob:.3}, got {actual_prob:.3}"
             );
         }
+    }
+
+    // Tests for get_current_display_probabilities
+    #[test]
+    fn test_get_current_display_probabilities_uniform() {
+        let mut active_variants = HashMap::new();
+        for name in ["A", "B", "C"] {
+            active_variants.insert(
+                name.to_string(),
+                Arc::new(VariantInfo {
+                    inner: VariantConfig::ChatCompletion(
+                        UninitializedChatCompletionConfig {
+                            weight: None,
+                            model: "model-name".into(),
+                            ..Default::default()
+                        }
+                        .load(&SchemaData::default(), &ErrorContext::new_test())
+                        .unwrap(),
+                    ),
+                    timeouts: Default::default(),
+                }),
+            );
+        }
+
+        let config = ExperimentationConfig::Uniform;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let probs = config
+            .get_current_display_probabilities("test", &active_variants, &postgres)
+            .unwrap();
+
+        // Should have uniform probabilities
+        assert_eq!(probs.len(), 3);
+        assert!((probs["A"] - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs["B"] - 1.0 / 3.0).abs() < 1e-9);
+        assert!((probs["C"] - 1.0 / 3.0).abs() < 1e-9);
+
+        // Check sum
+        let sum: f64 = probs.values().sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_get_current_display_probabilities_uniform_empty() {
+        let active_variants = HashMap::new();
+
+        let config = ExperimentationConfig::Uniform;
+        let postgres = PostgresConnectionInfo::new_disabled();
+        let probs = config
+            .get_current_display_probabilities("test", &active_variants, &postgres)
+            .unwrap();
+
+        // Should return empty map
+        assert_eq!(probs.len(), 0);
     }
 }

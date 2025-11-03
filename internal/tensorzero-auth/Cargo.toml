@@ -8,12 +8,16 @@ license.workspace = true
 [dependencies]
 hex = "0.4.3"
 secrecy.workspace = true
+serde.workspace = true
 sha2 = "0.10.9"
-# The alpha release has support for 'sqlx.toml' files
+# Unfortunately, this cannot be a workspace dependency, since renaming the 'sqlx' package breaks all of the macros
+# (which emit '::sqlx' tokens)
 sqlx = { version = "0.9.0-alpha.1", features = ["sqlx-toml", "postgres", "runtime-tokio", "chrono"] }
 thiserror = "2.0.17"
 rand = { workspace = true }
 chrono.workspace = true
+futures = { workspace = true }
+ts-rs.workspace = true
 
 [lints]
 workspace = true

@@ -32,7 +32,9 @@ use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse
 use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
-
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
@@ -527,6 +529,8 @@ impl InferenceProvider for OpenAIProvider {
                     event_source.map_err(TensorZeroEventError::EventSource),
                     start_time,
                     model_provider.discard_unknown_chunks,
+                    model_name,
+                    provider_name,
                 )
                 .peekable();
                 Ok((stream, raw_request))
@@ -780,6 +784,33 @@ impl InferenceProvider for OpenAIProvider {
                 raw_response,
             }),
         }
+    }
+}
+
+fn apply_inference_params(
+    request: &mut OpenAIRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        request.verbosity = verbosity.clone();
     }
 }
 
@@ -1417,10 +1448,10 @@ pub(super) fn prepare_openai_tools<'a>(
     match &request.tool_config {
         None => (None, None, None),
         Some(tool_config) => {
-            if tool_config.tools_available.is_empty() {
+            if !tool_config.any_tools_available() {
                 return (None, None, None);
             }
-            let tools = Some(tool_config.tools_available.iter().map(Into::into).collect());
+            let tools = Some(tool_config.tools_available().map(Into::into).collect());
             let tool_choice = Some((&tool_config.tool_choice).into());
             let parallel_tool_calls = tool_config.parallel_tool_calls;
             (tools, tool_choice, parallel_tool_calls)
@@ -1965,7 +1996,7 @@ pub(super) struct StreamOptions {
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct OpenAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -1994,6 +2025,10 @@ struct OpenAIRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
 }
 
 impl<'a> OpenAIRequest<'a> {
@@ -2043,7 +2078,7 @@ impl<'a> OpenAIRequest<'a> {
             }
         }
 
-        Ok(OpenAIRequest {
+        let mut openai_request = OpenAIRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -2059,7 +2094,13 @@ impl<'a> OpenAIRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+            reasoning_effort: None, // handled below
+            verbosity: None,        // handled below
+        };
+
+        apply_inference_params(&mut openai_request, &request.inference_params_v2);
+
+        Ok(openai_request)
     }
 }
 
@@ -2659,7 +2700,6 @@ mod tests {
     use crate::providers::test_helpers::{
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
-    use crate::tool::AllowedTools;
     use crate::tool::ToolCallConfig;
 
     use super::*;
@@ -3119,13 +3159,8 @@ mod tests {
             frequency_penalty: Some(0.5),
             max_completion_tokens: Some(100),
             seed: Some(69),
-            stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
-            stream_options: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -3217,13 +3252,8 @@ mod tests {
             frequency_penalty: Some(0.5),
             max_completion_tokens: Some(100),
             seed: Some(69),
-            stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
-            stream_options: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
@@ -3284,13 +3314,8 @@ mod tests {
             frequency_penalty: Some(0.2),
             max_completion_tokens: Some(100),
             seed: Some(69),
-            stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
-            stream_options: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
+            ..Default::default()
         };
         let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -3343,13 +3368,8 @@ mod tests {
             frequency_penalty: Some(0.2),
             max_completion_tokens: Some(100),
             seed: Some(69),
-            stream: false,
             response_format: Some(OpenAIResponseFormat::Text),
-            stream_options: None,
-            tools: None,
-            tool_choice: None,
-            parallel_tool_calls: None,
-            stop: None,
+            ..Default::default()
         };
         let result = ProviderInferenceResponse::try_from(OpenAIResponseWithMetadata {
             response: invalid_response_multiple_choices,
@@ -3404,11 +3424,9 @@ mod tests {
         let parallel_tool_calls = parallel_tool_calls.unwrap();
         assert!(parallel_tool_calls);
         let tool_config = ToolCallConfig {
-            tools_available: vec![],
             tool_choice: ToolChoice::Required,
             parallel_tool_calls: Some(true),
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
 
         // Test no tools but a tool choice and make sure tool choice output is None
@@ -4344,5 +4362,51 @@ mod tests {
         );
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_openai_apply_inference_params_called() {
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Test".to_string().into()],
+            }],
+            system: None,
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            seed: None,
+            stream: false,
+            json_mode: ModelInferenceRequestJsonMode::Off,
+            tool_config: None,
+            function_type: FunctionType::Chat,
+            output_schema: None,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: Some("high".to_string()),
+                thinking_budget_tokens: Some(1024),
+                verbosity: Some("low".to_string()),
+            },
+            extra_body: Default::default(),
+            ..Default::default()
+        };
+
+        let openai_request = OpenAIRequest::new("gpt-4o", &request)
+            .await
+            .expect("Failed to create OpenAI request");
+
+        // Test that reasoning_effort is applied correctly
+        assert_eq!(openai_request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "OpenAI does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity is applied correctly
+        assert_eq!(openai_request.verbosity, Some("low".to_string()));
     }
 }

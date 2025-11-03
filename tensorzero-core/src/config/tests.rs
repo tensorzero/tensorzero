@@ -1503,6 +1503,7 @@ async fn test_config_load_shorthand_models_only() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     env::set_var("OPENAI_API_KEY", "sk-something");
@@ -1935,31 +1936,6 @@ async fn test_config_s3_allow_http_env_var() {
     assert!(!logs_contain("HTTPS"));
 }
 
-#[traced_test]
-#[tokio::test]
-async fn test_deprecated_enable_template_filesystem_access() {
-    let config_str = r"
-        [gateway]
-        enable_template_filesystem_access = true
-        ";
-    let config_toml = toml::from_str(config_str).expect("Failed to parse sample config");
-
-    let config = Config::load_from_toml(
-        config_toml,
-        &SpanMap::new_single_file(PathBuf::from("fake_path.toml")),
-    )
-    .await
-    .unwrap();
-    assert!(config.gateway.template_filesystem_access.enabled);
-    assert!(config
-        .gateway
-        .template_filesystem_access
-        .base_path
-        .is_none());
-    // TODO - also test error when we match multiple files
-    assert!(logs_contain("Deprecation Warning: `gateway.enable_template_filesystem_access` is deprecated. Please use `[gateway.template_filesystem_access.enabled]` instead."));
-}
-
 #[tokio::test]
 async fn test_missing_json_mode_chat() {
     let config_str = r#"
@@ -2205,6 +2181,7 @@ async fn test_config_duplicate_user_schema() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2243,6 +2220,7 @@ async fn test_config_named_schema_no_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2279,6 +2257,7 @@ async fn test_config_duplicate_user_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2311,6 +2290,7 @@ async fn test_config_invalid_template_no_schema() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2737,6 +2717,7 @@ async fn test_config_schema_missing_template() {
 
     let config = UninitializedConfig::read_toml_config(
         &ConfigFileGlob::new_from_path(temp_file.path()).unwrap(),
+        false,
     )
     .unwrap();
     let err = Config::load_from_toml(config.table, &config.span_map)
@@ -2744,6 +2725,153 @@ async fn test_config_schema_missing_template() {
         .expect_err("Config should fail to load");
 
     assert_eq!(err.to_string(), "`functions.test.variants.missing_template.templates.my_custom_schema` is required when `functions.test.schemas.my_custom_schema` is specified");
+}
+
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_uniform() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.5
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.5
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a") && err_msg.contains("variant_b"),
+        "Error should list both variants with weights: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_static_weights() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.7
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "static_weights"
+        candidate_variants = {"variant_a" = 0.3, "variant_b" = 0.7}
+        fallback_variants = ["variant_a", "variant_b"]
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a"),
+        "Error should list the variant with weight: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_track_and_stop() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [metrics.test_metric]
+        type = "boolean"
+        optimize = "max"
+        level = "inference"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.6
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "track_and_stop"
+        metric = "test_metric"
+        candidate_variants = ["variant_a", "variant_b"]
+        fallback_variants = ["variant_a"]
+        min_samples_per_variant = 100
+        delta = 0.05
+        epsilon = 0.1
+        update_period_s = 60
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a"),
+        "Error should list the variant with weight: {err_msg}"
+    );
 }
 
 // Unit tests for glob pattern matching functionality
