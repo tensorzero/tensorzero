@@ -7,7 +7,7 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
     InputMessage, InputMessageContent, Role, Unknown, UnknownChunk, UrlFile,
 };

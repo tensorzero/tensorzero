@@ -1,7 +1,7 @@
 use chrono::DateTime;
 use tensorzero::test_helpers::make_embedded_gateway;
 use tensorzero::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
+    BooleanMetricFilter, ClientExt, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
     InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagFilter,
     TimeComparisonOperator, TimeFilter,
 };

@@ -11,6 +11,7 @@ path = "tests/tests.rs"
 required-features = ["e2e_tests"]
 
 [dependencies]
+async-trait = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true }
