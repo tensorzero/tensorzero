@@ -92,14 +92,14 @@ pub async fn test_list_simple_query_json_function() {
         );
     }
 
-    // Verify ORDER BY timestamp descending - check that timestamps are in descendingending order
+    // Verify ORDER BY timestamp DESC - check that timestamps are in descending order
     let mut prev_timestamp: Option<String> = None;
     for inference in &res {
         let timestamp = inference["timestamp"].as_str().unwrap().to_string();
         if let Some(prev) = &prev_timestamp {
             assert!(
                 timestamp <= *prev,
-                "Timestamps should be in descendingending order. Got: {timestamp} <= {prev}"
+                "Timestamps should be in descending order. Got: {timestamp} <= {prev}"
             );
         }
         prev_timestamp = Some(timestamp);
