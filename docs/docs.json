@@ -118,7 +118,7 @@
             "group": "Operations",
             "pages": [
               "operations/manage-credentials",
-              "operations/require-tensorzero-api-keys-auth",
+              "operations/set-up-auth-for-tensorzero",
               "operations/enforce-custom-rate-limits",
               "operations/organize-your-configuration",
               "operations/export-opentelemetry-traces",

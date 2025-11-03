@@ -1,9 +1,9 @@
 ---
-title: Require TensorZero API keys (auth)
-description: Learn how to require TensorZero API keys to authenticate your TensorZero Gateway clients.
+title: Set up auth for TensorZero
+description: Learn how to set up TensorZero API keys to authenticate your inference requests and manage access control for your workflows.
 ---
 
-You can create TensorZero API keys to authenticate your TensorZero Gateway clients.
+You can create TensorZero API keys to authenticate your requests to the TensorZero Gateway.
 This way, your clients don't need access to model provider credentials, making it easier to manage access and security.
 
 This page shows how to:
@@ -11,6 +11,14 @@ This page shows how to:
 - Create API keys for the TensorZero Gateway
 - Require clients to use these API keys for requests
 - Manage API keys in the TensorZero UI
+
+<Note>
+
+TensorZero supports authentication for the gateway.
+Authentication for the UI is coming soon.
+In the meantime, we recommend pairing the UI with complementary products like Nginx, OAuth2 Proxy, or Tailscale.
+
+</Note>
 
 ## Set up and enforce TensorZero API keys
 

@@ -1,5 +1,5 @@
 [project]
-name = "require-tensorzero-api-keys-auth"
+name = "set-up-auth-for-tensorzero"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"

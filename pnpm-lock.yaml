@@ -62,7 +62,7 @@ importers:
         specifier: ^11.0.5
         version: 11.1.0
 
-  examples/docs/guides/operations/require-tensorzero-api-keys-auth:
+  examples/docs/guides/operations/set-up-auth-for-tensorzero:
     dependencies:
       openai:
         specifier: ^6.4.0
