@@ -9,6 +9,7 @@ from typing import (
     Optional,
     Sequence,
     Type,
+    TypedDict,
     Union,
     final,
 )
@@ -38,6 +39,11 @@ from tensorzero.types import (
     JsonInferenceOutput,
     OrderBy,
 )
+
+class EvaluatorStatsDict(TypedDict):
+    mean: float
+    stderr: float
+    count: int
 
 @final
 class ResolvedInputMessage:
@@ -81,12 +87,13 @@ class EvaluationJobHandler:
         """
         ...
 
-    def summary_stats(self) -> dict[str, dict[str, float]]:
+    def summary_stats(self) -> dict[str, EvaluatorStatsDict]:
         """
         Get summary statistics from all consumed results.
 
         Uses cached results collected during iteration.
-        Returns dict mapping evaluator names to {"mean": float, "stderr": float}.
+        Returns dict mapping evaluator names to
+        {"mean": float, "stderr": float, "count": int}.
         """
         ...
 
@@ -124,12 +131,13 @@ class AsyncEvaluationJobHandler:
         """
         ...
 
-    async def summary_stats(self) -> dict[str, dict[str, float]]:
+    async def summary_stats(self) -> dict[str, EvaluatorStatsDict]:
         """
         Get summary statistics from all consumed results.
 
         Uses cached results collected during iteration.
-        Returns dict mapping evaluator names to {"mean": float, "stderr": float}.
+        Returns dict mapping evaluator names to
+        {"mean": float, "stderr": float, "count": int}.
         """
         ...
 
