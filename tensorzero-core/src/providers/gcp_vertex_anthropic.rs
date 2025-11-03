@@ -17,13 +17,13 @@ use super::helpers::{
 use crate::cache::ModelProviderRequest;
 use crate::config::skip_credential_validation;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{
-    warn_discarded_thought_block, warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error,
-    ErrorDetails,
-};
+use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::file::require_image;
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
@@ -34,7 +34,8 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, Thought, ThoughtChunk, UnknownChunk,
+    Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::CredentialLocationWithFallback;
@@ -52,7 +53,6 @@ use super::helpers::{convert_stream_error, peek_first_chunk};
 
 /// Implements a subset of the GCP Vertex Gemini API as documented [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/generateContent) for non-streaming
 /// and [here](https://cloud.google.com/vertex-ai/docs/reference/rest/v1/projects.locations.publishers.models/streamGenerateContent) for streaming
-#[expect(unused)]
 const PROVIDER_NAME: &str = "GCP Vertex Anthropic";
 pub const PROVIDER_TYPE: &str = "gcp_vertex_anthropic";
 
@@ -289,7 +289,7 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -326,7 +326,14 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
             builder,
         )
         .await?;
-        let mut stream = stream_anthropic(event_source, start_time, model_provider).peekable();
+        let mut stream = stream_anthropic(
+            event_source,
+            start_time,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
@@ -370,8 +377,12 @@ fn stream_anthropic(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         while let Some(ev) = event_source.next().await {
@@ -404,6 +415,8 @@ fn stream_anthropic(
                                 start_time.elapsed(),
                                 &mut current_tool_id,
                                 discard_unknown_chunks,
+                                &model_name,
+                                &provider_name,
                             )
                         });
 
@@ -501,6 +514,13 @@ enum GCPVertexAnthropicMessageContent<'a> {
         tool_use_id: &'a str,
         content: Vec<GCPVertexAnthropicMessageContent<'a>>,
     },
+    Thinking {
+        thinking: Option<&'a str>,
+        signature: Option<&'a str>,
+    },
+    RedactedThinking {
+        data: &'a str,
+    },
     ToolUse {
         id: &'a str,
         name: &'a str,
@@ -571,14 +591,21 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
                     },
                 )))
             }
-            // We don't support thought blocks being passed in from a request.
-            // These are only possible to be passed in in the scenario where the
-            // output of a chat completion is used as an input to another model inference,
-            // i.e. a judge or something.
-            // We don't think the thoughts should be passed in in this case.
             ContentBlock::Thought(thought) => {
-                warn_discarded_thought_block(PROVIDER_TYPE, thought);
-                Ok(None)
+                if let Some(text) = thought.text.as_deref() {
+                    Ok(Some(FlattenUnknown::Normal(
+                        GCPVertexAnthropicMessageContent::Thinking {
+                            thinking: Some(text),
+                            signature: thought.signature.as_deref(),
+                        },
+                    )))
+                } else if let Some(signature) = thought.signature.as_deref() {
+                    Ok(Some(FlattenUnknown::Normal(
+                        GCPVertexAnthropicMessageContent::RedactedThinking { data: signature },
+                    )))
+                } else {
+                    Ok(None)
+                }
             }
             ContentBlock::Unknown {
                 data,
@@ -624,6 +651,12 @@ enum GCPVertexAnthropicSystemBlock<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+struct GCPVertexAnthropicThinkingConfig {
+    r#type: &'static str,
+    budget_tokens: i32,
+}
+
+#[derive(Debug, Default, PartialEq, Serialize)]
 struct GCPVertexAnthropicRequestBody<'a> {
     anthropic_version: &'static str,
     messages: Vec<GCPVertexAnthropicMessage<'a>>,
@@ -636,6 +669,8 @@ struct GCPVertexAnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<GCPVertexAnthropicThinkingConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
@@ -643,6 +678,36 @@ struct GCPVertexAnthropicRequestBody<'a> {
     tool_choice: Option<GCPVertexAnthropicToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tools: Option<Vec<GCPVertexAnthropicTool<'a>>>,
+}
+
+fn apply_inference_params(
+    request: &mut GCPVertexAnthropicRequestBody,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        request.thinking = Some(GCPVertexAnthropicThinkingConfig {
+            r#type: "enabled",
+            budget_tokens: *budget_tokens,
+        });
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> GCPVertexAnthropicRequestBody<'a> {
@@ -704,18 +769,26 @@ impl<'a> GCPVertexAnthropicRequestBody<'a> {
         }?;
 
         // NOTE: Anthropic does not support seed
-        Ok(GCPVertexAnthropicRequestBody {
+        let mut gcp_vertex_anthropic_request = GCPVertexAnthropicRequestBody {
             anthropic_version: ANTHROPIC_API_VERSION,
             messages,
             max_tokens,
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
+            thinking: None,
             top_p: request.top_p,
             stop_sequences: request.borrow_stop_sequences(),
             tool_choice,
             tools,
-        })
+        };
+
+        apply_inference_params(
+            &mut gcp_vertex_anthropic_request,
+            &request.inference_params_v2,
+        );
+
+        Ok(gcp_vertex_anthropic_request)
     }
 }
 
@@ -735,7 +808,10 @@ fn get_default_max_tokens(model_id: &str) -> Result<u32, Error> {
     } else if model_id.starts_with("claude-3-7-sonnet@") {
         // GCP docs say 128k but that causes `max_tokens: XXX > 64000, which is the maximum allowed number of output tokens for claude-3-7-sonnet-20250219`
         Ok(64_000)
-    } else if model_id.starts_with("claude-sonnet-4@") {
+    } else if model_id.starts_with("claude-sonnet-4@")
+        || model_id.starts_with("claude-haiku-4-5@")
+        || model_id.starts_with("claude-sonnet-4-5@")
+    {
         Ok(64_000)
     } else if model_id.starts_with("claude-opus-4@") || model_id.starts_with("claude-opus-4-1@") {
         Ok(32_000)
@@ -857,6 +933,13 @@ pub enum GCPVertexAnthropicContentBlock {
         name: String,
         input: serde_json::Value,
     },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
+    RedactedThinking {
+        data: String,
+    },
 }
 
 fn convert_to_output(
@@ -878,6 +961,23 @@ fn convert_to_output(
                         ),
                     })
                 })?,
+            }))
+        }
+        FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::Thinking {
+            thinking,
+            signature,
+        }) => Ok(ContentBlockOutput::Thought(Thought {
+            text: Some(thinking),
+            signature: Some(signature),
+            summary: None,
+            provider_type: Some(PROVIDER_TYPE.to_string()),
+        })),
+        FlattenUnknown::Normal(GCPVertexAnthropicContentBlock::RedactedThinking { data }) => {
+            Ok(ContentBlockOutput::Thought(Thought {
+                text: None,
+                signature: Some(data),
+                summary: None,
+                provider_type: Some(PROVIDER_TYPE.to_string()),
             }))
         }
         FlattenUnknown::Unknown(obj) => Ok(ContentBlockOutput::Unknown {
@@ -1024,6 +1124,19 @@ enum GCPVertexAnthropicMessageBlock {
     InputJsonDelta {
         partial_json: String,
     },
+    ThinkingDelta {
+        thinking: String,
+    },
+    SignatureDelta {
+        signature: String,
+    },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
+    RedactedThinking {
+        data: String,
+    },
 }
 
 #[derive(Deserialize, Debug, Serialize)]
@@ -1066,6 +1179,8 @@ fn anthropic_to_tensorzero_stream_message(
     message_latency: Duration,
     current_tool_id: &mut Option<String>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
         GCPVertexAnthropicStreamMessage::ContentBlockDelta {
@@ -1098,6 +1213,38 @@ fn anthropic_to_tensorzero_stream_message(
                             raw_response: None,
                         }))?,
                         raw_arguments: partial_json,
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::ThinkingDelta { thinking } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: Some(thinking),
+                        signature: None,
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::SignatureDelta { signature } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(signature),
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1139,6 +1286,39 @@ fn anthropic_to_tensorzero_stream_message(
                         raw_name: Some(name),
                         // As far as I can tell this is always {} so we ignore
                         raw_arguments: String::new(),
+                    })],
+                    None,
+                    raw_message,
+                    message_latency,
+                    None,
+                )))
+            }
+            GCPVertexAnthropicMessageBlock::Thinking {
+                thinking,
+                signature,
+            } => Ok(Some(ProviderInferenceResponseChunk::new(
+                vec![ContentBlockChunk::Thought(ThoughtChunk {
+                    text: Some(thinking),
+                    signature: Some(signature),
+                    id: index.to_string(),
+                    summary_id: None,
+                    summary_text: None,
+                    provider_type: Some(PROVIDER_TYPE.to_string()),
+                })],
+                None,
+                raw_message,
+                message_latency,
+                None,
+            ))),
+            GCPVertexAnthropicMessageBlock::RedactedThinking { data } => {
+                Ok(Some(ProviderInferenceResponseChunk::new(
+                    vec![ContentBlockChunk::Thought(ThoughtChunk {
+                        text: None,
+                        signature: Some(data),
+                        id: index.to_string(),
+                        summary_id: None,
+                        summary_text: None,
+                        provider_type: Some(PROVIDER_TYPE.to_string()),
                     })],
                     None,
                     raw_message,
@@ -1201,11 +1381,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: delta.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1221,11 +1401,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: content_block.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1241,11 +1421,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "message_delta".to_string(),
                     data: delta.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1543,11 +1723,7 @@ mod tests {
                 system: Some(vec![GCPVertexAnthropicSystemBlock::Text {
                     text: "test_system"
                 }]),
-                temperature: None,
-                top_p: None,
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -1616,9 +1792,7 @@ mod tests {
                 }]),
                 temperature: Some(0.5),
                 top_p: Some(0.9),
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -1694,7 +1868,7 @@ mod tests {
                     description: Some(WEATHER_TOOL.description()),
                     input_schema: WEATHER_TOOL.parameters(),
                 }]),
-                stop_sequences: None,
+                ..Default::default()
             }
         );
     }
@@ -1762,6 +1936,18 @@ mod tests {
         let model = "claude-3-haiku@20240307".to_string();
         let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-haiku-4-5@20251001".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-sonnet-4-5@20250929".to_string();
+        let body = GCPVertexAnthropicRequestBody::new(&model, &request).await;
+        assert_eq!(body.unwrap().max_tokens, 64_000);
         let body = GCPVertexAnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
@@ -2183,15 +2369,10 @@ mod tests {
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
-            system: None,
             messages: vec![],
             stream: Some(false),
             max_tokens: 1000,
-            temperature: None,
-            top_p: None,
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test response".to_string();
@@ -2277,15 +2458,9 @@ mod tests {
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
-            system: None,
             messages: vec![],
-            stream: Some(false),
             max_tokens: 1000,
-            temperature: None,
-            top_p: None,
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
@@ -2370,15 +2545,9 @@ mod tests {
         };
         let request_body = GCPVertexAnthropicRequestBody {
             anthropic_version: "1.0",
-            system: None,
             messages: vec![],
-            stream: Some(false),
             max_tokens: 1000,
-            temperature: None,
-            top_p: None,
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let body_with_latency = GCPVertexAnthropicResponseWithMetadata {
@@ -2442,6 +2611,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2470,6 +2641,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2498,6 +2671,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2528,6 +2703,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2557,6 +2734,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2584,6 +2763,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2606,6 +2787,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2621,6 +2804,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2649,6 +2834,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2670,6 +2857,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2689,6 +2878,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2702,6 +2893,8 @@ mod tests {
             latency,
             &mut current_tool_id,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2793,9 +2986,43 @@ mod tests {
             Duration::from_secs(0),
             &mut Default::default(),
             true,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
         assert_eq!(res, None);
         assert!(logs_contain("Discarding unknown chunk"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_gcp_vertex_anthropic_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = GCPVertexAnthropicRequestBody::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns with tip about thinking_budget_tokens
+        assert!(logs_contain(
+            "GCP Vertex Anthropic does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
+        ));
+
+        // Test that thinking_budget_tokens is applied correctly
+        assert_eq!(
+            request.thinking,
+            Some(GCPVertexAnthropicThinkingConfig {
+                r#type: "enabled",
+                budget_tokens: 1024,
+            })
+        );
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "GCP Vertex Anthropic does not support the inference parameter `verbosity`, so it will be ignored."
+        ));
     }
 }

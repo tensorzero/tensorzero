@@ -1,5 +1,8 @@
 use std::{borrow::Cow, time::Duration};
 
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::RequestMessage;
 use crate::providers::openai::{OpenAIMessagesConfig, OpenAIToolChoiceString};
 use futures::{future::try_join_all, StreamExt};
@@ -334,8 +337,10 @@ enum TogetherResponseFormat<'a> {
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
 /// or context_length_exceeded_behavior
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct TogetherRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
+    #[cfg_attr(test, serde(default))]
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -360,6 +365,35 @@ struct TogetherRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+}
+
+fn apply_inference_params(
+    request: &mut TogetherRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> TogetherRequest<'a> {
@@ -402,7 +436,7 @@ impl<'a> TogetherRequest<'a> {
             tool_choice = Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto));
         }
 
-        Ok(TogetherRequest {
+        let mut together_request = TogetherRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -417,7 +451,12 @@ impl<'a> TogetherRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+            reasoning_effort: None,
+        };
+
+        apply_inference_params(&mut together_request, &request.inference_params_v2);
+
+        Ok(together_request)
     }
 }
 
@@ -804,6 +843,7 @@ mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
 
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -1586,5 +1626,31 @@ mod tests {
                 id: "0".to_string(),
             })]
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_together_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = TogetherRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort is applied correctly
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "Together does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Together does not support the inference parameter `verbosity`"
+        ));
     }
 }

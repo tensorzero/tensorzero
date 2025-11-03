@@ -13,6 +13,7 @@ import { FeedbackMeansTimeseries } from "~/components/function/variant/FeedbackM
 import { useTimeGranularityParam } from "~/hooks/use-time-granularity-param";
 import { transformFeedbackTimeseries } from "~/components/function/variant/FeedbackSamplesTimeseries";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { CHART_COLORS } from "~/utils/chart";
 
 interface FunctionExperimentationProps {
   functionConfig: FunctionConfig;
@@ -68,6 +69,29 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
       ? functionConfig.experimentation.metric
       : "";
 
+  // Create a centralized chart config to ensure consistent colors across all panels
+  // Use union of variant names from current weights and historical feedback data
+  // to handle recently disabled variants that still appear in historical timeseries
+  const allVariantNames = new Set([
+    ...variantWeights.map((v) => v.variant_name),
+    ...variantNames,
+  ]);
+  const sortedVariantNames = Array.from(allVariantNames).sort((a, b) =>
+    a.localeCompare(b),
+  );
+
+  const chartConfig: Record<string, { label: string; color: string }> =
+    sortedVariantNames.reduce(
+      (config, variantName, index) => ({
+        ...config,
+        [variantName]: {
+          label: variantName,
+          color: CHART_COLORS[index % CHART_COLORS.length],
+        },
+      }),
+      {},
+    );
+
   return (
     <Tabs defaultValue="weights" className="w-full">
       {shouldShowTimeseries && (
@@ -78,7 +102,10 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
         </TabsList>
       )}
       <TabsContent value="weights">
-        <ExperimentationPieChart variantWeights={variantWeights} />
+        <ExperimentationPieChart
+          variantWeights={variantWeights}
+          chartConfig={chartConfig}
+        />
       </TabsContent>
       {shouldShowTimeseries && (
         <>
@@ -91,6 +118,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
               metricName={metricName}
               time_granularity={timeGranularity}
               onTimeGranularityChange={onTimeGranularityChange}
+              chartConfig={chartConfig}
             />
           </TabsContent>
           <TabsContent value="counts">
@@ -101,6 +129,7 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
               metricName={metricName}
               time_granularity={timeGranularity}
               onTimeGranularityChange={onTimeGranularityChange}
+              chartConfig={chartConfig}
             />
           </TabsContent>
         </>

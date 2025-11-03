@@ -3091,4 +3091,91 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
     );
 }
 
+#[tokio::test]
+async fn test_datapoint_update_invalid_output_schema_json() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Try to create/update a datapoint with an invalid output_schema
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
+            "output": {"answer": "Hello"},
+            "output_schema": {
+                "type": "invalid_type",  // This is an invalid JSON Schema type
+                "properties": {
+                    "answer": {"type": "string"}
+                }
+            },
+            "is_custom": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // The request should fail with a client error
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "Expected BAD_REQUEST status for invalid output_schema"
+    );
+
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let error_message = resp_json.to_string();
+
+    // Verify that the error message mentions the schema is invalid
+    assert!(
+        error_message.contains("invalid") || error_message.contains("schema"),
+        "Error message should mention invalid schema: {error_message}"
+    );
+}
+
+#[tokio::test]
+async fn test_datapoint_create_invalid_output_schema_json() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+
+    // Try to create datapoints with an invalid output_schema
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&json!({
+            "datapoints": [{
+                "function_name": "json_success",
+                "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
+                "output": {"answer": "Hello"},
+                "output_schema": {
+                    "type": "invalid_type",  // This is an invalid JSON Schema type
+                    "properties": {
+                        "answer": {"type": "string"}
+                    }
+                }
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    // The request should fail with a client error
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "Expected BAD_REQUEST status for invalid output_schema"
+    );
+
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let error_message = resp_json.to_string();
+
+    // Verify that the error message mentions the schema is invalid
+    assert!(
+        error_message.contains("invalid") || error_message.contains("schema"),
+        "Error message should mention invalid schema: {error_message}"
+    );
+}
+
 pub mod tool_params;

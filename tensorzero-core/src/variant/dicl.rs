@@ -22,7 +22,9 @@ use crate::inference::types::ResolvedInputMessageContent;
 use crate::inference::types::StoredInput;
 use crate::inference::types::StoredInputMessageContent;
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ModelInferenceRequest, RequestMessage, Role, Text,
+    batch::StartBatchModelInferenceWithMetadata,
+    chat_completion_inference_params::ChatCompletionInferenceParamsV2, ModelInferenceRequest,
+    RequestMessage, Role, Text,
 };
 use crate::model::ModelTable;
 use crate::model_table::ShorthandModelConfig;
@@ -64,6 +66,8 @@ pub struct DiclConfig {
     frequency_penalty: Option<f32>,
     max_tokens: Option<u32>,
     seed: Option<u32>,
+    #[serde(flatten)]
+    pub(crate) inference_params_v2: ChatCompletionInferenceParamsV2,
     json_mode: Option<JsonMode>,
     #[cfg_attr(test, ts(skip))]
     extra_body: Option<ExtraBodyConfig>,
@@ -126,6 +130,14 @@ impl DiclConfig {
         self.seed
     }
 
+    pub fn reasoning_effort(&self) -> Option<&String> {
+        self.inference_params_v2.reasoning_effort.as_ref()
+    }
+
+    pub fn verbosity(&self) -> Option<&String> {
+        self.inference_params_v2.verbosity.as_ref()
+    }
+
     pub fn json_mode(&self) -> Option<&JsonMode> {
         self.json_mode.as_ref()
     }
@@ -147,7 +159,7 @@ impl DiclConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ts_rs::TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, ts_rs::TS)]
 #[ts(export)]
 #[serde(deny_unknown_fields)]
 pub struct UninitializedDiclConfig {
@@ -164,6 +176,15 @@ pub struct UninitializedDiclConfig {
     pub frequency_penalty: Option<f32>,
     pub max_tokens: Option<u32>,
     pub seed: Option<u32>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget_tokens: Option<i32>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
     pub json_mode: Option<JsonMode>,
     #[serde(default)]
     #[ts(skip)]
@@ -776,6 +797,7 @@ impl DiclConfig {
                 self.presence_penalty(),
                 self.frequency_penalty(),
                 self.stop_sequences().cloned(),
+                self.inference_params_v2.clone(),
             );
         if !inference_config.extra_body.is_empty() {
             return Err(ErrorDetails::InvalidRequest {
@@ -893,6 +915,11 @@ impl LoadableConfig<DiclConfig> for UninitializedDiclConfig {
             frequency_penalty: self.frequency_penalty,
             max_tokens: self.max_tokens,
             seed: self.seed,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: self.reasoning_effort,
+                thinking_budget_tokens: self.thinking_budget_tokens,
+                verbosity: self.verbosity,
+            },
             json_mode: self.json_mode,
             retries: self.retries,
             stop_sequences: self.stop_sequences,
@@ -1362,6 +1389,7 @@ mod tests {
             presence_penalty: None,
             frequency_penalty: None,
             seed: None,
+            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
             stop_sequences: None,
             json_mode: None,
             extra_body: None,
@@ -1476,6 +1504,7 @@ mod tests {
             presence_penalty: None,
             frequency_penalty: None,
             seed: None,
+            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
             stop_sequences: None,
             json_mode: None,
             extra_body: None,
@@ -1606,6 +1635,7 @@ mod tests {
             presence_penalty: None,
             frequency_penalty: None,
             seed: None,
+            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
             stop_sequences: None,
             json_mode: None,
             extra_body: None,
@@ -1633,6 +1663,7 @@ mod tests {
             presence_penalty: None,
             frequency_penalty: None,
             seed: None,
+            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
             stop_sequences: None,
             json_mode: None,
             extra_body: None,
@@ -1659,6 +1690,7 @@ mod tests {
             presence_penalty: None,
             frequency_penalty: None,
             seed: None,
+            inference_params_v2: ChatCompletionInferenceParamsV2::default(),
             stop_sequences: None,
             json_mode: None,
             extra_body: None,

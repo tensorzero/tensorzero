@@ -93,7 +93,6 @@ k = 10
 max_distance = 0.5
 system_instructions = "functions/extract_entities/baseline/system_template.minijinja"
 json_mode = "strict"
-weight = 1
 retries = { num_retries = 4, max_delay_s = 10 }
 
 [functions.extract_entities.variants.turbo]

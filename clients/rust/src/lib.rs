@@ -86,6 +86,7 @@ pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{Base64File, File, ObjectStoragePointer, UrlFile};
 pub use tensorzero_core::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System, Unknown,
+    UnknownChunk,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 
@@ -155,6 +156,8 @@ pub struct ClientBuilder {
     mode: ClientBuilderMode,
     http_client: Option<reqwest::Client>,
     verbose_errors: bool,
+    api_key: Option<String>,
+    timeout: Option<Duration>,
 }
 
 /// An error type representing an error from within the TensorZero gateway
@@ -203,6 +206,8 @@ pub enum ClientBuilderError {
     Clickhouse(TensorZeroError),
     #[error("Failed to configure PostgreSQL: {0}")]
     Postgres(TensorZeroError),
+    #[error("Authentication is not supported in embedded gateway mode: {0}")]
+    AuthNotSupportedInEmbeddedMode(TensorZeroError),
     #[error("Failed to parse config: {0}")]
     ConfigParsingPreGlob(TensorZeroError),
     #[error("Failed to parse config: {error}. Config file glob `{glob}` resolved to the following files:\n{paths}", glob = glob.glob,paths = glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"))]
@@ -262,6 +267,8 @@ impl ClientBuilder {
             mode,
             http_client: None,
             verbose_errors: false,
+            api_key: None,
+            timeout: None,
         }
     }
 
@@ -281,6 +288,21 @@ impl ClientBuilder {
     /// This is `false` by default.
     pub fn with_verbose_errors(mut self, verbose_errors: bool) -> Self {
         self.verbose_errors = verbose_errors;
+        self
+    }
+
+    /// Sets the API key to use for authentication with the TensorZero gateway.
+    /// This is only used in `HTTPGateway` mode.
+    /// If not set, the client will attempt to read from the `TENSORZERO_API_KEY` environment variable.
+    pub fn with_api_key(mut self, api_key: String) -> Self {
+        self.api_key = Some(api_key);
+        self
+    }
+
+    /// Sets the timeout for HTTP requests to the TensorZero gateway.
+    /// This is only used in `HTTPGateway` mode.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 
@@ -324,7 +346,12 @@ impl ClientBuilder {
                     )
                 } else {
                     tracing::info!("No config file provided, so only default functions will be available. Set `config_file` to specify your `tensorzero.toml`");
-                    Arc::new(Config::default())
+                    Arc::new(Config::new_empty().await.map_err(|e| {
+                        ClientBuilderError::ConfigParsing {
+                            error: TensorZeroError::Other { source: e.into() },
+                            glob: ConfigFileGlob::new_empty(),
+                        }
+                    })?)
                 };
                 if !allow_batch_writes
                     && config.gateway.observability.batch_writes.enabled
@@ -336,7 +363,15 @@ impl ClientBuilder {
                 {
                     return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
                         source: tensorzero_core::error::Error::new(ErrorDetails::Config {
-                            message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode".to_string(),
+                            message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
+                        })
+                        .into(),
+                    }));
+                }
+                if config.gateway.auth.enabled {
+                    return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(TensorZeroError::Other {
+                        source: tensorzero_core::error::Error::new(ErrorDetails::Config {
+                            message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
                         })
                         .into(),
                     }));
@@ -452,10 +487,71 @@ impl ClientBuilder {
         if !url.path().ends_with('/') {
             url.set_path(&format!("{}/", url.path()));
         }
+
+        // Try to get API key from constructor parameter, otherwise try environment variable
+        let api_key = self.api_key.or_else(|| env::var("TENSORZERO_API_KEY").ok());
+
+        // Build the HTTP client, applying timeout and/or API key
+        let http_client = if let Some(client) = self.http_client {
+            // Use custom client provided by advanced users
+
+            // TODO: Later we can decide if we want to override the custom HTTP clients.
+
+            if self.timeout.is_some() {
+                tracing::warn!("A timeout is set but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the timeout to the custom client.");
+            }
+
+            if api_key.is_some() {
+                tracing::warn!("A TensorZero API key is available but a custom HTTP client is being used. The TensorZero SDK will not automatically apply the authentication header to the custom client.");
+            }
+
+            client
+        } else {
+            // Build client from scratch, composing timeout and api_key
+            let mut builder = reqwest::Client::builder();
+
+            // Apply timeout if provided
+            if let Some(timeout) = self.timeout {
+                builder = builder.timeout(timeout);
+            }
+
+            // Apply API key as default Authorization header if provided
+            if let Some(ref key) = api_key {
+                let mut headers = HeaderMap::new();
+                headers.insert(
+                    reqwest::header::AUTHORIZATION,
+                    reqwest::header::HeaderValue::from_str(&format!("Bearer {key}")).map_err(
+                        |e| {
+                            ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                                source: tensorzero_core::error::Error::new(
+                                    ErrorDetails::InternalError {
+                                        message: format!(
+                                            "Failed to create authorization header: {e}"
+                                        ),
+                                    },
+                                )
+                                .into(),
+                            })
+                        },
+                    )?,
+                );
+                builder = builder.default_headers(headers);
+            }
+
+            builder.build().map_err(|e| {
+                ClientBuilderError::HTTPClientBuild(TensorZeroError::Other {
+                    source: tensorzero_core::error::Error::new(ErrorDetails::InternalError {
+                        message: format!("Failed to build HTTP client: {e}"),
+                    })
+                    .into(),
+                })
+            })?
+        };
+
         Ok(Client {
             mode: Arc::new(ClientMode::HTTPGateway(HTTPGateway {
                 base_url: url,
-                http_client: self.http_client.unwrap_or_default(),
+                http_client,
                 gateway_version: Mutex::new(None),
             })),
             verbose_errors: self.verbose_errors,
@@ -1511,7 +1607,9 @@ pub async fn get_config_no_verify_credentials(
         )
         .await
         .map_err(|e| TensorZeroError::Other { source: e.into() }),
-        None => Ok(Config::default()),
+        None => Ok(Config::new_empty()
+            .await
+            .map_err(|e| TensorZeroError::Other { source: e.into() })?),
     }
 }
 
@@ -1602,6 +1700,7 @@ pub use tensorzero_core::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
     #[tokio::test]
@@ -1621,6 +1720,34 @@ mod tests {
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"),
+            "Bad error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_auth_not_supported_in_embedded() {
+        // Create a config that enables auth, which is not supported in embedded mode
+        let config = r"
+[gateway.auth]
+enabled = true
+";
+        let tmp_config = NamedTempFile::new().unwrap();
+        std::fs::write(tmp_config.path(), config).unwrap();
+
+        let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(tmp_config.path().to_owned()),
+            clickhouse_url: None,
+            postgres_url: None,
+            timeout: None,
+            verify_credentials: false, // Skip credential verification
+            allow_batch_writes: false,
+        })
+        .build()
+        .await
+        .expect_err("ClientBuilder should have failed");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("`[gateway.auth]` is not supported in embedded gateway"),
             "Bad error message: {err_msg}"
         );
     }
