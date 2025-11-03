@@ -570,6 +570,7 @@ mod tests {
             fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
             stop_sequences: None,
+            ..Default::default()
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -598,6 +599,7 @@ mod tests {
             extra_headers: Default::default(),
             extra_cache_key: None,
             stop_sequences: None,
+            ..Default::default()
         };
         let model_provider_request = ModelProviderRequest {
             request: &model_inference_request,
@@ -628,6 +630,7 @@ mod tests {
             extra_headers: Default::default(),
             extra_cache_key: None,
             stop_sequences: None,
+            ..Default::default()
         };
         let model_provider_request = ModelProviderRequest {
             request: &streaming_model_inference_request,

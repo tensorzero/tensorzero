@@ -876,6 +876,7 @@ impl FuserConfig {
                 self.inner.presence_penalty(),
                 self.inner.frequency_penalty(),
                 self.inner.stop_sequences().cloned(),
+                self.inner.inference_params_v2.clone(),
             );
 
         if !inference_config.extra_body.is_empty() {

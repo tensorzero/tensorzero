@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{JsonInferenceDatapoint, Role, StoredDatapoint, System};
+use tensorzero::{ClientExt, JsonInferenceDatapoint, Role, StoredDatapoint, System};
 use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
 use tensorzero_core::{
     db::{

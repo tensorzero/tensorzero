@@ -1,6 +1,7 @@
 #![expect(clippy::print_stdout)]
 
 use std::collections::HashSet;
+use tensorzero::ClientExt;
 
 use axum::extract::State;
 use http_body_util::BodyExt;

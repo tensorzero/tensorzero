@@ -1,5 +1,4 @@
 import { Pie, PieChart, Cell } from "recharts";
-import { CHART_COLORS } from "~/utils/chart";
 import { memo } from "react";
 
 import {
@@ -50,8 +49,10 @@ function CustomTooltipContent({ active, payload }: TooltipProps) {
 
 export const ExperimentationPieChart = memo(function ExperimentationPieChart({
   variantWeights,
+  chartConfig,
 }: {
   variantWeights: VariantWeight[];
+  chartConfig: Record<string, { label: string; color: string }>;
 }) {
   // Calculate total weight for percentage calculation
   const totalWeight = variantWeights.reduce(
@@ -65,19 +66,6 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
     weight: variant.weight,
     percentage: `${((variant.weight / totalWeight) * 100).toFixed(1)}%`,
   }));
-
-  // Create chart config
-  const chartConfig: Record<string, { label: string; color: string }> =
-    variantWeights.reduce(
-      (config, variant, index) => ({
-        ...config,
-        [variant.variant_name]: {
-          label: variant.variant_name,
-          color: CHART_COLORS[index % CHART_COLORS.length],
-        },
-      }),
-      {},
-    );
 
   return (
     <Card>
@@ -100,10 +88,10 @@ export const ExperimentationPieChart = memo(function ExperimentationPieChart({
               outerRadius={100}
               label={({ percentage }) => percentage}
             >
-              {data.map((entry, index) => (
+              {data.map((entry) => (
                 <Cell
                   key={`cell-${entry.variant_name}`}
-                  fill={CHART_COLORS[index % CHART_COLORS.length]}
+                  fill={chartConfig[entry.variant_name]?.color}
                 />
               ))}
             </Pie>

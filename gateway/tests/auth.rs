@@ -1,10 +1,9 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout, clippy::expect_used)]
 use std::process::Stdio;
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
 use serde_json::json;
-use tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres;
 use tensorzero_auth::key::TensorZeroApiKey;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tokio::process::Command;
@@ -16,33 +15,31 @@ mod common;
 
 const GATEWAY_PATH: &str = env!("CARGO_BIN_EXE_gateway");
 
+/// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
+async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
+
+    sqlx::PgPool::connect(&postgres_url)
+        .await
+        .expect("Failed to connect to PostgreSQL")
+}
+
 #[tokio::test]
 async fn test_tensorzero_auth_enabled() {
+    let pool = get_postgres_pool_for_testing().await;
     let child_data = start_gateway_on_random_port(
         "
     [gateway.auth]
     enabled = true
+    [gateway.auth.cache]
+    enabled = false
     ",
         None,
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    ",
-    )
-    .await;
-
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
-        .unwrap();
-
-    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, postgres_pool)
+    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
         .await
         .unwrap();
 
@@ -77,7 +74,7 @@ async fn test_tensorzero_auth_enabled() {
         &TensorZeroApiKey::parse(key.expose_secret())
             .unwrap()
             .public_id,
-        postgres_pool,
+        &pool,
     )
     .await
     .unwrap();
@@ -152,40 +149,27 @@ async fn test_tensorzero_unauthenticated_routes() {
 
 #[tokio::test]
 async fn test_tensorzero_missing_auth() {
+    let pool = get_postgres_pool_for_testing().await;
     let child_data = start_gateway_on_random_port(
         "
     [gateway.auth]
     enabled = true
+    [gateway.auth.cache]
+    enabled = false
     ",
         None,
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    ",
-    )
-    .await;
-
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
+    let disabled_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
         .unwrap();
-
-    let disabled_key =
-        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, postgres_pool)
-            .await
-            .unwrap();
 
     let disabled_at = tensorzero_auth::postgres::disable_key(
         &TensorZeroApiKey::parse(disabled_key.expose_secret())
             .unwrap()
             .public_id,
-        postgres_pool,
+        &pool,
     )
     .await
     .unwrap();
@@ -305,6 +289,292 @@ async fn test_tensorzero_missing_auth() {
         );
         assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
+}
+
+#[tokio::test]
+async fn test_auth_cache_hides_disabled_key_until_ttl() {
+    let pool = get_postgres_pool_for_testing().await;
+    // Test that a disabled key continues to work until the cache TTL expires (demonstrates caching trade-off)
+    let child_data = start_gateway_on_random_port(
+        "
+    [gateway.auth]
+    enabled = true
+    [gateway.auth.cache]
+    enabled = true
+    ttl_ms = 4000
+    ",
+        None,
+    )
+    .await;
+
+    // Create a key
+    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+        .await
+        .unwrap();
+    let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
+
+    // First request - should succeed
+    let response1 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+
+    // Disable the key in the database
+    tensorzero_auth::postgres::disable_key(&parsed_key.public_id, &pool)
+        .await
+        .unwrap();
+
+    // Second request - should STILL succeed because key is cached
+    let response2 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        response2.status(),
+        StatusCode::OK,
+        "Disabled key should still work due to cache"
+    );
+
+    // Wait for cache to expire (4s TTL + buffer)
+    tokio::time::sleep(tokio::time::Duration::from_millis(4100)).await;
+
+    // Third request - should now fail because cache expired
+    let response3 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        response3.status(),
+        StatusCode::UNAUTHORIZED,
+        "Disabled key should now fail"
+    );
+}
+
+#[tokio::test]
+async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
+    let pool = get_postgres_pool_for_testing().await;
+    // Test that when cache is disabled, disabled keys fail immediately (no delayed visibility)
+    let child_data = start_gateway_on_random_port(
+        "
+    [gateway.auth]
+    enabled = true
+    [gateway.auth.cache]
+    enabled = false
+    ",
+        None,
+    )
+    .await;
+
+    // Create a key
+    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+        .await
+        .unwrap();
+    let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
+
+    // First request - should succeed
+    let response1 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+
+    // Disable the key
+    tensorzero_auth::postgres::disable_key(&parsed_key.public_id, &pool)
+        .await
+        .unwrap();
+
+    // Second request - should IMMEDIATELY fail (no caching to hide the disabled state)
+    let response2 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        response2.status(),
+        StatusCode::UNAUTHORIZED,
+        "Disabled key should fail immediately when cache is disabled"
+    );
+}
+
+#[tokio::test]
+async fn test_auth_cache_requires_full_key_match() {
+    let pool = get_postgres_pool_for_testing().await;
+    // Test that the cache includes the secret portion of the API key, not just the public_id.
+    // This prevents an attacker from using the same public_id with a different secret to bypass authentication.
+    let child_data = start_gateway_on_random_port(
+        "
+    [gateway.auth]
+    enabled = true
+    [gateway.auth.cache]
+    enabled = true
+    ttl_ms = 2000
+    ",
+        None,
+    )
+    .await;
+
+    // Create a valid key
+    let valid_key =
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+            .await
+            .unwrap();
+    let parsed_valid_key = TensorZeroApiKey::parse(valid_key.expose_secret()).unwrap();
+
+    // First request with valid key - should succeed and populate cache
+    let response1 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", valid_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response1.status(), StatusCode::OK);
+
+    // Craft an attacker key with the same public_id but different long key (secret)
+    // This simulates an attacker who knows the public portion but not the secret
+    let attacker_key = format!(
+        "sk-t0-{}-attackerattackerattackerattackerattackerattacker",
+        parsed_valid_key.public_id
+    );
+
+    // Request with attacker key - should FAIL even though the valid key is cached
+    // If the cache only used public_id, this would succeed (security vulnerability)
+    let response2 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {attacker_key}"),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    let status = response2.status();
+    let text = response2.text().await.unwrap();
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "Attacker key with same public_id but different secret should be rejected"
+    );
+    assert_eq!(
+        text,
+        "{\"error\":\"TensorZero authentication error: Provided API key does not exist in the database\"}"
+    );
+
+    // Verify the original valid key still works (cache should still be valid)
+    let response3 = reqwest::Client::new()
+        .post(format!("http://{}/inference", child_data.addr))
+        .header(
+            http::header::AUTHORIZATION,
+            format!("Bearer {}", valid_key.expose_secret()),
+        )
+        .json(&json!({
+            "model_name": "dummy::good",
+            "input": {
+                "messages": [{
+                    "role": "user",
+                    "content": "Hello"
+                }]
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        response3.status(),
+        StatusCode::OK,
+        "Valid key should still work from cache"
+    );
 }
 
 #[tokio::test]
