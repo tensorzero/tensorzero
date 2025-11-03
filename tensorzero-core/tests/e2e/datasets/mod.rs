@@ -642,7 +642,7 @@ async fn test_datapoint_insert_synthetic_chat_with_tools() {
       "id": id.to_string(),
       "episode_id": null,
       "input": "{\"system\":{\"assistant_name\":\"Dummy\"},\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"My synthetic input\"}]}]}",
-      "output": "[{\"type\":\"tool_call\",\"arguments\":{\"location\":\"New York\",\"units\":\"fahrenheit\"},\"id\":\"call_123\",\"name\":\"get_temperature\",\"raw_arguments\":\"{\\\"location\\\":\\\"New York\\\",\\\"units\\\":\\\"fahrenheit\\\"}\",\"raw_name\":\"get_temperature\"}]",
+      "output": "[{\"type\":\"tool_call\",\"id\":\"call_123\",\"raw_name\":\"get_temperature\",\"raw_arguments\":\"{\\\"location\\\":\\\"New York\\\",\\\"units\\\":\\\"fahrenheit\\\"}\",\"name\":\"get_temperature\",\"arguments\":{\"location\":\"New York\",\"units\":\"fahrenheit\"}}]",
       "tool_params": "{\"tools_available\":[{\"description\":\"Get the current temperature in a given location\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\",\"description\":\"The location to get the temperature for (e.g. \\\"New York\\\")\"},\"units\":{\"type\":\"string\",\"description\":\"The units to get the temperature in (must be \\\"fahrenheit\\\" or \\\"celsius\\\")\",\"enum\":[\"fahrenheit\",\"celsius\"]}},\"required\":[\"location\"],\"additionalProperties\":false},\"name\":\"get_temperature\",\"strict\":false}],\"tool_choice\":\"auto\",\"parallel_tool_calls\":false}",
       "tags": {},
       "auxiliary": "",
@@ -2934,7 +2934,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
     use tensorzero_core::{
         db::datasets::{ChatInferenceDatapointInsert, DatapointInsert, DatasetQueries},
         inference::types::{ContentBlockChatOutput, StoredInput},
-        tool::ToolCallOutput,
+        tool::InferenceResponseToolCall,
     };
 
     let episode_id = Uuid::now_v7();
@@ -2979,13 +2979,15 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
             system: None,
             messages: vec![],
         },
-        output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-            id: "call_eBDiwZRnNnddB5tjcQbhdY0s".to_string(),
-            name: Some("load_wikipedia_page".to_string()),
-            raw_name: "load_wikipedia_page".to_string(),
-            arguments: Some(json!({"title": "Russell Hoban"})),
-            raw_arguments: "{\"title\": \"Russell Hoban\"}".to_string(),
-        })]),
+        output: Some(vec![ContentBlockChatOutput::ToolCall(
+            InferenceResponseToolCall {
+                id: "call_eBDiwZRnNnddB5tjcQbhdY0s".to_string(),
+                name: Some("load_wikipedia_page".to_string()),
+                raw_name: "load_wikipedia_page".to_string(),
+                arguments: Some(json!({"title": "Russell Hoban"})),
+                raw_arguments: "{\"title\": \"Russell Hoban\"}".to_string(),
+            },
+        )]),
         tool_params: None,
         tags: None,
         auxiliary: String::new(),

@@ -1,3 +1,19 @@
+use std::{collections::HashMap, sync::Arc};
+
+use tensorzero_core::client::DisplayOrDebug;
+use tensorzero_core::db::inferences::InferenceQueries;
+use tensorzero_core::db::HealthCheckable;
+use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
+use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
+use tensorzero_core::endpoints::stored_inferences::render_samples;
+use tensorzero_core::endpoints::validate_tags;
+use tensorzero_core::endpoints::workflow_evaluation_run::{
+    WorkflowEvaluationRunEpisodeParams, WorkflowEvaluationRunEpisodeResponse,
+};
+use tensorzero_core::error::{Error, ErrorDetails};
+use tensorzero_core::stored_inference::StoredSample;
+use uuid::Uuid;
+
 // Re-export the core client from tensorzero-core
 
 // Client core types
@@ -63,7 +79,7 @@ pub use tensorzero_core::stored_inference::{
     RenderedSample, StoredChatInference, StoredChatInferenceDatabase, StoredInference,
     StoredInferenceDatabase, StoredJsonInference,
 };
-pub use tensorzero_core::tool::{DynamicToolParams, Tool};
+pub use tensorzero_core::tool::{DynamicToolParams, Tool, ToolCallWrapper};
 pub use tensorzero_core::utils::gateway::setup_clickhouse_without_config;
 
 // Export quantile array from migration_0037
@@ -78,21 +94,6 @@ pub mod test_helpers;
 // Re-export observability for pyo3 feature
 #[cfg(feature = "pyo3")]
 pub use tensorzero_core::observability;
-
-use std::{collections::HashMap, sync::Arc};
-use tensorzero_core::client::DisplayOrDebug;
-use tensorzero_core::db::inferences::InferenceQueries;
-use tensorzero_core::db::HealthCheckable;
-use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
-use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
-use tensorzero_core::endpoints::stored_inferences::render_samples;
-use tensorzero_core::endpoints::validate_tags;
-use tensorzero_core::endpoints::workflow_evaluation_run::{
-    WorkflowEvaluationRunEpisodeParams, WorkflowEvaluationRunEpisodeResponse,
-};
-use tensorzero_core::error::{Error, ErrorDetails};
-use tensorzero_core::stored_inference::StoredSample;
-use uuid::Uuid;
 
 use crate::git::GitInfo;
 
