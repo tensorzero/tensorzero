@@ -288,14 +288,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust 1.86.0
+      - name: Install Rust 1.88.0
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.86.0 && rustup default 1.86.0; then
+            if rustup install 1.88.0 && rustup default 1.88.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust 1.86.0 after 3 attempts"
+              echo "Failed to install Rust 1.88.0 after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))

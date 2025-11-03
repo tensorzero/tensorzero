@@ -279,7 +279,7 @@ impl InferenceProvider for DummyProvider {
             *counter += 1;
 
             // Fail on even-numbered calls
-            if *counter % 2 == 0 {
+            if counter.is_multiple_of(2) {
                 if self.model_name.contains("rate_limit") {
                     return Err(ErrorDetails::RateLimitExceeded {
                         failed_rate_limits: vec![FailedRateLimit {
@@ -612,7 +612,7 @@ impl InferenceProvider for DummyProvider {
             *counter += 1;
 
             // Fail on even-numbered calls
-            if *counter % 2 == 0 {
+            if counter.is_multiple_of(2) {
                 return Err(ErrorDetails::InferenceClient {
                     raw_request: Some("raw request".to_string()),
                     raw_response: None,
