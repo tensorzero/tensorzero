@@ -518,6 +518,8 @@ async fn test_rollback_helper(migration_num: usize, logs_contain: fn(&str) -> bo
         }
     }
 
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
     run_rollback_instructions(&fresh_clickhouse, &*migrations[migration_num]).await;
 
     // The rollback for Migration0000 drops the entire database, which will cause '_cleanup_fresh_clickhouse'
