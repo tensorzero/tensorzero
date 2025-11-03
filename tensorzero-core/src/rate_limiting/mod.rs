@@ -109,9 +109,7 @@ impl ScopeInfo {
             api_key_public_id: api_key.map(|ext| ext.0.api_key.get_public_id().into()),
         }
     }
-}
 
-impl ScopeInfo {
     // Expose relevant information from this `ScopeInfo` as OpenTelemetry span attributes
     fn apply_otel_span_attributes(&self, span: &Span) {
         let ScopeInfo {
