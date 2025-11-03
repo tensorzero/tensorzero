@@ -647,7 +647,7 @@ impl Client {
                         gateway.handle.app_state.deferred_tasks.clone(),
                         params.try_into().map_err(err_to_http)?,
                         // We currently ban auth-enabled configs in embedded gateway mode,
-                        // so we don't have an API key herre
+                        // so we don't have an API key here
                         None,
                     )
                     .await
