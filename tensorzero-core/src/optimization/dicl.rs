@@ -26,7 +26,6 @@ use crate::{
     providers::openai::OpenAICredentials,
     rate_limiting::ScopeInfo,
     stored_inference::RenderedSample,
-    utils::retries::RetryConfig,
     variant::dicl::UninitializedDiclConfig,
 };
 
@@ -392,23 +391,10 @@ impl JobHandle for DiclOptimizationJobHandle {
         Ok(OptimizationJobInfo::Completed {
             output: OptimizerOutput::Variant(Box::new(UninitializedVariantConfig::Dicl(
                 UninitializedDiclConfig {
-                    weight: None,
                     embedding_model: self.embedding_model.to_string(),
                     k: self.k,
                     model: self.model.to_string(),
-                    system_instructions: None,
-                    temperature: None,
-                    top_p: None,
-                    stop_sequences: None,
-                    presence_penalty: None,
-                    frequency_penalty: None,
-                    max_tokens: None,
-                    seed: None,
-                    json_mode: None,
-                    extra_body: None,
-                    extra_headers: None,
-                    retries: RetryConfig::default(),
-                    max_distance: None,
+                    ..Default::default()
                 },
             ))),
         })

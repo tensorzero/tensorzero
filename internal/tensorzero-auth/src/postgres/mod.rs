@@ -68,7 +68,7 @@ pub async fn create_key(
     Ok(key)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AuthResult {
     /// The API key exists and is not disabled.
     Success(KeyInfo),

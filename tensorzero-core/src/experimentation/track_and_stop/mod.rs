@@ -282,9 +282,11 @@ fn default_update_period_s() -> u64 {
     300
 }
 
+/// Default minimum probability is 0.0, but it will be treated as 1e-6 internally
+/// in the optimization algorithm for numerical stability.
 #[expect(clippy::unnecessary_wraps)]
 fn default_min_prob() -> Option<f64> {
-    Some(1e-6)
+    Some(0.0)
 }
 
 impl UninitializedTrackAndStopConfig {
@@ -355,23 +357,26 @@ impl UninitializedTrackAndStopConfig {
         }
 
         // Validate min_prob if provided
+        // Note: min_prob can be 0.0, but it will be treated as 1e-6 internally for numerical stability
         if let Some(min_prob) = self.min_prob {
             // Check non-negative
             if min_prob < 0.0 {
                 return Err(Error::new(ErrorDetails::Config {
-                    message: format!("Track-and-Stop min_prob must be >= 0, got {min_prob}"),
+                    message: format!("Track-and-Stop `min_prob` must be >= 0.0, got {min_prob}"),
                 }));
             }
 
             // Check finite
             if !min_prob.is_finite() {
                 return Err(Error::new(ErrorDetails::Config {
-                    message: format!("Track-and-Stop min_prob must be finite, got {min_prob}"),
+                    message: format!("Track-and-Stop `min_prob` must be finite, got {min_prob}"),
                 }));
             }
 
             // Check that min_prob * num_candidate_variants <= 1.0
             // Only candidate variants get probability mass, not fallback variants
+            // Note: This check uses the configured min_prob value (which can be 0.0).
+            // The actual optimization uses max(min_prob, 1e-6) for numerical stability.
             let num_candidate_variants = self.candidate_variants.len();
             let min_total_prob = min_prob * (num_candidate_variants as f64);
             if min_total_prob > 1.0 + 1e-9 {
@@ -2184,8 +2189,8 @@ mod tests {
 
     #[test]
     fn test_min_prob_none_uses_default() {
-        // Test that when min_prob is None, the default value from
-        // estimate_optimal_probabilities (1e-6) is used
+        // Test that when min_prob is None, the default config value (0.0) is used,
+        // but the optimization algorithm applies a floor of 1e-6 for numerical stability
         let candidates = vec!["A".to_string(), "B".to_string()];
         let performances = vec![
             create_feedback("A", 20, 0.5, 0.1),
@@ -2198,7 +2203,7 @@ mod tests {
             10,
             0.05,
             0.0,
-            None, // min_prob is None, should use default
+            None, // min_prob is None, defaults to 0.0 in config, but 1e-6 is applied in optimization
             MetricConfigOptimize::Max,
         )
         .unwrap();
@@ -2207,11 +2212,49 @@ mod tests {
             TrackAndStopState::BanditsOnly {
                 sampling_probabilities,
             } => {
-                // All probabilities should be >= default min_prob (1e-6)
+                // All probabilities should be >= 1e-6 (the floor applied in optimization)
                 for (variant_name, &prob) in &sampling_probabilities {
                     assert!(
                         prob >= 1e-6 - 1e-9,
-                        "Variant {variant_name} has probability {prob} which is less than default min_prob"
+                        "Variant {variant_name} has probability {prob} which is less than the optimization floor (1e-6)"
+                    );
+                }
+            }
+            _ => panic!("Expected BanditsOnly state, got {state:?}"),
+        }
+    }
+
+    #[test]
+    fn test_min_prob_zero_accepted_and_uses_floor() {
+        // Test that min_prob=0.0 is accepted in config but the optimization
+        // algorithm applies a floor of 1e-6 for numerical stability
+        let candidates = vec!["A".to_string(), "B".to_string()];
+        let performances = vec![
+            create_feedback("A", 20, 0.5, 0.1),
+            create_feedback("B", 20, 0.6, 0.2),
+        ];
+
+        let state = TrackAndStopState::new(
+            &candidates,
+            performances,
+            10,
+            0.05,
+            0.0,
+            Some(0.0), // min_prob is explicitly set to 0.0
+            MetricConfigOptimize::Max,
+        )
+        .unwrap();
+
+        match state {
+            TrackAndStopState::BanditsOnly {
+                sampling_probabilities,
+            } => {
+                // All probabilities should be >= 1e-6 (the floor applied in optimization)
+                // even though min_prob was set to 0.0
+                for (variant_name, &prob) in &sampling_probabilities {
+                    assert!(
+                        prob >= 1e-6 - 1e-9,
+                        "Variant {variant_name} has probability {prob} which is less than the optimization floor (1e-6)"
                     );
                 }
             }

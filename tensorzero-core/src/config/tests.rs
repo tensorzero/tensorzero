@@ -2727,6 +2727,153 @@ async fn test_config_schema_missing_template() {
     assert_eq!(err.to_string(), "`functions.test.variants.missing_template.templates.my_custom_schema` is required when `functions.test.schemas.my_custom_schema` is specified");
 }
 
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_uniform() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.5
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.5
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a") && err_msg.contains("variant_b"),
+        "Error should list both variants with weights: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_static_weights() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.7
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "static_weights"
+        candidate_variants = {"variant_a" = 0.3, "variant_b" = 0.7}
+        fallback_variants = ["variant_a", "variant_b"]
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a"),
+        "Error should list the variant with weight: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_track_and_stop() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [metrics.test_metric]
+        type = "boolean"
+        optimize = "max"
+        level = "inference"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.6
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "track_and_stop"
+        metric = "test_metric"
+        candidate_variants = ["variant_a", "variant_b"]
+        fallback_variants = ["variant_a"]
+        min_samples_per_variant = 100
+        delta = 0.05
+        epsilon = 0.1
+        update_period_s = 60
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a"),
+        "Error should list the variant with weight: {err_msg}"
+    );
+}
+
 // Unit tests for glob pattern matching functionality
 
 #[test]
