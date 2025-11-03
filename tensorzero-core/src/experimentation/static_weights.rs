@@ -141,9 +141,8 @@ impl VariantSampler for StaticWeightsConfig {
             }
         }
 
-        // Check if there are any candidate variants with positive weight
+        // Make sure there are candidate variants with positive weight or fallback variants
         let has_positive_weight = self.candidate_variants.values().any(|&w| w > 0.0);
-
         if !has_positive_weight && self.fallback_variants.is_empty() {
             return Err(Error::new(ErrorDetails::Config {
                 message: format!(
