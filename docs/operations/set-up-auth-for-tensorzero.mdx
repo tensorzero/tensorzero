@@ -1,0 +1,327 @@
+---
+title: Set up auth for TensorZero
+description: Learn how to set up TensorZero API keys to authenticate your inference requests and manage access control for your workflows.
+---
+
+You can create TensorZero API keys to authenticate your requests to the TensorZero Gateway.
+This way, your clients don't need access to model provider credentials, making it easier to manage access and security.
+
+This page shows how to:
+
+- Create API keys for the TensorZero Gateway
+- Require clients to use these API keys for requests
+- Manage API keys in the TensorZero UI
+
+<Note>
+
+TensorZero supports authentication for the gateway.
+Authentication for the UI is coming soon.
+In the meantime, we recommend pairing the UI with complementary products like Nginx, OAuth2 Proxy, or Tailscale.
+
+</Note>
+
+## Configure
+
+<Tip>
+
+You can find a [complete runnable example](https://github.com/tensorzero/tensorzero/tree/main/examples/docs/guides/operations/set-up-auth-for-tensorzero) of this guide on GitHub.
+
+</Tip>
+
+<Steps>
+
+<Step title="Configure your gateway to require authentication">
+
+You can instruct the TensorZero Gateway to require authentication in the configuration:
+
+```toml title="tensorzero.toml"
+[gateway]
+auth.enabled = true
+```
+
+With this setting, every gateway endpoint except for `/status` and `/health` will require authentication.
+
+</Step>
+
+<Step title="Deploy TensorZero and Postgres">
+
+You must set up Postgres to use TensorZero's authentication features.
+
+- [Deploy the TensorZero Gateway](/deployment/tensorzero-gateway)
+- [Deploy the TensorZero UI](/deployment/tensorzero-ui)
+- [Deploy ClickHouse](/deployment/clickhouse)
+- [Deploy Postgres](/deployment/postgres)
+
+<Accordion title="Example: Docker Compose">
+
+You can deploy all the requirements using the Docker Compose file below:
+
+```yaml title="docker-compose.yml"
+# This is a simplified example for learning purposes. Do not use this in production.
+# For production-ready deployments, see: https://www.tensorzero.com/docs/gateway/deployment
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    environment:
+      CLICKHOUSE_USER: chuser
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_PASSWORD: chpassword
+    ports:
+      - "8123:8123" # HTTP port
+      - "9000:9000" # Native port
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: wget --spider --tries 1 http://chuser:chpassword@clickhouse:8123/ping
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: tensorzero
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U postgres
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    environment:
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: wget --spider --tries 1 http://localhost:3000/status
+      start_period: 30s
+      start_interval: 1s
+      timeout: 1s
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+  ui:
+    image: tensorzero/ui
+    volumes:
+      - ./config:/app/config:ro
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
+      TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
+      TENSORZERO_GATEWAY_URL: http://gateway:3000
+    ports:
+      - "4000:4000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  clickhouse-data:
+```
+
+</Accordion>
+
+</Step>
+
+<Step title="Create a TensorZero API key">
+
+You can create API keys using the TensorZero UI.
+If you're running a standard local deployment, visit `http://localhost:4000/api-keys` to create a key.
+
+Alternatively, you can create API keys programmatically in the CLI using the gateway binary with the `--create-api-key` flag.
+For example:
+
+```bash
+docker compose run --rm gateway --create-api-key
+```
+
+<Warning>
+
+The API key is a secret and should be kept secure.
+
+</Warning>
+
+Once you've created an API key, set the `TENSORZERO_API_KEY` environment variable.
+
+</Step>
+
+<Step title="Make an authenticated inference request">
+
+<Tabs>
+
+<Tab title="Python (TensorZero SDK)">
+
+You can make authenticated requests by setting the `api_key` parameter in your TensorZero client:
+
+```python title="tensorzero_sdk.py"
+import os
+
+from tensorzero import TensorZeroGateway
+
+t0 = TensorZeroGateway.build_http(
+    api_key=os.environ["TENSORZERO_API_KEY"],
+    gateway_url="http://localhost:3000",
+)
+
+response = t0.inference(
+    model_name="openai::gpt-5-mini",
+    input={
+        "messages": [
+            {
+                "role": "user",
+                "content": "Tell me a fun fact.",
+            }
+        ]
+    },
+)
+
+print(response)
+```
+
+<Tip>
+
+The client will automatically read the `TENSORZERO_API_KEY` environment variable if you don't set `api_key`.
+
+</Tip>
+
+<Note>
+
+Authentication is not supported in the embedded (in-memory) gateway in Python.
+Please use the HTTP client with a standalone gateway to make authenticated requests.
+
+</Note>
+
+</Tab>
+
+<Tab title="Python (OpenAI SDK)">
+
+You can make authenticated requests by setting the `api_key` parameter in your OpenAI client:
+
+```python title="openai_sdk.py"
+import os
+
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=os.environ["TENSORZERO_API_KEY"],
+    base_url="http://localhost:3000/openai/v1",
+)
+
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-5-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": "Tell me a fun fact.",
+        }
+    ],
+)
+
+print(response)
+```
+
+<Note>
+
+Authentication is not supported in the embedded (in-memory) gateway in Python.
+Please use the HTTP client with a standalone gateway to make authenticated requests.
+
+</Note>
+
+</Tab>
+
+<Tab title="Node (OpenAI SDK)">
+
+You can make authenticated requests by setting the `apiKey` parameter in your OpenAI client:
+
+```ts title="openai_sdk.ts"
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.TENSORZERO_API_KEY,
+  baseURL: "http://localhost:3000/openai/v1",
+});
+
+const response = await client.chat.completions.create({
+  model: "tensorzero::model_name::openai::gpt-5-mini",
+  messages: [
+    {
+      role: "user",
+      content: "Tell me a fun fact.",
+    },
+  ],
+});
+```
+
+</Tab>
+
+<Tab title="HTTP">
+
+You can make authenticated requests by setting the `Authorization` HTTP header to `Bearer <API_KEY>`:
+
+```bash title="curl.sh"
+curl -X POST http://localhost:3000/openai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${TENSORZERO_API_KEY}" \
+  -d '{
+    "model": "tensorzero::model_name::openai::gpt-5-mini",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Tell me a fun fact."
+      }
+    ]
+  }'
+```
+
+</Tab>
+
+</Tabs>
+
+</Step>
+
+<Step title="Manage API keys in the TensorZero UI">
+
+You can manage and delete API keys in the TensorZero UI.
+If you're running a standard local deployment, visit `http://localhost:4000/api-keys` to manage your keys.
+
+</Step>
+
+</Steps>
+
+## Advanced
+
+### Customize the gateway's authentication cache
+
+By default, the TensorZero Gateway caches authentication database queries for one second.
+You can customize this behavior in the configuration:
+
+```toml
+[gateway.auth.cache]
+enabled = true # boolean
+ttl_ms = 60_000 # one minute
+```
