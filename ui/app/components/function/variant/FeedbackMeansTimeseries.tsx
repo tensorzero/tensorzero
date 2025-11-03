@@ -51,6 +51,7 @@ export function FeedbackMeansTimeseries({
   time_granularity: TimeWindow;
   onTimeGranularityChange: (value: TimeWindow) => void;
 }) {
+  // Add numeric timestamps for x-axis (Recharts requires numbers for linear scale)
   const meanDataWithTimestamps: Array<
     FeedbackMeansTimeseriesData & { timestamp: number }
   > = meansData.map((row) => ({
@@ -58,7 +59,7 @@ export function FeedbackMeansTimeseries({
     timestamp: new Date(row.date).getTime(),
   }));
 
-  // Create a mapping from date to counts for tooltip
+  // Create a mapping from date to counts for displaying sample sizes in tooltip
   const countsDataByDate = countsData.reduce<
     Record<string, FeedbackCountsTimeseriesData>
   >((acc, row) => {
@@ -88,6 +89,7 @@ export function FeedbackMeansTimeseries({
     variantNames.some((variant) => getMeanValue(row, variant) !== null),
   );
 
+  // Use only rows with values if any exist, otherwise use all rows (to show empty chart)
   const meanChartData =
     meanDataWithValues.length > 0 ? meanDataWithValues : meanDataWithTimestamps;
 
@@ -319,7 +321,17 @@ export function FeedbackMeansTimeseries({
 
               const elements: ReactNode[] = [];
 
-              if (hasConfidence) {
+              // Count how many data points this specific variant has (handles ragged time series)
+              const variantDataPointCount = meanChartData.filter(
+                (row) => getMeanValue(row, variantName) !== null,
+              ).length;
+
+              // Render confidence intervals as stacked Area bands:
+              // - First Area: transparent, stacked at lower bound
+              // - Second Area: colored, stacked on top with width = (upper - lower)
+              // Result: colored band between lower and upper bounds
+              // Only show if >1 data point (single points render as dots at upper bound)
+              if (hasConfidence && variantDataPointCount > 1) {
                 elements.push(
                   <Area
                     key={`${variantName}-cs-lower`}
