@@ -229,7 +229,10 @@ impl Optimizer for OpenAISFTConfig {
             None
         };
 
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let api_key = self
+            .credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
 
         // Run these concurrently
         let api_base = self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL);
@@ -354,7 +357,9 @@ impl JobHandle for OpenAISFTJobHandle {
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
             .await?;
         let mut request = client.get(self.job_api_url.clone());
-        let api_key = openai_credentials.get_api_key(credentials)?;
+        let api_key = openai_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         if let Some(api_key) = api_key {
             request = request.bearer_auth(api_key.expose_secret());
         }
