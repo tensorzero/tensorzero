@@ -154,6 +154,8 @@ pub enum ClientBuilderError {
     Clickhouse(TensorZeroError),
     #[error("Failed to configure PostgreSQL: {0}")]
     Postgres(TensorZeroError),
+    #[error("Authentication is not supported in embedded gateway mode: {0}")]
+    AuthNotSupportedInEmbeddedMode(TensorZeroError),
     #[error("Failed to parse config: {0}")]
     ConfigParsingPreGlob(TensorZeroError),
     #[error("Failed to parse config: {error}. Config file glob `{glob}` resolved to the following files:\n{paths}", glob = glob.glob,paths = glob.paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join("\n"))]
@@ -310,7 +312,15 @@ impl ClientBuilder {
                 {
                     return Err(ClientBuilderError::Clickhouse(TensorZeroError::Other {
                         source: crate::error::Error::new(ErrorDetails::Config {
-                            message: "[gateway.observability.batch_writes] is not yet supported in embedded gateway mode".to_string(),
+                            message: "`[gateway.observability.batch_writes]` is not yet supported in embedded gateway mode".to_string(),
+                        })
+                        .into(),
+                    }));
+                }
+                if config.gateway.auth.enabled {
+                    return Err(ClientBuilderError::AuthNotSupportedInEmbeddedMode(TensorZeroError::Other {
+                        source: crate::error::Error::new(ErrorDetails::Config {
+                            message: "`[gateway.auth]` is not supported in embedded gateway mode. Authentication is only available when using HTTP gateway mode. Please either disable authentication by setting `gateway.auth.enabled = false` or use HTTP mode instead.".to_string(),
                         })
                         .into(),
                     }));
@@ -1026,6 +1036,7 @@ pub use crate::observability;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::NamedTempFile;
     use tracing_test::traced_test;
 
     #[tokio::test]
@@ -1045,6 +1056,34 @@ mod tests {
         let err_msg = err.to_string();
         assert!(
             err_msg.contains("Missing environment variable TENSORZERO_CLICKHOUSE_URL"),
+            "Bad error message: {err_msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_auth_not_supported_in_embedded() {
+        // Create a config that enables auth, which is not supported in embedded mode
+        let config = r"
+        [gateway.auth]
+        enabled = true
+        ";
+        let tmp_config = NamedTempFile::new().unwrap();
+        std::fs::write(tmp_config.path(), config).unwrap();
+
+        let err = ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
+            config_file: Some(tmp_config.path().to_owned()),
+            clickhouse_url: None,
+            postgres_url: None,
+            timeout: None,
+            verify_credentials: false, // Skip credential verification
+            allow_batch_writes: false,
+        })
+        .build()
+        .await
+        .expect_err("ClientBuilder should have failed");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("`[gateway.auth]` is not supported in embedded gateway"),
             "Bad error message: {err_msg}"
         );
     }
