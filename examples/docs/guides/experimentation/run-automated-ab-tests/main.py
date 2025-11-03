@@ -5,7 +5,7 @@ from tensorzero import AsyncTensorZeroGateway, JsonInferenceResponse
 from tqdm.asyncio import tqdm
 
 NUM_SAMPLES = 500
-MAX_CONCURRENCY = 50  # lower this value if you get rate lmited
+MAX_CONCURRENCY = 50  # lower this value if you get rate limited
 
 
 async def process_datapoint(datapoint: Row, t0: AsyncTensorZeroGateway, semaphore: asyncio.Semaphore):
