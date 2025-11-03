@@ -15,6 +15,50 @@ The configuration file is a <a href="https://toml.io/en/" target="_blank">TOML</
 
 The `[gateway]` section defines the behavior of the TensorZero Gateway.
 
+### `auth.cache.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `true`)
+
+Enable caching of authentication database queries.
+When enabled, the gateway caches authentication results to reduce database load and improve performance.
+
+See [Require virtual API keys (auth)](/operations/require-virtual-api-keys-auth) for more details.
+
+### `auth.cache.ttl_ms`
+
+- **Type:** integer
+- **Required:** no (default: `1000`)
+
+The time-to-live (TTL) in milliseconds for cached authentication queries.
+By default, authentication results are cached for 1 second (1000 ms).
+
+```toml title="tensorzero.toml"
+[gateway.auth.cache]
+enabled = true
+ttl_ms = 60_000  # Cache for one minute
+```
+
+See [Require virtual API keys (auth)](/operations/require-virtual-api-keys-auth) for more details.
+
+### `auth.enabled`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+Enable authentication for the TensorZero Gateway.
+When enabled, all gateway endpoints except `/status` and `/health` will require a valid API key.
+
+You must set up Postgres to use authentication features.
+API keys can be created and managed through the TensorZero UI or CLI.
+
+```toml title="tensorzero.toml"
+[gateway]
+auth.enabled = true
+```
+
+See [Require virtual API keys (auth)](/operations/require-virtual-api-keys-auth) for a complete guide.
+
 ### `base_path`
 
 - **Type:** string
