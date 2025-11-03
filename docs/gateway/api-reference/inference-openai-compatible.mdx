@@ -95,6 +95,43 @@ response = oai.chat.completions.create(
 )
 ```
 
+#### `tensorzero::cache_options`
+
+- **Type:** object
+- **Required:** no (default: `{"enabled": "write_only"}`)
+
+Options for controlling inference caching behavior.
+The object has the fields below.
+
+See [Inference Caching](/gateway/guides/inference-caching/) for more details.
+
+This field should be provided as an extra body parameter in the request body.
+
+##### `tensorzero::cache_options.enabled`
+
+- **Type:** string
+- **Required:** no (default: `"write_only"`)
+
+The cache mode to use.
+Must be one of:
+
+- `"write_only"` (default): Only write to cache but don't serve cached responses
+- `"read_only"`: Only read from cache but don't write new entries
+- `"on"`: Both read from and write to cache
+- `"off"`: Disable caching completely
+
+Note: When using `tensorzero::dryrun=true`, the gateway never writes to the cache.
+
+##### `tensorzero::cache_options.max_age_s`
+
+- **Type:** integer
+- **Required:** no (default: `null`)
+
+Maximum age in seconds for cache entries.
+If set, cached responses older than this value will not be used.
+
+For example, if you set `max_age_s=3600`, the gateway will only use cache entries that were created in the last hour.
+
 #### `tensorzero::dryrun`
 
 - **Type:** boolean
@@ -273,6 +310,116 @@ Safety-Checks: on
 ```text
 Safety-Checks: off
 Intelligence-Level: AGI
+```
+
+</Accordion>
+
+#### `tensorzero::params`
+
+- **Type:** object (see below)
+- **Required:** no (default: `{}`)
+
+Override inference-time parameters for a particular variant type.
+This field allows for dynamic inference parameters, i.e. defining parameters at runtime.
+
+This field's format is `{ variant_type: { param: value, ... }, ... }`.
+You should prefer to set these parameters in the configuration file if possible.
+Only use this field if you need to set these parameters dynamically at runtime.
+
+Note that the parameters will apply to every variant of the specified type.
+
+In the OpenAI-compatible endpoint, if you parameters provided in the OpenAI interface itself take precedence over the parameters provided in this field.
+
+Currently, we support the following:
+
+- `chat_completion`
+  - `frequency_penalty`
+  - `json_mode`
+  - `max_tokens`
+  - `presence_penalty`
+  - `reasoning_effort`
+  - `seed`
+  - `stop_sequences`
+  - `temperature`
+  - `thinking_budget_tokens`
+  - `top_p`
+  - `verbosity`
+
+See [Configuration Reference](/gateway/configuration-reference/#functionsfunction_namevariantsvariant_name) for more details on the parameters.
+
+This field should be provided as an extra body parameter in the request body.
+
+<Accordion title="Example">
+
+For example, if you wanted to dynamically override the `temperature` parameter for `chat_completion` variants, you'd include the following in the request body:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:3000/openai/v1")
+
+response = client.chat.completions.create(
+    model="tensorzero::function_name::my_function",
+    messages=[
+        {
+            "role": "user",
+            "content": "Tell me a fun fact."
+        }
+    ],
+    extra_body={
+        "tensorzero::params": {
+            "chat_completion": {
+                "temperature": 0.7
+            }
+        }
+    }
+)
+```
+
+</Accordion>
+
+#### `tensorzero::provider_tools`
+
+- **Type:** array of objects
+- **Required:** no (default: `[]`)
+
+A list of provider-specific tools to pass to the model provider at inference time.
+This is useful for enabling provider-native tools like OpenAI's web search.
+
+Each object in the array has the following fields:
+
+- `scope` (optional): Specifies which model/provider this tool applies to. If not provided, the tool applies to all providers. The scope object can have:
+  - `model_name`: The model name
+  - `model_provider_name`: The provider name
+- `tool`: A JSON object containing the provider-specific tool definition
+
+This field should be provided as an extra body parameter in the request body.
+
+<Accordion title="Example">
+
+For example, to enable OpenAI's web search tool:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:3000/openai/v1")
+
+response = client.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-5-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": "What's the latest news about AI?"
+        }
+    ],
+    extra_body={
+        "tensorzero::provider_tools": [
+            {
+                "tool": {"type": "web_search"}
+            }
+        ]
+    }
+)
 ```
 
 </Accordion>
