@@ -1,0 +1,85 @@
+# This workflow lets us test a PR from a fork, while still having secrets available
+# * We cannot use the 'pull_request' event in 'general.yml,', since Github unconditionally blocks
+#   secrets when this event is triggered by a PR from a fork.
+# * We cannot use the 'pull_request_target' event in 'general.yml', since it runs unconditionally (!!),
+#   regardless of the repository approval settings:
+#   https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository#controlling-changes-from-forks-to-workflows-in-public-repositories
+#   As a result, using this event to build the PR would allow someone to instantly steal our secrets just by opening a PR.
+name: Run all checks for PR from a fork (by pushing to a branch on tensorzero/tensorzero)
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [check-fork-command]
+
+permissions:
+  pull-requests: write
+  contents: read
+  actions: write
+
+env:
+  TARGET_BRANCH: external-contributor/pr-${{ github.event.client_payload.pull_request.id }}
+
+jobs:
+  check-fork:
+    runs-on: ubuntu-latest
+    if: github.repository == 'tensorzero/tensorzero'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: ${{ github.event.client_payload.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.client_payload.pull_request.head.ref }}
+
+      - name: Add initial reaction
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
+          reactions: eyes
+
+      - name: Force-push to a branch named ${{ env.TARGET_BRANCH }}
+        run: |
+          git checkout -b ${{ env.TARGET_BRANCH }}
+          git push origin ${{ env.TARGET_BRANCH }}
+      - name: Trigger 'General Checks' workflow on ${{ env.TARGET_BRANCH }}
+        id: trigger
+        run: |
+          set -e
+          gh workflow run general.yml --ref ${{ env.TARGET_BRANCH }}
+
+          # Wait 30s for the workflow to be created
+          sleep 30
+
+          # Get the most recent workflow run for this branch
+          RUN_ID=$(gh run list --workflow=general.yml --branch=${{ env.TARGET_BRANCH }} --limit=1 --json databaseId --jq '.[0].databaseId')
+
+          if [ -n "$RUN_ID" ]; then
+            echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+            echo "run_url=https://github.com/${{ github.repository }}/actions/runs/$RUN_ID" >> $GITHUB_OUTPUT
+          else
+            echo "Failed to get run ID"
+            echo "run_url=https://github.com/${{ github.repository }}/actions" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment with workflow link
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          issue-number: ${{ github.event.client_payload.pull_request.number }}
+          body: |
+            🚀 General Checks queue workflow triggered on new branch ${{ env.TARGET_BRANCH }}!
+
+            View the run: ${{ steps.trigger.outputs.run_url }}
+
+      - name: Add success reaction
+        if: success()
+        uses: peter-evans/create-or-update-comment@71345be0265236311c031f5c7866368bd1eff043
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          comment-id: ${{ github.event.client_payload.github.payload.comment.id }}
+          reactions: hooray

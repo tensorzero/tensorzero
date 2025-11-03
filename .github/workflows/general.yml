@@ -7,6 +7,7 @@ on:
       - "docs/**"
   pull_request:
     branches: ["main"]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
