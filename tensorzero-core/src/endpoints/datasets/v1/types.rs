@@ -185,9 +185,8 @@ pub struct UpdateDatapointMetadataRequest {
     /// The ID of the datapoint to update. Required.
     pub id: Uuid,
 
-    /// Metadata fields to update. If omitted, no metadata changes will be made.
-    #[serde(default)]
-    pub metadata: Option<DatapointMetadataUpdate>,
+    /// Metadata fields to update.
+    pub metadata: DatapointMetadataUpdate,
 }
 
 /// Request to list datapoints from a dataset with pagination and filters.

@@ -10,7 +10,7 @@ export type UpdateDatapointMetadataRequest = {
    */
   id: string;
   /**
-   * Metadata fields to update. If omitted, no metadata changes will be made.
+   * Metadata fields to update.
    */
-  metadata?: DatapointMetadataUpdate;
+  metadata: DatapointMetadataUpdate;
 };
