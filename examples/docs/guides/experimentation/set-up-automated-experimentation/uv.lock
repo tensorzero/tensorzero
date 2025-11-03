@@ -706,7 +706,7 @@ wheels = [
 ]
 
 [[package]]
-name = "require-virtual-api-keys-auth"
+name = "require-tensorzero-api-keys-auth"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [
