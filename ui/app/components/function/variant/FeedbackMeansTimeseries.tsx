@@ -9,7 +9,6 @@ import {
 } from "recharts";
 import { type ReactNode } from "react";
 import {
-  CHART_COLORS,
   formatDetailedNumber,
   formatXAxisTimestamp,
   formatTooltipTimestamp,
@@ -42,6 +41,7 @@ export function FeedbackMeansTimeseries({
   metricName,
   time_granularity,
   onTimeGranularityChange,
+  chartConfig,
 }: {
   meansData: FeedbackMeansTimeseriesData[];
   countsData: FeedbackCountsTimeseriesData[];
@@ -50,6 +50,7 @@ export function FeedbackMeansTimeseries({
   metricName: string;
   time_granularity: TimeWindow;
   onTimeGranularityChange: (value: TimeWindow) => void;
+  chartConfig: Record<string, { label: string; color: string }>;
 }) {
   // Add numeric timestamps for x-axis (Recharts requires numbers for linear scale)
   const meanDataWithTimestamps: Array<
@@ -104,18 +105,6 @@ export function FeedbackMeansTimeseries({
         getUpperValue(row, variant) !== null,
     ),
   );
-
-  const chartConfig: Record<string, { label: string; color: string }> =
-    variantNames.reduce(
-      (config, variantName, index) => ({
-        ...config,
-        [variantName]: {
-          label: variantName,
-          color: CHART_COLORS[index % CHART_COLORS.length],
-        },
-      }),
-      {},
-    );
 
   const meanChartConfig: Record<string, { label: string; color: string }> =
     variantsWithMeanData.reduce(
