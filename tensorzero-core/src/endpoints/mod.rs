@@ -44,7 +44,7 @@ pub fn validate_tags(tags: &HashMap<String, String>, internal: bool) -> Result<(
 
 // Our auth middleware stores this in the request extensions when auth is enabled,
 // *and* the API key is valid.
-// This is used to get access to the API key (e.g. fo rate-limiting), *not* to require that a route is authenticated -
+// This is used to get access to the API key (e.g. for rate-limiting), *not* to require that a route is authenticated -
 // the `auth` middleware itself rejects requests without API keys
 #[derive(Debug, Clone)]
 pub struct RequestApiKeyExtension {
