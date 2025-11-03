@@ -205,6 +205,14 @@ class InferenceInput(TypedDict):
     system: NotRequired[System]
 
 
+class EvaluatorStatsDict(TypedDict):
+    """Statistics computed about a particular evaluator."""
+
+    mean: float
+    stderr: float
+    count: int
+
+
 InferenceResponse = Union[ChatInferenceResponse, JsonInferenceResponse]
 
 

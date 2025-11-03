@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 import pytest
 from tensorzero import (
     AsyncTensorZeroGateway,
+    EvaluatorStatsDict,
     TensorZeroGateway,
     TensorZeroInternalError,
 )
@@ -76,7 +77,7 @@ def test_sync_run_evaluation(
     assert len(results) == run_info["num_datapoints"]
 
     # Test summary stats
-    stats: Dict[str, Dict[str, Any]] = job.summary_stats()
+    stats: Dict[str, EvaluatorStatsDict] = job.summary_stats()
     assert isinstance(stats, dict)
     assert len(stats) > 0  # Should have at least one evaluator
 
@@ -181,7 +182,7 @@ async def test_async_run_evaluation(
     assert len(results) == run_info["num_datapoints"]
 
     # Test summary stats
-    stats: Dict[str, Dict[str, Any]] = await job.summary_stats()
+    stats: Dict[str, EvaluatorStatsDict] = await job.summary_stats()
     assert isinstance(stats, dict)
     assert len(stats) > 0  # Should have at least one evaluator
 

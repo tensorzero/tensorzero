@@ -9,7 +9,6 @@ from typing import (
     Optional,
     Sequence,
     Type,
-    TypedDict,
     Union,
     final,
 )
@@ -35,15 +34,11 @@ from tensorzero import (
 )
 from tensorzero.internal import ModelInput, ToolCallConfigDatabaseInsert
 from tensorzero.types import (
+    EvaluatorStatsDict,
     InferenceFilter,
     JsonInferenceOutput,
     OrderBy,
 )
-
-class EvaluatorStatsDict(TypedDict):
-    mean: float
-    stderr: float
-    count: int
 
 @final
 class ResolvedInputMessage:
