@@ -152,22 +152,23 @@ impl Migration for Migration0041<'_> {
     }
 
     fn rollback_instructions(&self) -> String {
-        r"ALTER TABLE ChatInference DROP COLUMN dynamic_tools;
-          ALTER TABLE ChatInference DROP COLUMN dynamic_provider_tools;
-          ALTER TABLE ChatInference DROP COLUMN allowed_tools;
-          ALTER TABLE ChatInference DROP COLUMN tool_choice;
-          ALTER TABLE ChatInference DROP COLUMN parallel_tool_calls;
-          ALTER TABLE ChatInferenceDatapoint DROP COLUMN dynamic_tools;
-          ALTER TABLE ChatInferenceDatapoint DROP COLUMN dynamic_provider_tools;
-          ALTER TABLE ChatInferenceDatapoint DROP COLUMN allowed_tools;
-          ALTER TABLE ChatInferenceDatapoint DROP COLUMN tool_choice;
-          ALTER TABLE ChatInferenceDatapoint DROP COLUMN parallel_tool_calls;
-          ALTER TABLE BatchModelInference DROP COLUMN dynamic_tools;
-          ALTER TABLE BatchModelInference DROP COLUMN dynamic_provider_tools;
-          ALTER TABLE BatchModelInference DROP COLUMN allowed_tools;
-          ALTER TABLE BatchModelInference DROP COLUMN tool_choice;
-          ALTER TABLE BatchModelInference DROP COLUMN parallel_tool_calls;"
-            .to_string()
+        // r"ALTER TABLE ChatInference DROP COLUMN dynamic_tools;
+        //   ALTER TABLE ChatInference DROP COLUMN dynamic_provider_tools;
+        //   ALTER TABLE ChatInference DROP COLUMN allowed_tools;
+        //   ALTER TABLE ChatInference DROP COLUMN tool_choice;
+        //   ALTER TABLE ChatInference DROP COLUMN parallel_tool_calls;
+        //   ALTER TABLE ChatInferenceDatapoint DROP COLUMN dynamic_tools;
+        //   ALTER TABLE ChatInferenceDatapoint DROP COLUMN dynamic_provider_tools;
+        //   ALTER TABLE ChatInferenceDatapoint DROP COLUMN allowed_tools;
+        //   ALTER TABLE ChatInferenceDatapoint DROP COLUMN tool_choice;
+        //   ALTER TABLE ChatInferenceDatapoint DROP COLUMN parallel_tool_calls;
+        //   ALTER TABLE BatchModelInference DROP COLUMN dynamic_tools;
+        //   ALTER TABLE BatchModelInference DROP COLUMN dynamic_provider_tools;
+        //   ALTER TABLE BatchModelInference DROP COLUMN allowed_tools;
+        //   ALTER TABLE BatchModelInference DROP COLUMN tool_choice;
+        //   ALTER TABLE BatchModelInference DROP COLUMN parallel_tool_calls;"
+        //     .to_string()
+        String::new()
     }
 
     async fn has_succeeded(&self) -> Result<bool, Error> {
