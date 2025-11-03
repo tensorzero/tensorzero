@@ -3,7 +3,7 @@ use axum::Json;
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::db::inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams};
+use crate::db::inferences::{InferenceQueries, ListInferencesParams};
 use crate::error::Error;
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
@@ -40,17 +40,12 @@ async fn get_inferences(
     }
 
     let params = ListInferencesParams {
-        function_name: None,
         ids: Some(&request.ids),
-        variant_name: None,
-        episode_id: None,
-        filters: None,
-        // For get by ID, we return the inference output (not demonstration feedback)
-        output_source: InferenceOutputSource::Inference,
+        output_source: request.output_source,
         // Return all inferences matching the IDs.
         limit: Some(u64::MAX),
         offset: Some(0),
-        order_by: None,
+        ..Default::default()
     };
 
     let inferences_storage = clickhouse.list_inferences(config, &params).await?;
@@ -113,7 +108,7 @@ async fn list_inferences(
 mod tests {
     use super::*;
     use crate::config::{Config, SchemaData};
-    use crate::db::inferences::MockInferenceQueries;
+    use crate::db::inferences::{InferenceOutputSource, MockInferenceQueries};
     use crate::experimentation::ExperimentationConfig;
     use crate::function::{FunctionConfig, FunctionConfigChat};
     use crate::inference::types::{ContentBlockChatOutput, StoredInput, Text};
@@ -202,6 +197,7 @@ mod tests {
 
         let request = GetInferencesRequest {
             ids: vec![id1, id2],
+            output_source: InferenceOutputSource::Inference,
         };
 
         let result = get_inferences(&config, &mock_clickhouse, request)
@@ -219,7 +215,10 @@ mod tests {
         // Should NOT call list_inferences when IDs are empty
         mock_clickhouse.expect_list_inferences().times(0);
 
-        let request = GetInferencesRequest { ids: vec![] };
+        let request = GetInferencesRequest {
+            ids: vec![],
+            output_source: InferenceOutputSource::Inference,
+        };
 
         let result = get_inferences(&config, &mock_clickhouse, request)
             .await
@@ -243,7 +242,10 @@ mod tests {
                 Box::pin(async move { Ok(vec![inf]) })
             });
 
-        let request = GetInferencesRequest { ids: vec![id] };
+        let request = GetInferencesRequest {
+            ids: vec![id],
+            output_source: InferenceOutputSource::Inference,
+        };
 
         let result = get_inferences(&config, &mock_clickhouse, request)
             .await
@@ -274,7 +276,7 @@ mod tests {
                 assert_eq!(params.limit, Some(u64::MAX), "Should use u64::MAX limit");
                 assert_eq!(
                     params.output_source,
-                    InferenceOutputSource::Inference,
+                    InferenceOutputSource::Demonstration,
                     "Should use Inference output source"
                 );
                 true
@@ -285,7 +287,10 @@ mod tests {
                 Box::pin(async move { Ok(vec![inf]) })
             });
 
-        let request = GetInferencesRequest { ids: vec![id] };
+        let request = GetInferencesRequest {
+            ids: vec![id],
+            output_source: InferenceOutputSource::Demonstration,
+        };
 
         let result = get_inferences(&config, &mock_clickhouse, request).await;
         assert!(result.is_ok());

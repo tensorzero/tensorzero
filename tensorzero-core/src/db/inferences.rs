@@ -147,6 +147,7 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
     }
 }
 
+// TODO(shuyangli): Move to tensorzero-core/src/endpoints/stored_inferences/v1/types.rs
 /// Source of an inference output when querying inferences. Users can choose this because there may be
 /// demonstration feedback (manually-curated output) for the inference that should be preferred.
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]

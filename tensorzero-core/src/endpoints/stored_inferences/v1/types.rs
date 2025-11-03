@@ -204,6 +204,11 @@ pub struct ListInferencesRequest {
 pub struct GetInferencesRequest {
     /// The IDs of the inferences to retrieve. Required.
     pub ids: Vec<Uuid>,
+
+    /// Source of the inference output.
+    /// Determines whether to return the original inference output or demonstration feedback
+    /// (manually-curated output) if available.
+    pub output_source: InferenceOutputSource,
 }
 
 /// Response containing the requested inferences.

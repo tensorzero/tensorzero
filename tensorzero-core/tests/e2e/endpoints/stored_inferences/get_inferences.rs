@@ -1,6 +1,7 @@
 /// Tests for the /v1/inferences/list_inferences and /v1/inferences/get_inferences endpoints.
 use reqwest::Client;
 use serde_json::{json, Value};
+use tensorzero::InferenceOutputSource;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -31,14 +32,18 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 }
 
 /// Helper function to call get_inferences via HTTP
-async fn get_inferences_by_ids(ids: Vec<Uuid>) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+async fn get_inferences_by_ids(
+    ids: Vec<Uuid>,
+    output_source: InferenceOutputSource,
+) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
     let http_client = Client::new();
     let id_strings: Vec<String> = ids.iter().map(std::string::ToString::to_string).collect();
 
     let resp = http_client
         .post(get_gateway_endpoint("/v1/inferences/get_inferences"))
         .json(&json!({
-            "ids": id_strings
+            "ids": id_strings,
+            "output_source": json!(output_source)
         }))
         .send()
         .await?;
@@ -465,7 +470,9 @@ pub async fn test_get_by_ids_json_only() {
         .collect();
 
     // Now get by IDs
-    let res = get_inferences_by_ids(ids.clone()).await.unwrap();
+    let res = get_inferences_by_ids(ids.clone(), InferenceOutputSource::Inference)
+        .await
+        .unwrap();
 
     // Should get back the same 3 inferences
     assert_eq!(res.len(), 3);
@@ -497,7 +504,9 @@ pub async fn test_get_by_ids_chat_only() {
         .collect();
 
     // Now get by IDs
-    let res = get_inferences_by_ids(ids.clone()).await.unwrap();
+    let res = get_inferences_by_ids(ids.clone(), InferenceOutputSource::Inference)
+        .await
+        .unwrap();
 
     // Should get back the same 2 inferences
     assert_eq!(res.len(), 2);
@@ -514,7 +523,9 @@ pub async fn test_get_by_ids_chat_only() {
 pub async fn test_get_by_ids_unknown_id_returns_empty() {
     // Get by an unknown ID
     let unknown_ids = vec![Uuid::now_v7()];
-    let res = get_inferences_by_ids(unknown_ids).await.unwrap();
+    let res = get_inferences_by_ids(unknown_ids, InferenceOutputSource::Inference)
+        .await
+        .unwrap();
 
     assert!(res.is_empty(), "Expected empty result for unknown ID");
 }
@@ -549,7 +560,9 @@ pub async fn test_get_by_ids_mixed_types() {
     );
 
     // Now get by mixed IDs
-    let res = get_inferences_by_ids(ids.clone()).await.unwrap();
+    let res = get_inferences_by_ids(ids.clone(), InferenceOutputSource::Inference)
+        .await
+        .unwrap();
 
     // Should get back 4 inferences (2 JSON + 2 Chat)
     assert_eq!(res.len(), 4);
@@ -581,7 +594,9 @@ pub async fn test_get_by_ids_mixed_types() {
 #[tokio::test(flavor = "multi_thread")]
 pub async fn test_get_by_ids_empty_list() {
     // Get by empty list of IDs should return empty result
-    let res = get_inferences_by_ids(vec![]).await.unwrap();
+    let res = get_inferences_by_ids(vec![], InferenceOutputSource::Inference)
+        .await
+        .unwrap();
     assert!(res.is_empty(), "Expected empty result for empty ID list");
 }
 
@@ -601,7 +616,9 @@ pub async fn test_get_by_ids_duplicate_ids() {
 
     // Query with the same ID duplicated
     let duplicate_ids = vec![id, id, id];
-    let res = get_inferences_by_ids(duplicate_ids).await.unwrap();
+    let res = get_inferences_by_ids(duplicate_ids, InferenceOutputSource::Inference)
+        .await
+        .unwrap();
 
     // Should still only get back 1 inference (deduplicated by ClickHouse)
     assert_eq!(res.len(), 1);
