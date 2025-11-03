@@ -1375,10 +1375,6 @@ fn openrouter_to_tensorzero_chunk(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use std::borrow::Cow;
-    use tracing_test::traced_test;
-
     use crate::{
         inference::types::{FunctionType, RequestMessage},
         providers::test_helpers::{
@@ -1386,6 +1382,8 @@ mod tests {
         },
         tool::ToolCallConfig,
     };
+    use serde_json::json;
+    use std::borrow::Cow;
 
     #[test]
     fn test_get_chat_url() {
@@ -2771,8 +2769,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_openrouter_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

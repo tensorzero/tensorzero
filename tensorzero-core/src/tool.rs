@@ -1092,8 +1092,6 @@ mod tests {
     use super::*;
     use lazy_static::lazy_static;
     use serde_json::json;
-    use tracing_test::traced_test;
-
     lazy_static! {
         static ref TOOLS: HashMap<String, Arc<StaticToolConfig>> = {
             let mut map = HashMap::new();
@@ -1519,8 +1517,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_tool_call_deserialize_deprecated_arguments() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let tool_call = serde_json::json!({
             "name": "get_temperature",
             "id": "123",
@@ -1630,7 +1628,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_dynamic_tool_in_allowed_tools() {
         // Test that a dynamic tool name in allowed_tools is recognized and doesn't error
         let dynamic_tool_params = DynamicToolParams {
@@ -1672,7 +1669,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_allowed_tool_not_found_in_static_or_dynamic() {
         // Test that a tool name in allowed_tools that's not in static_tools or additional_tools throws error
         let dynamic_tool_params = DynamicToolParams {
@@ -1708,8 +1704,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_dynamic_tool_auto_added_with_warning() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Test that dynamic tools are still auto-added even when not in allowed_tools (with warning)
         let dynamic_tool_params = DynamicToolParams {
             allowed_tools: Some(vec!["get_temperature".to_string()]),

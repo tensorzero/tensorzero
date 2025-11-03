@@ -1463,12 +1463,10 @@ fn prepare_serialized_openai_compatible_events(
 mod tests {
 
     use super::*;
-    use serde_json::json;
-    use tracing_test::traced_test;
-
     use crate::cache::CacheEnabledMode;
     use crate::inference::types::{System, Text, TextChunk};
     use crate::tool::ToolCallChunk;
+    use serde_json::json;
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -1978,8 +1976,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_deprecated_custom_block() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let content = json!([{
             "country": "Japan",
             "city": "Tokyo",
@@ -2346,10 +2344,9 @@ mod tests {
             }
         );
     }
-
-    #[traced_test]
     #[test]
     fn test_try_from_embedding_params_deprecated() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let openai_embedding_params = OpenAICompatibleEmbeddingParams {
             input: EmbeddingInput::Single("foo".to_string()),
             model: "text-embedding-ada-002".to_string(),
@@ -2365,10 +2362,9 @@ mod tests {
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
         assert!(logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
-
-    #[traced_test]
     #[test]
     fn test_try_from_embedding_params_strip() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let openai_embedding_params = OpenAICompatibleEmbeddingParams {
             input: EmbeddingInput::Single("foo".to_string()),
             model: "tensorzero::embedding_model_name::text-embedding-ada-002".to_string(),

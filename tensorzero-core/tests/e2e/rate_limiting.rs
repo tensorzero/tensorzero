@@ -10,7 +10,6 @@ use tensorzero::{
 };
 use tensorzero_core::endpoints::inference::{ChatCompletionInferenceParams, InferenceParams};
 use tensorzero_core::inference::types::TextKind;
-use tracing_test::traced_test;
 use uuid::Uuid;
 
 // ===== HELPER FUNCTIONS =====
@@ -1160,8 +1159,8 @@ retries = { num_retries = 3 }
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_rate_limiting_cancelled_stream_return_tokens() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(&[&format!(
         r#"[[rate_limiting.rules]]

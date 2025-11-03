@@ -518,7 +518,6 @@ mod tests {
     use std::{borrow::Cow, time::Duration};
 
     use serde_json::json;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -726,8 +725,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_vllm_provider_new_api_base_check() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let model_name = "test-model".to_string();
 
         // Valid cases (should not warn)
@@ -842,8 +841,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_vllm_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

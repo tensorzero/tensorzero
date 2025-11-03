@@ -148,7 +148,6 @@ git2 = { workspace = true }
 tempfile = { version = "3.21.0" }
 
 [dev-dependencies]
-tracing-test = { workspace = true }
 tempfile = "3.21.0"
 rand_distr = "0.5.1"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }

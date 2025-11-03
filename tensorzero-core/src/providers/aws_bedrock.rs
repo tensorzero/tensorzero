@@ -1155,13 +1155,10 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
-        #[traced_test]
         async fn first_run() {
+            let logs_contain = crate::utils::testing::capture_logs();
             AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
                 .await
                 .unwrap();
@@ -1170,9 +1167,8 @@ mod tests {
                 "Creating new AWS config for region: uk-hogwarts-1"
             ));
         }
-
-        #[traced_test]
         async fn second_run() {
+            let logs_contain = crate::utils::testing::capture_logs();
             AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
                 .await
                 .unwrap();
@@ -1181,9 +1177,8 @@ mod tests {
                 "Creating new AWS config for region: uk-hogwarts-1"
             ));
         }
-
-        #[traced_test]
         async fn third_run() {
+            let logs_contain = crate::utils::testing::capture_logs();
             // We want auto-detection to fail, so we clear this environment variable.
             // We use 'nextest' as our runner, so each test runs in its own process
             std::env::remove_var("AWS_REGION");
@@ -1199,9 +1194,8 @@ mod tests {
 
             assert!(logs_contain("Failed to determine AWS region."));
         }
-
-        #[traced_test]
         async fn fourth_run() {
+            let logs_contain = crate::utils::testing::capture_logs();
             AWSBedrockProvider::new("test".to_string(), Some(Region::new("me-shire-2")))
                 .await
                 .unwrap();

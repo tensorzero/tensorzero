@@ -1512,7 +1512,6 @@ mod tests {
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
     use serde_json::json;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     #[test]
@@ -3224,8 +3223,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_chunk_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             AnthropicStreamMessage::ContentBlockStart {
@@ -3247,8 +3246,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_anthropic_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

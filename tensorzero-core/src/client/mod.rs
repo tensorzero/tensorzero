@@ -1037,8 +1037,6 @@ pub use crate::observability;
 mod tests {
     use super::*;
     use tempfile::NamedTempFile;
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
@@ -1089,8 +1087,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_log_no_clickhouse() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from(
@@ -1112,8 +1110,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_log_no_config() {
+        let logs_contain = crate::utils::testing::capture_logs();
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,
             clickhouse_url: None,

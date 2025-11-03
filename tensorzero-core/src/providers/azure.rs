@@ -812,7 +812,6 @@ mod tests {
     use std::borrow::Cow;
     use std::collections::HashMap;
     use std::time::Duration;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::config::SKIP_CREDENTIAL_VALIDATION;
@@ -1140,8 +1139,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_azure_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

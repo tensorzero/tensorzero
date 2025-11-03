@@ -1458,7 +1458,6 @@ mod tests {
     use super::*;
 
     use serde_json::json;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
@@ -2973,8 +2972,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_chunk_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             GCPVertexAnthropicStreamMessage::ContentBlockStart {
@@ -2995,8 +2994,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_gcp_vertex_anthropic_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

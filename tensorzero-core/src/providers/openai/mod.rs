@@ -2685,13 +2685,6 @@ struct OpenAIBatchFileResponse {
 
 #[cfg(test)]
 mod tests {
-    use base64::prelude::*;
-    use base64::Engine;
-    use futures::FutureExt;
-    use serde_json::json;
-    use std::borrow::Cow;
-    use tracing_test::traced_test;
-
     use crate::inference::types::storage::{StorageKind, StoragePath};
     use crate::inference::types::{
         FunctionType, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
@@ -2701,6 +2694,11 @@ mod tests {
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
     use crate::tool::ToolCallConfig;
+    use base64::prelude::*;
+    use base64::Engine;
+    use futures::FutureExt;
+    use serde_json::json;
+    use std::borrow::Cow;
 
     use super::*;
 
@@ -4087,8 +4085,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_file_url_no_mime_type_fetch_and_encode() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let fetch_and_encode = OpenAIMessagesConfig {
             fetch_and_encode_input_files_before_inference: true,
             json_mode: None,
@@ -4141,7 +4139,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_file_url_warn_mime_type() {
         let fetch_and_encode = OpenAIMessagesConfig {
             fetch_and_encode_input_files_before_inference: false,
@@ -4190,8 +4187,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_forward_image_url() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let fetch_and_encode = OpenAIMessagesConfig {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
@@ -4227,8 +4224,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_cannot_forward_file_url() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let fetch_and_encode = OpenAIMessagesConfig {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
@@ -4281,8 +4278,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_check_api_base_suffix() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Valid cases (should not warn)
         check_api_base_suffix(&Url::parse("http://localhost:1234/").unwrap());
         check_api_base_suffix(&Url::parse("http://localhost:1234/openai/").unwrap());
@@ -4315,8 +4312,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_openai_provider_new_api_base_check() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let model_name = "test-model".to_string();
 
         // Valid cases (should not warn)
@@ -4365,8 +4362,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_openai_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {

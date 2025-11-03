@@ -35,10 +35,8 @@ use tensorzero::{
     ClientInputMessageContent, ClientSecretString, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::endpoints::inference::ChatCompletionInferenceParams;
-use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use tracing_test::traced_test;
-
 use tensorzero_core::endpoints::object_storage::{get_object_handler, ObjectResponse, PathParams};
+use tensorzero_core::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 
 use tensorzero_core::inference::types::file::{Base64File, ObjectStoragePointer, UrlFile};
 use tensorzero_core::inference::types::stored_input::StoredFile;
@@ -1148,11 +1146,11 @@ defaults.{}
 /// 4. Infers with the dynamic credential
 /// 5. Infers with the default credential
 /// 6. Asserts that the logs contain exactly one message about falling back
-#[traced_test]
 pub async fn test_provider_type_fallback_credentials_with_provider(
     provider: ModelTestProvider,
     supports_dynamic_credentials_test: bool,
 ) {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.provider_type);
 
@@ -2397,9 +2395,8 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 }
-
-#[traced_test]
 pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     // Bedrock rejects input thoughts for these models
     if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
         || provider.model_name == "deepseek-r1-aws-bedrock"

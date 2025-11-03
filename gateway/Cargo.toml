@@ -41,7 +41,6 @@ default = []
 reqwest.workspace = true
 tempfile = "3.21.0"
 tensorzero = { path = "../clients/rust", features = ["e2e_tests"] }
-tracing-test = "0.2"
 serde_json = { workspace = true }
 reqwest-eventsource = { workspace = true }
 futures = { workspace = true }
