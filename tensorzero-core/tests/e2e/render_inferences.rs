@@ -3,7 +3,7 @@ use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
-    JsonInferenceDatapoint, Role, StorageKind, StoragePath, StoredChatInferenceDatabase,
+    ClientExt, JsonInferenceDatapoint, Role, StorageKind, StoragePath, StoredChatInferenceDatabase,
     StoredChatInferenceDatapoint, StoredDatapoint, StoredInferenceDatabase, StoredJsonInference,
     Tool,
 };

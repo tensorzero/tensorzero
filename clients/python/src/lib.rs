@@ -50,7 +50,6 @@ use tensorzero_core::{
         DiclConfigPyClass, MixtureOfNConfigPyClass,
     },
 };
-use tensorzero_core::{endpoints::datasets::Datapoint, stored_inference::StoredInference};
 use tensorzero_core::{
     endpoints::{
         datasets::InsertDatapointParams,
@@ -63,10 +62,10 @@ use tensorzero_core::{
 };
 use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
-    ClientBuilderMode, ClientInferenceParams, ClientInput, ClientSecretString, DynamicToolParams,
-    FeedbackParams, InferenceOutput, InferenceParams, InferenceStream, LaunchOptimizationParams,
-    ListInferencesParams, OptimizationJobHandle, RenderedSample, TensorZeroError, Tool,
-    WorkflowEvaluationRunParams,
+    ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
+    Datapoint, DynamicToolParams, FeedbackParams, InferenceOutput, InferenceParams,
+    InferenceStream, LaunchOptimizationParams, ListInferencesParams, OptimizationJobHandle,
+    RenderedSample, StoredInference, TensorZeroError, Tool, WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
 use url::Url;
