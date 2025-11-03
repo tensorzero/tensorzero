@@ -882,8 +882,7 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("API key public id `my_bad_public_id` must be 12 characters long."),
-            "Unexpected error message: {}",
-            err.to_string()
+            "Unexpected error message: {err}",
         );
     }
 
