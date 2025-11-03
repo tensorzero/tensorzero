@@ -28,9 +28,9 @@ export async function launch_sft_job(
   const fireworksNativeSFTBase = getEnv().FIREWORKS_BASE_URL;
   const togetherNativeSFTBase = getEnv().TOGETHER_BASE_URL;
   let filters: InferenceFilter | null = null;
-  let output_source: InferenceOutputSource = "Inference";
+  let output_source: InferenceOutputSource = "inference";
   if (data.metric === "demonstration") {
-    output_source = "Demonstration";
+    output_source = "demonstration";
   } else if (data.metric) {
     const threshold =
       typeof data.threshold === "string"

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::db::clickhouse::query_builder::parameters::add_parameter;
-use crate::db::clickhouse::query_builder::{ClickhouseType, QueryParameter, TagFilter, TimeFilter};
+use crate::db::clickhouse::query_builder::{ClickhouseType, QueryParameter};
+use crate::endpoints::stored_inferences::v1::types::{TagFilter, TimeFilter};
 
 /// Filter tree for querying datapoints.
 /// This is similar to `InferenceFilter` but without metric filters, as datapoints don't have associated metrics.
