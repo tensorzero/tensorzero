@@ -1,7 +1,14 @@
 use std::borrow::Cow;
 use std::time::Duration;
 
-use crate::inference::types::{ProviderInferenceResponseStreamInner, ThoughtSummaryBlock};
+use crate::inference::types::{
+    chat_completion_inference_params::{
+        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    },
+    ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
+};
+
+const PROVIDER_NAME: &str = "OpenAI Responses";
 use crate::providers::helpers::convert_stream_error;
 use crate::{error::IMPOSSIBLE_ERROR_MESSAGE, inference::TensorZeroEventError};
 use futures::StreamExt;
@@ -18,7 +25,7 @@ use crate::{
         ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
         ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
         ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, Usage,
+        TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
     },
     model::fully_qualified_name,
     providers::openai::{
@@ -53,6 +60,8 @@ pub struct OpenAIResponsesRequest<'a> {
     frequency_penalty: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     include: Option<Vec<OpenAIResponsesInclude>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning: Option<OpenAIResponsesReasoningConfig>,
     stream: bool,
 }
 
@@ -65,6 +74,14 @@ pub enum OpenAIResponsesInclude {
 #[derive(Serialize, Debug, Clone)]
 pub struct OpenAIResponsesTextConfig {
     format: OpenAIResponsesTextConfigFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct OpenAIResponsesReasoningConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    effort: Option<String>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -380,7 +397,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             tracing::warn!("Stop sequences are not supported in the OpenAI Responses API");
         }
 
-        let text = match request.json_mode {
+        let text_format = match request.json_mode {
             ModelInferenceRequestJsonMode::On => OpenAIResponsesTextConfigFormat::JsonObject,
             ModelInferenceRequestJsonMode::Off => OpenAIResponsesTextConfigFormat::Text,
             ModelInferenceRequestJsonMode::Strict => {
@@ -397,7 +414,7 @@ impl<'a> OpenAIResponsesRequest<'a> {
             }
         };
 
-        Ok(Self {
+        let mut openai_responses_request = Self {
             model: openai_model,
             input: prepare_openai_responses_messages(
                 request
@@ -413,7 +430,10 @@ impl<'a> OpenAIResponsesRequest<'a> {
                 },
             )
             .await?,
-            text: OpenAIResponsesTextConfig { format: text },
+            text: OpenAIResponsesTextConfig {
+                format: text_format,
+                verbosity: None, // handled below
+            },
             tools,
             parallel_tool_calls,
             tool_choice,
@@ -428,8 +448,40 @@ impl<'a> OpenAIResponsesRequest<'a> {
             } else {
                 None
             },
+            reasoning: None, // handled below
             stream: request.stream,
-        })
+        };
+        apply_inference_params(&mut openai_responses_request, &request.inference_params_v2);
+        Ok(openai_responses_request)
+    }
+}
+
+fn apply_inference_params(
+    request: &mut OpenAIResponsesRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning = Some(OpenAIResponsesReasoningConfig {
+            effort: reasoning_effort.clone(),
+        });
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        request.text.verbosity = verbosity.clone();
     }
 }
 
@@ -931,9 +983,13 @@ pub fn stream_openai_responses(
     event_source: impl Stream<Item = Result<Event, TensorZeroEventError>> + Send + 'static,
     start_time: Instant,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let mut current_tool_id: Option<String> = None;
     let mut current_tool_name: Option<String> = None;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
 
     Box::pin(async_stream::stream! {
         futures::pin_mut!(event_source);
@@ -986,6 +1042,8 @@ pub fn stream_openai_responses(
                             &mut current_tool_id,
                             &mut current_tool_name,
                             discard_unknown_chunks,
+                            &model_name,
+                            &provider_name,
                         );
 
                         match stream_message {
@@ -1013,6 +1071,7 @@ pub fn stream_openai_responses(
 /// Maps an OpenAI Responses API stream event to a TensorZero chunk
 /// Similar to anthropic_to_tensorzero_stream_message in anthropic.rs
 /// Tool calls require tracking the current tool ID and name across chunks
+#[expect(clippy::too_many_arguments)]
 pub(super) fn openai_responses_to_tensorzero_chunk(
     raw_message: String,
     event: OpenAIResponsesStreamEvent,
@@ -1020,6 +1079,8 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match event {
         // Text delta - the main content streaming event
@@ -1132,11 +1193,14 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 } else {
                     // Unknown item type - return as unknown chunk
                     return Ok(Some(ProviderInferenceResponseChunk::new(
-                        vec![ContentBlockChunk::Unknown {
+                        vec![ContentBlockChunk::Unknown(UnknownChunk {
                             id: output_index.to_string(),
                             data: item,
-                            provider_type: Some(PROVIDER_TYPE.to_string()),
-                        }],
+                            model_provider_name: Some(fully_qualified_name(
+                                model_name,
+                                provider_name,
+                            )),
+                        })],
                         None,
                         raw_message,
                         message_latency,
@@ -1255,11 +1319,11 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
                 json!({ "raw": raw_message.clone() })
             });
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "unknown".to_string(),
                     data,
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1271,10 +1335,12 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
-    use crate::inference::types::FunctionType;
-
     use super::*;
     use std::time::Duration;
+    use tracing_test::traced_test;
+    use uuid::Uuid;
+
+    use crate::inference::types::{FunctionType, ModelInferenceRequest, RequestMessage, Role};
 
     #[test]
     fn test_deserialize_response_created() {
@@ -1512,6 +1578,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1545,6 +1613,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1589,6 +1659,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1628,6 +1700,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1664,6 +1738,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1707,6 +1783,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1738,6 +1816,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1766,6 +1846,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1792,6 +1874,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1828,6 +1912,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -1858,6 +1944,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1901,6 +1989,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -1940,6 +2030,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -1964,6 +2056,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -1988,6 +2082,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
 
         assert!(result.is_err());
@@ -2025,6 +2121,8 @@ mod tests {
                 &mut tool_id,
                 &mut tool_name,
                 false,
+                "test_model",
+                "test_provider",
             )
             .unwrap();
 
@@ -2050,6 +2148,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
@@ -2057,7 +2157,7 @@ mod tests {
         // Unknown events should return an Unknown chunk
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data, .. } => {
+            ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                 assert_eq!(id, "unknown");
                 assert_eq!(
                     data.get("type").and_then(|v| v.as_str()),
@@ -2087,6 +2187,8 @@ mod tests {
             &mut tool_id,
             &mut tool_name,
             true,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
 
@@ -2176,6 +2278,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
+            ..Default::default()
         };
 
         let result = response.into_provider_response(
@@ -2274,6 +2377,7 @@ mod tests {
             extra_headers: Default::default(),
             fetch_and_encode_input_files_before_inference: false,
             extra_cache_key: None,
+            ..Default::default()
         };
 
         let result = response.into_provider_response(
@@ -2342,5 +2446,53 @@ mod tests {
             }
             _ => panic!("Expected ContentBlockOutput::Unknown for another_unknown_type"),
         }
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_openai_responses_apply_inference_params_called() {
+        let request = ModelInferenceRequest {
+            inference_id: Uuid::now_v7(),
+            messages: vec![RequestMessage {
+                role: Role::User,
+                content: vec!["Test".to_string().into()],
+            }],
+            function_type: FunctionType::Chat,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: Some("high".to_string()),
+                thinking_budget_tokens: Some(1024),
+                verbosity: Some("low".to_string()),
+            },
+            ..Default::default()
+        };
+
+        let openai_responses_request = OpenAIResponsesRequest::new(
+            "gpt-4o",
+            &request,
+            false,
+            &[],
+            "test-model",
+            "test-provider",
+        )
+        .await
+        .expect("Failed to create OpenAI responses request");
+
+        // Verify that reasoning_effort is applied correctly
+        assert!(openai_responses_request.reasoning.is_some());
+        assert_eq!(
+            openai_responses_request.reasoning.unwrap().effort,
+            Some("high".to_string())
+        );
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "OpenAI Responses does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Verify that verbosity is applied correctly
+        assert_eq!(
+            openai_responses_request.text.verbosity,
+            Some("low".to_string())
+        );
     }
 }

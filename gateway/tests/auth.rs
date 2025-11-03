@@ -1,10 +1,9 @@
-#![allow(clippy::print_stdout)]
+#![expect(clippy::print_stdout, clippy::expect_used)]
 use std::process::Stdio;
 use std::str::FromStr;
 
 use http::{Method, StatusCode};
 use serde_json::json;
-use tensorzero::test_helpers::make_embedded_gateway_with_config_and_postgres;
 use tensorzero_auth::key::TensorZeroApiKey;
 use tensorzero_core::endpoints::status::TENSORZERO_VERSION;
 use tokio::process::Command;
@@ -16,8 +15,19 @@ mod common;
 
 const GATEWAY_PATH: &str = env!("CARGO_BIN_EXE_gateway");
 
+/// `#[sqlx::test]` doesn't work here because it needs to share the DB with `start_gateway_on_random_port`.
+async fn get_postgres_pool_for_testing() -> sqlx::PgPool {
+    let postgres_url = std::env::var("TENSORZERO_POSTGRES_URL")
+        .expect("TENSORZERO_POSTGRES_URL must be set for auth tests");
+
+    sqlx::PgPool::connect(&postgres_url)
+        .await
+        .expect("Failed to connect to PostgreSQL")
+}
+
 #[tokio::test]
 async fn test_tensorzero_auth_enabled() {
+    let pool = get_postgres_pool_for_testing().await;
     let child_data = start_gateway_on_random_port(
         "
     [gateway.auth]
@@ -29,24 +39,7 @@ async fn test_tensorzero_auth_enabled() {
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    [gateway.auth.cache]
-    enabled = false
-    ",
-    )
-    .await;
-
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
-        .unwrap();
-
-    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, postgres_pool)
+    let key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
         .await
         .unwrap();
 
@@ -81,7 +74,7 @@ async fn test_tensorzero_auth_enabled() {
         &TensorZeroApiKey::parse(key.expose_secret())
             .unwrap()
             .public_id,
-        postgres_pool,
+        &pool,
     )
     .await
     .unwrap();
@@ -156,6 +149,7 @@ async fn test_tensorzero_unauthenticated_routes() {
 
 #[tokio::test]
 async fn test_tensorzero_missing_auth() {
+    let pool = get_postgres_pool_for_testing().await;
     let child_data = start_gateway_on_random_port(
         "
     [gateway.auth]
@@ -167,33 +161,15 @@ async fn test_tensorzero_missing_auth() {
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    [gateway.auth.cache]
-    enabled = false
-    ",
-    )
-    .await;
-
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
+    let disabled_key = tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, &pool)
+        .await
         .unwrap();
-
-    let disabled_key =
-        tensorzero_auth::postgres::create_key("my_org", "my_workspace", None, postgres_pool)
-            .await
-            .unwrap();
 
     let disabled_at = tensorzero_auth::postgres::disable_key(
         &TensorZeroApiKey::parse(disabled_key.expose_secret())
             .unwrap()
             .public_id,
-        postgres_pool,
+        &pool,
     )
     .await
     .unwrap();
@@ -317,6 +293,7 @@ async fn test_tensorzero_missing_auth() {
 
 #[tokio::test]
 async fn test_auth_cache_hides_disabled_key_until_ttl() {
+    let pool = get_postgres_pool_for_testing().await;
     // Test that a disabled key continues to work until the cache TTL expires (demonstrates caching trade-off)
     let child_data = start_gateway_on_random_port(
         "
@@ -330,26 +307,10 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    ",
-    )
-    .await;
-
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
-        .unwrap();
-
     // Create a key
-    let key =
-        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, postgres_pool)
-            .await
-            .unwrap();
+    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+        .await
+        .unwrap();
     let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
 
     // First request - should succeed
@@ -374,7 +335,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
     assert_eq!(response1.status(), StatusCode::OK);
 
     // Disable the key in the database
-    tensorzero_auth::postgres::disable_key(&parsed_key.public_id, postgres_pool)
+    tensorzero_auth::postgres::disable_key(&parsed_key.public_id, &pool)
         .await
         .unwrap();
 
@@ -434,6 +395,7 @@ async fn test_auth_cache_hides_disabled_key_until_ttl() {
 
 #[tokio::test]
 async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
+    let pool = get_postgres_pool_for_testing().await;
     // Test that when cache is disabled, disabled keys fail immediately (no delayed visibility)
     let child_data = start_gateway_on_random_port(
         "
@@ -446,26 +408,10 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    ",
-    )
-    .await;
-
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
-        .unwrap();
-
     // Create a key
-    let key =
-        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, postgres_pool)
-            .await
-            .unwrap();
+    let key = tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
+        .await
+        .unwrap();
     let parsed_key = TensorZeroApiKey::parse(key.expose_secret()).unwrap();
 
     // First request - should succeed
@@ -490,7 +436,7 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
     assert_eq!(response1.status(), StatusCode::OK);
 
     // Disable the key
-    tensorzero_auth::postgres::disable_key(&parsed_key.public_id, postgres_pool)
+    tensorzero_auth::postgres::disable_key(&parsed_key.public_id, &pool)
         .await
         .unwrap();
 
@@ -522,6 +468,7 @@ async fn test_auth_cache_disabled_sees_disabled_key_immediately() {
 
 #[tokio::test]
 async fn test_auth_cache_requires_full_key_match() {
+    let pool = get_postgres_pool_for_testing().await;
     // Test that the cache includes the secret portion of the API key, not just the public_id.
     // This prevents an attacker from using the same public_id with a different secret to bypass authentication.
     let child_data = start_gateway_on_random_port(
@@ -536,24 +483,9 @@ async fn test_auth_cache_requires_full_key_match() {
     )
     .await;
 
-    let embedded_client = make_embedded_gateway_with_config_and_postgres(
-        "
-    [gateway.auth]
-    enabled = true
-    ",
-    )
-    .await;
-
-    let postgres_pool = embedded_client
-        .get_app_state_data()
-        .unwrap()
-        .postgres_connection_info
-        .get_alpha_pool()
-        .unwrap();
-
     // Create a valid key
     let valid_key =
-        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, postgres_pool)
+        tensorzero_auth::postgres::create_key("test_org", "test_workspace", None, &pool)
             .await
             .unwrap();
     let parsed_valid_key = TensorZeroApiKey::parse(valid_key.expose_secret()).unwrap();

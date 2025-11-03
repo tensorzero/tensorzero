@@ -10,4 +10,7 @@ export type ChatCompletionInferenceParams = {
   frequency_penalty: number | null;
   json_mode: JsonMode | null;
   stop_sequences: Array<string> | null;
+  reasoning_effort?: string;
+  thinking_budget_tokens?: number;
+  verbosity?: string;
 };

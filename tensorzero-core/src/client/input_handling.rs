@@ -1,9 +1,9 @@
-use crate::{ClientInput, ClientInputMessage, ClientInputMessageContent};
-use tensorzero_core::inference::types::{
+use super::{ClientInput, ClientInputMessage, ClientInputMessageContent};
+use crate::inference::types::{
     Base64File, File, ObjectStorageFile, ResolvedInput, ResolvedInputMessage,
     ResolvedInputMessageContent, TextKind,
 };
-use tensorzero_core::tool::{ToolCall, ToolCallInput};
+use crate::tool::{ToolCall, ToolCallInput};
 
 /// Convert a resolved input to a client input
 pub fn resolved_input_to_client_input(resolved_input: ResolvedInput) -> ClientInput {
@@ -78,7 +78,7 @@ fn resolved_input_message_content_to_client_input_message_content(
 mod tests {
     use object_store::path::Path;
 
-    use tensorzero_core::inference::types::{
+    use crate::inference::types::{
         storage::{StorageKind, StoragePath},
         Base64File, ObjectStorageFile, ObjectStoragePointer,
     };
