@@ -1,9 +1,161 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::db::clickhouse::query_builder::{InferenceFilter, OrderBy};
 use crate::db::inferences::InferenceOutputSource;
 use crate::stored_inference::StoredInference;
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub struct FloatMetricFilter {
+    pub metric_name: String,
+    pub value: f64,
+    pub comparison_operator: FloatComparisonOperator,
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub struct BooleanMetricFilter {
+    pub metric_name: String,
+    pub value: bool,
+}
+
+/// Filter by tag key-value pair.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct TagFilter {
+    pub key: String,
+    pub value: String,
+    pub comparison_operator: TagComparisonOperator,
+}
+
+/// Filter by timestamp.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct TimeFilter {
+    #[cfg_attr(test, ts(type = "Date"))]
+    pub time: DateTime<Utc>,
+    pub comparison_operator: TimeComparisonOperator,
+}
+
+/// Comparison operators for float metrics.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub enum FloatComparisonOperator {
+    #[serde(rename = "<")]
+    LessThan,
+    #[serde(rename = "<=")]
+    LessThanOrEqual,
+    #[serde(rename = "=")]
+    Equal,
+    #[serde(rename = ">")]
+    GreaterThan,
+    #[serde(rename = ">=")]
+    GreaterThanOrEqual,
+    #[serde(rename = "!=")]
+    NotEqual,
+}
+
+/// Comparison operators for timestamps.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub enum TimeComparisonOperator {
+    #[serde(rename = "<")]
+    LessThan,
+    #[serde(rename = "<=")]
+    LessThanOrEqual,
+    #[serde(rename = "=")]
+    Equal,
+    #[serde(rename = ">")]
+    GreaterThan,
+    #[serde(rename = ">=")]
+    GreaterThanOrEqual,
+    #[serde(rename = "!=")]
+    NotEqual,
+}
+
+/// Comparison operators for tag filters.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
+#[cfg_attr(test, ts(export))]
+pub enum TagComparisonOperator {
+    #[serde(rename = "=")]
+    Equal,
+    #[serde(rename = "!=")]
+    NotEqual,
+}
+
+/// The ordering direction.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub enum OrderDirection {
+    #[serde(rename = "ascending")]
+    Asc,
+    #[serde(rename = "descending")]
+    Desc,
+}
+
+/// The property to order by.
+/// This is flattened in the public API inside the `OrderBy` struct.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "by", rename_all = "snake_case")]
+pub enum OrderByTerm {
+    Timestamp,
+    Metric {
+        /// The name of the metric to order by.
+        name: String,
+    },
+}
+
+/// Order by clauses for querying inferences.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
+pub struct OrderBy {
+    /// The property to order by.
+    #[serde(flatten)]
+    pub term: OrderByTerm,
+
+    /// The ordering direction.
+    pub direction: OrderDirection,
+}
+
+/// Filters for querying inferences.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[cfg_attr(test, ts(export))]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InferenceFilter {
+    /// Filter by the value of a float metric
+    FloatMetric(FloatMetricFilter),
+
+    /// Filter by the value of a boolean metric
+    BooleanMetric(BooleanMetricFilter),
+
+    /// Filter by tag key-value pair
+    Tag(TagFilter),
+
+    /// Filter by the timestamp of an inference.
+    Time(TimeFilter),
+
+    /// Logical AND of multiple filters
+    And { children: Vec<InferenceFilter> },
+
+    /// Logical OR of multiple filters
+    Or { children: Vec<InferenceFilter> },
+
+    /// Logical NOT of a filter
+    Not { child: Box<InferenceFilter> },
+}
 
 /// Request to list inferences with pagination and filters.
 /// Used by the `POST /v1/inferences/list_inferences` endpoint.

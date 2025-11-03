@@ -2,9 +2,20 @@
 import type { OrderDirection } from "./OrderDirection";
 
 /**
- * Order by direction for querying inferences.
+ * Order by clauses for querying inferences.
  */
-export type OrderBy = { direction: OrderDirection } & (
-  | { type: "timestamp" }
-  | { type: "metric"; name: string }
+export type OrderBy = {
+  /**
+   * The ordering direction.
+   */
+  direction: OrderDirection;
+} & (
+  | { by: "timestamp" }
+  | {
+      by: "metric";
+      /**
+       * The name of the metric to order by.
+       */
+      name: string;
+    }
 );

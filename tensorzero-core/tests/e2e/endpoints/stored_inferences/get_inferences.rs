@@ -69,7 +69,7 @@ pub async fn test_list_simple_query_json_function() {
         "page_size": 2,
         "order_by": [
             {
-                "type": "timestamp",
+                "by": "timestamp",
                 "direction": "descending"
             }
         ]
@@ -110,7 +110,7 @@ pub async fn test_list_simple_query_chat_function() {
         "offset": 3,
         "order_by": [
             {
-                "type": "timestamp",
+                "by": "timestamp",
                 "direction": "ascending"
             }
         ]
@@ -156,7 +156,7 @@ pub async fn test_list_query_with_float_filter() {
         },
         "order_by": [
             {
-                "type": "metric",
+                "by": "metric",
                 "name": "jaccard_similarity",
                 "direction": "descending"
             }
@@ -347,12 +347,12 @@ async fn test_list_simple_time_filter() {
         },
         "order_by": [
             {
-                "type": "metric",
+                "by": "metric",
                 "name": "exact_match",
                 "direction": "descending"
             },
             {
-                "type": "timestamp",
+                "by": "timestamp",
                 "direction": "ascending"
             }
         ]
