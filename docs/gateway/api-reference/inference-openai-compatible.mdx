@@ -91,7 +91,7 @@ response = oai.chat.completions.create(
     extra_body={
         "tensorzero::deny_unknown_fields": True,
     },
-    ultrathink=True,  # made-up parameter → `deny_unknown_fields` will reject this request
+    ultrathink=True,  # made-up parameter → `deny_unknown_fields` would reject this request
 )
 ```
 
