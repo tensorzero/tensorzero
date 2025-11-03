@@ -2,6 +2,7 @@ use axum::extract::{Path, State};
 use axum::Json;
 use tracing::instrument;
 
+use crate::config::Config;
 use crate::db::clickhouse::ClickHouseConnectionInfo;
 use crate::db::datasets::{DatasetQueries, GetDatapointsParams};
 use crate::endpoints::datasets::validate_dataset_name;
@@ -23,8 +24,13 @@ pub async fn list_datapoints_handler(
     Path(dataset_name): Path<String>,
     StructuredJson(request): StructuredJson<ListDatapointsRequest>,
 ) -> Result<Json<GetDatapointsResponse>, Error> {
-    let response =
-        list_datapoints(&app_state.clickhouse_connection_info, dataset_name, request).await?;
+    let response = list_datapoints(
+        &app_state.clickhouse_connection_info,
+        &app_state.config,
+        dataset_name,
+        request,
+    )
+    .await?;
 
     Ok(Json(response))
 }
@@ -37,12 +43,18 @@ pub async fn get_datapoints_handler(
     State(app_state): AppState,
     StructuredJson(request): StructuredJson<GetDatapointsRequest>,
 ) -> Result<Json<GetDatapointsResponse>, Error> {
-    let response = get_datapoints(&app_state.clickhouse_connection_info, request).await?;
+    let response = get_datapoints(
+        &app_state.clickhouse_connection_info,
+        &app_state.config,
+        request,
+    )
+    .await?;
     Ok(Json(response))
 }
 
 async fn list_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
+    config: &Config,
     dataset_name: String,
     request: ListDatapointsRequest,
 ) -> Result<GetDatapointsResponse, Error> {
@@ -59,12 +71,17 @@ async fn list_datapoints(
     };
 
     let datapoints = clickhouse.get_datapoints(&params).await?;
+    let datapoints = datapoints
+        .into_iter()
+        .map(|dp| dp.into_datapoint(config))
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(GetDatapointsResponse { datapoints })
 }
 
 async fn get_datapoints(
     clickhouse: &ClickHouseConnectionInfo,
+    config: &Config,
     request: GetDatapointsRequest,
 ) -> Result<GetDatapointsResponse, Error> {
     // If no IDs are provided, return an empty response.
@@ -85,6 +102,10 @@ async fn get_datapoints(
     };
 
     let datapoints = clickhouse.get_datapoints(&params).await?;
+    let datapoints = datapoints
+        .into_iter()
+        .map(|dp| dp.into_datapoint(config))
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(GetDatapointsResponse { datapoints })
 }

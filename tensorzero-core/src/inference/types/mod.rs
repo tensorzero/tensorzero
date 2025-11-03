@@ -44,24 +44,7 @@
 //!
 //! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
 //! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
-use crate::endpoints::object_storage::get_object;
-use crate::http::TensorzeroHttpClient;
-use crate::inference::types::file::Base64FileMetadata;
-use crate::inference::types::resolved_input::{
-    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
-    LazyResolvedInputMessageContent,
-};
-use crate::inference::types::storage::StorageKind;
-use crate::inference::types::stored_input::StoredFile;
-use crate::rate_limiting::{
-    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
-    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
-};
-use crate::serde_util::{
-    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
-};
-use crate::tool::ToolCallInput;
-use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
+
 use derive_builder::Builder;
 use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
@@ -79,6 +62,7 @@ use pyo3::types::PyAny;
 #[cfg(feature = "pyo3")]
 use pyo3_helpers::serialize_to_dict;
 pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use std::borrow::Borrow;
@@ -92,8 +76,26 @@ use std::{
 use uuid::Uuid;
 
 use crate::cache::NonStreamingCacheData;
+use crate::endpoints::object_storage::get_object;
 use crate::function::FunctionConfigType;
+use crate::http::TensorzeroHttpClient;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
+use crate::inference::types::file::Base64FileMetadata;
+use crate::inference::types::resolved_input::{
+    write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
+    LazyResolvedInputMessageContent,
+};
+use crate::inference::types::storage::StorageKind;
+use crate::inference::types::stored_input::StoredFile;
+use crate::rate_limiting::{
+    get_estimated_tokens, EstimatedRateLimitResourceUsage, RateLimitResource,
+    RateLimitResourceUsage, RateLimitedInputContent, RateLimitedRequest,
+};
+use crate::serde_util::{
+    deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
+};
 use crate::tool::ToolCallConfigDatabaseInsert;
+use crate::tool::ToolCallInput;
 use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
 use crate::{cache::CacheData, config::ObjectStoreInfo};
 use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
@@ -102,9 +104,9 @@ use crate::{
     error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
 };
 use crate::{error::Error, variant::JsonMode};
-use serde::de::Error as _;
 
 pub mod batch;
+pub mod chat_completion_inference_params;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod file;
@@ -112,11 +114,13 @@ mod input_message;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
+mod role;
 pub mod storage;
 pub mod stored_input;
 pub mod streams;
 
 pub use resolved_input::ResolvedRequestMessage;
+pub use role::Role;
 pub use stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
 };
@@ -124,7 +128,7 @@ pub use streams::{
     collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
     InferenceResultChunk, InferenceResultStream, JsonInferenceResultChunk,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
+    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
 };
 
 /*
@@ -645,50 +649,6 @@ impl<'de> Deserialize<'de> for TextKind {
     }
 }
 
-#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
-#[ts(export)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass)]
-pub enum Role {
-    User,
-    Assistant,
-}
-
-impl Role {
-    /// The template name to use for `{"type": "text", "arguments": {}}` inputs.
-    /// This will eventually be deprecated in favor of explicit `{"type": "template", "name": "user", "arguments": {}}` inputs.
-    pub fn implicit_template_name(&self) -> &'static str {
-        match self {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-        }
-    }
-
-    pub fn implicit_template_var(&self) -> &'static str {
-        match self {
-            Role::User => USER_TEXT_TEMPLATE_VAR,
-            Role::Assistant => ASSISTANT_TEXT_TEMPLATE_VAR,
-        }
-    }
-}
-
-impl std::fmt::Display for Role {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Role::User => write!(f, "user"),
-            Role::Assistant => write!(f, "assistant"),
-        }
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Role {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
-    }
-}
-
 /// InputMessages are validated against the input schema of the Function
 /// and then templated and transformed into RequestMessages for a particular Variant.
 /// They might contain tool calls or tool results along with text.
@@ -1174,6 +1134,8 @@ pub struct ModelInferenceRequest<'a> {
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
     pub extra_cache_key: Option<String>,
+    #[serde(flatten)]
+    pub inference_params_v2: ChatCompletionInferenceParamsV2,
 }
 
 impl<'a> ModelInferenceRequest<'a> {
@@ -1207,6 +1169,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             fetch_and_encode_input_files_before_inference: _,
             extra_headers: _,
             extra_cache_key: _,
+            inference_params_v2: _,
         } = self;
 
         let tokens = if resources.contains(&RateLimitResource::Token) {

@@ -14,10 +14,12 @@ class EnvironmentVariableError extends Error {
 
 interface Env {
   TENSORZERO_CLICKHOUSE_URL: string;
+  TENSORZERO_POSTGRES_URL: string | null;
   TENSORZERO_UI_CONFIG_PATH: string | null;
   TENSORZERO_UI_DEFAULT_CONFIG: boolean;
   TENSORZERO_UI_READ_ONLY: boolean;
   TENSORZERO_GATEWAY_URL: string;
+  TENSORZERO_API_KEY: string | null;
   OPENAI_BASE_URL: string | null;
   FIREWORKS_BASE_URL: string | null;
   FIREWORKS_ACCOUNT_ID: string | null;
@@ -69,6 +71,7 @@ export function getEnv(): Env {
 
   _env = {
     TENSORZERO_CLICKHOUSE_URL,
+    TENSORZERO_POSTGRES_URL: process.env.TENSORZERO_POSTGRES_URL || null,
     TENSORZERO_UI_CONFIG_PATH,
     TENSORZERO_UI_DEFAULT_CONFIG,
     TENSORZERO_UI_READ_ONLY: process.env.TENSORZERO_UI_READ_ONLY === "1",
@@ -77,6 +80,7 @@ export function getEnv(): Env {
     FIREWORKS_BASE_URL: process.env.FIREWORKS_BASE_URL || null,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
     TOGETHER_BASE_URL: process.env.TOGETHER_BASE_URL || null,
+    TENSORZERO_API_KEY: process.env.TENSORZERO_API_KEY || null,
   };
 
   return _env;

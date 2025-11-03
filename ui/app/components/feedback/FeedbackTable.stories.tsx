@@ -16,6 +16,7 @@ const config: Config = {
     fetch_and_encode_input_files_before_inference: false,
     auth: {
       enabled: false,
+      cache: null,
     },
     observability: {
       enabled: true,

@@ -145,7 +145,8 @@ pub fn estimate_optimal_probabilities(
     // TODO(https://github.com/tensorzero/tensorzero/issues/4282): Consider nonzero default value for epsilon
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let variance_floor: f64 = variance_floor.unwrap_or(1e-12);
-    let min_prob: f64 = min_prob.unwrap_or(1e-6);
+    // Default min_prob is 0.0, but we apply a floor of 1e-6 for numerical stability in the optimization
+    let min_prob: f64 = min_prob.unwrap_or(0.0).max(1e-6);
     let reg0: f64 = reg0.unwrap_or(0.01);
 
     let pull_counts: Vec<u64> = feedback.iter().map(|x| x.count).collect();

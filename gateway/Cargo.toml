@@ -27,6 +27,8 @@ pin-project = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
+sqlx = { version = "0.9.0-alpha.1", features = ["sqlx-toml", "postgres", "runtime-tokio", "chrono"] }
+secrecy = { workspace = true }
 
 [lints]
 workspace = true

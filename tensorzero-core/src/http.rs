@@ -6,6 +6,7 @@ use std::{
         Arc,
     },
     task::{Context, Poll},
+    time::Duration,
 };
 use tracing::Span;
 use tracing_futures::Instrument;
@@ -102,7 +103,7 @@ const CONCURRENCY_LIMIT: u8 = 100;
 
 /// A wrapper for `reqwest::Client` that adds extra features:
 /// * Improved connection pooling support for HTTP/2
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct TensorzeroHttpClient {
     // A 'waterfall' of clients for connecting pooling.
     // When we try to obtain a client with `take_ticket`, we iterate over
@@ -318,6 +319,13 @@ impl<'a> TensorzeroRequestBuilder<'a> {
     {
         Self {
             builder: self.builder.header(key, value),
+            ticket: self.ticket,
+        }
+    }
+
+    pub fn timeout(self, timeout: Duration) -> TensorzeroRequestBuilder<'a> {
+        Self {
+            builder: self.builder.timeout(timeout),
             ticket: self.ticket,
         }
     }

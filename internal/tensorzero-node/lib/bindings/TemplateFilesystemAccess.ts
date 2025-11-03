@@ -3,7 +3,7 @@ import type { ResolvedTomlPath } from "./ResolvedTomlPath";
 
 export type TemplateFilesystemAccess = {
   /**
-   * If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for '{% include %}'
+   * If `true`, allow minijinja to read from the filesystem (within the tree of the config file) for `{% include %}`
    * Defaults to `false`
    */
   enabled: boolean;

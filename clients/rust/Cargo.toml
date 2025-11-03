@@ -21,6 +21,7 @@ reqwest-eventsource = { workspace = true }
 async-stream = { workspace = true }
 tokio-stream = { workspace = true }
 tensorzero-core = { path = "../../tensorzero-core" }
+tensorzero-auth = { path = "../../internal/tensorzero-auth" }
 ts-rs = { workspace = true }
 url = { workspace = true }
 thiserror = "2.0.16"
@@ -33,7 +34,7 @@ serde_path_to_error = { workspace = true }
 tensorzero-derive = { path = "../../internal/tensorzero-derive" }
 mime = { workspace = true }
 tokio-util = "0.7.15"
-tempfile = { version = "3.21.0", optional = true }
+tempfile = { version = "3.21.0" }
 paste = { version = "1.0.15", optional = true }
 lazy_static = { workspace = true }
 
@@ -56,4 +57,4 @@ pyo3 = ["dep:pyo3", "tensorzero-core/pyo3"]
 default = []
 # Forward this feature to 'tensorzero-core', so that our embedded
 # client can recognize things like the `dummy` provider
-e2e_tests = ["tensorzero-core/e2e_tests", "dep:tempfile", "dep:paste"]
+e2e_tests = ["tensorzero-core/e2e_tests", "dep:paste"]

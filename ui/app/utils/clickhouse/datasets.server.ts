@@ -5,7 +5,6 @@ import type {
   DatasetDetailRow,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
-  JsonValue,
   GetDatapointParams,
   Datapoint,
   AdjacentDatapointIds,
@@ -162,9 +161,6 @@ export async function datapointToParsedDatasetRow(
       episode_id: datapoint.episode_id ?? null,
       input: resolvedInput,
       output: datapoint.output,
-      tool_params: datapoint.tool_params as unknown as
-        | Record<string, JsonValue>
-        | undefined,
       tags: datapoint.tags ?? null,
       auxiliary: datapoint.auxiliary,
       is_deleted: datapoint.is_deleted,

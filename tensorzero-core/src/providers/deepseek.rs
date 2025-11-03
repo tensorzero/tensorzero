@@ -16,6 +16,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ProviderInferenceResponse,
@@ -333,7 +336,7 @@ impl DeepSeekResponseFormat {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct DeepSeekRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -361,6 +364,29 @@ struct DeepSeekRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<DeepSeekResponseFormat>,
+}
+
+fn apply_inference_params(
+    _request: &mut DeepSeekRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "thinking_budget_tokens", None);
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> DeepSeekRequest<'a> {
@@ -410,7 +436,7 @@ impl<'a> DeepSeekRequest<'a> {
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
-        Ok(DeepSeekRequest {
+        let mut deepseek_request = DeepSeekRequest {
             messages,
             model,
             temperature,
@@ -425,7 +451,11 @@ impl<'a> DeepSeekRequest<'a> {
             response_format,
             tools,
             tool_choice,
-        })
+        };
+
+        apply_inference_params(&mut deepseek_request, &request.inference_params_v2);
+
+        Ok(deepseek_request)
     }
 }
 
@@ -793,6 +823,7 @@ mod tests {
     use super::*;
     use std::borrow::Cow;
     use std::time::Duration;
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{
@@ -1219,6 +1250,34 @@ mod tests {
             content,
             tool_call_id,
         })
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_deepseek_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = DeepSeekRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns
+        assert!(logs_contain(
+            "DeepSeek does not support the inference parameter `reasoning_effort`"
+        ));
+
+        // Test that thinking_budget_tokens warns
+        assert!(logs_contain(
+            "DeepSeek does not support the inference parameter `thinking_budget_tokens`"
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "DeepSeek does not support the inference parameter `verbosity`"
+        ));
     }
 
     #[tokio::test]
