@@ -70,7 +70,7 @@ pub async fn test_list_simple_query_json_function() {
         "order_by": [
             {
                 "term": {"type": "timestamp"},
-                "direction": "desc"
+                "direction": "DESC"
             }
         ]
     });
@@ -113,7 +113,7 @@ pub async fn test_list_simple_query_chat_function() {
         "order_by": [
             {
                 "term": {"type": "timestamp"},
-                "direction": "asc"
+                "direction": "ASC"
             }
         ]
     });
@@ -156,7 +156,7 @@ pub async fn test_list_query_with_float_filter() {
             "type": "float_metric",
             "metric_name": "jaccard_similarity",
             "value": 0.5,
-            "comparison_operator": "greater_than"
+            "comparison_operator": ">"
         },
         "order_by": [
             {
@@ -164,7 +164,7 @@ pub async fn test_list_query_with_float_filter() {
                     "type": "metric",
                     "name": "jaccard_similarity"
                 },
-                "direction": "desc"
+                "direction": "DESC"
             }
         ]
     });
@@ -244,13 +244,13 @@ pub async fn test_list_and_filter_multiple_float_metrics() {
                     "type": "float_metric",
                     "metric_name": "jaccard_similarity",
                     "value": 0.5,
-                    "comparison_operator": "greater_than"
+                    "comparison_operator": ">"
                 },
                 {
                     "type": "float_metric",
                     "metric_name": "jaccard_similarity",
                     "value": 0.8,
-                    "comparison_operator": "less_than"
+                    "comparison_operator": "<"
                 }
             ]
         }
@@ -282,7 +282,7 @@ async fn test_list_or_filter_mixed_metrics() {
                     "type": "float_metric",
                     "metric_name": "jaccard_similarity",
                     "value": 0.8,
-                    "comparison_operator": "greater_than_or_equal"
+                    "comparison_operator": ">="
                 },
                 {
                     "type": "boolean_metric",
@@ -349,7 +349,7 @@ async fn test_list_simple_time_filter() {
         "filter": {
             "type": "time",
             "time": "2023-01-01T00:00:00Z",
-            "comparison_operator": "greater_than"
+            "comparison_operator": ">"
         },
         "order_by": [
             {
@@ -357,11 +357,11 @@ async fn test_list_simple_time_filter() {
                     "type": "metric",
                     "name": "exact_match"
                 },
-                "direction": "desc"
+                "direction": "DESC"
             },
             {
                 "term": {"type": "timestamp"},
-                "direction": "asc"
+                "direction": "ASC"
             }
         ]
     });
@@ -400,7 +400,7 @@ async fn test_list_simple_tag_filter() {
             "type": "tag",
             "key": "tensorzero::evaluation_name",
             "value": "entity_extraction",
-            "comparison_operator": "equal"
+            "comparison_operator": "="
         }
     });
 
@@ -429,13 +429,13 @@ async fn test_list_combined_time_and_tag_filter() {
                 {
                     "type": "time",
                     "time": "2025-04-14T23:30:00Z",
-                    "comparison_operator": "greater_than_or_equal"
+                    "comparison_operator": ">="
                 },
                 {
                     "type": "tag",
                     "key": "tensorzero::evaluation_name",
                     "value": "haiku",
-                    "comparison_operator": "equal"
+                    "comparison_operator": "="
                 }
             ]
         }

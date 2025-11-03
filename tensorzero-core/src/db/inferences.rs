@@ -149,9 +149,10 @@ impl TryFrom<ClickHouseStoredInferenceWithDispreferredOutputs> for StoredInferen
 
 /// Source of an inference output when querying inferences. Users can choose this because there may be
 /// demonstration feedback (manually-curated output) for the inference that should be preferred.
-#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
+#[serde(rename_all = "snake_case")]
 pub enum InferenceOutputSource {
     /// The inference output is the original output from the inference.
     Inference,

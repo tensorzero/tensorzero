@@ -18,6 +18,7 @@ pub use datapoint_queries::DatapointFilter;
 #[cfg(test)]
 pub mod test_util;
 
+/// Comparison operators for float metrics.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
@@ -49,6 +50,7 @@ impl FloatComparisonOperator {
     }
 }
 
+/// Comparison operators for timestamps.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
@@ -80,6 +82,7 @@ impl TimeComparisonOperator {
     }
 }
 
+/// Comparison operators for tag filters.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(test, ts(export))]
@@ -99,6 +102,7 @@ impl TagComparisonOperator {
     }
 }
 
+/// Order by terms for querying inferences.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(test, ts(export))]
@@ -117,6 +121,7 @@ impl OrderDirection {
     }
 }
 
+/// Order by terms for querying inferences.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(test, ts(export))]
@@ -126,6 +131,7 @@ pub enum OrderByTerm {
     Metric { name: String },
 }
 
+/// Order by direction for querying inferences.
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(test, ts(export))]
