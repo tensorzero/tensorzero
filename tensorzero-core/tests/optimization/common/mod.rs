@@ -176,22 +176,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 system: Some(system),
                 messages,
                 inference_id: Uuid::now_v7(),
-                tool_config: None,
-                temperature: None,
-                top_p: None,
-                max_tokens: None,
-                presence_penalty: None,
-                frequency_penalty: None,
-                seed: None,
-                stop_sequences: None,
-                stream: false,
                 json_mode: JsonMode::Off.into(),
                 function_type: FunctionType::Chat,
-                output_schema: None,
-                fetch_and_encode_input_files_before_inference: true,
-                extra_body: Default::default(),
-                extra_headers: Default::default(),
-                extra_cache_key: None,
+                ..Default::default()
             };
             let clients = InferenceClients {
                 http_client: client.clone(),

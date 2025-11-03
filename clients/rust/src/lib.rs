@@ -86,6 +86,7 @@ pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{Base64File, File, ObjectStoragePointer, UrlFile};
 pub use tensorzero_core::inference::types::{
     ContentBlockChunk, Input, InputMessage, InputMessageContent, Role, System, Unknown,
+    UnknownChunk,
 };
 pub use tensorzero_core::tool::{DynamicToolParams, Tool};
 

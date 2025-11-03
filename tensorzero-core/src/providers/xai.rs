@@ -13,6 +13,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -308,6 +311,7 @@ impl InferenceProvider for XAIProvider {
 /// logit_bias, seed, service_tier, stop, user or response_format.
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct XAIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -335,6 +339,35 @@ struct XAIRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+}
+
+fn apply_inference_params(
+    request: &mut XAIRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> XAIRequest<'a> {
@@ -379,7 +412,7 @@ impl<'a> XAIRequest<'a> {
         .await?;
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        Ok(XAIRequest {
+        let mut xai_request = XAIRequest {
             messages,
             model,
             temperature,
@@ -394,7 +427,12 @@ impl<'a> XAIRequest<'a> {
             tools,
             tool_choice,
             stop: request.borrow_stop_sequences(),
-        })
+            reasoning_effort: None,
+        };
+
+        apply_inference_params(&mut xai_request, &request.inference_params_v2);
+
+        Ok(xai_request)
     }
 }
 
@@ -508,6 +546,7 @@ mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
 
+    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -723,5 +762,31 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_xai_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = XAIRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort is applied correctly
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "xAI does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "xAI does not support the inference parameter `verbosity`, so it will be ignored."
+        ));
     }
 }
