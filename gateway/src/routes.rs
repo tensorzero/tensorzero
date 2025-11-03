@@ -332,11 +332,11 @@ fn build_non_otel_enabled_routes(metrics_handle: PrometheusHandle) -> Router<App
         )
         .route(
             "/v1/inferences/list_inferences",
-            post(endpoints::stored_inference::v1::list_inferences_handler),
+            post(endpoints::stored_inferences::v1::list_inferences_handler),
         )
         .route(
             "/v1/inferences/get_inferences",
-            post(endpoints::stored_inference::v1::get_inferences_handler),
+            post(endpoints::stored_inferences::v1::get_inferences_handler),
         )
         .route(
             "/internal/datasets/{dataset_name}/datapoints",
