@@ -25,6 +25,7 @@ export * from "./CacheParamsOptions";
 export * from "./ChainOfThoughtConfig";
 export * from "./ChatCompletionConfig";
 export * from "./ChatCompletionInferenceParams";
+export * from "./ChatCompletionInferenceParamsV2";
 export * from "./ChatInferenceDatapoint";
 export * from "./ChatInferenceResponse";
 export * from "./ChatTemplates";
