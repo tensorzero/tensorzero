@@ -4,4 +4,4 @@
  * Source of an inference output when querying inferences. Users can choose this because there may be
  * demonstration feedback (manually-curated output) for the inference that should be preferred.
  */
-export type InferenceOutputSource = "Inference" | "Demonstration";
+export type InferenceOutputSource = "inference" | "demonstration";

@@ -85,7 +85,7 @@ use tensorzero_core::db::inferences::InferenceQueries;
 use tensorzero_core::db::HealthCheckable;
 use tensorzero_core::endpoints::datasets::{InsertDatapointParams, StaleDatasetResponse};
 use tensorzero_core::endpoints::optimization::{launch_optimization, launch_optimization_workflow};
-use tensorzero_core::endpoints::stored_inference::render_samples;
+use tensorzero_core::endpoints::stored_inferences::render_samples;
 use tensorzero_core::endpoints::validate_tags;
 use tensorzero_core::endpoints::workflow_evaluation_run::{
     WorkflowEvaluationRunEpisodeParams, WorkflowEvaluationRunEpisodeResponse,
