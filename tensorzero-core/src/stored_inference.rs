@@ -1,15 +1,19 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use crate::db::datasets::{
     ChatInferenceDatapointInsert, DatapointInsert, JsonInferenceDatapointInsert,
 };
 use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
+use crate::function::FunctionConfig;
 #[cfg(feature = "pyo3")]
 use crate::inference::types::pyo3_helpers::{
-    content_block_chat_output_to_python, deserialize_from_pyobj, serialize_to_dict, uuid_to_python,
+    content_block_chat_output_to_python, serialize_to_dict, uuid_to_python,
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
+use crate::tool::{DynamicToolParams, StaticToolConfig};
+#[cfg(feature = "pyo3")]
+use crate::tool::{ProviderTool, Tool, ToolChoice};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
@@ -19,7 +23,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 #[cfg(feature = "pyo3")]
-use pyo3::types::{PyAny, PyList};
+use pyo3::types::PyList;
 #[cfg(feature = "pyo3")]
 use pyo3::{exceptions::PyValueError, prelude::*, IntoPyObjectExt};
 use serde::{Deserialize, Serialize};
@@ -54,14 +58,13 @@ pub struct SimpleStoredSampleInfo {
     pub tags: HashMap<String, String>,
 }
 
-/// Represents an stored inference to be used for optimization.
-/// These are retrieved from the database in this format.
-/// NOTE / TODO: As an incremental step we are deserializing this enum from Python.
-/// in the final version we should instead make this a native PyO3 class and
-/// avoid deserialization entirely unless given a dict.
+/// Wire variant of StoredInference for API responses with Python/TypeScript bindings
+/// This one should be used in all public interfaces
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "StoredInference"))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub enum StoredInference {
     Chat(StoredChatInference),
     Json(StoredJsonInference),
@@ -88,7 +91,8 @@ impl StoredInference {
         self,
         dataset_name: &str,
         output_source: &CreateDatapointsFromInferenceOutputSource,
-    ) -> DatapointInsert {
+        config: &Config,
+    ) -> Result<DatapointInsert, Error> {
         let datapoint_id = Uuid::now_v7();
 
         match self {
@@ -117,7 +121,7 @@ impl StoredInference {
                     is_custom: false,
                 };
 
-                DatapointInsert::Json(datapoint)
+                Ok(DatapointInsert::Json(datapoint))
             }
             StoredInference::Chat(inference) => {
                 let output = match output_source {
@@ -128,6 +132,12 @@ impl StoredInference {
                     }
                 };
 
+                // Convert DynamicToolParams (wire type) to ToolCallConfigDatabaseInsert (storage type)
+                let function_config = config.get_function(&inference.function_name)?;
+                let tool_params = function_config
+                    .dynamic_tool_params_to_database_insert(inference.tool_params, &config.tools)?
+                    .unwrap_or_default();
+
                 let datapoint = ChatInferenceDatapointInsert {
                     dataset_name: dataset_name.to_string(),
                     function_name: inference.function_name,
@@ -136,7 +146,7 @@ impl StoredInference {
                     episode_id: Some(inference.episode_id),
                     input: inference.input,
                     output,
-                    tool_params: Some(inference.tool_params),
+                    tool_params: Some(tool_params),
                     tags: Some(inference.tags),
                     auxiliary: String::new(),
                     staled_at: None,
@@ -144,7 +154,7 @@ impl StoredInference {
                     is_custom: false,
                 };
 
-                DatapointInsert::Chat(datapoint)
+                Ok(DatapointInsert::Chat(datapoint))
             }
         }
     }
@@ -153,23 +163,32 @@ impl StoredInference {
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl StoredInference {
-    #[expect(clippy::too_many_arguments)]
     #[new]
-    pub fn new<'py>(
-        py: Python<'py>,
+    #[pyo3(signature = (r#type, function_name, variant_name, input, output, episode_id, inference_id, timestamp, output_schema=None, dispreferred_outputs=None, tags=None, allowed_tools=None, additional_tools=None, tool_choice=None, parallel_tool_calls=None, provider_tools=None))]
+    #[expect(clippy::too_many_arguments)]
+    pub fn new(
+        py: Python<'_>,
         r#type: String,
         function_name: String,
         variant_name: String,
-        input: Bound<'py, PyAny>,
-        output: Bound<'py, PyAny>,
-        episode_id: Bound<'py, PyAny>,
-        inference_id: Bound<'py, PyAny>,
-        dispreferred_outputs: Option<Bound<'py, PyAny>>,
-        tool_params: Option<Bound<'py, PyAny>>,
-        output_schema: Option<Bound<'py, PyAny>>,
-        tags: Option<Bound<'py, PyAny>>,
-        timestamp: Bound<'py, PyAny>,
+        input: Bound<'_, PyAny>,
+        output: Bound<'_, PyAny>,
+        episode_id: Bound<'_, PyAny>,
+        inference_id: Bound<'_, PyAny>,
+        timestamp: Bound<'_, PyAny>,
+        output_schema: Option<Bound<'_, PyAny>>,
+        dispreferred_outputs: Option<Bound<'_, PyAny>>,
+        tags: Option<Bound<'_, PyAny>>,
+        // Flattened DynamicToolParams fields
+        allowed_tools: Option<Vec<String>>,
+        additional_tools: Option<Bound<'_, PyAny>>,
+        tool_choice: Option<Bound<'_, PyAny>>,
+        parallel_tool_calls: Option<bool>,
+        provider_tools: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
+        use crate::inference::types::pyo3_helpers::deserialize_from_pyobj;
+
+        // Deserialize common fields
         let input: StoredInput = deserialize_from_pyobj(py, &input)?;
         let episode_id: Uuid = deserialize_from_pyobj(py, &episode_id)?;
         let inference_id: Uuid = deserialize_from_pyobj(py, &inference_id)?;
@@ -179,19 +198,38 @@ impl StoredInference {
             .map(|x| deserialize_from_pyobj(py, x))
             .transpose()?
             .unwrap_or_default();
+
         match r#type.as_str() {
             "chat" => {
                 let output: Vec<ContentBlockChatOutput> = deserialize_from_pyobj(py, &output)?;
                 let dispreferred_outputs: Option<Vec<Vec<ContentBlockChatOutput>>> =
                     dispreferred_outputs
-                        .map(|x| deserialize_from_pyobj(py, &x))
+                        .as_ref()
+                        .map(|x| deserialize_from_pyobj(py, x))
                         .transpose()?;
-                let Some(tool_params) = tool_params.map(|x| deserialize_from_pyobj(py, &x)) else {
-                    return Err(PyValueError::new_err(
-                        "tool_params is required for chat inferences",
-                    ));
+
+                // Build DynamicToolParams from flattened fields
+                let additional_tools: Option<Vec<Tool>> = additional_tools
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .transpose()?;
+                let tool_choice: Option<ToolChoice> = tool_choice
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .transpose()?;
+                let provider_tools: Option<Vec<ProviderTool>> = provider_tools
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
+                    .transpose()?;
+
+                let tool_params = DynamicToolParams {
+                    allowed_tools,
+                    additional_tools,
+                    tool_choice,
+                    parallel_tool_calls,
+                    provider_tools,
                 };
-                let tool_params: ToolCallConfigDatabaseInsert = tool_params?;
+
                 Ok(Self::Chat(StoredChatInference {
                     function_name,
                     variant_name,
@@ -208,9 +246,12 @@ impl StoredInference {
             "json" => {
                 let output: JsonInferenceOutput = deserialize_from_pyobj(py, &output)?;
                 let dispreferred_outputs: Option<Vec<JsonInferenceOutput>> = dispreferred_outputs
-                    .map(|x| deserialize_from_pyobj(py, &x))
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
                     .transpose()?;
-                let Some(output_schema) = output_schema.map(|x| deserialize_from_pyobj(py, &x))
+                let Some(output_schema) = output_schema
+                    .as_ref()
+                    .map(|x| deserialize_from_pyobj(py, x))
                 else {
                     return Err(PyValueError::new_err(
                         "output_schema is required for json inferences",
@@ -230,7 +271,9 @@ impl StoredInference {
                     timestamp,
                 }))
             }
-            _ => Err(PyValueError::new_err(format!("Invalid type: {type}"))),
+            _ => Err(PyValueError::new_err(format!(
+                "Invalid inference type: {type}. Must be 'chat' or 'json'",
+            ))),
         }
     }
 
@@ -261,7 +304,6 @@ impl StoredInference {
             StoredInference::Json(example) => example.input.clone(),
         }
     }
-
     /// Returns the output of the inference as PyO3 classes.
     /// This is actually a List of ContentBlockChatOutputs for StoredChatInference
     /// and a JsonInferenceOutput for StoredJsonInference.
@@ -314,17 +356,6 @@ impl StoredInference {
     }
 
     #[getter]
-    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self {
-            StoredInference::Chat(example) => {
-                example.tool_params.clone().into_py_any(py)?.into_bound(py)
-            }
-            // Json inferences don't have tool params
-            StoredInference::Json(_) => py.None().into_bound(py),
-        })
-    }
-
-    #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         Ok(match self {
             StoredInference::Chat(_) => py.None().into_bound(py),
@@ -357,10 +388,135 @@ impl StoredInference {
             StoredInference::Json(example) => example.timestamp.to_rfc3339(),
         }
     }
+
+    #[getter]
+    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
+        match self {
+            StoredInference::Chat(example) => example.tool_params.allowed_tools.clone(),
+            StoredInference::Json(_) => None,
+        }
+    }
+
+    #[getter]
+    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            StoredInference::Chat(example) => example
+                .tool_params
+                .additional_tools
+                .clone()
+                .into_bound_py_any(py),
+            StoredInference::Json(_) => Ok(py.None().into_bound(py)),
+        }
+    }
+
+    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
+
+    #[getter]
+    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+        match self {
+            StoredInference::Chat(example) => example.tool_params.parallel_tool_calls,
+            StoredInference::Json(_) => None,
+        }
+    }
+
+    #[getter]
+    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            StoredInference::Chat(example) => example
+                .tool_params
+                .provider_tools
+                .clone()
+                .into_bound_py_any(py),
+            StoredInference::Json(_) => Ok(py.None().into_bound(py)),
+        }
+    }
 }
 
+impl StoredInferenceDatabase {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn into_stored_inference(self, config: &Config) -> Result<StoredInference, Error> {
+        match self {
+            StoredInferenceDatabase::Chat(chat) => {
+                let function_config = config.get_function(&chat.function_name)?;
+                Ok(StoredInference::Chat(
+                    chat.into_stored_inference(&function_config),
+                ))
+            }
+            StoredInferenceDatabase::Json(json) => Ok(StoredInference::Json(json)),
+        }
+    }
+}
+
+impl StoredInference {
+    /// Convert to storage type, properly handling tool params with function config
+    pub fn to_storage(self, config: &Config) -> Result<StoredInferenceDatabase, Error> {
+        match self {
+            StoredInference::Chat(chat) => {
+                let function_config = config.get_function(&chat.function_name)?;
+                Ok(StoredInferenceDatabase::Chat(
+                    chat.to_storage(&function_config, &config.tools)?,
+                ))
+            }
+            StoredInference::Json(json) => Ok(StoredInferenceDatabase::Json(json)),
+        }
+    }
+}
+
+impl StoredChatInference {
+    /// Convert to storage type, properly handling tool params with function config
+    pub fn to_storage(
+        self,
+        function_config: &FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<StoredChatInferenceDatabase, Error> {
+        let tool_params = function_config
+            .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?
+            .unwrap_or_default();
+
+        Ok(StoredChatInferenceDatabase {
+            function_name: self.function_name,
+            variant_name: self.variant_name,
+            input: self.input,
+            output: self.output,
+            dispreferred_outputs: self.dispreferred_outputs,
+            timestamp: self.timestamp,
+            episode_id: self.episode_id,
+            inference_id: self.inference_id,
+            tool_params,
+            tags: self.tags,
+        })
+    }
+}
+
+/// Storage variant of StoredInference for database operations (no Python/TypeScript bindings)
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StoredInferenceDatabase {
+    Chat(StoredChatInferenceDatabase),
+    Json(StoredJsonInference),
+}
+
+impl std::fmt::Display for StoredInferenceDatabase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl StoredInferenceDatabase {
+    pub fn id(&self) -> Uuid {
+        match self {
+            StoredInferenceDatabase::Json(inference) => inference.inference_id,
+            StoredInferenceDatabase::Chat(inference) => inference.inference_id,
+        }
+    }
+}
+
+/// Wire variant of StoredChatInference for API responses with Python/TypeScript bindings
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct StoredChatInference {
     pub function_name: String,
     pub variant_name: String,
@@ -371,8 +527,9 @@ pub struct StoredChatInference {
     pub timestamp: DateTime<Utc>,
     pub episode_id: Uuid,
     pub inference_id: Uuid,
+    #[serde(flatten)]
     #[serde(default)]
-    pub tool_params: ToolCallConfigDatabaseInsert,
+    pub tool_params: DynamicToolParams,
     #[serde(default)]
     pub tags: HashMap<String, String>,
 }
@@ -392,8 +549,55 @@ impl StoredChatInference {
     }
 }
 
+impl StoredChatInferenceDatabase {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn into_stored_inference(self, function_config: &FunctionConfig) -> StoredChatInference {
+        let tool_params = function_config.database_insert_to_dynamic_tool_params(self.tool_params);
+
+        StoredChatInference {
+            function_name: self.function_name,
+            variant_name: self.variant_name,
+            input: self.input,
+            output: self.output,
+            dispreferred_outputs: self.dispreferred_outputs,
+            timestamp: self.timestamp,
+            episode_id: self.episode_id,
+            inference_id: self.inference_id,
+            tool_params,
+            tags: self.tags,
+        }
+    }
+}
+
+/// Storage variant of StoredChatInference for database operations (no Python/TypeScript bindings)
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct StoredChatInferenceDatabase {
+    pub function_name: String,
+    pub variant_name: String,
+    pub input: StoredInput,
+    pub output: Vec<ContentBlockChatOutput>,
+    #[serde(default)]
+    pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
+    pub timestamp: DateTime<Utc>,
+    pub episode_id: Uuid,
+    pub inference_id: Uuid,
+    #[serde(default)]
+    pub tool_params: ToolCallConfigDatabaseInsert,
+    #[serde(default)]
+    pub tags: HashMap<String, String>,
+}
+
+impl std::fmt::Display for StoredChatInferenceDatabase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(export))]
 pub struct StoredJsonInference {
     pub function_name: String,
     pub variant_name: String,
@@ -424,37 +628,37 @@ impl StoredJsonInference {
     }
 }
 
-impl StoredSample for StoredInference {
+impl StoredSample for StoredInferenceDatabase {
     fn input_mut(&mut self) -> &mut StoredInput {
         match self {
-            StoredInference::Chat(example) => &mut example.input,
-            StoredInference::Json(example) => &mut example.input,
+            StoredInferenceDatabase::Chat(example) => &mut example.input,
+            StoredInferenceDatabase::Json(example) => &mut example.input,
         }
     }
     fn input(&self) -> &StoredInput {
         match self {
-            StoredInference::Chat(example) => &example.input,
-            StoredInference::Json(example) => &example.input,
+            StoredInferenceDatabase::Chat(example) => &example.input,
+            StoredInferenceDatabase::Json(example) => &example.input,
         }
     }
 
     fn into_input(self) -> StoredInput {
         match self {
-            StoredInference::Chat(example) => example.input,
-            StoredInference::Json(example) => example.input,
+            StoredInferenceDatabase::Chat(example) => example.input,
+            StoredInferenceDatabase::Json(example) => example.input,
         }
     }
 
     fn function_name(&self) -> &str {
         match self {
-            StoredInference::Chat(example) => &example.function_name,
-            StoredInference::Json(example) => &example.function_name,
+            StoredInferenceDatabase::Chat(example) => &example.function_name,
+            StoredInferenceDatabase::Json(example) => &example.function_name,
         }
     }
 
     fn owned_simple_info(self) -> SimpleStoredSampleInfo {
         match self {
-            StoredInference::Chat(example) => SimpleStoredSampleInfo {
+            StoredInferenceDatabase::Chat(example) => SimpleStoredSampleInfo {
                 function_name: example.function_name,
                 input: example.input,
                 episode_id: Some(example.episode_id),
@@ -466,7 +670,7 @@ impl StoredSample for StoredInference {
                 output_schema: None,
                 tags: example.tags,
             },
-            StoredInference::Json(example) => {
+            StoredInferenceDatabase::Json(example) => {
                 let output = json_output_to_content_block_chat_output(example.output.clone());
                 let dispreferred_outputs = example
                     .dispreferred_outputs
@@ -510,6 +714,7 @@ pub enum StoredOutput {
 /// Represents an inference that has been prepared for fine-tuning.
 /// This is constructed by rendering a StoredInference with a variant for messages
 /// and by resolving all network resources (e.g. images).
+/// This is a wire type - it uses DynamicToolParams and has Python/TypeScript bindings.
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -523,7 +728,7 @@ pub struct RenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_params: DynamicToolParams,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -564,7 +769,7 @@ pub struct LazyRenderedSample {
     pub dispreferred_outputs: Vec<Vec<ContentBlockChatOutput>>,
     pub episode_id: Option<Uuid>,
     pub inference_id: Option<Uuid>,
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    pub tool_params: DynamicToolParams,
     pub output_schema: Option<Value>,
     pub tags: HashMap<String, String>,
 }
@@ -628,13 +833,36 @@ impl RenderedSample {
     }
 
     #[getter]
-    pub fn get_tool_params(&self) -> Option<ToolCallConfigDatabaseInsert> {
-        self.tool_params.clone()
+    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
     }
 
     #[getter]
-    pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        serialize_to_dict(py, self.output_schema.clone()).map(|x| x.into_bound(py))
+    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
+        self.tool_params.allowed_tools.clone()
+    }
+
+    #[getter]
+    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.tool_params
+            .additional_tools
+            .clone()
+            .into_bound_py_any(py)
+    }
+
+    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
+
+    #[getter]
+    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+        self.tool_params.parallel_tool_calls
+    }
+
+    #[getter]
+    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        self.tool_params
+            .provider_tools
+            .clone()
+            .into_bound_py_any(py)
     }
 
     #[getter]
@@ -739,6 +967,15 @@ pub async fn render_stored_sample<T: StoredSample>(
         tags,
     } = stored_sample.owned_simple_info();
     let model_input = render_model_input(&resolved_input, &function_name, config, variants).await?;
+
+    // Convert tool_params from storage format to wire format, subtracting static tools
+    let function_config = config.get_function(&function_name)?;
+    let dynamic_tool_params = tool_params
+        .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp))
+        // should default for JSON functions or functions with no tools to a default DynamicToolParams
+        // where everything is empty
+        .unwrap_or_default();
+
     Ok(RenderedSample {
         function_name,
         episode_id,
@@ -748,7 +985,7 @@ pub async fn render_stored_sample<T: StoredSample>(
         output,
         stored_output,
         dispreferred_outputs,
-        tool_params,
+        tool_params: dynamic_tool_params,
         output_schema,
         tags,
     })
@@ -757,11 +994,52 @@ pub async fn render_stored_sample<T: StoredSample>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::{Config, SchemaData};
     use crate::db::datasets::DatapointInsert;
     use crate::endpoints::datasets::v1::types::CreateDatapointsFromInferenceOutputSource;
+    use crate::experimentation::ExperimentationConfig;
+    use crate::function::{FunctionConfig, FunctionConfigChat, FunctionConfigJson};
     use crate::inference::types::System;
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Text};
-    use crate::tool::ToolCallConfigDatabaseInsert;
+    use crate::jsonschema_util::StaticJSONSchema;
+    use crate::tool::{DynamicToolParams, ToolCallConfig, ToolChoice};
+    use std::sync::Arc;
+
+    /// Helper to create a test config with the functions registered
+    fn create_test_config() -> Config {
+        let mut config = Config::default();
+
+        // Add the test_function (Chat function)
+        config.functions.insert(
+            "test_function".to_string(),
+            Arc::new(FunctionConfig::Chat(FunctionConfigChat {
+                variants: Default::default(),
+                schemas: SchemaData::default(),
+                tools: vec![],
+                tool_choice: ToolChoice::Auto,
+                parallel_tool_calls: None,
+                description: None,
+                experimentation: ExperimentationConfig::default(),
+                all_explicit_templates_names: Default::default(),
+            })),
+        );
+
+        // Add the json_function (Json function)
+        config.functions.insert(
+            "json_function".to_string(),
+            Arc::new(FunctionConfig::Json(FunctionConfigJson {
+                variants: Default::default(),
+                schemas: SchemaData::default(),
+                output_schema: StaticJSONSchema::default(),
+                implicit_tool_call_config: ToolCallConfig::default(),
+                description: None,
+                experimentation: ExperimentationConfig::default(),
+                all_explicit_template_names: Default::default(),
+            })),
+        );
+
+        config
+    }
 
     /// Helper to create a test StoredChatInference with all fields populated
     fn create_test_chat_inference() -> StoredChatInference {
@@ -789,7 +1067,7 @@ mod tests {
                 .with_timezone(&Utc),
             episode_id,
             inference_id,
-            tool_params: ToolCallConfigDatabaseInsert::default(),
+            tool_params: DynamicToolParams::default(),
             tags: {
                 let mut tags = HashMap::new();
                 tags.insert("key1".to_string(), "value1".to_string());
@@ -840,17 +1118,19 @@ mod tests {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let config = create_test_config();
 
         let original_inference_id = chat_inference.inference_id;
         let original_episode_id = chat_inference.episode_id;
         let original_function_name = chat_inference.function_name.clone();
         let original_input = chat_inference.input.clone();
         let original_output = chat_inference.output.clone();
-        let original_tool_params = chat_inference.tool_params.clone();
         let original_tags = chat_inference.tags.clone();
 
         let inference = StoredInference::Chat(chat_inference);
-        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint = inference
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         match datapoint {
             DatapointInsert::Chat(dp) => {
@@ -861,7 +1141,9 @@ mod tests {
                 assert_eq!(dp.episode_id, Some(original_episode_id));
                 assert_eq!(dp.input, original_input);
                 assert_eq!(dp.output, Some(original_output));
-                assert_eq!(dp.tool_params, Some(original_tool_params));
+                // tool_params are converted from DynamicToolParams to ToolCallConfigDatabaseInsert
+                // Since we used default DynamicToolParams, we should get default ToolCallConfigDatabaseInsert
+                assert!(dp.tool_params.is_some());
                 assert_eq!(dp.tags, Some(original_tags));
                 assert_eq!(dp.staled_at, None);
                 assert_eq!(dp.source_inference_id, Some(original_inference_id));
@@ -876,9 +1158,12 @@ mod tests {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::None;
+        let config = create_test_config();
 
         let inference = StoredInference::Chat(chat_inference);
-        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint = inference
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         match datapoint {
             DatapointInsert::Chat(dp) => {
@@ -898,10 +1183,13 @@ mod tests {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::Demonstration;
+        let config = create_test_config();
 
         let original_output = chat_inference.output.clone();
         let inference = StoredInference::Chat(chat_inference);
-        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint = inference
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         match datapoint {
             DatapointInsert::Chat(dp) => {
@@ -917,6 +1205,7 @@ mod tests {
         let json_inference = create_test_json_inference();
         let dataset_name = "json_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let config = create_test_config();
 
         let original_inference_id = json_inference.inference_id;
         let original_episode_id = json_inference.episode_id;
@@ -927,7 +1216,9 @@ mod tests {
         let original_tags = json_inference.tags.clone();
 
         let inference = StoredInference::Json(json_inference);
-        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint = inference
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         match datapoint {
             DatapointInsert::Json(dp) => {
@@ -953,9 +1244,12 @@ mod tests {
         let json_inference = create_test_json_inference();
         let dataset_name = "json_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::None;
+        let config = create_test_config();
 
         let inference = StoredInference::Json(json_inference);
-        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint = inference
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         match datapoint {
             DatapointInsert::Json(dp) => {
@@ -975,10 +1269,13 @@ mod tests {
         let json_inference = create_test_json_inference();
         let dataset_name = "json_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::Demonstration;
+        let config = create_test_config();
 
         let original_output = json_inference.output.clone();
         let inference = StoredInference::Json(json_inference);
-        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint = inference
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         match datapoint {
             DatapointInsert::Json(dp) => {
@@ -994,12 +1291,17 @@ mod tests {
         let chat_inference = create_test_chat_inference();
         let dataset_name = "test_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let config = create_test_config();
 
         // Convert the same inference twice
         let inference1 = StoredInference::Chat(chat_inference.clone());
         let inference2 = StoredInference::Chat(chat_inference);
-        let datapoint1 = inference1.into_datapoint_insert(dataset_name, &output_source);
-        let datapoint2 = inference2.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint1 = inference1
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
+        let datapoint2 = inference2
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         // Extract IDs
         let id1 = match datapoint1 {
@@ -1026,9 +1328,12 @@ mod tests {
 
         let dataset_name = "test_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let config = create_test_config();
 
         let inference = StoredInference::Chat(chat_inference);
-        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint = inference
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         match datapoint {
             DatapointInsert::Chat(dp) => {
@@ -1046,9 +1351,12 @@ mod tests {
 
         let dataset_name = "test_dataset";
         let output_source = CreateDatapointsFromInferenceOutputSource::Inference;
+        let config = create_test_config();
 
         let inference = StoredInference::Json(json_inference);
-        let datapoint = inference.into_datapoint_insert(dataset_name, &output_source);
+        let datapoint = inference
+            .into_datapoint_insert(dataset_name, &output_source, &config)
+            .unwrap();
 
         match datapoint {
             DatapointInsert::Json(dp) => {

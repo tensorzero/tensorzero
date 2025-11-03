@@ -32,6 +32,7 @@ use crate::experimentation::ExperimentationConfig;
 use crate::function::FunctionConfig;
 use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -52,8 +53,8 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
-use super::validate_tags;
-use super::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
+use crate::endpoints::validate_tags;
+use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Deserialize)]
@@ -1337,6 +1338,15 @@ pub struct ChatCompletionInferenceParams {
     pub json_mode: Option<JsonMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_sequences: Option<Vec<String>>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget_tokens: Option<i32>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
 }
 
 impl ChatCompletionInferenceParams {
@@ -1350,6 +1360,7 @@ impl ChatCompletionInferenceParams {
         presence_penalty: Option<f32>,
         frequency_penalty: Option<f32>,
         stop_sequences: Option<Vec<String>>,
+        inference_params_v2: ChatCompletionInferenceParamsV2,
     ) {
         if self.temperature.is_none() {
             self.temperature = temperature;
@@ -1371,6 +1382,21 @@ impl ChatCompletionInferenceParams {
         }
         if self.stop_sequences.is_none() {
             self.stop_sequences = stop_sequences;
+        }
+        let ChatCompletionInferenceParamsV2 {
+            reasoning_effort,
+            thinking_budget_tokens,
+            verbosity,
+        } = inference_params_v2;
+
+        if self.reasoning_effort.is_none() {
+            self.reasoning_effort = reasoning_effort;
+        }
+        if self.thinking_budget_tokens.is_none() {
+            self.thinking_budget_tokens = thinking_budget_tokens;
+        }
+        if self.verbosity.is_none() {
+            self.verbosity = verbosity;
         }
     }
 }

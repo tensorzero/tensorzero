@@ -44,7 +44,8 @@ use crate::inference::types::{
 };
 
 use crate::tool::{
-    DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
+    DynamicToolParams, InferenceResponseToolCall, ProviderTool, Tool, ToolCallWrapper, ToolChoice,
+    ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -549,7 +550,7 @@ struct OpenAICompatibleStreamOptions {
     include_usage: bool,
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct OpenAICompatibleParams {
     messages: Vec<OpenAICompatibleMessage>,
     model: String,
@@ -567,6 +568,8 @@ pub struct OpenAICompatibleParams {
     top_p: Option<f32>,
     parallel_tool_calls: Option<bool>,
     stop: Option<Vec<String>>,
+    reasoning_effort: Option<String>,
+    verbosity: Option<String>,
     #[serde(rename = "tensorzero::variant_name")]
     tensorzero_variant_name: Option<String>,
     #[serde(rename = "tensorzero::dryrun")]
@@ -589,6 +592,8 @@ pub struct OpenAICompatibleParams {
     tensorzero_internal_dynamic_variant_config: Option<UninitializedVariantInfo>,
     #[serde(default, rename = "tensorzero::provider_tools")]
     tensorzero_provider_tools: Option<Vec<ProviderTool>>,
+    #[serde(default, rename = "tensorzero::params")]
+    tensorzero_params: Option<InferenceParams>,
     #[serde(flatten)]
     unknown_fields: HashMap<String, Value>,
 }
@@ -714,19 +719,44 @@ impl Params {
             None => None,
         };
         let input = openai_compatible_params.messages.try_into()?;
-        let chat_completion_inference_params = ChatCompletionInferenceParams {
-            temperature: openai_compatible_params.temperature,
-            max_tokens,
-            seed: openai_compatible_params.seed,
-            top_p: openai_compatible_params.top_p,
-            presence_penalty: openai_compatible_params.presence_penalty,
-            frequency_penalty: openai_compatible_params.frequency_penalty,
-            stop_sequences: openai_compatible_params.stop,
-            json_mode,
+
+        let mut inference_params = openai_compatible_params
+            .tensorzero_params
+            .unwrap_or_default();
+
+        // Override the inference parameters with OpenAI-compatible parameters
+        // TODO (GabrielBianconi): Should we warn if we override parameters that are already set?
+        // Currently: OpenAI-compatible parameters take precedence over TensorZero parameters
+        inference_params.chat_completion = ChatCompletionInferenceParams {
+            frequency_penalty: openai_compatible_params
+                .frequency_penalty
+                .or(inference_params.chat_completion.frequency_penalty),
+            json_mode: json_mode.or(inference_params.chat_completion.json_mode),
+            max_tokens: max_tokens.or(inference_params.chat_completion.max_tokens),
+            presence_penalty: openai_compatible_params
+                .presence_penalty
+                .or(inference_params.chat_completion.presence_penalty),
+            reasoning_effort: openai_compatible_params
+                .reasoning_effort
+                .or(inference_params.chat_completion.reasoning_effort),
+            seed: openai_compatible_params
+                .seed
+                .or(inference_params.chat_completion.seed),
+            stop_sequences: openai_compatible_params
+                .stop
+                .or(inference_params.chat_completion.stop_sequences),
+            temperature: openai_compatible_params
+                .temperature
+                .or(inference_params.chat_completion.temperature),
+            thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
+            top_p: openai_compatible_params
+                .top_p
+                .or(inference_params.chat_completion.top_p),
+            verbosity: openai_compatible_params
+                .verbosity
+                .or(inference_params.chat_completion.verbosity),
         };
-        let inference_params = InferenceParams {
-            chat_completion: chat_completion_inference_params,
-        };
+
         let OpenAICompatibleToolChoiceParams {
             allowed_tools,
             tool_choice,
@@ -1070,15 +1100,15 @@ impl From<OpenAICompatibleTool> for Tool {
     }
 }
 
-impl From<OpenAICompatibleToolCall> for ToolCallInput {
+impl From<OpenAICompatibleToolCall> for ToolCallWrapper {
     fn from(tool_call: OpenAICompatibleToolCall) -> Self {
-        ToolCallInput {
+        ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
             id: tool_call.id,
-            raw_name: Some(tool_call.function.name),
-            raw_arguments: Some(tool_call.function.arguments),
+            raw_name: tool_call.function.name,
+            raw_arguments: tool_call.function.arguments,
             name: None,
             arguments: None,
-        }
+        })
     }
 }
 
@@ -1171,8 +1201,8 @@ fn process_chat_content(
     (content_str, tool_calls)
 }
 
-impl From<ToolCallOutput> for OpenAICompatibleToolCall {
-    fn from(tool_call: ToolCallOutput) -> Self {
+impl From<InferenceResponseToolCall> for OpenAICompatibleToolCall {
+    fn from(tool_call: InferenceResponseToolCall) -> Self {
         OpenAICompatibleToolCall {
             id: tool_call.id,
             r#type: "function".to_string(),
@@ -1315,7 +1345,7 @@ fn process_chat_content_chunk(
                     "Ignoring 'thought' content block chunk when constructing OpenAI-compatible response"
                 );
             }
-            ContentBlockChunk::Unknown { .. } => {
+            ContentBlockChunk::Unknown(_) => {
                 // OpenAI compatible endpoint does not support unknown blocks
                 // Users of this endpoint will need to check observability to see them
                 tracing::warn!(
@@ -1477,6 +1507,7 @@ mod tests {
             stop: None,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(params.function_name, Some("test_function".to_string()));
@@ -1620,13 +1651,15 @@ mod tests {
         let expected_text = InputMessageContent::Text(Text {
             text: "Hello, world!".to_string(),
         });
-        let expected_tool_call = InputMessageContent::ToolCall(ToolCallInput {
-            id: "1".to_string(),
-            raw_name: Some("test_tool".to_string()),
-            raw_arguments: Some("{}".to_string()),
-            name: None,
-            arguments: None,
-        });
+        let expected_tool_call = InputMessageContent::ToolCall(
+            ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
+                id: "1".to_string(),
+                raw_name: "test_tool".to_string(),
+                raw_arguments: "{}".to_string(),
+                name: None,
+                arguments: None,
+            }),
+        );
 
         assert!(
             input.messages[0].content.contains(&expected_text),
@@ -1989,7 +2022,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "Hello".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 arguments: None,
                 name: Some("test_tool".to_string()),
                 id: "1".to_string(),
@@ -2018,7 +2051,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: " second part".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 arguments: None,
                 name: Some("middle_tool".to_string()),
                 id: "123".to_string(),
@@ -2173,6 +2206,7 @@ mod tests {
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(params.cache_options, CacheParamsOptions::default());
@@ -2212,6 +2246,7 @@ mod tests {
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(
@@ -2257,6 +2292,7 @@ mod tests {
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(
@@ -2302,6 +2338,7 @@ mod tests {
             tensorzero_deny_unknown_fields: false,
             tensorzero_internal_dynamic_variant_config: None,
             tensorzero_provider_tools: None,
+            ..Default::default()
         })
         .unwrap();
         assert_eq!(

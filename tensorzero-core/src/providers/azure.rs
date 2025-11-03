@@ -13,10 +13,13 @@ use crate::embeddings::{
     EmbeddingProviderRequestInfo, EmbeddingProviderResponse, EmbeddingRequest,
 };
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
@@ -160,32 +163,33 @@ impl AzureCredentials {
     fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             AzureCredentials::Static(api_key) => Ok(api_key),
             AzureCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
-            AzureCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            AzureCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
             AzureCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
         }
     }
@@ -216,7 +220,7 @@ impl InferenceProvider for AzureProvider {
         let endpoint = self.endpoint.get_endpoint(api_key)?;
         let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
         let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(api_key)?;
+        let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
         let builder = http_client
             .post(request_url)
             .header("api-key", api_key.expose_secret());
@@ -310,7 +314,10 @@ impl InferenceProvider for AzureProvider {
             })?;
         let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
         let request_url = get_azure_chat_url(&endpoint, &self.deployment_id)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -367,7 +374,10 @@ impl EmbeddingProvider for AzureProvider {
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let endpoint = self.endpoint.get_endpoint(dynamic_api_keys)?;
         let request_url = get_azure_embedding_url(&endpoint, &self.deployment_id)?;
         let request_body = AzureEmbeddingRequest::new(request);
@@ -603,6 +613,37 @@ struct AzureRequest<'a> {
     tools: Option<Vec<OpenAITool<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AzureToolChoice<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
+}
+
+fn apply_inference_params(
+    request: &mut AzureRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        request.verbosity = verbosity.clone();
+    }
 }
 
 impl<'a> AzureRequest<'a> {
@@ -623,7 +664,7 @@ impl<'a> AzureRequest<'a> {
         )
         .await?;
         let (tools, tool_choice, _) = prepare_openai_tools(request);
-        Ok(AzureRequest {
+        let mut azure_request = AzureRequest {
             messages,
             temperature: request.temperature,
             top_p: request.top_p,
@@ -636,7 +677,13 @@ impl<'a> AzureRequest<'a> {
             seed: request.seed,
             tools,
             tool_choice: tool_choice.map(AzureToolChoice::from),
-        })
+            reasoning_effort: None,
+            verbosity: None,
+        };
+
+        apply_inference_params(&mut azure_request, &request.inference_params_v2);
+
+        Ok(azure_request)
     }
 }
 
@@ -767,14 +814,13 @@ impl<'a> AzureEmbeddingRequest<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use secrecy::SecretString;
     use std::borrow::Cow;
     use std::collections::HashMap;
     use std::time::Duration;
-
+    use tracing_test::traced_test;
     use uuid::Uuid;
-
-    use super::*;
 
     use crate::config::SKIP_CREDENTIAL_VALIDATION;
     use crate::inference::types::{
@@ -1098,5 +1144,44 @@ mod tests {
             .unwrap_err()
             .to_string()
             .contains("Dynamic endpoint 'missing_endpoint' not found"));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_azure_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = AzureRequest {
+            messages: vec![],
+            temperature: None,
+            top_p: None,
+            stop: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_completion_tokens: None,
+            seed: None,
+            stream: false,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            reasoning_effort: None,
+            verbosity: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort is applied correctly
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "Azure does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity is applied correctly
+        assert_eq!(request.verbosity, Some("low".to_string()));
     }
 }

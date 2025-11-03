@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ToolCallContentBlock } from "./ToolCallContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { ToolCallWrapper } from "~/types/tensorzero";
 
 const meta = {
   title: "Input Output/Content Blocks/ToolCallContentBlock",
@@ -49,7 +50,7 @@ export const SimpleEditing: Story = {
     onChange: () => {},
   },
   render: function SimpleEditingStory() {
-    const [block, setBlock] = useState({
+    const [block, setBlock] = useState<ToolCallWrapper>({
       id: "call_123",
       name: "get_weather",
       arguments: JSON.stringify({
@@ -126,7 +127,7 @@ export const LongValuesEditing: Story = {
     onChange: () => {},
   },
   render: function LongValuesEditingStory() {
-    const [block, setBlock] = useState({
+    const [block, setBlock] = useState<ToolCallWrapper>({
       id: "call_" + "x".repeat(1000),
       name: "very_".repeat(1000) + "long_tool_name",
       arguments: JSON.stringify({

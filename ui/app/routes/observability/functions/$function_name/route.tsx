@@ -39,9 +39,11 @@ import {
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { logger } from "~/utils/logger";
 import { DEFAULT_FUNCTION } from "~/utils/constants";
-import { getNativeDatabaseClient } from "~/utils/tensorzero/native_client.server";
 import type { TimeWindow } from "~/types/tensorzero";
-import { computeTrackAndStopOptimalProbabilities } from "~/utils/experimentation.server";
+import {
+  getNativeDatabaseClient,
+  getNativeTensorZeroClient,
+} from "~/utils/tensorzero/native_client.server";
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { function_name } = params;
@@ -127,6 +129,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       })()
     : Promise.resolve(undefined);
 
+  // Get variant sampling probabilities from the gateway
+  const variantSamplingProbabilitiesPromise = (async () => {
+    try {
+      const tensorZeroClient = await getNativeTensorZeroClient();
+      return await tensorZeroClient.getVariantSamplingProbabilities(
+        function_name,
+      );
+    } catch (error) {
+      logger.error("Failed to get variant sampling probabilities:", error);
+      return {};
+    }
+  })();
+
   const [
     inferences,
     inference_bounds,
@@ -136,6 +151,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_counts,
     variant_throughput,
     feedback_timeseries,
+    variant_sampling_probabilities,
   ] = await Promise.all([
     inferencePromise,
     tableBoundsPromise,
@@ -145,14 +161,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variantCountsPromise,
     variantThroughputPromise,
     feedbackTimeseriesPromise,
+    variantSamplingProbabilitiesPromise,
   ]);
-
-  // Compute optimal probabilities for track_and_stop experimentation
-  const optimal_probabilities = await computeTrackAndStopOptimalProbabilities(
-    function_name,
-    function_config,
-    config,
-  );
 
   const variant_counts_with_metadata = variant_counts.map((variant_count) => {
     let variant_config = function_config.variants[
@@ -206,8 +216,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     variant_performances,
     variant_throughput,
     variant_counts: variant_counts_with_metadata,
-    optimal_probabilities,
     feedback_timeseries,
+    variant_sampling_probabilities,
   };
 }
 
@@ -221,8 +231,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
     variant_performances,
     variant_throughput,
     variant_counts,
-    optimal_probabilities,
     feedback_timeseries,
+    variant_sampling_probabilities,
   } = loaderData;
 
   const navigate = useNavigate();
@@ -302,8 +312,8 @@ export default function InferencesPage({ loaderData }: Route.ComponentProps) {
             <FunctionExperimentation
               functionConfig={function_config}
               functionName={function_name}
-              optimalProbabilities={optimal_probabilities}
               feedbackTimeseries={feedback_timeseries}
+              variantSamplingProbabilities={variant_sampling_probabilities}
             />
           </SectionLayout>
         )}

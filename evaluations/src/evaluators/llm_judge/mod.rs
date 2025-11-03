@@ -7,7 +7,7 @@ use tensorzero::{
     DynamicToolParams, File, InferenceOutput, InferenceParams, InferenceResponse, Role,
 };
 use tensorzero_core::cache::CacheEnabledMode;
-use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use tensorzero_core::evaluations::{
     get_evaluator_metric_name, get_llm_judge_function_name, LLMJudgeConfig, LLMJudgeInputFormat,
     LLMJudgeOutputType,
@@ -43,7 +43,7 @@ impl LLMJudgeEvaluationResult {
 
 pub struct RunLLMJudgeEvaluatorParams<'a> {
     pub inference_response: &'a InferenceResponse,
-    pub datapoint: &'a Datapoint,
+    pub datapoint: &'a StoredDatapoint,
     pub clients: &'a Clients,
     pub llm_judge_config: &'a LLMJudgeConfig,
     pub evaluation_name: &'a str,
@@ -179,7 +179,7 @@ fn prepare_llm_judge_input(
     llm_judge_config: &LLMJudgeConfig,
     input: &ClientInput,
     inference_response: &InferenceResponse,
-    datapoint: &Datapoint,
+    datapoint: &StoredDatapoint,
 ) -> Result<Option<ClientInput>> {
     let generated_output = match &inference_response {
         InferenceResponse::Chat(chat_response) => {
@@ -403,17 +403,17 @@ fn prepare_serialized_json_output(output: &JsonInferenceOutput) -> Result<String
 /// If the reference output is needed but not present, we throw an error. (this could be mapped to None above this call)
 fn handle_reference_output(
     llm_judge_config: &LLMJudgeConfig,
-    datapoint: &Datapoint,
+    datapoint: &StoredDatapoint,
 ) -> Result<Option<String>> {
     if !llm_judge_config.include.reference_output {
         return Ok(None);
     }
     match datapoint {
-        Datapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
+        StoredDatapoint::Chat(chat_datapoint) => match &chat_datapoint.output {
             Some(output) => prepare_serialized_chat_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
-        Datapoint::Json(json_datapoint) => match &json_datapoint.output {
+        StoredDatapoint::Json(json_datapoint) => match &json_datapoint.output {
             Some(output) => prepare_serialized_json_output(output).map(Some),
             None => bail!("Datapoint does not contain an output when this is expected"),
         },
@@ -427,18 +427,18 @@ mod tests {
     use serde_json::json;
     use tensorzero::Role;
     use tensorzero::{File, UrlFile};
-    use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
     use tensorzero_core::endpoints::datasets::JsonInferenceDatapoint;
+    use tensorzero_core::endpoints::datasets::StoredChatInferenceDatapoint;
     use tensorzero_core::endpoints::inference::ChatInferenceResponse;
     use tensorzero_core::endpoints::inference::JsonInferenceResponse;
     use tensorzero_core::evaluations::LLMJudgeIncludeConfig;
     use tensorzero_core::evaluations::LLMJudgeOptimize;
     use tensorzero_core::inference::types::StoredInput;
     use tensorzero_core::inference::types::Usage;
-    use tensorzero_core::tool::ToolCallInput;
+    use tensorzero_core::tool::{ToolCall, ToolCallWrapper};
     use tensorzero_core::{
         inference::types::{ContentBlockChatOutput, RawText, Text, Thought, Unknown},
-        tool::{ToolCallOutput, ToolResult},
+        tool::{InferenceResponseToolCall, ToolResult},
     };
 
     use url::Url;
@@ -528,7 +528,7 @@ mod tests {
         );
         // Tool call and text content blocks
         let content = vec![
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 name: Some("tool".to_string()),
                 arguments: Some(json!({"foo": "bar"})),
                 id: "foooo".to_string(),
@@ -542,7 +542,7 @@ mod tests {
         let serialized_output = prepare_serialized_chat_output(&content).unwrap();
         assert_eq!(
             serialized_output,
-            r#"[{"type":"tool_call","arguments":{"foo":"bar"},"id":"foooo","name":"tool","raw_arguments":"{\"foo\": \"bar\"}","raw_name":"tool"},{"type":"text","text":"Hello, world!"}]"#
+            r#"[{"type":"tool_call","id":"foooo","raw_name":"tool","raw_arguments":"{\"foo\": \"bar\"}","name":"tool","arguments":{"foo":"bar"}},{"type":"text","text":"Hello, world!"}]"#
         );
     }
 
@@ -579,7 +579,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::Chat(ChatInferenceDatapoint {
+            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 name: None,
@@ -646,7 +646,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::Chat(ChatInferenceDatapoint {
+            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "foo".to_string(),
                 function_name: "foo".to_string(),
                 name: None,
@@ -770,13 +770,11 @@ mod tests {
 
         // Test with ToolCall, ToolResult, etc. (should pass through)
         let content = vec![
-            ClientInputMessageContent::ToolCall(ToolCallInput {
-                name: Some("tool".to_string()),
-                arguments: Some(json!({"arg": "value"})),
+            ClientInputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
                 id: "toolid".to_string(),
-                raw_name: None,
-                raw_arguments: None,
-            }),
+                name: "tool".to_string(),
+                arguments: json!({"arg": "value"}).to_string(),
+            })),
             ClientInputMessageContent::ToolResult(ToolResult {
                 name: "tool".to_string(),
                 result: "result".to_string(),
@@ -841,7 +839,7 @@ mod tests {
                 reference_output: false,
             },
         };
-        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -874,7 +872,7 @@ mod tests {
                 reference_output: true,
             },
         };
-        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -901,7 +899,7 @@ mod tests {
         );
 
         // Test with reference output enabled and present (chat)
-        let datapoint = Datapoint::Chat(ChatInferenceDatapoint {
+        let datapoint = StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -929,7 +927,7 @@ mod tests {
         assert_eq!(result, r#"[{"type":"text","text":"Reference text"}]"#);
 
         // Test with reference output enabled and present (json)
-        let datapoint = Datapoint::Json(JsonInferenceDatapoint {
+        let datapoint = StoredDatapoint::Json(JsonInferenceDatapoint {
             dataset_name: "dataset".to_string(),
             function_name: "function".to_string(),
             name: None,
@@ -1035,7 +1033,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::Chat(ChatInferenceDatapoint {
+            &StoredDatapoint::Chat(StoredChatInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,
@@ -1150,7 +1148,7 @@ mod tests {
                 finish_reason: None,
                 episode_id: Uuid::now_v7(),
             }),
-            &Datapoint::Json(JsonInferenceDatapoint {
+            &StoredDatapoint::Json(JsonInferenceDatapoint {
                 dataset_name: "dataset".to_string(),
                 function_name: "function".to_string(),
                 name: None,

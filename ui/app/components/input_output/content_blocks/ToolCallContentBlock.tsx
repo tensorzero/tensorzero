@@ -2,12 +2,12 @@ import { Terminal } from "lucide-react";
 import { type ReactNode } from "react";
 import { ContentBlockLabel } from "~/components/input_output/content_blocks/ContentBlockLabel";
 import { ToolPayload } from "~/components/input_output/content_blocks/ToolPayload";
-import { type ToolCallInput } from "~/types/tensorzero";
+import type { ToolCallWrapper } from "~/types/tensorzero";
 
 interface ToolCallContentBlockProps {
-  block: ToolCallInput; // TODO: `ToolCallInput` vs `ToolCall`? DO NOT MERGE
+  block: ToolCallWrapper;
   isEditing?: boolean;
-  onChange?: (updatedBlock: ToolCallInput) => void;
+  onChange?: (updatedBlock: ToolCallWrapper) => void;
   actionBar?: ReactNode;
 }
 
@@ -17,6 +17,10 @@ export function ToolCallContentBlock({
   onChange,
   actionBar,
 }: ToolCallContentBlockProps) {
+  const name: string = "raw_name" in block ? block.raw_name : block.name;
+  const payload: string =
+    "raw_arguments" in block ? block.raw_arguments : block.arguments;
+
   return (
     <div className="flex max-w-240 min-w-80 flex-col gap-1">
       <ContentBlockLabel
@@ -26,9 +30,9 @@ export function ToolCallContentBlock({
         Tool Call
       </ContentBlockLabel>
       <ToolPayload
-        name={block.name || block.raw_name}
+        name={name}
         id={block.id}
-        payload={block.arguments}
+        payload={payload}
         payloadLabel="Arguments"
         isEditing={isEditing}
         onChange={(id, name, payload) => {

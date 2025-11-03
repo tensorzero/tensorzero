@@ -527,6 +527,16 @@ class Tool:
 
 @dataclass
 class ToolParams:
+    """Legacy ToolParams class for backward compatibility.
+
+    Use the flattened DynamicToolParams fields directly when constructing StoredInference:
+    - allowed_tools: Optional[List[str]]
+    - additional_tools: Optional[List[Tool]]
+    - tool_choice: Optional[str]
+    - parallel_tool_calls: Optional[bool]
+    - provider_tools: Optional[List[ProviderTool]]
+    """
+
     tools_available: List[Tool]
     tool_choice: str
     parallel_tool_calls: Optional[bool] = None
@@ -614,4 +624,4 @@ class NotFilter(InferenceFilter):
 class OrderBy:
     by: Literal["timestamp", "metric"]
     name: Optional[str] = None
-    direction: Literal["ASC", "DESC"] = "DESC"
+    direction: Literal["ascending", "descending"] = "descending"

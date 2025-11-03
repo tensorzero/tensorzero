@@ -1,13 +1,11 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     fmt::{self, Display},
 };
 
-use crate::db::clickhouse::query_builder::parameters::add_parameter;
 use crate::{
     config::{Config, MetricConfigType},
+    db::clickhouse::query_builder::parameters::add_parameter,
     error::{Error, ErrorDetails},
 };
 
@@ -15,26 +13,15 @@ mod datapoint_queries;
 pub(super) mod parameters;
 pub use datapoint_queries::DatapointFilter;
 
+// Re-export filter and ordering types from v1 API for backwards compatibility
+pub use crate::endpoints::stored_inferences::v1::types::{
+    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter, OrderBy,
+    OrderByTerm, OrderDirection, TagComparisonOperator, TagFilter, TimeComparisonOperator,
+    TimeFilter,
+};
+
 #[cfg(test)]
 pub mod test_util;
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
-pub enum FloatComparisonOperator {
-    #[serde(rename = "<")]
-    LessThan,
-    #[serde(rename = "<=")]
-    LessThanOrEqual,
-    #[serde(rename = "=")]
-    Equal,
-    #[serde(rename = ">")]
-    GreaterThan,
-    #[serde(rename = ">=")]
-    GreaterThanOrEqual,
-    #[serde(rename = "!=")]
-    NotEqual,
-}
 
 impl FloatComparisonOperator {
     pub fn to_clickhouse_operator(&self) -> &str {
@@ -47,24 +34,6 @@ impl FloatComparisonOperator {
             FloatComparisonOperator::NotEqual => "!=",
         }
     }
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
-pub enum TimeComparisonOperator {
-    #[serde(rename = "<")]
-    LessThan,
-    #[serde(rename = "<=")]
-    LessThanOrEqual,
-    #[serde(rename = "=")]
-    Equal,
-    #[serde(rename = ">")]
-    GreaterThan,
-    #[serde(rename = ">=")]
-    GreaterThanOrEqual,
-    #[serde(rename = "!=")]
-    NotEqual,
 }
 
 impl TimeComparisonOperator {
@@ -80,16 +49,6 @@ impl TimeComparisonOperator {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
-pub enum TagComparisonOperator {
-    #[serde(rename = "=")]
-    Equal,
-    #[serde(rename = "!=")]
-    NotEqual,
-}
-
 impl TagComparisonOperator {
     pub fn to_clickhouse_operator(&self) -> &str {
         match self {
@@ -99,15 +58,6 @@ impl TagComparisonOperator {
     }
 }
 
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum OrderDirection {
-    Asc,
-    Desc,
-}
-
 impl OrderDirection {
     pub fn to_clickhouse_direction(&self) -> &str {
         match self {
@@ -115,24 +65,6 @@ impl OrderDirection {
             OrderDirection::Desc => "DESC",
         }
     }
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
-#[serde(tag = "by", rename_all = "snake_case")]
-pub enum OrderByTerm {
-    Timestamp,
-    Metric { name: String },
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[cfg_attr(test, ts(export))]
-pub struct OrderBy {
-    #[serde(flatten)]
-    pub term: OrderByTerm,
-    pub direction: OrderDirection,
 }
 
 #[derive(Hash, Eq, PartialEq, Debug)]
@@ -224,69 +156,6 @@ LEFT JOIN (
 ) AS {alias} ON i.{inference_table_column_name} = {alias}.target_id"
         )
     }
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
-pub struct FloatMetricFilter {
-    pub metric_name: String,
-    pub value: f64,
-    pub comparison_operator: FloatComparisonOperator,
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
-pub struct BooleanMetricFilter {
-    pub metric_name: String,
-    pub value: bool,
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
-pub struct TagFilter {
-    pub key: String,
-    pub value: String,
-    pub comparison_operator: TagComparisonOperator,
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
-pub struct TimeFilter {
-    #[cfg_attr(test, ts(type = "Date"))]
-    pub time: DateTime<Utc>,
-    pub comparison_operator: TimeComparisonOperator,
-}
-
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[cfg_attr(test, ts(export))]
-#[serde(tag = "type", rename_all = "snake_case")]
-/// Filters for querying inferences.
-pub enum InferenceFilter {
-    /// Filter by the value of a float metric
-    FloatMetric(FloatMetricFilter),
-
-    /// Filter by the value of a boolean metric
-    BooleanMetric(BooleanMetricFilter),
-
-    /// Filter by tag key-value pair
-    Tag(TagFilter),
-
-    /// Filter by the timestamp of an inference.
-    Time(TimeFilter),
-
-    /// Logical AND of multiple filters
-    And { children: Vec<InferenceFilter> },
-
-    /// Logical OR of multiple filters
-    Or { children: Vec<InferenceFilter> },
-
-    /// Logical NOT of a filter
-    Not { child: Box<InferenceFilter> },
 }
 
 // TODO(shuyangli): Extract inference filters into their own file.
@@ -534,6 +403,7 @@ impl Display for ClickhouseType {
 #[cfg(test)]
 mod tests {
     // TODO(shuyangli): Cleanly separate tests for ListInferences SQL generation from the filter generation tests.
+    use chrono::DateTime;
     use serde_json::json;
     use std::path::Path;
     use uuid::Uuid;
@@ -547,7 +417,7 @@ mod tests {
     use crate::inference::types::{
         ContentBlockChatOutput, JsonInferenceOutput, StoredInput, System,
     };
-    use crate::stored_inference::StoredInference;
+    use crate::stored_inference::StoredInferenceDatabase;
     use crate::tool::ToolCallConfigDatabaseInsert;
     use crate::{config::ConfigFileGlob, inference::types::Text, tool::ToolChoice};
 
@@ -2017,7 +1887,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Chat(chat_inference) = inference.try_into().unwrap() else {
             panic!("Expected a chat inference");
         };
         assert_eq!(chat_inference.function_name, "test_function");
@@ -2058,8 +1928,8 @@ FORMAT JSONEachRow";
             "timestamp": "2023-01-01T00:00:00Z"
         }
     "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Chat(chat_inference) = inference else {
             panic!("Expected a chat inference");
         };
         assert_eq!(chat_inference.function_name, "test_function");
@@ -2106,7 +1976,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Chat(chat_inference) = inference.try_into().unwrap() else {
             panic!("Expected a chat inference");
         };
         assert_eq!(
@@ -2137,8 +2007,8 @@ FORMAT JSONEachRow";
             "timestamp": "2023-01-01T00:00:00Z"
         }
     "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Chat(chat_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Chat(chat_inference) = inference else {
             panic!("Expected a chat inference");
         };
         assert_eq!(
@@ -2168,7 +2038,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Json(json_inference) = inference.try_into().unwrap() else {
             panic!("Expected a json inference");
         };
         assert_eq!(json_inference.function_name, "test_function");
@@ -2216,8 +2086,8 @@ FORMAT JSONEachRow";
              "timestamp": "2023-01-01T00:00:00Z"
          }
      "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Json(json_inference) = inference else {
             panic!("Expected a json inference");
         };
         assert_eq!(json_inference.function_name, "test_function");
@@ -2271,7 +2141,7 @@ FORMAT JSONEachRow";
         "#;
         let inference: ClickHouseStoredInferenceWithDispreferredOutputs =
             serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference.try_into().unwrap() else {
+        let StoredInferenceDatabase::Json(json_inference) = inference.try_into().unwrap() else {
             panic!("Expected a json inference");
         };
         assert_eq!(
@@ -2300,8 +2170,8 @@ FORMAT JSONEachRow";
              "timestamp": "2023-01-01T00:00:00Z"
          }
      "#;
-        let inference: StoredInference = serde_json::from_str(json).unwrap();
-        let StoredInference::Json(json_inference) = inference else {
+        let inference: StoredInferenceDatabase = serde_json::from_str(json).unwrap();
+        let StoredInferenceDatabase::Json(json_inference) = inference else {
             panic!("Expected a json inference");
         };
 

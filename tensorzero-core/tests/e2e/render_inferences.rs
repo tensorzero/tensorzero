@@ -3,8 +3,9 @@ use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
-    ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
-    StoredChatInference, StoredInference, StoredJsonInference, Tool,
+    ClientExt, JsonInferenceDatapoint, Role, StorageKind, StoragePath, StoredChatInferenceDatabase,
+    StoredChatInferenceDatapoint, StoredDatapoint, StoredInferenceDatabase, StoredJsonInference,
+    Tool,
 };
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
 use tensorzero_core::inference::types::stored_input::StoredFile;
@@ -16,7 +17,7 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Template, Text},
-    tool::{ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice},
+    tool::{InferenceResponseToolCall, ToolCallConfigDatabaseInsert, ToolChoice},
 };
 use tracing_test::traced_test;
 use uuid::Uuid;
@@ -27,7 +28,7 @@ pub async fn test_render_samples_empty() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     // Test with an empty stored inferences array.
-    let stored_inferences: Vec<StoredInference> = vec![];
+    let stored_inferences: Vec<StoredInferenceDatabase> = vec![];
     let rendered_inferences = client
         .experimental_render_samples(stored_inferences, HashMap::new())
         .await
@@ -42,7 +43,7 @@ pub async fn test_render_samples_empty() {
 pub async fn test_render_samples_no_function() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: StoredInput {
@@ -78,7 +79,7 @@ pub async fn test_render_samples_no_function() {
 pub async fn test_render_samples_no_variant() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: StoredInput {
@@ -122,7 +123,7 @@ pub async fn test_render_samples_no_variant() {
 pub async fn test_render_samples_missing_variable() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test".to_string(),
         variant_name: "dummy".to_string(),
         input: StoredInput {
@@ -164,7 +165,7 @@ pub async fn test_render_samples_normal() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![
-        StoredInference::Chat(StoredChatInference {
+        StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
@@ -186,7 +187,7 @@ pub async fn test_render_samples_normal() {
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
         }),
-        StoredInference::Json(StoredJsonInference {
+        StoredInferenceDatabase::Json(StoredJsonInference {
             function_name: "json_success".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
@@ -215,7 +216,7 @@ pub async fn test_render_samples_normal() {
             }],
             tags: HashMap::new(),
         }),
-        StoredInference::Chat(StoredChatInference {
+        StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "weather_helper".to_string(),
             variant_name: "dummy".to_string(),
             input: StoredInput {
@@ -229,7 +230,7 @@ pub async fn test_render_samples_normal() {
                     })],
                 }],
             },
-            output: vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            output: vec![ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 name: Some("get_temperature".to_string()),
                 arguments: Some(json!({"location": "Tokyo"})),
                 id: Uuid::now_v7().to_string(),
@@ -254,7 +255,7 @@ pub async fn test_render_samples_normal() {
             })]],
             tags: HashMap::new(),
         }),
-        StoredInference::Chat(StoredChatInference {
+        StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
             function_name: "basic_test".to_string(),
             variant_name: "gpt-4o-mini-2024-07-18".to_string(),
             input: StoredInput {
@@ -329,7 +330,6 @@ pub async fn test_render_samples_normal() {
 
     // Check other fields
     assert!(first_inference.output.as_ref().unwrap().is_empty());
-    assert!(first_inference.tool_params.is_some());
     assert!(first_inference.output_schema.is_none());
 
     // Check the second rendered inference
@@ -368,7 +368,6 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "{}");
     // Check other fields
-    assert!(second_inference.tool_params.is_none());
     assert!(second_inference.output_schema.is_some());
 
     // Check the third rendered inference
@@ -410,7 +409,6 @@ pub async fn test_render_samples_normal() {
     };
     assert_eq!(output_text.text, "Hello, world!");
     // Check other fields
-    assert!(third_inference.tool_params.is_some());
     assert!(third_inference.output_schema.is_none());
 
     // Check the fourth rendered inference
@@ -444,7 +442,6 @@ pub async fn test_render_samples_normal() {
     assert_eq!(fourth_inference.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
-    assert!(fourth_inference.tool_params.is_some());
     assert!(fourth_inference.output_schema.is_none());
 }
 
@@ -453,7 +450,7 @@ pub async fn test_render_samples_normal() {
 pub async fn test_render_samples_template_no_schema() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let stored_inferences = vec![StoredInference::Chat(StoredChatInference {
+    let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
         function_name: "basic_test_template_no_schema".to_string(),
         variant_name: "test".to_string(),
         timestamp: Utc::now(),
@@ -545,7 +542,6 @@ pub async fn test_render_samples_template_no_schema() {
 
     // Check other fields
     assert!(first_inference.output.as_ref().unwrap().is_empty());
-    assert!(first_inference.tool_params.is_some());
     assert!(first_inference.output_schema.is_none());
 }
 
@@ -558,7 +554,7 @@ pub async fn test_render_datapoints_empty() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     // Test with an empty datapoints array.
-    let datapoints: Vec<Datapoint> = vec![];
+    let datapoints: Vec<StoredDatapoint> = vec![];
     let rendered_samples = client
         .experimental_render_samples(datapoints, HashMap::new())
         .await
@@ -573,7 +569,7 @@ pub async fn test_render_datapoints_empty() {
 pub async fn test_render_datapoints_no_function() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -614,7 +610,7 @@ pub async fn test_render_datapoints_no_function() {
 pub async fn test_render_datapoints_no_variant() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -663,7 +659,7 @@ pub async fn test_render_datapoints_no_variant() {
 pub async fn test_render_datapoints_missing_variable() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test".to_string(),
         name: None,
@@ -710,7 +706,7 @@ pub async fn test_render_datapoints_normal() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![
-        Datapoint::Chat(ChatInferenceDatapoint {
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -737,7 +733,7 @@ pub async fn test_render_datapoints_normal() {
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
-        Datapoint::Json(JsonInferenceDatapoint {
+        StoredDatapoint::Json(JsonInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "json_success".to_string(),
             name: None,
@@ -768,7 +764,7 @@ pub async fn test_render_datapoints_normal() {
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
-        Datapoint::Chat(ChatInferenceDatapoint {
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "weather_helper".to_string(),
             name: None,
@@ -785,7 +781,7 @@ pub async fn test_render_datapoints_normal() {
                     })],
                 }],
             },
-            output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            output: Some(vec![ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 name: Some("get_temperature".to_string()),
                 arguments: Some(json!({"location": "Tokyo"})),
                 id: Uuid::now_v7().to_string(),
@@ -810,7 +806,7 @@ pub async fn test_render_datapoints_normal() {
             updated_at: "2025-10-13T20:17:36Z".to_string(),
             is_custom: false,
         }),
-        Datapoint::Chat(ChatInferenceDatapoint {
+        StoredDatapoint::Chat(StoredChatInferenceDatapoint {
             dataset_name: "test_dataset".to_string(),
             function_name: "basic_test".to_string(),
             name: None,
@@ -890,7 +886,6 @@ pub async fn test_render_datapoints_normal() {
 
     // Check other fields
     assert!(first_sample.output.as_ref().unwrap().is_empty());
-    assert!(first_sample.tool_params.is_some());
     assert!(first_sample.output_schema.is_none());
 
     // Check the second rendered sample (json_success)
@@ -922,7 +917,6 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(output_text.text, "{}");
 
     // Check other fields
-    assert!(second_sample.tool_params.is_none());
     assert!(second_sample.output_schema.is_some());
 
     // Check the third rendered sample (weather_helper with tool call)
@@ -957,7 +951,6 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(tool_call.arguments, Some(json!({"location": "Tokyo"})));
 
     // Check other fields
-    assert!(third_sample.tool_params.is_some());
     assert!(third_sample.output_schema.is_none());
 
     // Check the fourth rendered sample (basic_test with image)
@@ -991,7 +984,6 @@ pub async fn test_render_datapoints_normal() {
     assert_eq!(fourth_sample.output.as_ref().unwrap().len(), 0);
 
     // Check other fields
-    assert!(fourth_sample.tool_params.is_some());
     assert!(fourth_sample.output_schema.is_none());
 }
 
@@ -1000,7 +992,7 @@ pub async fn test_render_datapoints_normal() {
 pub async fn test_render_datapoints_template_no_schema() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
-    let datapoints = vec![Datapoint::Chat(ChatInferenceDatapoint {
+    let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
         dataset_name: "test_dataset".to_string(),
         function_name: "basic_test_template_no_schema".to_string(),
         name: None,
@@ -1097,6 +1089,5 @@ pub async fn test_render_datapoints_template_no_schema() {
 
     // Check other fields
     assert!(first_sample.output.as_ref().unwrap().is_empty());
-    assert!(first_sample.tool_params.is_some());
     assert!(first_sample.output_schema.is_none());
 }

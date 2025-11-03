@@ -1,0 +1,76 @@
+name: Cancel workflows on status failure
+
+on:
+  status:
+  check_run:
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cancel-on-failure:
+    name: Cancel General Checks on Failure
+    runs-on: ubuntu-latest
+    if: |
+      github.repository == 'tensorzero/tensorzero' && (
+        (github.event_name == 'status' && (github.event.state == 'failure' || github.event.state == 'error')) ||
+        (github.event_name == 'check_run' && (github.event.check_run.conclusion == 'failure' || github.event.check_run.conclusion == 'cancelled'))
+      )
+    steps:
+      - name: Find workflows to cancel
+        id: find-workflows
+        run: |
+          # Determine the SHA based on event type
+          if [ "${{ github.event_name }}" = "status" ]; then
+            SHA="${{ github.event.sha }}"
+            echo "Status event details:"
+            echo "SHA: $SHA"
+            echo "State: ${{ github.event.state }}"
+            echo "Context: ${{ github.event.context }}"
+          else
+            SHA="${{ github.event.check_run.head_sha }}"
+            echo "Check run event details:"
+            echo "SHA: $SHA"
+            echo "Conclusion: ${{ github.event.check_run.conclusion }}"
+            echo "Name: ${{ github.event.check_run.name }}"
+          fi
+
+          # Get all workflow runs for the specific SHA
+          workflow_runs=$(curl -s -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?head_sha=$SHA")
+
+          # Find running general.yml workflows on merge queue branches
+          current_run_id="${{ github.run_id }}"
+          matching_runs=$(echo "$workflow_runs" | jq -r --arg current_run "$current_run_id" '.workflow_runs[] | select(.path == ".github/workflows/general.yml" and .status != "completed" and (.head_branch // "" | test("^gh-readonly-queue/main/pr-")) and (.id | tostring) != $current_run) | "\(.id) \(.head_branch)"')
+
+          if [ -n "$matching_runs" ]; then
+            echo "Found workflows to cancel:"
+            echo "$matching_runs"
+            echo "workflows<<EOF" >> $GITHUB_OUTPUT
+            echo "$matching_runs" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "No matching workflows found to cancel"
+            echo "workflows=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Cancel workflows
+        if: steps.find-workflows.outputs.workflows != ''
+        run: |
+          # Determine the SHA based on event type
+          if [ "${{ github.event_name }}" = "status" ]; then
+            SHA="${{ github.event.sha }}"
+          else
+            SHA="${{ github.event.check_run.head_sha }}"
+          fi
+
+          echo "Cancelling workflows..."
+          echo "${{ steps.find-workflows.outputs.workflows }}" | while read -r run_id branch; do
+            if [ -n "$run_id" ]; then
+              echo "Cancelling general.yml workflow run $run_id on branch $branch for SHA $SHA"
+              curl -X POST -H "Authorization: Bearer ${{ github.token }}" \
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$run_id/cancel"
+            fi
+          done

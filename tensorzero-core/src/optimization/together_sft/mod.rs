@@ -209,17 +209,21 @@ pub struct TogetherSupervisedRow<'a> {
 
 impl<'a> TogetherSupervisedRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        let tools = match &inference.tool_params {
-            Some(tool_params) => {
-                if tool_params.parallel_tool_calls.unwrap_or_default() {
-                    return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
-                        message: "Parallel tool calls are not supported for Together".to_string(),
-                    }));
-                }
-                tool_params.tools_available.iter().map(Into::into).collect()
-            }
-            None => vec![],
-        };
+        if inference
+            .tool_params
+            .parallel_tool_calls
+            .unwrap_or_default()
+        {
+            return Err(Error::new(ErrorDetails::InvalidRenderedStoredInference {
+                message: "Parallel tool calls are not supported for Together".to_string(),
+            }));
+        }
+        let tools = inference
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| tools.iter().map(Into::into).collect())
+            .unwrap_or_default();
         let mut messages = prepare_together_messages(
             inference.system_input.as_deref(),
             &inference.messages,
@@ -743,7 +747,10 @@ impl Optimizer for TogetherSFTConfig {
             None
         };
         // Upload the training and validation rows to Together files
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let api_key = self
+            .credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let train_file_fut = self.upload_file(client, &api_key, &train_rows, "fine-tune");
         let (train_file_id, val_file_id) = if let Some(val_rows) = val_rows.as_ref() {
             // Upload the files in parallel
@@ -851,7 +858,9 @@ impl JobHandle for TogetherSFTJobHandle {
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
             .await?;
 
-        let api_key = together_credentials.get_api_key(credentials)?;
+        let api_key = together_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let res: TogetherJobResponse = client
             .get(
                 self.api_base

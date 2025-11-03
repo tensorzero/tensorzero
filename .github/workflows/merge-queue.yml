@@ -215,6 +215,10 @@ jobs:
         run: |
           ./ci/run-provider-proxy.sh ci
 
+      # TODO - get rid of this when the merge queue has a freshly-build gateway image available
+      - name: Manually run the latest postgres migrations
+        run: cargo run-e2e --run-postgres-migrations
+
       - name: Launch the gateway for E2E tests
         timeout-minutes: 2
         run: |
@@ -228,9 +232,8 @@ jobs:
       # The 'CARGO_NEXTEST_FLAKY_TESTS' variable allows us to mark tests as flaky without merging a PR (if a provider happens to break or goes down)
       # We run the tests without the flaky tests, and require them to pass
       - name: Run all tests (including E2E tests)
-        # When running from a cron job (the 'schedule' event), use '--no-fail-fast' so that we get full coverage of flaky providers.
         run: |
-          cargo test-e2e ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})" ${{ github.event_name == 'schedule' && '--no-fail-fast' || '' }}
+          cargo test-e2e ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})" --no-fail-fast
 
       # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
       # For now, we only check for deprecation warnings after running the Rust e2e tests
@@ -364,13 +367,13 @@ jobs:
     if: github.repository == 'tensorzero/tensorzero'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
       - name: Build Docker container for production deployment tests
         run: docker build -t tensorzero/gateway -f gateway/Dockerfile .
 
       - name: Launch ClickHouse container for E2E tests
         run: |
-          # 'docker compose' will exit with status code 1 if any container exits, even if the container exits with status code 0
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up -d --wait || true
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up clickhouse -d --wait
 
       - name: Set up .env file for production deployment tests
         run: |
@@ -404,6 +407,7 @@ jobs:
     with:
       regen_cache: true
       is_merge_group: true
+      force_no_auth: true
     secrets:
       S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

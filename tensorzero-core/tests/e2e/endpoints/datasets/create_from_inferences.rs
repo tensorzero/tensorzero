@@ -2,6 +2,7 @@ use reqwest::Client;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use tensorzero::ClientExt;
 use tensorzero_core::config::Config;
 use tensorzero_core::db::clickhouse::query_builder::{
     InferenceFilter, TagComparisonOperator, TagFilter,
@@ -11,7 +12,7 @@ use tensorzero_core::db::clickhouse::ClickHouseConnectionInfo;
 use tensorzero_core::db::inferences::{InferenceQueries, ListInferencesParams};
 use tensorzero_core::endpoints::datasets::v1::types::{
     CreateDatapointsFromInferenceOutputSource, CreateDatapointsFromInferenceRequest,
-    CreateDatapointsFromInferenceRequestParams, CreateDatapointsFromInferenceResponse,
+    CreateDatapointsFromInferenceRequestParams, CreateDatapointsResponse,
 };
 
 use crate::common::get_gateway_endpoint;
@@ -67,7 +68,7 @@ async fn test_create_from_inference_ids_success() {
         .unwrap();
 
     assert_eq!(response.status(), 200);
-    let result: CreateDatapointsFromInferenceResponse = response.json().await.unwrap();
+    let result: CreateDatapointsResponse = response.json().await.unwrap();
 
     assert_eq!(result.ids.len(), 2);
 }
@@ -96,7 +97,7 @@ async fn test_create_from_inference_query_success() {
         .unwrap();
 
     assert_eq!(response.status(), 200);
-    let result: CreateDatapointsFromInferenceResponse = response.json().await.unwrap();
+    let result: CreateDatapointsResponse = response.json().await.unwrap();
 
     // Should have created datapoints from existing inferences
     assert!(!result.ids.is_empty(), "Expected at least one datapoint");
@@ -135,7 +136,7 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
         .await
         .unwrap();
     assert_eq!(response1.status(), 200);
-    let result1: CreateDatapointsFromInferenceResponse = response1.json().await.unwrap();
+    let result1: CreateDatapointsResponse = response1.json().await.unwrap();
     assert_eq!(result1.ids.len(), 1);
 
     // Try to create datapoint from the same inference again - should succeed and create another datapoint
@@ -148,7 +149,7 @@ async fn test_create_from_same_inference_multiple_times_succeeds() {
         .await
         .unwrap();
     assert_eq!(response2.status(), 200);
-    let result2: CreateDatapointsFromInferenceResponse = response2.json().await.unwrap();
+    let result2: CreateDatapointsResponse = response2.json().await.unwrap();
     assert_eq!(result2.ids.len(), 1);
 
     // The datapoint IDs should be different
@@ -231,7 +232,7 @@ async fn test_create_from_inference_with_filters() {
         .unwrap();
 
     assert_eq!(response.status(), 200);
-    let result: CreateDatapointsFromInferenceResponse = response.json().await.unwrap();
+    let result: CreateDatapointsResponse = response.json().await.unwrap();
 
     // Should have created datapoints from filtered inferences
     assert!(!result.ids.is_empty(), "Expected at least one datapoint");

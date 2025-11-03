@@ -7,7 +7,7 @@ use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use tracing::instrument;
 use uuid::Uuid;
 
@@ -26,12 +26,13 @@ use crate::inference::types::{
     ContentBlockChatOutput, FetchContext, Input, JsonInferenceOutput,
     TaggedInferenceDatabaseInsert, Text,
 };
+use crate::jsonschema_util::DynamicJSONSchema;
 use crate::stored_inference::{SimpleStoredSampleInfo, StoredOutput, StoredSample};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
     serde_util::{deserialize_optional_string_or_parsed_json, deserialize_string_or_parsed_json},
-    tool::{DynamicToolParams, ToolCallConfigDatabaseInsert},
+    tool::{DynamicToolParams, StaticToolConfig, ToolCallConfigDatabaseInsert},
     utils::gateway::{AppState, StructuredJson},
     utils::uuid::validate_tensorzero_uuid,
 };
@@ -268,7 +269,7 @@ async fn insert_from_existing(
                 OutputKind::None => None,
             };
             // TODO(#3957): the `put_chat_datapoints` call should really take a `ChatInferenceDatapointInsert`. We'll fix it separately.
-            let datapoint = ChatInferenceDatapoint {
+            let datapoint = StoredChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: inference.function_name,
                 name: None,
@@ -380,8 +381,8 @@ pub async fn update_datapoint_handler(
             let dynamic_demonstration_info = DynamicDemonstrationInfo::Chat(
                 chat.tool_params
                     .clone()
-                    .map(ToolCallConfigDatabaseInsert::into)
-                    .unwrap_or_default(),
+                    .unwrap_or_default()
+                    .into_tool_call_config(&function_config, &app_state.config.tools)?,
             );
 
             // Only validate and parse output if it exists
@@ -405,7 +406,7 @@ pub async fn update_datapoint_handler(
                 None
             };
 
-            let datapoint = ChatInferenceDatapoint {
+            let datapoint = StoredChatInferenceDatapoint {
                 dataset_name: path_params.dataset_name,
                 function_name: chat.function_name,
                 name: chat.name,
@@ -448,6 +449,21 @@ pub async fn update_datapoint_handler(
                 .resolve()
                 .await?;
             function_config.validate_input(&json.input)?;
+
+            // Validate the user-provided output_schema
+            let schema_str = serde_json::to_string(&json.output_schema).map_err(|e| {
+                Error::new(ErrorDetails::Serialization {
+                    message: format!("Failed to serialize output_schema: {e}"),
+                })
+            })?;
+            let parsed_schema = DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
+                Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Invalid output_schema: {e}"),
+                })
+            })?;
+            // Ensure the schema is valid by forcing compilation
+            parsed_schema.ensure_valid().await?;
+
             let dynamic_demonstration_info =
                 DynamicDemonstrationInfo::Json(json.output_schema.clone());
 
@@ -629,7 +645,7 @@ pub async fn insert_datapoint(
                 let tool_config =
                     function_config.prepare_tool_config(chat.dynamic_tool_params, &config.tools)?;
                 let dynamic_demonstration_info =
-                    DynamicDemonstrationInfo::Chat(tool_config.clone().unwrap_or_default());
+                    DynamicDemonstrationInfo::Chat(tool_config.clone());
                 // Validate the output
                 let output = if let Some(output) = chat.output {
                     let validated_output = validate_parse_demonstration(
@@ -663,7 +679,7 @@ pub async fn insert_datapoint(
                 };
                 let datapoint_id = Uuid::now_v7();
                 datapoint_ids.push(datapoint_id);
-                chat_datapoints.push(ChatInferenceDatapoint {
+                chat_datapoints.push(StoredChatInferenceDatapoint {
                     dataset_name: dataset_name.clone(),
                     function_name: chat.function_name,
                     name: chat.name,
@@ -704,10 +720,28 @@ pub async fn insert_datapoint(
                             message: format!("Failed to resolve input for datapoint {i}: {e}"),
                         })
                     })?;
-                // Validate the outputs against the output schema
-                let output_schema = json
-                    .output_schema
-                    .unwrap_or_else(|| json_function_config.output_schema.value.clone());
+                // Validate the output_schema if provided by user
+                let output_schema = if let Some(user_schema) = json.output_schema {
+                    // Validate the schema by attempting to parse it
+                    let schema_str = serde_json::to_string(&user_schema).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to serialize output_schema for datapoint {i}: {e}"
+                            ),
+                        })
+                    })?;
+                    let parsed_schema =
+                        DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
+                            Error::new(ErrorDetails::InvalidRequest {
+                                message: format!("Invalid output_schema for datapoint {i}: {e}"),
+                            })
+                        })?;
+                    // Ensure the schema is valid by forcing compilation
+                    parsed_schema.ensure_valid().await?;
+                    user_schema
+                } else {
+                    json_function_config.output_schema.value.clone()
+                };
                 let dynamic_demonstration_info =
                     DynamicDemonstrationInfo::Json(output_schema.clone());
                 let output = if let Some(output) = json.output {
@@ -876,21 +910,24 @@ pub async fn list_datapoints_handler(
     Path(path_params): Path<ListDatapointsPathParams>,
     Query(query_params): Query<ListDatapointsQueryParams>,
 ) -> Result<Json<Vec<Datapoint>>, Error> {
-    list_datapoints(
+    let datapoints = list_datapoints(
         path_params.dataset_name,
         &app_state.clickhouse_connection_info,
+        &app_state.config,
         query_params.function_name,
         query_params.limit,
         query_params.offset,
     )
-    .await
-    .map(Json)
+    .await?;
+
+    Ok(Json(datapoints))
 }
 
 #[tracing::instrument(name = "list_datapoints", skip(clickhouse))]
 pub async fn list_datapoints(
     dataset_name: String,
     clickhouse: &ClickHouseConnectionInfo,
+    config: &Config,
     function_name: Option<String>,
     limit: Option<u32>,
     offset: Option<u32>,
@@ -914,7 +951,7 @@ pub async fn list_datapoints(
             is_deleted,
             is_custom,
             staled_at,
-            updated_at
+            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM ChatInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
         AND staled_at IS NULL"
@@ -944,7 +981,7 @@ pub async fn list_datapoints(
             is_deleted,
             is_custom,
             staled_at,
-            updated_at
+            formatDateTime(updated_at, '%Y-%m-%dT%H:%i:%SZ') AS updated_at
         FROM JsonInferenceDatapoint FINAL
         WHERE dataset_name = {dataset_name: String}
         AND staled_at IS NULL",
@@ -989,7 +1026,7 @@ pub async fn list_datapoints(
 
     let datapoints: Result<Vec<Datapoint>, _> = result_lines
         .iter()
-        .map(|line| serde_json::from_str(line))
+        .map(|line| serde_json::from_str::<StoredDatapoint>(line)?.into_datapoint(config))
         .collect();
     let datapoints = match datapoints {
         Ok(datapoints) => datapoints,
@@ -1045,15 +1082,18 @@ pub async fn get_datapoint_handler(
     State(app_state): AppState,
     Path(path_params): Path<GetDatapointPathParams>,
 ) -> Result<Json<Datapoint>, Error> {
-    app_state
+    let datapoint = app_state
         .clickhouse_connection_info
         .get_datapoint(&GetDatapointParams {
             dataset_name: path_params.dataset_name,
             datapoint_id: path_params.datapoint_id,
             allow_stale: None,
         })
-        .await
-        .map(Json)
+        .await?;
+
+    // Convert storage type to wire type
+    let wire = datapoint.into_datapoint(&app_state.config)?;
+    Ok(Json(wire))
 }
 
 #[derive(Debug, Deserialize)]
@@ -1106,14 +1146,23 @@ pub struct InsertDatapointResponse {
     id: Uuid,
 }
 
+/// Wire variant of Datapoint enum for API responses with Python/TypeScript bindings
+/// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
+#[cfg_attr(feature = "pyo3", pyclass(str, name = "Datapoint"))]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub enum Datapoint {
     Chat(ChatInferenceDatapoint),
     Json(JsonInferenceDatapoint),
+}
+
+impl std::fmt::Display for Datapoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 impl Datapoint {
@@ -1124,24 +1173,10 @@ impl Datapoint {
         }
     }
 
-    pub fn input(&self) -> &StoredInput {
+    pub fn function_name(&self) -> &str {
         match self {
-            Datapoint::Chat(datapoint) => &datapoint.input,
-            Datapoint::Json(datapoint) => &datapoint.input,
-        }
-    }
-
-    pub fn tool_call_config(&self) -> Option<&ToolCallConfigDatabaseInsert> {
-        match self {
-            Datapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
-            Datapoint::Json(_datapoint) => None,
-        }
-    }
-
-    pub fn output_schema(&self) -> Option<&serde_json::Value> {
-        match self {
-            Datapoint::Chat(_datapoint) => None,
-            Datapoint::Json(datapoint) => Some(&datapoint.output_schema),
+            Datapoint::Chat(datapoint) => &datapoint.function_name,
+            Datapoint::Json(datapoint) => &datapoint.function_name,
         }
     }
 
@@ -1152,15 +1187,64 @@ impl Datapoint {
         }
     }
 
-    pub fn name(&self) -> Option<&str> {
+    pub fn input(&self) -> &StoredInput {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.name.as_deref(),
-            Datapoint::Json(datapoint) => datapoint.name.as_deref(),
+            Datapoint::Chat(datapoint) => &datapoint.input,
+            Datapoint::Json(datapoint) => &datapoint.input,
+        }
+    }
+
+    pub fn tool_call_config(&self) -> Option<&DynamicToolParams> {
+        match self {
+            Datapoint::Chat(datapoint) => Some(&datapoint.tool_params),
+            Datapoint::Json(_) => None,
         }
     }
 }
 
-/// These input datapoints are used as input types by the `insert_datapoint` endpoint
+impl StoredDatapoint {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn into_datapoint(self, config: &Config) -> Result<Datapoint, Error> {
+        match self {
+            StoredDatapoint::Chat(chat) => {
+                let function_config = config.get_function(&chat.function_name)?;
+                Ok(Datapoint::Chat(chat.into_datapoint(&function_config)))
+            }
+            StoredDatapoint::Json(json) => Ok(Datapoint::Json(json)),
+        }
+    }
+}
+
+impl ChatInferenceDatapoint {
+    /// Convert to storage type, properly handling tool params with function config
+    pub fn into_storage(
+        self,
+        function_config: &FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<StoredChatInferenceDatapoint, Error> {
+        let tool_params = function_config
+            .dynamic_tool_params_to_database_insert(self.tool_params, static_tools)?;
+
+        Ok(StoredChatInferenceDatapoint {
+            dataset_name: self.dataset_name,
+            function_name: self.function_name,
+            id: self.id,
+            episode_id: self.episode_id,
+            input: self.input,
+            output: self.output,
+            tool_params,
+            tags: self.tags,
+            auxiliary: self.auxiliary,
+            is_deleted: self.is_deleted,
+            is_custom: self.is_custom,
+            source_inference_id: self.source_inference_id,
+            staled_at: self.staled_at,
+            updated_at: self.updated_at,
+            name: self.name,
+        })
+    }
+}
+
 #[cfg(feature = "pyo3")]
 #[pymethods]
 impl Datapoint {
@@ -1204,18 +1288,54 @@ impl Datapoint {
     }
 
     #[getter]
-    pub fn get_tool_params<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        match self.tool_call_config() {
-            Some(tool_params) => tool_params.clone().into_bound_py_any(py),
-            None => Ok(py.None().into_bound(py)),
+    pub fn get_allowed_tools(&self) -> Option<Vec<String>> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.tool_params.allowed_tools.clone(),
+            Datapoint::Json(_) => None,
+        }
+    }
+
+    #[getter]
+    pub fn get_additional_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint
+                .tool_params
+                .additional_tools
+                .clone()
+                .into_bound_py_any(py),
+            Datapoint::Json(_) => Ok(py.None().into_bound(py)),
+        }
+    }
+
+    // Note: We're intentionally skipping tool_choice as it's not exposed in the Python API
+
+    #[getter]
+    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.tool_params.parallel_tool_calls,
+            Datapoint::Json(_) => None,
+        }
+    }
+
+    #[getter]
+    pub fn get_provider_tools<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self {
+            Datapoint::Chat(datapoint) => datapoint
+                .tool_params
+                .provider_tools
+                .clone()
+                .into_bound_py_any(py),
+            Datapoint::Json(_) => Ok(py.None().into_bound(py)),
         }
     }
 
     #[getter]
     pub fn get_output_schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        Ok(match self.output_schema() {
-            Some(output_schema) => serialize_to_dict(py, output_schema)?.into_bound(py),
-            None => py.None().into_bound(py),
+        Ok(match self {
+            Datapoint::Chat(_) => py.None().into_bound(py),
+            Datapoint::Json(datapoint) => {
+                serialize_to_dict(py, &datapoint.output_schema)?.into_bound(py)
+            }
         })
     }
 
@@ -1229,11 +1349,67 @@ impl Datapoint {
 
     #[getter]
     pub fn get_name(&self) -> Option<String> {
-        self.name().map(std::string::ToString::to_string)
+        match self {
+            Datapoint::Chat(datapoint) => datapoint.name.clone(),
+            Datapoint::Json(datapoint) => datapoint.name.clone(),
+        }
     }
 }
 
-impl std::fmt::Display for Datapoint {
+/// Storage variant of Datapoint enum for database operations (no Python/TypeScript bindings)
+/// Convert to Datapoint with `.into_datapoint(config)`
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StoredDatapoint {
+    Chat(StoredChatInferenceDatapoint),
+    Json(JsonInferenceDatapoint),
+}
+
+impl StoredDatapoint {
+    pub fn dataset_name(&self) -> &str {
+        match self {
+            StoredDatapoint::Chat(datapoint) => &datapoint.dataset_name,
+            StoredDatapoint::Json(datapoint) => &datapoint.dataset_name,
+        }
+    }
+
+    pub fn input(&self) -> &StoredInput {
+        match self {
+            StoredDatapoint::Chat(datapoint) => &datapoint.input,
+            StoredDatapoint::Json(datapoint) => &datapoint.input,
+        }
+    }
+
+    pub fn tool_call_config(&self) -> Option<&ToolCallConfigDatabaseInsert> {
+        match self {
+            StoredDatapoint::Chat(datapoint) => datapoint.tool_params.as_ref(),
+            StoredDatapoint::Json(_datapoint) => None,
+        }
+    }
+
+    pub fn output_schema(&self) -> Option<&serde_json::Value> {
+        match self {
+            StoredDatapoint::Chat(_datapoint) => None,
+            StoredDatapoint::Json(datapoint) => Some(&datapoint.output_schema),
+        }
+    }
+
+    pub fn id(&self) -> Uuid {
+        match self {
+            StoredDatapoint::Chat(datapoint) => datapoint.id,
+            StoredDatapoint::Json(datapoint) => datapoint.id,
+        }
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            StoredDatapoint::Chat(datapoint) => datapoint.name.as_deref(),
+            StoredDatapoint::Json(datapoint) => datapoint.name.as_deref(),
+        }
+    }
+}
+
+impl std::fmt::Display for StoredDatapoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -1273,6 +1449,8 @@ pub struct JsonDatapointInsert {
     pub tags: Option<HashMap<String, String>>,
 }
 
+/// Wire variant of ChatInferenceDatapoint for API responses with Python/TypeScript bindings
+/// This one should be used in all public interfaces.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -1289,17 +1467,15 @@ pub struct ChatInferenceDatapoint {
     #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
     #[cfg_attr(test, ts(optional))]
     pub output: Option<Vec<ContentBlockChatOutput>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    // `tool_params` are always flattened to match the convention of LLM APIs
+    #[serde(flatten)]
     #[serde(default)]
-    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
-    #[cfg_attr(test, ts(optional))]
-    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
-    // By default, ts_rs generates { [key in string]?: string } | undefined, which means values are string | undefined which isn't what we want.
+    pub tool_params: DynamicToolParams,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     #[cfg_attr(test, ts(type = "Record<string, string>"), ts(optional))]
     pub tags: Option<HashMap<String, String>>,
-    #[serde(skip_serializing, default)] // this will become an object
+    #[serde(skip_serializing, default)]
     pub auxiliary: String,
     pub is_deleted: bool,
     #[serde(default)]
@@ -1326,8 +1502,80 @@ impl std::fmt::Display for ChatInferenceDatapoint {
     }
 }
 
-impl From<ChatInferenceDatapoint> for ChatInferenceDatapointInsert {
-    fn from(datapoint: ChatInferenceDatapoint) -> Self {
+impl StoredChatInferenceDatapoint {
+    /// Convert to wire type, properly handling tool params by subtracting static tools
+    pub fn into_datapoint(self, function_config: &FunctionConfig) -> ChatInferenceDatapoint {
+        let tool_params = self
+            .tool_params
+            .map(|tp| function_config.database_insert_to_dynamic_tool_params(tp))
+            .unwrap_or_default();
+
+        ChatInferenceDatapoint {
+            dataset_name: self.dataset_name,
+            function_name: self.function_name,
+            id: self.id,
+            episode_id: self.episode_id,
+            input: self.input,
+            output: self.output,
+            tool_params,
+            tags: self.tags,
+            auxiliary: self.auxiliary,
+            is_deleted: self.is_deleted,
+            is_custom: self.is_custom,
+            source_inference_id: self.source_inference_id,
+            staled_at: self.staled_at,
+            updated_at: self.updated_at,
+            name: self.name,
+        }
+    }
+}
+
+/// Storage variant of ChatInferenceDatapoint for database operations (no Python/TypeScript bindings)
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct StoredChatInferenceDatapoint {
+    pub dataset_name: String,
+    pub function_name: String,
+    pub id: Uuid,
+    pub episode_id: Option<Uuid>,
+    #[serde(deserialize_with = "deserialize_string_or_parsed_json")]
+    pub input: StoredInput,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub output: Option<Vec<ContentBlockChatOutput>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_optional_string_or_parsed_json")]
+    pub tool_params: Option<ToolCallConfigDatabaseInsert>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub tags: Option<HashMap<String, String>>,
+    #[serde(skip_serializing, default)] // this will become an object
+    pub auxiliary: String,
+    pub is_deleted: bool,
+    #[serde(default)]
+    pub is_custom: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub source_inference_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub staled_at: Option<String>,
+    pub updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+impl std::fmt::Display for StoredChatInferenceDatapoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+impl From<StoredChatInferenceDatapoint> for ChatInferenceDatapointInsert {
+    fn from(datapoint: StoredChatInferenceDatapoint) -> Self {
         ChatInferenceDatapointInsert {
             dataset_name: datapoint.dataset_name,
             function_name: datapoint.function_name,
@@ -1417,38 +1665,38 @@ impl From<JsonInferenceDatapoint> for JsonInferenceDatapointInsert {
     }
 }
 
-impl StoredSample for Datapoint {
+impl StoredSample for StoredDatapoint {
     fn function_name(&self) -> &str {
         match self {
-            Datapoint::Chat(datapoint) => &datapoint.function_name,
-            Datapoint::Json(datapoint) => &datapoint.function_name,
+            StoredDatapoint::Chat(datapoint) => &datapoint.function_name,
+            StoredDatapoint::Json(datapoint) => &datapoint.function_name,
         }
     }
 
     fn input(&self) -> &StoredInput {
         match self {
-            Datapoint::Chat(datapoint) => &datapoint.input,
-            Datapoint::Json(datapoint) => &datapoint.input,
+            StoredDatapoint::Chat(datapoint) => &datapoint.input,
+            StoredDatapoint::Json(datapoint) => &datapoint.input,
         }
     }
 
     fn input_mut(&mut self) -> &mut StoredInput {
         match self {
-            Datapoint::Chat(datapoint) => &mut datapoint.input,
-            Datapoint::Json(datapoint) => &mut datapoint.input,
+            StoredDatapoint::Chat(datapoint) => &mut datapoint.input,
+            StoredDatapoint::Json(datapoint) => &mut datapoint.input,
         }
     }
 
     fn into_input(self) -> StoredInput {
         match self {
-            Datapoint::Chat(datapoint) => datapoint.input,
-            Datapoint::Json(datapoint) => datapoint.input,
+            StoredDatapoint::Chat(datapoint) => datapoint.input,
+            StoredDatapoint::Json(datapoint) => datapoint.input,
         }
     }
 
     fn owned_simple_info(self) -> SimpleStoredSampleInfo {
         match self {
-            Datapoint::Chat(datapoint) => SimpleStoredSampleInfo {
+            StoredDatapoint::Chat(datapoint) => SimpleStoredSampleInfo {
                 function_name: datapoint.function_name,
                 input: datapoint.input,
                 output: datapoint.output.clone(),
@@ -1460,7 +1708,7 @@ impl StoredSample for Datapoint {
                 inference_id: None,
                 tags: datapoint.tags.unwrap_or_default(),
             },
-            Datapoint::Json(datapoint) => {
+            StoredDatapoint::Json(datapoint) => {
                 let stored_output = datapoint.output.clone().map(StoredOutput::Json);
                 let output = datapoint.output.map(|output| match output.raw {
                     Some(raw) => vec![ContentBlockChatOutput::Text(Text { text: raw })],

@@ -14,6 +14,7 @@ use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -24,9 +25,8 @@ use crate::inference::types::{
 };
 use crate::jsonschema_util::StaticJSONSchema;
 use crate::model::ModelTable;
-use crate::tool::{
-    AllowedTools, AllowedToolsChoice, ImplicitToolConfig, ToolCallConfig, ToolChoice, ToolConfig,
-};
+use crate::tool::create_implicit_tool_call_config_with_allowed_tools;
+use crate::tool::{AllowedTools, AllowedToolsChoice, ToolCallConfig};
 use crate::utils::unbounded_recursion_wrapper;
 use crate::variant::mixture_of_n::stream_inference_from_non_stream;
 use crate::{
@@ -129,6 +129,9 @@ impl UninitializedBestOfNSamplingConfig {
         })
     }
 }
+
+const IMPLICIT_TOOL_NAME: &str = "respond";
+
 lazy_static! {
     static ref EVALUATOR_OUTPUT_SCHEMA: StaticJSONSchema = {
         #[expect(clippy::expect_used)]
@@ -143,17 +146,14 @@ lazy_static! {
         }))
         .expect("Failed to create schema for evaluator output")
     };
-    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = ToolCallConfig {
-        tools_available: vec![ToolConfig::Implicit(ImplicitToolConfig {
-            parameters: EVALUATOR_OUTPUT_SCHEMA.clone(),
-        })],
-        tool_choice: ToolChoice::Specific("respond".to_string()),
-        parallel_tool_calls: None,
-        provider_tools: vec![],
-        allowed_tools: AllowedTools {
-            tools: vec!["respond".to_string()],
-            choice: AllowedToolsChoice::FunctionDefault,
-        }
+    static ref IMPLICIT_TOOL_CALL_CONFIG: ToolCallConfig = {
+        create_implicit_tool_call_config_with_allowed_tools(
+            EVALUATOR_OUTPUT_SCHEMA.clone(),
+            AllowedTools {
+                tools: vec![IMPLICIT_TOOL_NAME.to_string()],
+                choice: AllowedToolsChoice::FunctionDefault,
+            },
+        )
     };
 }
 
@@ -746,6 +746,7 @@ impl BestOfNEvaluatorConfig {
                 self.inner.presence_penalty(),
                 self.inner.frequency_penalty(),
                 self.inner.stop_sequences().cloned(),
+                self.inner.inference_params_v2.clone(),
             );
         let json_mode = inference_params
             .chat_completion
@@ -797,6 +798,11 @@ impl BestOfNEvaluatorConfig {
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             },
             skipped_indices,
         ))

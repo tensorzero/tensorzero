@@ -16,6 +16,20 @@ use crate::{
     rate_limiting::{get_estimated_tokens, RateLimitedInputContent},
 };
 
+/*  Key tool types in TensorZero
+ * - DynamicToolParams: the wire format for tool configuration info (flattened into struct body)
+ *       contains a disjoint set of information from that specified in FunctionConfig and config.tools
+ * - ToolCallConfig: the representation at inference time of what tool calls are possible
+ * - ToolCallConfigDatabaseInsert: the storage format for tool call configuration info
+ *     In a close-following PR @viraj will refactor this type.
+ * All of these types are convertible given access to the current Config. The conversion from ToolCallConfig
+ * to ToolCallConfigDatabaseInsert is temporarily lossy because we don't yet stored dynamic provider tools.
+ *
+ * Tool: represents a single Tool that could be called by an LLM. This will be generalized soon to an enum.
+ * ToolCall: represents a request by an LLM to call a tool.
+ * ToolResult: the response from a tool call.
+ */
+
 /* A Tool is a function that can be called by an LLM
  * We represent them in various ways depending on how they are configured by the user.
  * The primary difficulty is that tools require an input signature that we represent as a JSONSchema.
@@ -192,7 +206,8 @@ pub enum AllowedToolsChoice {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct ToolCallConfig {
-    pub tools_available: Vec<ToolConfig>,
+    pub(crate) static_tools_available: Vec<ToolConfig>,
+    pub(crate) dynamic_tools_available: Vec<ToolConfig>,
     pub provider_tools: Vec<ProviderTool>,
     pub tool_choice: ToolChoice,
     pub parallel_tool_calls: Option<bool>,
@@ -230,7 +245,7 @@ impl ToolCallConfig {
         // Get each tool from the static tool config.
         // If a tool name is in allowed_tools but not in static_tools, check if it's a dynamic tool.
         // If it's neither static nor dynamic, throw an error.
-        let tools_available: Result<Vec<ToolConfig>, Error> = allowed_tools
+        let static_tools_available: Vec<ToolConfig> = allowed_tools
             .tools
             .iter()
             .filter_map(|tool_name| {
@@ -247,11 +262,9 @@ impl ToolCallConfig {
                     })))
                 }
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
-        // Throw an error if any tool was not found in the previous step.
-        let mut tools_available = tools_available?;
-
+        let mut dynamic_tools_available = vec![];
         if let Some(additional_tools) = dynamic_tool_params.additional_tools {
             for tool in additional_tools {
                 // Today we automatically add dynamically configured tools to the allowed tools list but in future we may
@@ -266,7 +279,7 @@ impl ToolCallConfig {
                          otherwise, disregard this warning."
                     );
                 }
-                tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
+                dynamic_tools_available.push(ToolConfig::Dynamic(DynamicToolConfig {
                     description: tool.description,
                     parameters: DynamicJSONSchema::new(tool.parameters),
                     name: tool.name.clone(),
@@ -279,7 +292,10 @@ impl ToolCallConfig {
         let mut tool_display_names = HashSet::new();
 
         // Check for duplicate tool names.
-        for tool in &tools_available {
+        for tool in static_tools_available
+            .iter()
+            .chain(dynamic_tools_available.iter())
+        {
             let duplicate = !tool_display_names.insert(tool.name());
             if duplicate {
                 return Err(Error::new(ErrorDetails::DuplicateTool {
@@ -294,12 +310,17 @@ impl ToolCallConfig {
 
         // If the tool choice is a specific tool, make sure it's in the list of available tools
         if let ToolChoice::Specific(tool_name) = &tool_choice {
-            if !tools_available.iter().any(|tool| match tool {
-                ToolConfig::Static(config) => config.name == *tool_name,
-                ToolConfig::Dynamic(config) => config.name == *tool_name,
-                ToolConfig::Implicit(_) => false,
-                ToolConfig::DynamicImplicit(_) => false,
-            }) {
+            let tool_found = static_tools_available
+                .iter()
+                .chain(dynamic_tools_available.iter())
+                .any(|tool| match tool {
+                    ToolConfig::Static(config) => config.name == *tool_name,
+                    ToolConfig::Dynamic(config) => config.name == *tool_name,
+                    ToolConfig::Implicit(_) => false,
+                    ToolConfig::DynamicImplicit(_) => false,
+                });
+
+            if !tool_found {
                 return Err(ErrorDetails::ToolNotFound {
                     name: tool_name.clone(),
                 }
@@ -311,14 +332,17 @@ impl ToolCallConfig {
             .parallel_tool_calls
             .or(function_parallel_tool_calls);
 
-        let provider_tools = dynamic_tool_params.provider_tools.unwrap_or_default();
-        let tool_call_config_option = if tools_available.is_empty() && provider_tools.is_empty() {
+        let tool_call_config_option = if static_tools_available.is_empty()
+            && dynamic_tools_available.is_empty()
+            && dynamic_tool_params.provider_tools.is_none()
+        {
             None
         } else {
             Some(Self {
-                tools_available,
-                provider_tools,
+                static_tools_available,
+                dynamic_tools_available,
                 tool_choice,
+                provider_tools: dynamic_tool_params.provider_tools.unwrap_or_default(),
                 parallel_tool_calls,
                 allowed_tools,
             })
@@ -327,8 +351,19 @@ impl ToolCallConfig {
         Ok(tool_call_config_option)
     }
 
+    /// Returns an iterator over references to all tools (both static and dynamic)
+    pub fn tools_available(&self) -> impl Iterator<Item = &ToolConfig> {
+        self.static_tools_available
+            .iter()
+            .chain(self.dynamic_tools_available.iter())
+    }
+
+    pub fn any_tools_available(&self) -> bool {
+        !(self.static_tools_available.is_empty() && self.dynamic_tools_available.is_empty())
+    }
+
     pub fn get_tool(&self, name: &str) -> Option<&ToolConfig> {
-        self.tools_available.iter().find(|tool_cfg| match tool_cfg {
+        self.tools_available().find(|tool_cfg| match tool_cfg {
             ToolConfig::Static(config) => config.name == name,
             ToolConfig::Dynamic(config) => config.name == name,
             ToolConfig::Implicit(_config) => false,
@@ -346,23 +381,181 @@ impl ToolCallConfig {
             .filter(|t| t.scope.matches(model_name, model_provider_name))
             .collect()
     }
+
+    #[cfg(test)]
+    pub fn with_tools_available(
+        static_tools_available: Vec<ToolConfig>,
+        dynamic_tools_available: Vec<ToolConfig>,
+    ) -> Self {
+        Self {
+            static_tools_available,
+            dynamic_tools_available,
+            ..Default::default()
+        }
+    }
 }
-/// ToolCallConfigDatabaseInsert is a lightweight version of ToolCallConfig that can be serialized and cloned.
-/// It is used to insert the ToolCallConfig into the database.
-#[cfg_attr(test, derive(ts_rs::TS))]
+/// Storage representation of tool call configuration for database persistence.
+///
+/// This type is the **database/storage format** for tool configurations, designed to be stored
+/// in ClickHouse and other persistence layers. It represents a simplified, flattened view of
+/// tool configuration after all static and dynamic tools have been merged.
+///
+/// # Purpose
+/// - Store tool configurations in the database alongside inference records
+/// - Provide a serializable, cloneable format for persistence
+/// - Simplify the tool configuration to a single merged list
+///
+/// # Key Differences from DynamicToolParams
+/// - **Merged tools**: All tools (static from config + dynamic from runtime) are combined into a single `tools_available` list
+/// - **No distinction**: Does not track which tools came from static config vs dynamic runtime parameters
+/// - **No provider_tools**: This field is not persisted (lossy conversion)
+/// - **No bindings**: Not exposed to Python/TypeScript clients (internal storage only)
+///
+/// # Conversion
+/// - **From wire type**: Use `FunctionConfig::dynamic_tool_params_to_database_insert()` to convert `DynamicToolParams` → `ToolCallConfigDatabaseInsert`
+/// - **To wire type**: Use `FunctionConfig::database_insert_to_dynamic_tool_params()` to convert `ToolCallConfigDatabaseInsert` → `DynamicToolParams`
+/// - **To ToolCallConfig**: Use the `into_tool_call_config()` method for a direct conversion to `ToolCallConfig`
+///
+/// See also: [`DynamicToolParams`] for the wire/API format
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
-#[cfg_attr(feature = "pyo3", pyclass(str))]
 pub struct ToolCallConfigDatabaseInsert {
+    /// All tools available for this inference (merged static + dynamic tools)
     pub tools_available: Vec<Tool>,
+    /// The tool choice strategy
     pub tool_choice: ToolChoice,
     // TODO: decide what we want the Python interface to be for ToolChoice
     // This is complicated because ToolChoice is an enum with some simple arms and some
     // struct arms. We would likely need to land on one of the serde options for enums (tagged?)
+    /// Whether parallel tool calls are enabled
     pub parallel_tool_calls: Option<bool>,
 }
 
-impl std::fmt::Display for ToolCallConfigDatabaseInsert {
+impl ToolCallConfigDatabaseInsert {
+    /// Converts this database representation back into a `ToolCallConfig`.
+    /// Errors if there are tools specified in the function that are not in the
+    /// static tools (shouldn't happen). Or if the function is a JSON function (no tools).
+    ///
+    /// This method performs the reverse transformation of the lossy conversion that occurs
+    /// when storing `ToolCallConfig` in the database. It reconstructs the tool configuration
+    /// by:
+    /// 1. Converting the stored tools into `DynamicToolParams`
+    /// 2. Using the function config to prepare a full `ToolCallConfig`
+    ///
+    ///
+    /// # Lossy Conversion
+    /// Note that this conversion cannot fully restore the original `ToolCallConfig`:
+    /// - `provider_tools` are not stored in the database and will be `None`
+    /// - The distinction between static/dynamic tools is reconstructed based on function config
+    /// This will be fixed in a follow-up PR.
+    ///
+    /// # Parameters
+    /// - `function_config`: The function configuration containing static tool definitions
+    /// - `static_tools`: Map of static tool names to their compiled configurations
+    ///
+    /// # Returns
+    /// - `Ok(Some(ToolCallConfig))` if tools were configured
+    /// - `Ok(None)` if no tools were available (e.g., JSON functions)
+    /// - `Err(Error)` if reconstruction fails (e.g., tool not found, duplicate tools)
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let db_insert = get_tool_config_from_database();
+    /// let tool_config = db_insert.into_tool_call_config(&function_config, &static_tools)?;
+    /// ```
+    pub fn into_tool_call_config(
+        self,
+        function_config: &crate::function::FunctionConfig,
+        static_tools: &HashMap<String, Arc<StaticToolConfig>>,
+    ) -> Result<Option<ToolCallConfig>, Error> {
+        let dynamic_params = function_config.database_insert_to_dynamic_tool_params(self);
+        function_config.prepare_tool_config(dynamic_params, static_tools)
+    }
+}
+
+/// Wire/API representation of dynamic tool parameters for inference requests.
+///
+/// This type is the **wire format** for tool configurations used in API requests and responses.
+/// It distinguishes between static tools (configured in the function) and dynamic tools
+/// (provided at runtime), allowing clients to reference pre-configured tools by name or
+/// provide new tools on-the-fly.
+///
+/// # Purpose
+/// - Accept tool parameters in inference API requests (e.g., `/inference/{function_name}`)
+/// - Expose tool configurations in API responses for stored inferences
+/// - Support Python and TypeScript client bindings
+/// - Allow runtime customization of tool behavior
+///
+/// # Fields
+/// - `allowed_tools`: Names of static tools from function config to use (subset selection)
+/// - `additional_tools`: New tools defined at runtime (not in static config)
+/// - `tool_choice`: Override the function's default tool choice strategy
+/// - `parallel_tool_calls`: Override whether parallel tool calls are enabled
+/// - `provider_tools`: Provider-specific tool configurations (not persisted to database)
+///
+/// # Key Differences from ToolCallConfigDatabaseInsert
+/// - **Separate lists**: Maintains distinction between static (`allowed_tools`) and dynamic (`additional_tools`) tools
+/// - **By reference**: Static tools referenced by name, not duplicated
+/// - **Has provider_tools**: Can specify provider-specific tool configurations
+/// - **Has bindings**: Exposed to Python/TypeScript via `pyo3` and `ts_rs`
+///
+/// # Conversion to Storage Format
+/// Converting from `DynamicToolParams` to `ToolCallConfigDatabaseInsert` is a **lossy** operation:
+/// 1. Static tools (from `allowed_tools` names) are resolved from function config
+/// 2. Dynamic tools (from `additional_tools`) are included as-is
+/// 3. Both lists are merged into a single `tools_available` list
+/// 4. The distinction between static and dynamic tools is lost
+/// 5. `provider_tools` are dropped (not stored)
+///
+/// Use `FunctionConfig::dynamic_tool_params_to_database_insert()` for this conversion.
+///
+/// # Conversion from Storage Format
+/// Converting from `ToolCallConfigDatabaseInsert` back to `DynamicToolParams` attempts to reconstruct the original:
+/// 1. Tools that match function config tool names → `allowed_tools`
+/// 2. Tools that don't match function config → `additional_tools`
+/// 3. `provider_tools` is set to `None` (cannot be recovered)
+///
+/// Use `FunctionConfig::database_insert_to_dynamic_tool_params()` for this conversion.
+///
+/// # Example
+/// ```rust,ignore
+/// // API request with dynamic tool params
+/// let params = DynamicToolParams {
+///     allowed_tools: Some(vec!["calculator".to_string()]),  // Use only the calculator tool from config
+///     additional_tools: Some(vec![Tool {  runtime tool  }]),  // Add a new tool
+///     tool_choice: Some(ToolChoice::Required),
+///     parallel_tool_calls: Some(true),
+///     provider_tools: None,
+/// };
+///
+/// // Convert to storage format (merge tools, lose distinction)
+/// let db_insert = function_config
+///     .dynamic_tool_params_to_database_insert(params, &static_tools)?
+///     .unwrap_or_default();
+///
+/// // db_insert.tools_available now contains both the calculator tool (from config)
+/// // and the runtime tool (from additional_tools), merged together
+/// ```
+///
+/// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+#[derive(ts_rs::TS)]
+#[ts(optional_fields)]
+#[cfg_attr(feature = "pyo3", pyclass(str))]
+pub struct DynamicToolParams {
+    /// Names of static tools (from function config) to use. If None, all static tools are available.
+    pub allowed_tools: Option<Vec<String>>,
+    /// Additional tools provided at runtime (not in function config)
+    pub additional_tools: Option<Vec<Tool>>,
+    /// Override the function's tool choice strategy
+    pub tool_choice: Option<ToolChoice>,
+    /// Override whether parallel tool calls are enabled
+    pub parallel_tool_calls: Option<bool>,
+    /// Provider-specific tool configurations (not persisted to database)
+    pub provider_tools: Option<Vec<ProviderTool>>,
+}
+
+impl std::fmt::Display for DynamicToolParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -371,37 +564,34 @@ impl std::fmt::Display for ToolCallConfigDatabaseInsert {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ToolCallConfigDatabaseInsert {
+impl DynamicToolParams {
     #[getter]
-    pub fn get_tools_available(&self) -> Vec<Tool> {
-        self.tools_available.clone()
+    pub fn allowed_tools(&self) -> Option<Vec<String>> {
+        self.allowed_tools.clone()
     }
 
     #[getter]
-    pub fn get_parallel_tool_calls(&self) -> Option<bool> {
+    pub fn additional_tools(&self) -> Option<Vec<Tool>> {
+        self.additional_tools.clone()
+    }
+
+    // TODO: Add tool_choice getter when we decide how to handle it.
+    // Mixed enums (with unit and tuple variants) aren't well supported in PyO3,
+    // and we need to decide on the proper Python representation.
+
+    #[getter]
+    pub fn parallel_tool_calls(&self) -> Option<bool> {
         self.parallel_tool_calls
+    }
+
+    #[getter]
+    pub fn provider_tools(&self) -> Option<Vec<ProviderTool>> {
+        self.provider_tools.clone()
     }
 
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
-}
-
-/// A struct to hold the dynamic tool parameters passed at inference time.
-/// These should override the function-level tool parameters.
-/// `allowed_tools` should be a subset of the configured tools for the function.
-/// if `allowed_tools` is not provided, all tools are allowed.
-/// `additional_tools` are the tools that are provided at runtime, which we compile on the fly.
-/// `tool_choice` and `parallel_tool_calls` are optional and will override the function-level values.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
-pub struct DynamicToolParams {
-    pub allowed_tools: Option<Vec<String>>,
-    pub additional_tools: Option<Vec<Tool>>,
-    pub tool_choice: Option<ToolChoice>,
-    pub parallel_tool_calls: Option<bool>,
-    pub provider_tools: Option<Vec<ProviderTool>>,
 }
 
 #[derive(Debug, Default, Deserialize, PartialEq, Serialize)]
@@ -416,15 +606,31 @@ pub struct BatchDynamicToolParams {
 // Helper type for converting BatchDynamicToolParams into a Vec<DynamicToolParams>
 pub struct BatchDynamicToolParamsWithSize(pub BatchDynamicToolParams, pub usize);
 
-/// A ToolCall is a request by a model to call a Tool
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[cfg_attr(test, ts(export))]
+/// In most cases, tool call arguments are a string.
+/// However, when looping back from an inference response, they will be an object.
+fn deserialize_tool_call_arguments<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::String(s) => Ok(s),
+        serde_json::Value::Object(_) => Ok(value.to_string()),
+        _ => Err(D::Error::custom(
+            "`arguments` must be a string or an object",
+        )),
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all, str))]
 pub struct ToolCall {
-    pub name: String,
-    pub arguments: String,
     pub id: String,
+    pub name: String,
+    #[serde(deserialize_with = "deserialize_tool_call_arguments")] // String or Object --> String
+    pub arguments: String,
 }
 
 impl std::fmt::Display for ToolCall {
@@ -454,77 +660,45 @@ impl ToolCall {
     }
 }
 
-/// The input format that we accept from the clients.
-/// This is like `ToolCallOutput`, but more relaxed (`raw_arguments` and `raw_name` are optional)
-/// This allows round-tripping a `ToolCallOutput` without needing to modify the json object,
-/// but also allows manually-constructed `ToolCallInput` where users don't care about the
-/// name/raw_name distinction.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-#[derive(ts_rs::TS)]
+/// `ToolCallWrapper` helps us disambiguate between `ToolCall` (no `raw_*`) and `InferenceResponseToolCall` (has `raw_*`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
 #[ts(export)]
-pub struct ToolCallInput {
-    pub name: Option<String>,
-    pub arguments: Option<Value>,
-    pub id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_arguments: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub raw_name: Option<String>,
+#[serde(untagged)]
+pub enum ToolCallWrapper {
+    ToolCall(ToolCall), // the format we store in the database
+    InferenceResponseToolCall(InferenceResponseToolCall), // the format we send on an inference response
 }
 
-impl TryFrom<ToolCallInput> for ToolCall {
+/// - ToolCallWrapper::ToolCall: passthrough
+/// - ToolCallWrapper::InferenceResponseToolCall: this is an inference loopback --> use raw values, ignore parsed values
+impl TryFrom<ToolCallWrapper> for ToolCall {
     type Error = Error;
-    fn try_from(value: ToolCallInput) -> Result<Self, Self::Error> {
-        let name = value.name.or(value.raw_name).ok_or_else(|| {
-            Error::new(ErrorDetails::InvalidRequest {
-                message: "ToolCall must have `name` or `raw_name` set".to_string(),
-            })
-        })?;
-
-        let arguments = if let Some(arguments) = value.arguments {
-            match arguments {
-                Value::String(s) => {
-                    tracing::warn!("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object. Please pass in a JSON object instead. Support for strings will be removed in a future release: https://github.com/tensorzero/tensorzero/issues/1410");
-                    s
-                }
-                Value::Object(obj) => Value::Object(obj).to_string(),
-                _ => {
-                    return Err(Error::new(ErrorDetails::InvalidRequest {
-                        message: "ToolCall arguments must be a string or an object".to_string(),
-                    }));
-                }
-            }
-        } else if let Some(raw_arguments) = value.raw_arguments {
-            raw_arguments
-        } else {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: "ToolCall must have `arguments` or `raw_arguments` set".to_string(),
-            }));
-        };
-
-        Ok(ToolCall {
-            name,
-            arguments,
-            id: value.id,
-        })
+    fn try_from(wrapper: ToolCallWrapper) -> Result<Self, Self::Error> {
+        match wrapper {
+            ToolCallWrapper::ToolCall(tc) => Ok(tc),
+            ToolCallWrapper::InferenceResponseToolCall(tc) => Ok(ToolCall {
+                id: tc.id,
+                name: tc.raw_name,
+                arguments: tc.raw_arguments,
+            }),
+        }
     }
 }
 
-/// A ToolCallOutput is a request by a model to call a Tool
+/// An InferenceResponseToolCall is a request by a model to call a Tool
 /// in the form that we return to the client / ClickHouse
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
-pub struct ToolCallOutput {
-    pub arguments: Option<Value>,
+pub struct InferenceResponseToolCall {
     pub id: String,
-    pub name: Option<String>,
-    pub raw_arguments: String,
     pub raw_name: String,
+    pub raw_arguments: String,
+    pub name: Option<String>,
+    pub arguments: Option<Value>,
 }
 
-impl std::fmt::Display for ToolCallOutput {
+impl std::fmt::Display for InferenceResponseToolCall {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let json = serde_json::to_string_pretty(self).map_err(|_| std::fmt::Error)?;
         write!(f, "{json}")
@@ -533,13 +707,13 @@ impl std::fmt::Display for ToolCallOutput {
 
 #[cfg(feature = "pyo3")]
 #[pymethods]
-impl ToolCallOutput {
+impl InferenceResponseToolCall {
     pub fn __repr__(&self) -> String {
         self.to_string()
     }
 }
 
-impl ToolCallOutput {
+impl InferenceResponseToolCall {
     /// Validates that a ToolCall is compliant with the ToolCallConfig
     /// First, it finds the ToolConfig for the ToolCall
     /// Then, it validates the ToolCall arguments against the ToolConfig
@@ -580,7 +754,8 @@ impl ToolCallConfig {
         let parameters = StaticJSONSchema::from_value(value.clone()).unwrap();
         let implicit_tool_config = ToolConfig::Implicit(ImplicitToolConfig { parameters });
         Self {
-            tools_available: vec![implicit_tool_config],
+            static_tools_available: vec![implicit_tool_config],
+            dynamic_tools_available: vec![],
             tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
             parallel_tool_calls: None,
             provider_tools: vec![],
@@ -719,8 +894,9 @@ impl From<ToolCallConfig> for ToolCallConfigDatabaseInsert {
     fn from(tool_call_config: ToolCallConfig) -> Self {
         Self {
             tools_available: tool_call_config
-                .tools_available
+                .static_tools_available
                 .into_iter()
+                .chain(tool_call_config.dynamic_tools_available)
                 .map(ToolConfig::into)
                 .collect(),
             tool_choice: tool_call_config.tool_choice,
@@ -746,7 +922,8 @@ pub fn create_dynamic_implicit_tool_config(schema: Value) -> ToolCallConfig {
         parameters: tool_schema,
     });
     ToolCallConfig {
-        tools_available: vec![implicit_tool],
+        static_tools_available: vec![],
+        dynamic_tools_available: vec![implicit_tool],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
         provider_tools: vec![],
@@ -873,40 +1050,24 @@ impl TryFrom<BatchDynamicToolParamsWithSize> for Vec<DynamicToolParams> {
     }
 }
 
-impl From<ToolCallConfigDatabaseInsert> for ToolCallConfig {
-    fn from(db_insert: ToolCallConfigDatabaseInsert) -> Self {
-        Self {
-            tools_available: db_insert
-                .tools_available
-                .into_iter()
-                .map(|tool| {
-                    ToolConfig::Dynamic(DynamicToolConfig {
-                        description: tool.description,
-                        parameters: DynamicJSONSchema::new(tool.parameters),
-                        name: tool.name,
-                        strict: tool.strict,
-                    })
-                })
-                .collect(),
-            tool_choice: db_insert.tool_choice,
-            parallel_tool_calls: db_insert.parallel_tool_calls,
-            // TODO(Viraj): address this once we start storing provider tools
-            provider_tools: vec![],
-            allowed_tools: AllowedTools::default(),
-        }
-    }
-}
-
 /// For use in initializing JSON functions
 /// Creates a ToolCallConfig with a single implicit tool that takes the schema as arguments
 pub fn create_implicit_tool_call_config(schema: StaticJSONSchema) -> ToolCallConfig {
+    create_implicit_tool_call_config_with_allowed_tools(schema, AllowedTools::default())
+}
+
+pub fn create_implicit_tool_call_config_with_allowed_tools(
+    schema: StaticJSONSchema,
+    allowed_tools: AllowedTools,
+) -> ToolCallConfig {
     let implicit_tool = ToolConfig::Implicit(ImplicitToolConfig { parameters: schema });
     ToolCallConfig {
-        tools_available: vec![implicit_tool],
+        static_tools_available: vec![implicit_tool],
+        dynamic_tools_available: vec![],
         tool_choice: ToolChoice::Specific(IMPLICIT_TOOL_NAME.to_string()),
         parallel_tool_calls: None,
         provider_tools: vec![],
-        allowed_tools: AllowedTools::default(),
+        allowed_tools,
     }
 }
 
@@ -992,11 +1153,12 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available.len(), 2);
+        assert_eq!(tool_call_config.tools_available().count(), 2);
         assert_eq!(tool_call_config.tool_choice, ToolChoice::Auto);
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
-        assert!(tool_call_config.tools_available[0].strict());
-        assert!(!tool_call_config.tools_available[1].strict());
+        let tools: Vec<_> = tool_call_config.tools_available().collect();
+        assert!(tools[0].strict());
+        assert!(!tools[1].strict());
 
         // Empty tools in function and config but we specify an allowed tool (should fail)
         let dynamic_tool_params = DynamicToolParams {
@@ -1033,7 +1195,7 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available.len(), 2);
+        assert_eq!(tool_call_config.tools_available().count(), 2);
         assert_eq!(
             tool_call_config.tool_choice,
             ToolChoice::Specific("get_temperature".to_string())
@@ -1082,8 +1244,8 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available.len(), 1);
-        let first_tool = tool_call_config.tools_available.first().unwrap();
+        assert_eq!(tool_call_config.tools_available().count(), 1);
+        let first_tool = tool_call_config.tools_available().next().unwrap();
         assert_eq!(first_tool.name(), "establish_campground");
         assert!(!first_tool.strict());
 
@@ -1109,17 +1271,12 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available.len(), 2);
+        assert_eq!(tool_call_config.tools_available().count(), 2);
         // The following code depends on an implementation detail for this ordering,
         // might break if we change the order
-        assert_eq!(
-            tool_call_config.tools_available[0].name(),
-            "get_temperature"
-        );
-        assert_eq!(
-            tool_call_config.tools_available[1].name(),
-            "establish_campground"
-        );
+        let tools: Vec<_> = tool_call_config.tools_available().collect();
+        assert_eq!(tools[0].name(), "get_temperature");
+        assert_eq!(tools[1].name(), "establish_campground");
         assert_eq!(tool_call_config.parallel_tool_calls, Some(false));
 
         // We pass a list of no allowed tools and then configure a new tool
@@ -1144,21 +1301,19 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        assert_eq!(tool_call_config.tools_available.len(), 1);
-        assert_eq!(
-            tool_call_config.tools_available[0].name(),
-            "establish_campground"
-        );
+        assert_eq!(tool_call_config.tools_available().count(), 1);
+        let first_tool = tool_call_config.tools_available().next().unwrap();
+        assert_eq!(first_tool.name(), "establish_campground");
         assert_eq!(tool_call_config.parallel_tool_calls, Some(true));
         assert_eq!(
             tool_call_config.tool_choice,
             ToolChoice::Specific("establish_campground".to_string())
         );
-        assert!(!tool_call_config.tools_available[0].strict());
+        assert!(!first_tool.strict());
     }
 
     #[tokio::test]
-    async fn test_tool_call_output_new() {
+    async fn test_inference_response_tool_call_new() {
         let tool_call = ToolCall {
             name: "get_temperature".to_string(),
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
@@ -1173,17 +1328,21 @@ mod tests {
         )
         .unwrap()
         .unwrap();
-        // Tool call is valid, so we should get a valid ToolCallOutput
-        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.raw_name, "get_temperature");
+        // Tool call is valid, so we should get a valid InferenceResponseToolCall
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(inference_response_tool_call.raw_name, "get_temperature");
         assert_eq!(
-            tool_call_output.raw_arguments,
+            inference_response_tool_call.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
         );
-        assert_eq!(tool_call_output.id, "123");
-        assert_eq!(tool_call_output.name, Some("get_temperature".to_string()));
+        assert_eq!(inference_response_tool_call.id, "123");
         assert_eq!(
-            tool_call_output.arguments,
+            inference_response_tool_call.name,
+            Some("get_temperature".to_string())
+        );
+        assert_eq!(
+            inference_response_tool_call.arguments,
             Some(json!({
                 "location": "San Francisco",
                 "unit": "celsius"
@@ -1196,13 +1355,17 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.name, Some("get_temperature".to_string()));
-        assert_eq!(tool_call_output.arguments, None);
-        assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.raw_name, "get_temperature");
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
         assert_eq!(
-            tool_call_output.raw_arguments,
+            inference_response_tool_call.name,
+            Some("get_temperature".to_string())
+        );
+        assert_eq!(inference_response_tool_call.arguments, None);
+        assert_eq!(inference_response_tool_call.id, "321");
+        assert_eq!(inference_response_tool_call.raw_name, "get_temperature");
+        assert_eq!(
+            inference_response_tool_call.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"kelvin\"}"
         );
 
@@ -1212,13 +1375,14 @@ mod tests {
             arguments: "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.name, None);
-        assert_eq!(tool_call_output.arguments, None);
-        assert_eq!(tool_call_output.id, "321");
-        assert_eq!(tool_call_output.raw_name, "not_get_weather");
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
+        assert_eq!(inference_response_tool_call.name, None);
+        assert_eq!(inference_response_tool_call.arguments, None);
+        assert_eq!(inference_response_tool_call.id, "321");
+        assert_eq!(inference_response_tool_call.raw_name, "not_get_weather");
         assert_eq!(
-            tool_call_output.raw_arguments,
+            inference_response_tool_call.raw_arguments,
             "{\"location\": \"San Francisco\", \"unit\": \"celsius\"}"
         );
 
@@ -1245,19 +1409,23 @@ mod tests {
             arguments: "{\"location\": \"Lucky Dog\"}".to_string(),
             id: "321".to_string(),
         };
-        let tool_call_output = ToolCallOutput::new(tool_call, Some(&tool_call_config)).await;
-        assert_eq!(tool_call_output.raw_name, "establish_campground");
+        let inference_response_tool_call =
+            InferenceResponseToolCall::new(tool_call, Some(&tool_call_config)).await;
         assert_eq!(
-            tool_call_output.raw_arguments,
+            inference_response_tool_call.raw_name,
+            "establish_campground"
+        );
+        assert_eq!(
+            inference_response_tool_call.raw_arguments,
             "{\"location\": \"Lucky Dog\"}"
         );
-        assert_eq!(tool_call_output.id, "321");
+        assert_eq!(inference_response_tool_call.id, "321");
         assert_eq!(
-            tool_call_output.name,
+            inference_response_tool_call.name,
             Some("establish_campground".to_string())
         );
         assert_eq!(
-            tool_call_output.arguments,
+            inference_response_tool_call.arguments,
             Some(json!({"location": "Lucky Dog"}))
         );
     }
@@ -1287,8 +1455,8 @@ mod tests {
             "raw_arguments": "my raw arguments",
             "id": "123"
         });
-        let tool_call_input: ToolCallInput = serde_json::from_value(tool_call).unwrap();
-        let tool_call: ToolCall = tool_call_input.try_into().unwrap();
+        let tool_call_wrapper: ToolCallWrapper = serde_json::from_value(tool_call).unwrap();
+        let tool_call: ToolCall = tool_call_wrapper.try_into().unwrap();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "my raw arguments");
         assert_eq!(tool_call.id, "123");
@@ -1301,8 +1469,8 @@ mod tests {
             "arguments": {"my": "arguments"},
             "id": "123"
         });
-        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
-        let tool_call = TryInto::<ToolCall>::try_into(tool_call_input).unwrap();
+        let tool_call_wrapper = serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap();
+        let tool_call = TryInto::<ToolCall>::try_into(tool_call_wrapper).unwrap();
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.arguments, "{\"my\":\"arguments\"}");
         assert_eq!(tool_call.id, "123");
@@ -1327,12 +1495,9 @@ mod tests {
             "arguments": "{\"my\": \"arguments\"}",
             "id": "123"
         });
-        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
-        let err = TryInto::<ToolCall>::try_into(tool_call_input).unwrap_err();
-        assert_eq!(
-            err.to_string(),
-            "ToolCall must have `name` or `raw_name` set"
-        );
+        // Now we get an ugly error because of the untagged enum, but that's ok for now...
+        // https://github.com/tensorzero/tensorzero/discussions/4258
+        serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap_err();
     }
 
     #[test]
@@ -1349,19 +1514,19 @@ mod tests {
 
     #[test]
     #[traced_test]
-    fn test_tool_call_deserialize_deprecated_arguments() {
+    fn test_tool_call_deserialize_object_arguments() {
         let tool_call = serde_json::json!({
             "name": "get_temperature",
             "id": "123",
-            "arguments": "My string arguments"
+            "arguments": {
+                "role": "intern"
+            }
         });
-        let tool_call_input = serde_json::from_value::<ToolCallInput>(tool_call).unwrap();
-        let tool_call = TryInto::<ToolCall>::try_into(tool_call_input).unwrap();
-        assert_eq!(tool_call.arguments, "My string arguments");
+        let tool_call_wrapper = serde_json::from_value::<ToolCallWrapper>(tool_call).unwrap();
+        let tool_call = TryInto::<ToolCall>::try_into(tool_call_wrapper).unwrap();
+        assert_eq!(tool_call.arguments, "{\"role\":\"intern\"}");
         assert_eq!(tool_call.name, "get_temperature");
         assert_eq!(tool_call.id, "123");
-
-        assert!(logs_contain("Deprecation Warning: Treating string 'ToolCall.arguments' as a serialized JSON object."));
     }
 
     #[tokio::test]
@@ -1426,11 +1591,8 @@ mod tests {
         ];
 
         let config = ToolCallConfig {
-            tools_available: vec![],
             provider_tools,
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            allowed_tools: AllowedTools::default(),
+            ..Default::default()
         };
 
         // Test matching gpt-4/openai: should return unscoped + gpt4_tool
@@ -1455,14 +1617,8 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].tool, json!({"type": "unscoped_tool"}));
 
-        // Test with empty provider_tools
-        let config_no_tools = ToolCallConfig {
-            tools_available: vec![],
-            provider_tools: vec![],
-            tool_choice: ToolChoice::Auto,
-            parallel_tool_calls: None,
-            allowed_tools: AllowedTools::default(),
-        };
+        // Test with None provider_tools
+        let config_no_tools = ToolCallConfig::with_tools_available(vec![], vec![]);
         let result = config_no_tools.get_scoped_provider_tools("gpt-4", "openai");
         assert_eq!(result.len(), 0);
     }
@@ -1496,18 +1652,16 @@ mod tests {
         .unwrap();
 
         // Should have both static and dynamic tools
-        assert_eq!(tool_call_config.tools_available.len(), 2);
+        assert_eq!(tool_call_config.tools_available().count(), 2);
 
         // Verify the static tool is included
         assert!(tool_call_config
-            .tools_available
-            .iter()
+            .tools_available()
             .any(|t| t.name() == "get_temperature"));
 
         // Verify the dynamic tool is included
         assert!(tool_call_config
-            .tools_available
-            .iter()
+            .tools_available()
             .any(|t| t.name() == "establish_campground"));
     }
 
@@ -1573,14 +1727,12 @@ mod tests {
         .unwrap();
 
         // Both tools should be included (dynamic tool auto-added despite not being in allowed_tools)
-        assert_eq!(tool_call_config.tools_available.len(), 2);
+        assert_eq!(tool_call_config.tools_available().count(), 2);
         assert!(tool_call_config
-            .tools_available
-            .iter()
+            .tools_available()
             .any(|t| t.name() == "get_temperature"));
         assert!(tool_call_config
-            .tools_available
-            .iter()
+            .tools_available()
             .any(|t| t.name() == "establish_campground"));
 
         // Check that warning was logged

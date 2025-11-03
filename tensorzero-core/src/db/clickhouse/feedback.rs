@@ -557,7 +557,26 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                     ARRAY JOIN arrayEnumerate(periods) AS i
                 ),
 
-                -- CTE 4: Filter to only the most recent max_periods (DateTime arithmetic on DateTime types)
+                -- CTE 4: Determine the window start time
+                WindowStart AS (
+                    SELECT
+                        (SELECT max(period_end) FROM AllCumulativeStats) - {interval_function}({{max_periods:UInt32}}) AS window_start_time
+                ),
+
+                -- CTE 5: Get baseline cumulative values (the last value before the window starts)
+                -- This ensures we have the cumulative count at the start of the window for all variants
+                BaselineStats AS (
+                    SELECT
+                        variant_name,
+                        mean,
+                        variance,
+                        count
+                    FROM AllCumulativeStats
+                    WHERE period_end < (SELECT window_start_time FROM WindowStart)
+                    QUALIFY row_number() OVER (PARTITION BY variant_name ORDER BY period_end DESC) = 1
+                ),
+
+                -- CTE 6: Filter to only the most recent max_periods
                 FilteredCumulativeStats AS (
                     SELECT
                         period_end,
@@ -566,10 +585,31 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                         variance,
                         count
                     FROM AllCumulativeStats
-                    WHERE period_end >= (
-                        SELECT max(period_end)
-                        FROM AllCumulativeStats
-                    ) - {interval_function}({{max_periods:UInt32}})
+                    WHERE period_end >= (SELECT window_start_time FROM WindowStart)
+                ),
+
+                -- CTE 7: Create synthetic baseline entries at window start for variants with baseline data
+                -- Only add synthetic entries for variants that DON'T already have data at window start
+                SyntheticBaselineEntries AS (
+                    SELECT
+                        (SELECT window_start_time FROM WindowStart) AS period_end,
+                        b.variant_name,
+                        b.mean,
+                        b.variance,
+                        b.count
+                    FROM BaselineStats b
+                    WHERE b.variant_name NOT IN (
+                        SELECT variant_name
+                        FROM FilteredCumulativeStats
+                        WHERE period_end = (SELECT window_start_time FROM WindowStart)
+                    )
+                ),
+
+                -- CTE 8: Combine all data (baseline + window data)
+                CombinedStats AS (
+                    SELECT * FROM FilteredCumulativeStats
+                    UNION ALL
+                    SELECT * FROM SyntheticBaselineEntries
                 )
 
             -- Final SELECT: Format the DateTime to string
@@ -582,7 +622,7 @@ impl FeedbackQueries for ClickHouseConnectionInfo {
                 0.05 AS alpha,
                 0.0 AS cs_lower,
                 0.0 AS cs_upper
-            FROM FilteredCumulativeStats
+            FROM CombinedStats
             ORDER BY
                 period_end ASC,
                 variant_name ASC

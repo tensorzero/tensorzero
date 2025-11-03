@@ -66,7 +66,9 @@ async def evaluate_question(
     run_id: UUID,
 ):
     try:
-        episode_info = await t0.dynamic_evaluation_run_episode(run_id=run_id, task_name=question["id"])
+        episode_info = await t0.dynamic_evaluation_run_episode(
+            run_id=run_id, task_name=question["id"], tags={"foo": "bar"}
+        )
         episode_id = episode_info.episode_id
         result = await ask_question(
             t0,

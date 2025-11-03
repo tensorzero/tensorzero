@@ -337,13 +337,16 @@ pub struct OpenAISupervisedRow<'a> {
 
 impl<'a> OpenAISupervisedRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        let (parallel_tool_calls, tools) = match &inference.tool_params {
-            Some(tool_params) => (
-                tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params.tools_available.iter().map(Into::into).collect(),
-            ),
-            None => (false, vec![]),
-        };
+        let parallel_tool_calls = inference
+            .tool_params
+            .parallel_tool_calls
+            .unwrap_or_default();
+        let tools = inference
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| tools.iter().map(Into::into).collect())
+            .unwrap_or_default();
         let mut messages = prepare_openai_messages(
             inference
                 .system_input
@@ -411,13 +414,16 @@ pub struct OpenAIReinforcementRow<'a> {
 
 impl<'a> OpenAIReinforcementRow<'a> {
     pub async fn from_rendered_sample(inference: &'a LazyRenderedSample) -> Result<Self, Error> {
-        let (parallel_tool_calls, tools) = match &inference.tool_params {
-            Some(tool_params) => (
-                tool_params.parallel_tool_calls.unwrap_or_default(),
-                tool_params.tools_available.iter().map(Into::into).collect(),
-            ),
-            None => (false, vec![]),
-        };
+        let parallel_tool_calls = inference
+            .tool_params
+            .parallel_tool_calls
+            .unwrap_or_default();
+        let tools = inference
+            .tool_params
+            .additional_tools
+            .as_ref()
+            .map(|tools| tools.iter().map(Into::into).collect())
+            .unwrap_or_default();
         let messages = prepare_openai_messages(
             inference
                 .system_input
@@ -478,9 +484,9 @@ impl<'a> TryFrom<&'a Vec<ContentBlockChatOutput>> for OpenAIReinforcementOutput<
                 ContentBlockChatOutput::Text(text) => {
                     text_parts.push(text.text.clone());
                 }
-                ContentBlockChatOutput::ToolCall(tool_call_output) => {
-                    // Convert ToolCallOutput to ToolCall using the From impl
-                    let tool_call: ToolCall = tool_call_output.clone().into();
+                ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
+                    // Convert InferenceResponseToolCall to ToolCall using the From impl
+                    let tool_call: ToolCall = inference_response_tool_call.clone().into();
                     tool_calls.push(tool_call);
                 }
                 ContentBlockChatOutput::Thought(_) => {
@@ -613,7 +619,7 @@ mod tests {
         },
         providers::openai::OpenAIContentBlock,
         stored_inference::{RenderedSample, StoredOutput},
-        tool::ToolCallOutput,
+        tool::{DynamicToolParams, InferenceResponseToolCall},
     };
 
     #[tokio::test]
@@ -647,7 +653,7 @@ mod tests {
             stored_output: output.map(StoredOutput::Chat),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
-            tool_params: None,
+            tool_params: DynamicToolParams::default(),
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -718,7 +724,7 @@ mod tests {
             )])),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
-            tool_params: None,
+            tool_params: DynamicToolParams::default(),
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
@@ -779,7 +785,7 @@ mod tests {
                 ContentBlockChatOutput::Text(Text {
                     text: "I'll check the weather for you.".to_string(),
                 }),
-                ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                     id: "call_123".to_string(),
                     name: Some("get_weather".to_string()),
                     raw_name: "get_weather".to_string(),
@@ -791,7 +797,7 @@ mod tests {
                 ContentBlockChatOutput::Text(Text {
                     text: "I'll check the weather for you.".to_string(),
                 }),
-                ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                     id: "call_123".to_string(),
                     name: Some("get_weather".to_string()),
                     raw_name: "get_weather".to_string(),
@@ -801,7 +807,7 @@ mod tests {
             ])),
             episode_id: Some(uuid::Uuid::now_v7()),
             inference_id: Some(uuid::Uuid::now_v7()),
-            tool_params: None,
+            tool_params: DynamicToolParams::default(),
             output_schema: None,
             dispreferred_outputs: vec![],
             tags: HashMap::new(),
