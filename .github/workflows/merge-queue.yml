@@ -25,7 +25,7 @@ env:
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests
+  #DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   FORCE_COLOR: 1
@@ -44,7 +44,7 @@ env:
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
-  TENSORZERO_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests
+  #TENSORZERO_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests
   TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
