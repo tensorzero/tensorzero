@@ -32,7 +32,7 @@ async fn get_test_setup() -> &'static (ClickHouseConnectionInfo, Arc<Config>) {
         .await
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_chat_datapoint_basic() {
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
@@ -127,7 +127,7 @@ async fn test_create_chat_datapoint_basic() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_basic() {
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
@@ -213,7 +213,7 @@ async fn test_create_json_datapoint_basic() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_multiple_datapoints() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
@@ -286,7 +286,7 @@ async fn test_create_multiple_datapoints() {
     assert_eq!(result.ids.len(), 3);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_chat_datapoint_with_tools() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
@@ -332,7 +332,7 @@ async fn test_create_chat_datapoint_with_tools() {
     assert_eq!(result.ids.len(), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_with_tags() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
@@ -371,7 +371,7 @@ async fn test_create_datapoint_with_tags() {
     assert_eq!(result.ids.len(), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_invalid_function() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
@@ -399,7 +399,7 @@ async fn test_create_datapoint_invalid_function() {
     assert_eq!(response.status(), 400);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_wrong_function_type() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
@@ -434,7 +434,7 @@ async fn test_create_datapoint_wrong_function_type() {
     assert_eq!(response.status(), 400);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_empty_list() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
@@ -453,7 +453,7 @@ async fn test_create_datapoint_empty_list() {
     assert_eq!(response.status(), 400);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_invalid_schema() {
     let client = Client::new();
     let (clickhouse, _config) = get_test_setup().await;
@@ -529,7 +529,7 @@ async fn test_create_json_datapoint_invalid_schema() {
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_with_episode_id() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
@@ -571,7 +571,7 @@ async fn test_create_datapoint_with_episode_id() {
     assert_eq!(result.ids.len(), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_datapoint_without_output() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
@@ -603,7 +603,7 @@ async fn test_create_datapoint_without_output() {
     assert_eq!(result.ids.len(), 1);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_create_json_datapoint_default_schema() {
     let client = Client::new();
     let (_clickhouse, _config) = get_test_setup().await;
