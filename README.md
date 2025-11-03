@@ -361,9 +361,9 @@ _More coming soon..._
 <pre><code class="language-bash">Run ID: 01961de9-c8a4-7c60-ab8d-15491a9708e4
 Number of datapoints: 100
 ██████████████████████████████████████ 100/100
-exact_match: 0.83 ± 0.03
-semantic_match: 0.98 ± 0.01
-item_count: 7.15 ± 0.39</code></pre>
+exact_match: 0.83 ± 0.03 (n=100)
+semantic_match: 0.98 ± 0.01 (n=100)
+item_count: 7.15 ± 0.39 (n=100)</code></pre>
     </td>
   </tr>
 </table>
