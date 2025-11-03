@@ -36,6 +36,9 @@ use crate::error::{DelayedError, Error, ErrorDetails};
 use crate::inference::types::batch::{
     BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
 };
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -421,8 +424,10 @@ fn stream_tgi(
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct TGIRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
+    #[cfg_attr(test, serde(default))]
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -447,6 +452,29 @@ struct TGIRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+}
+
+fn apply_inference_params(
+    _request: &mut TGIRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "thinking_budget_tokens", None);
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> TGIRequest<'a> {
@@ -486,7 +514,7 @@ impl<'a> TGIRequest<'a> {
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
-        Ok(TGIRequest {
+        let mut tgi_request = TGIRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -501,7 +529,11 @@ impl<'a> TGIRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut tgi_request, &request.inference_params_v2);
+
+        Ok(tgi_request)
     }
 }
 
@@ -1090,5 +1122,33 @@ mod tests {
         let _ = TGIProvider::new(invalid_url_2.clone(), TGICredentials::None);
         assert!(logs_contain("automatically appends `/chat/completions`"));
         assert!(logs_contain(invalid_url_2.as_ref()));
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_tgi_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = TGIRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns
+        assert!(logs_contain(
+            "TGI does not support the inference parameter `reasoning_effort`"
+        ));
+
+        // Test that thinking_budget_tokens warns
+        assert!(logs_contain(
+            "TGI does not support the inference parameter `thinking_budget_tokens`"
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "TGI does not support the inference parameter `verbosity`"
+        ));
     }
 }

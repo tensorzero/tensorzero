@@ -7,7 +7,8 @@ use pyo3::{sync::PyOnceLock, types::PyModule, Bound, Py, PyAny, PyErr, PyResult,
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::endpoints::datasets::Datapoint;
+use crate::config::Config;
+use crate::endpoints::datasets::{Datapoint, StoredDatapoint};
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::ResolvedContentBlock;
 use crate::inference::types::{
@@ -15,12 +16,13 @@ use crate::inference::types::{
 };
 use crate::optimization::dicl::UninitializedDiclOptimizationConfig;
 use crate::optimization::fireworks_sft::UninitializedFireworksSFTConfig;
+use crate::optimization::gcp_vertex_gemini_sft::UninitializedGCPVertexGeminiSFTConfig;
 use crate::optimization::openai_rft::UninitializedOpenAIRFTConfig;
 use crate::optimization::openai_sft::UninitializedOpenAISFTConfig;
 use crate::optimization::together_sft::UninitializedTogetherSFTConfig;
 use crate::optimization::UninitializedOptimizerConfig;
 use crate::stored_inference::{
-    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredSample,
+    RenderedSample, SimpleStoredSampleInfo, StoredInference, StoredInferenceDatabase, StoredSample,
 };
 use pyo3::types::PyNone;
 
@@ -358,11 +360,37 @@ pub fn serialize_to_dict<T: serde::ser::Serialize>(py: Python<'_>, val: T) -> Py
 pub fn deserialize_from_stored_sample<'a>(
     py: Python<'a>,
     obj: &Bound<'a, PyAny>,
+    config: &Config,
 ) -> PyResult<StoredSampleItem> {
     if obj.is_instance_of::<StoredInference>() {
-        Ok(StoredSampleItem::StoredInference(obj.extract()?))
+        // Extract wire type and convert to storage type
+        let wire: StoredInference = obj.extract()?;
+        let storage = match wire.to_storage(config) {
+            Ok(s) => s,
+            Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+        };
+        Ok(StoredSampleItem::StoredInference(storage))
     } else if obj.is_instance_of::<Datapoint>() {
-        Ok(StoredSampleItem::Datapoint(obj.extract()?))
+        // Extract wire type and convert to storage type
+        let wire: Datapoint = obj.extract()?;
+        match wire {
+            Datapoint::Chat(chat_wire) => {
+                let function_config = match config.get_function(&chat_wire.function_name) {
+                    Ok(f) => f,
+                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                };
+                let datapoint = match chat_wire.into_storage(&function_config, &config.tools) {
+                    Ok(d) => d,
+                    Err(e) => return Err(tensorzero_core_error(py, &e.to_string())?),
+                };
+                Ok(StoredSampleItem::Datapoint(StoredDatapoint::Chat(
+                    datapoint,
+                )))
+            }
+            Datapoint::Json(json_wire) => Ok(StoredSampleItem::Datapoint(StoredDatapoint::Json(
+                json_wire,
+            ))),
+        }
     } else {
         deserialize_from_pyobj(py, obj)
     }
@@ -397,17 +425,24 @@ pub fn deserialize_optimization_config(
         )))
     } else if obj.is_instance_of::<UninitializedDiclOptimizationConfig>() {
         Ok(UninitializedOptimizerConfig::Dicl(obj.extract()?))
-    } else {
-        Err(PyValueError::new_err(
-            "Invalid optimization config. Expected OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, or DiclOptimizationConfig",
+    } else if obj.is_instance_of::<UninitializedGCPVertexGeminiSFTConfig>() {
+        Ok(UninitializedOptimizerConfig::GCPVertexGeminiSFT(
+            obj.extract()?,
         ))
+    } else {
+        // Fall back to deserializing from a dictionary
+        deserialize_from_pyobj(obj.py(), obj).map_err(|e| {
+            PyValueError::new_err(format!(
+                "Invalid optimization config. Expected one of: OpenAISFTConfig, OpenAIRFTConfig, FireworksSFTConfig, TogetherSFTConfig, GCPVertexGeminiSFTConfig, or DICLOptimizationConfig (as either a class instance or a dictionary with 'type' field). Error: {e}"
+            ))
+        })
     }
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub enum StoredSampleItem {
-    StoredInference(StoredInference),
-    Datapoint(Datapoint),
+    StoredInference(StoredInferenceDatabase),
+    Datapoint(StoredDatapoint),
 }
 
 impl StoredSample for StoredSampleItem {

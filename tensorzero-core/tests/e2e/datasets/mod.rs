@@ -4,7 +4,8 @@ use std::time::Duration;
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
-use tensorzero::{ChatInferenceDatapoint, Datapoint, JsonInferenceDatapoint, Role, System};
+use tensorzero::{ClientExt, JsonInferenceDatapoint, Role, StoredDatapoint, System};
+use tensorzero_core::endpoints::datasets::ChatInferenceDatapoint;
 use tensorzero_core::{
     db::{
         clickhouse::test_helpers::{
@@ -227,7 +228,7 @@ async fn test_create_delete_datapoint_chat() {
         .collect::<Vec<_>>();
     assert_eq!(list_datapoints.len(), 3);
 
-    for (datapoint, list_datapoint) in datapoints.iter().zip(list_datapoints.iter()) {
+    for datapoint in &datapoints {
         let pretty_datapoint = serde_json::to_string_pretty(&datapoint).unwrap();
         println!("pretty_datapoint: {pretty_datapoint}");
         // Verify the datapoint structure and content
@@ -239,6 +240,12 @@ async fn test_create_delete_datapoint_chat() {
         assert_eq!(datapoint.auxiliary, "");
         assert!(datapoint.staled_at.is_none());
         let datapoint_id = datapoint.id;
+
+        // Find the matching list_datapoint by ID
+        let list_datapoint = list_datapoints
+            .iter()
+            .find(|dp| dp.id == datapoint_id)
+            .expect("datapoint from database should be in list response");
 
         // Test the getter
         let get_datapoint_response = client
@@ -254,7 +261,7 @@ async fn test_create_delete_datapoint_chat() {
         assert!(get_datapoint_json.get("auxiliary").is_none());
         let get_datapoint =
             serde_json::from_value::<ChatInferenceDatapoint>(get_datapoint_json).unwrap();
-        assert_eq!(&get_datapoint, datapoint);
+        assert_eq!(&get_datapoint, list_datapoint);
 
         // Verify the list datapoint structure and content
         assert_eq!(list_datapoint.dataset_name, dataset_name);
@@ -360,10 +367,9 @@ async fn test_create_delete_datapoint_chat() {
         }
 
         // Verify tool_params if present for the list datapoint
-        if let Some(tool_params) = &list_datapoint.tool_params {
-            let tools_available = &tool_params.tools_available;
-            assert!(!tools_available.is_empty());
-            let first_tool = tools_available[0].clone();
+        if let Some(additional_tools) = &list_datapoint.tool_params.additional_tools {
+            assert!(!additional_tools.is_empty());
+            let first_tool = &additional_tools[0];
             assert_eq!(first_tool.name, "get_temperature");
             assert_eq!(
                 first_tool.description,
@@ -3009,7 +3015,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = &datapoint[0] else {
+    let StoredDatapoint::Chat(chat_datapoint) = &datapoint[0] else {
         panic!("Datapoint is not a chat datapoint");
     };
     let output = chat_datapoint.output.as_ref().unwrap();
@@ -3072,7 +3078,7 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         })
         .await
         .unwrap();
-    let Datapoint::Chat(chat_datapoint) = &datapoint[0] else {
+    let StoredDatapoint::Chat(chat_datapoint) = &datapoint[0] else {
         panic!("Datapoint is not a chat datapoint");
     };
     let output = chat_datapoint.output.as_ref().unwrap();
@@ -3084,3 +3090,92 @@ async fn test_update_datapoint_preserves_tool_call_ids() {
         "call_eBDiwZRnNnddB5tjcQbhdY0s"
     );
 }
+
+#[tokio::test]
+async fn test_datapoint_update_invalid_output_schema_json() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+    let datapoint_id = Uuid::now_v7();
+
+    // Try to create/update a datapoint with an invalid output_schema
+    let resp = client
+        .put(get_gateway_endpoint(&format!(
+            "/internal/datasets/{dataset_name}/datapoints/{datapoint_id}",
+        )))
+        .json(&json!({
+            "function_name": "json_success",
+            "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
+            "output": {"answer": "Hello"},
+            "output_schema": {
+                "type": "invalid_type",  // This is an invalid JSON Schema type
+                "properties": {
+                    "answer": {"type": "string"}
+                }
+            },
+            "is_custom": true
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // The request should fail with a client error
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "Expected BAD_REQUEST status for invalid output_schema"
+    );
+
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let error_message = resp_json.to_string();
+
+    // Verify that the error message mentions the schema is invalid
+    assert!(
+        error_message.contains("invalid") || error_message.contains("schema"),
+        "Error message should mention invalid schema: {error_message}"
+    );
+}
+
+#[tokio::test]
+async fn test_datapoint_create_invalid_output_schema_json() {
+    let client = Client::new();
+    let dataset_name = format!("test-dataset-{}", Uuid::now_v7());
+
+    // Try to create datapoints with an invalid output_schema
+    let resp = client
+        .post(get_gateway_endpoint(&format!(
+            "/datasets/{dataset_name}/datapoints",
+        )))
+        .json(&json!({
+            "datapoints": [{
+                "function_name": "json_success",
+                "input": {"system": {"assistant_name": "Dummy"}, "messages": [{"role": "user", "content": [{"type": "template", "name": "user", "arguments": {"country": "US"}}]}]},
+                "output": {"answer": "Hello"},
+                "output_schema": {
+                    "type": "invalid_type",  // This is an invalid JSON Schema type
+                    "properties": {
+                        "answer": {"type": "string"}
+                    }
+                }
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    // The request should fail with a client error
+    assert_eq!(
+        resp.status(),
+        StatusCode::BAD_REQUEST,
+        "Expected BAD_REQUEST status for invalid output_schema"
+    );
+
+    let resp_json = resp.json::<Value>().await.unwrap();
+    let error_message = resp_json.to_string();
+
+    // Verify that the error message mentions the schema is invalid
+    assert!(
+        error_message.contains("invalid") || error_message.contains("schema"),
+        "Error message should mention invalid schema: {error_message}"
+    );
+}
+
+pub mod tool_params;

@@ -8,9 +8,9 @@ use uuid::Uuid;
 
 use super::use_mock_inference_provider;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
-    InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
-    System,
+    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    DynamicToolParams, InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams,
+    RenderedSample, Role, System,
 };
 use tensorzero_core::{
     config::{Config, ConfigFileGlob, UninitializedVariantConfig},
@@ -1203,7 +1203,7 @@ fn create_pinocchio_example(
         stored_output: Some(stored_output),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         output_schema: if is_json_function {
             Some(json!({
                 "type": "object",

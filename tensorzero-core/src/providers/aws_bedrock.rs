@@ -1,4 +1,6 @@
+use aws_sdk_bedrockruntime::operation::converse::builders::ConverseFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse::ConverseOutput;
+use aws_sdk_bedrockruntime::operation::converse_stream::builders::ConverseStreamFluentBuilder;
 use aws_sdk_bedrockruntime::operation::converse_stream::ConverseStreamOutput;
 use aws_sdk_bedrockruntime::types::{
     AnyToolChoice, AutoToolChoice, ContentBlock as BedrockContentBlock, ContentBlockDelta,
@@ -9,12 +11,13 @@ use aws_sdk_bedrockruntime::types::{
     StopReason, SystemContentBlock, Tool, ToolChoice as AWSBedrockToolChoice, ToolConfiguration,
     ToolInputSchema, ToolResultBlock, ToolResultContentBlock, ToolSpecification, ToolUseBlock,
 };
-use aws_smithy_types::error::display::DisplayErrorContext;
+use aws_smithy_types::{error::display::DisplayErrorContext, Document, Number};
 use aws_types::region::Region;
 use futures::future::try_join_all;
 use futures::StreamExt;
 use reqwest::StatusCode;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -27,6 +30,9 @@ use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::file::mime_type_to_ext;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
@@ -40,7 +46,6 @@ use crate::inference::InferenceProvider;
 use crate::model::ModelProvider;
 use crate::tool::{ToolCall, ToolCallChunk, ToolChoice, ToolConfig};
 
-#[expect(unused)]
 const PROVIDER_NAME: &str = "AWS Bedrock";
 pub const PROVIDER_TYPE: &str = "aws_bedrock";
 
@@ -54,6 +59,105 @@ pub struct AWSBedrockProvider {
     client: aws_sdk_bedrockruntime::Client,
     #[serde(skip)]
     base_config: aws_sdk_bedrockruntime::config::Builder,
+}
+
+fn apply_inference_params(
+    bedrock_request: ConverseFluentBuilder,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) -> ConverseFluentBuilder {
+    let mut bedrock_request = bedrock_request;
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        let existing_fields = bedrock_request
+            .get_additional_model_request_fields()
+            .clone();
+        let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
+        bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
+
+    bedrock_request
+}
+
+fn apply_inference_params_stream(
+    bedrock_request: ConverseStreamFluentBuilder,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) -> ConverseStreamFluentBuilder {
+    let mut bedrock_request = bedrock_request;
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        let existing_fields = bedrock_request
+            .get_additional_model_request_fields()
+            .clone();
+        let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
+        bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
+
+    bedrock_request
+}
+
+fn build_bedrock_additional_fields(existing: Option<Document>, budget_tokens: i32) -> Document {
+    let mut fields = match existing {
+        Some(Document::Object(map)) => map,
+        Some(_) => {
+            tracing::warn!(
+                "Existing AWS Bedrock `additional_model_request_fields` is not an object; overriding to attach thinking config."
+            );
+            HashMap::new()
+        }
+        None => HashMap::new(),
+    };
+
+    let mut thinking = HashMap::new();
+    thinking.insert("type".to_string(), Document::String("enabled".to_string()));
+    thinking.insert(
+        "budget_tokens".to_string(),
+        Document::Number(number_from_i32(budget_tokens)),
+    );
+
+    fields.insert("thinking".to_string(), Document::Object(thinking));
+    Document::Object(fields)
+}
+
+fn number_from_i32(value: i32) -> Number {
+    if value >= 0 {
+        Number::PosInt(value as u64)
+    } else {
+        Number::NegInt(value as i64)
+    }
 }
 
 impl AWSBedrockProvider {
@@ -119,12 +223,14 @@ impl InferenceProvider for AWSBedrockProvider {
             inference_config =
                 inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
         }
+        let inference_config = inference_config.build();
+
         let mut bedrock_request = self
             .client
             .converse()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
-            .inference_config(inference_config.build());
+            .inference_config(inference_config);
 
         if let Some(system) = &request.system {
             // AWS Bedrock does not support system message "" so we remove it
@@ -165,22 +271,18 @@ impl InferenceProvider for AWSBedrockProvider {
             }
         }
 
+        bedrock_request = apply_inference_params(bedrock_request, &request.inference_params_v2);
+
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
             get_raw_response,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
-        // We need to use the `aws_http_client::Client` wrapper type, which currently
-        // doesn't work with the `TensorzeroHttpClient` type.
-        // This causes us to lose out on things like connection pooling and outgoing OTEL headers.
-        // TODO: make this use `TensorzeroHttpClient`
         let new_config = self
             .base_config
             .clone()
-            .http_client(super::aws_http_client::Client::new(
-                http_client.dangerous_get_fallback_client().clone(),
-            ));
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
         let start_time = Instant::now();
         let output = bedrock_request
             .customize()
@@ -266,13 +368,14 @@ impl InferenceProvider for AWSBedrockProvider {
             inference_config =
                 inference_config.set_stop_sequences(Some(stop_sequences.into_owned()));
         }
+        let inference_config = inference_config.build();
 
         let mut bedrock_request = self
             .client
             .converse_stream()
             .model_id(&self.model_id)
             .set_messages(Some(messages))
-            .inference_config(inference_config.build());
+            .inference_config(inference_config);
 
         if let Some(system) = &request.system {
             // AWS Bedrock does not support system message "" so we remove it
@@ -312,22 +415,20 @@ impl InferenceProvider for AWSBedrockProvider {
                 bedrock_request = bedrock_request.tool_config(aws_bedrock_tool_config);
             }
         }
+
+        bedrock_request =
+            apply_inference_params_stream(bedrock_request, &request.inference_params_v2);
+
         let InterceptorAndRawBody {
             interceptor,
             get_raw_request,
             get_raw_response,
         } = build_interceptor(request, model_provider, model_name.to_string());
 
-        // We need to use the `aws_http_client::Client` wrapper type, which currently
-        // doesn't work with the `TensorzeroHttpClient` type.
-        // This causes us to lose out on things like connection pooling and outgoing OTEL headers.
-        // TODO: make this use `TensorzeroHttpClient`
         let new_config = self
             .base_config
             .clone()
-            .http_client(super::aws_http_client::Client::new(
-                http_client.dangerous_get_fallback_client().clone(),
-            ));
+            .http_client(super::aws_http_client::Client::new(http_client.clone()));
 
         let start_time = Instant::now();
         let stream = bedrock_request

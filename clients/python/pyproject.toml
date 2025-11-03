@@ -57,6 +57,7 @@ dev = [
     "pytest-xdist",
     "pytest-rerunfailures",
     "pytest",
+    "pytest-httpserver",
     "openai",
     "clickhouse-connect",
     "pandas",

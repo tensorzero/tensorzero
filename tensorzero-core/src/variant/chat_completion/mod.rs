@@ -19,8 +19,9 @@ use crate::inference::types::resolved_input::{
 use crate::utils::retries::RetryConfig;
 
 use crate::inference::types::{
-    batch::StartBatchModelInferenceWithMetadata, ContentBlock, InferenceResultStream,
-    ModelInferenceRequest, RequestMessage, Role, System, Text,
+    batch::StartBatchModelInferenceWithMetadata,
+    chat_completion_inference_params::ChatCompletionInferenceParamsV2, ContentBlock,
+    InferenceResultStream, ModelInferenceRequest, RequestMessage, Role, System, Text,
 };
 use crate::inference::types::{InferenceResult, ModelInput, ResolvedInputMessage};
 use crate::jsonschema_util::StaticJSONSchema;
@@ -69,6 +70,8 @@ pub struct ChatCompletionConfig {
     frequency_penalty: Option<f32>,
     seed: Option<u32>,
     stop_sequences: Option<Vec<String>>,
+    #[serde(flatten)]
+    pub(crate) inference_params_v2: ChatCompletionInferenceParamsV2,
     json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     retries: RetryConfig,
     #[cfg_attr(test, ts(skip))]
@@ -122,6 +125,18 @@ impl ChatCompletionConfig {
 
     pub fn stop_sequences(&self) -> Option<&Vec<String>> {
         self.stop_sequences.as_ref()
+    }
+
+    pub fn reasoning_effort(&self) -> Option<&String> {
+        self.inference_params_v2.reasoning_effort.as_ref()
+    }
+
+    pub fn thinking_budget_tokens(&self) -> Option<i32> {
+        self.inference_params_v2.thinking_budget_tokens
+    }
+
+    pub fn verbosity(&self) -> Option<&String> {
+        self.inference_params_v2.verbosity.as_ref()
     }
 
     pub fn json_mode(&self) -> Option<&JsonMode> {
@@ -184,6 +199,15 @@ pub struct UninitializedChatCompletionConfig {
     pub frequency_penalty: Option<f32>,
     pub seed: Option<u32>,
     pub stop_sequences: Option<Vec<String>>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget_tokens: Option<i32>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
     #[serde(default)]
     pub json_mode: Option<JsonMode>, // Only for JSON functions, not for chat functions
     #[serde(default)]
@@ -214,6 +238,11 @@ impl UninitializedChatCompletionConfig {
             frequency_penalty: self.frequency_penalty,
             seed: self.seed,
             stop_sequences: self.stop_sequences,
+            inference_params_v2: ChatCompletionInferenceParamsV2 {
+                reasoning_effort: self.reasoning_effort,
+                thinking_budget_tokens: self.thinking_budget_tokens,
+                verbosity: self.verbosity,
+            },
             json_mode: self.json_mode,
             retries: self.retries,
             extra_body: self.extra_body,
@@ -276,6 +305,7 @@ impl ChatCompletionConfig {
                 self.presence_penalty,
                 self.frequency_penalty,
                 self.stop_sequences.clone(),
+                self.inference_params_v2.clone(),
             );
 
         let extra_body = FullExtraBodyConfig {
@@ -815,17 +845,7 @@ mod tests {
             weight: Some(1.0),
             templates: ChatTemplates::empty(),
             json_mode: Some(JsonMode::On),
-            temperature: None,
-            top_p: None,
-            presence_penalty: None,
-            frequency_penalty: None,
-            max_tokens: None,
-            seed: None,
-            stop_sequences: None,
-            retries: RetryConfig::default(),
-            extra_body: Default::default(),
-            extra_headers: Default::default(),
-            _private: (),
+            ..Default::default()
         };
 
         // Test case 1: Regular user message
@@ -1950,6 +1970,7 @@ mod tests {
                 frequency_penalty: Some(0.2),
                 json_mode: None,
                 stop_sequences: None,
+                ..Default::default()
             },
         };
         // Will dynamically set "answer" instead of "response"
@@ -2172,6 +2193,7 @@ mod tests {
                         frequency_penalty: Some(0.2),
                         json_mode: None,
                         stop_sequences: None,
+                        ..Default::default()
                     },
                 };
                 assert_eq!(json_result.inference_params, expected_inference_params);
@@ -2560,6 +2582,7 @@ mod tests {
                 frequency_penalty: Some(0.2),
                 json_mode: None,
                 stop_sequences: None,
+                ..Default::default()
             },
         };
         let model_request = chat_completion_config

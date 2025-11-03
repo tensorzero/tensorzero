@@ -23,6 +23,9 @@ use crate::error::{
 };
 use crate::inference::types::batch::StartBatchProviderInferenceResponse;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::file::require_image;
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
@@ -997,6 +1000,37 @@ struct OpenRouterRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
+}
+
+fn apply_inference_params(
+    request: &mut OpenRouterRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        request.verbosity = verbosity.clone();
+    }
 }
 
 impl<'a> OpenRouterRequest<'a> {
@@ -1033,7 +1067,7 @@ impl<'a> OpenRouterRequest<'a> {
             }
         }
 
-        Ok(OpenRouterRequest {
+        let mut openrouter_request = OpenRouterRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -1049,7 +1083,13 @@ impl<'a> OpenRouterRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+            reasoning_effort: None,
+            verbosity: None,
+        };
+
+        apply_inference_params(&mut openrouter_request, &request.inference_params_v2);
+
+        Ok(openrouter_request)
     }
 }
 
@@ -1344,10 +1384,10 @@ fn openrouter_to_tensorzero_chunk(
 
 #[cfg(test)]
 mod tests {
-
-    use std::borrow::Cow;
-
+    use super::*;
     use serde_json::json;
+    use std::borrow::Cow;
+    use tracing_test::traced_test;
 
     use crate::{
         inference::types::{FunctionType, RequestMessage},
@@ -1356,8 +1396,6 @@ mod tests {
         },
         tool::ToolCallConfig,
     };
-
-    use super::*;
 
     #[test]
     fn test_get_chat_url() {
@@ -1824,6 +1862,8 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
+            verbosity: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1921,6 +1961,8 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
+            verbosity: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
@@ -1988,6 +2030,8 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
+            verbosity: None,
         };
         let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -2045,6 +2089,8 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
+            verbosity: None,
         };
         let result = ProviderInferenceResponse::try_from(OpenRouterResponseWithMetadata {
             response: invalid_response_multiple_choices,
@@ -2732,5 +2778,47 @@ mod tests {
             serialized,
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_openrouter_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = OpenRouterRequest {
+            messages: vec![],
+            model: "test-model",
+            temperature: None,
+            max_completion_tokens: None,
+            seed: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            stream: false,
+            stream_options: None,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            parallel_tool_calls: None,
+            stop: None,
+            reasoning_effort: None,
+            verbosity: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort is applied correctly
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "OpenRouter does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity is applied correctly
+        assert_eq!(request.verbosity, Some("low".to_string()));
     }
 }

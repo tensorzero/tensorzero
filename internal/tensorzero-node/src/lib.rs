@@ -9,23 +9,20 @@ use napi::threadsafe_function::{ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use serde::Serialize;
 use serde_json::Value;
 use tensorzero::{
-    Client, ClientBuilder, ClientBuilderMode, ClientInferenceParams, InferenceOutput,
+    Client, ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, InferenceOutput,
     OptimizationJobHandle, QUANTILES,
 };
 use tensorzero_core::{
     cache::CacheEnabledMode,
-    config::{Config, ConfigFileGlob, MetricConfigOptimize},
-    db::{clickhouse::ClickHouseConnectionInfo, feedback::FeedbackByVariant},
-    experimentation::track_and_stop::estimate_optimal_probabilities::{
-        estimate_optimal_probabilities as estimate_track_and_stop_optimal_probabilities_core,
-        EstimateOptimalProbabilitiesArgs,
-    },
+    config::{Config, ConfigFileGlob},
+    db::clickhouse::ClickHouseConnectionInfo,
 };
 use uuid::Uuid;
 
 #[macro_use]
 mod napi_bridge;
 mod database;
+mod postgres;
 
 #[macro_use]
 extern crate napi_derive;
@@ -368,6 +365,24 @@ impl TensorZeroClient {
         })?;
         Ok(result_str)
     }
+
+    #[napi]
+    pub async fn get_variant_sampling_probabilities(
+        &self,
+        function_name: String,
+    ) -> Result<String, napi::Error> {
+        let probabilities = self
+            .client
+            .get_variant_sampling_probabilities(&function_name)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+        let probabilities_str = serde_json::to_string(&probabilities).map_err(|e| {
+            napi::Error::from_reason(format!(
+                "Failed to serialize variant sampling probabilities: {e}"
+            ))
+        })?;
+        Ok(probabilities_str)
+    }
 }
 
 #[napi]
@@ -387,37 +402,4 @@ pub async fn get_config(config_path: Option<String>) -> Result<String, napi::Err
 #[napi]
 pub fn get_quantiles() -> Vec<f64> {
     QUANTILES.to_vec()
-}
-
-#[derive(serde::Deserialize, ts_rs::TS)]
-#[ts(export, optional_fields)]
-pub struct EstimateTrackAndStopOptimalProbabilitiesParams {
-    pub feedback: Vec<FeedbackByVariant>,
-    pub epsilon: Option<f64>,
-    pub variance_floor: Option<f64>,
-    pub min_prob: Option<f64>,
-    pub reg0: Option<f64>,
-    pub metric_optimize: MetricConfigOptimize,
-}
-
-#[napi]
-pub fn estimate_track_and_stop_optimal_probabilities(
-    params: String,
-) -> Result<String, napi::Error> {
-    let params: EstimateTrackAndStopOptimalProbabilitiesParams =
-        serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
-
-    let args = EstimateOptimalProbabilitiesArgs {
-        feedback: params.feedback,
-        epsilon: params.epsilon,
-        variance_floor: params.variance_floor,
-        min_prob: params.min_prob,
-        reg0: params.reg0,
-        metric_optimize: params.metric_optimize,
-    };
-
-    let result = estimate_track_and_stop_optimal_probabilities_core(args)
-        .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-
-    serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
 }

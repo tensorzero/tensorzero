@@ -70,10 +70,12 @@ pub fn warn_discarded_cache_write(raw_response: &str) {
 
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
-        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
+        tracing::warn!(
+            "TensorZero doesn't support input thought blocks for the `{provider_type}` provider. Many providers don't support them; if this provider does, please let us know: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests\n\n{thought:?}"
+        );
     } else {
         tracing::warn!(
-            "Provider type `{provider_type}` does not support input thought blocks, discarding"
+            "TensorZero doesn't support input thought blocks for the `{provider_type}` provider. Many providers don't support them; if this provider does, please let us know: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
         );
     }
 }
@@ -201,6 +203,9 @@ impl From<ErrorDetails> for Error {
 pub enum ErrorDetails {
     AllVariantsFailed {
         errors: HashMap<String, Error>,
+    },
+    TensorZeroAuth {
+        message: String,
     },
     InvalidInferenceTarget {
         message: String,
@@ -591,6 +596,7 @@ impl ErrorDetails {
     fn level(&self) -> tracing::Level {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => tracing::Level::ERROR,
+            ErrorDetails::TensorZeroAuth { .. } => tracing::Level::WARN,
             ErrorDetails::ApiKeyMissing { .. } => tracing::Level::ERROR,
             ErrorDetails::AppState { .. } => tracing::Level::ERROR,
             ErrorDetails::ObjectStoreUnconfigured { .. } => tracing::Level::ERROR,
@@ -714,6 +720,7 @@ impl ErrorDetails {
     fn status_code(&self) -> StatusCode {
         match self {
             ErrorDetails::AllVariantsFailed { .. } => StatusCode::BAD_GATEWAY,
+            ErrorDetails::TensorZeroAuth { .. } => StatusCode::UNAUTHORIZED,
             ErrorDetails::ApiKeyMissing { .. } => StatusCode::BAD_REQUEST,
             ErrorDetails::Glob { .. } => StatusCode::INTERNAL_SERVER_ERROR,
             ErrorDetails::ExtraBodyReplacement { .. } => StatusCode::BAD_REQUEST,
@@ -883,6 +890,9 @@ impl std::fmt::Display for ErrorDetails {
                         .collect::<Vec<_>>()
                         .join("\n")
                 )
+            }
+            ErrorDetails::TensorZeroAuth { message } => {
+                write!(f, "TensorZero authentication error: {message}")
             }
             ErrorDetails::ModelProviderTimeout {
                 provider_name,

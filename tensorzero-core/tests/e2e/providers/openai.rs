@@ -7,9 +7,9 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
-    InputMessage, InputMessageContent, Role, Unknown, UrlFile,
+    InputMessage, InputMessageContent, Role, Unknown, UnknownChunk, UrlFile,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
@@ -271,7 +271,6 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
         pdf_inference: image_providers.clone(),
-
         shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }
@@ -2636,7 +2635,7 @@ model = "test-model"
                     ContentBlockChunk::Text(text_chunk) => {
                         full_text.push_str(&text_chunk.text);
                     }
-                    ContentBlockChunk::Unknown { id, data, .. } => {
+                    ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                         unknown_chunks.push((id.clone(), data.clone()));
                     }
                     _ => {}

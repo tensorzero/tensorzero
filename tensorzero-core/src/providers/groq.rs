@@ -17,6 +17,9 @@ use crate::error::{
 };
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
     ContentBlockOutput, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
@@ -875,7 +878,7 @@ pub(super) struct StreamOptions {
 /// We are not handling logprobs, top_logprobs, n,
 /// presence_penalty, seed, service_tier, stop, user,
 /// or the deprecated function_call and functions arguments.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct GroqRequest<'a> {
     messages: Vec<GroqRequestMessage<'a>>,
     model: &'a str,
@@ -904,6 +907,35 @@ struct GroqRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+}
+
+fn apply_inference_params(
+    request: &mut GroqRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> GroqRequest<'a> {
@@ -942,7 +974,7 @@ impl<'a> GroqRequest<'a> {
             }
         }
 
-        Ok(GroqRequest {
+        let mut groq_request = GroqRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -958,7 +990,12 @@ impl<'a> GroqRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+            reasoning_effort: None,
+        };
+
+        apply_inference_params(&mut groq_request, &request.inference_params_v2);
+
+        Ok(groq_request)
     }
 }
 
@@ -1262,10 +1299,10 @@ fn groq_to_tensorzero_chunk(
 }
 #[cfg(test)]
 mod tests {
-
-    use std::borrow::Cow;
-
+    use super::*;
     use serde_json::json;
+    use std::borrow::Cow;
+    use tracing_test::traced_test;
 
     use crate::{
         inference::types::{FunctionType, RequestMessage},
@@ -1274,8 +1311,6 @@ mod tests {
         },
         tool::ToolCallConfig,
     };
-
-    use super::*;
 
     #[test]
     fn test_handle_groq_error() {
@@ -1638,6 +1673,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1735,6 +1771,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
@@ -1802,6 +1839,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -1859,6 +1897,7 @@ mod tests {
             tool_choice: None,
             parallel_tool_calls: None,
             stop: None,
+            reasoning_effort: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_multiple_choices,
@@ -2451,5 +2490,34 @@ mod tests {
             serialized,
             r#"{"content":[{"type":"text","text":"My first message"},{"type":"text","text":"My second message"}]}"#
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_groq_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = GroqRequest {
+            model: "test-model",
+            ..Default::default()
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort is applied correctly
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "Groq does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Groq does not support the inference parameter `verbosity`"
+        ));
     }
 }

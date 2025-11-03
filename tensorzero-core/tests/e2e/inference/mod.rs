@@ -17,8 +17,8 @@ use reqwest::{Client, StatusCode};
 use reqwest_eventsource::{Event, RequestBuilderExt};
 use serde_json::{json, Value};
 use tensorzero::{
-    ClientBuilder, ClientBuilderMode, ClientInferenceParams, ClientInput, ClientInputMessage,
-    ClientInputMessageContent, InferenceOutput, InferenceResponse,
+    ClientBuilder, ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput,
+    ClientInputMessage, ClientInputMessageContent, InferenceOutput, InferenceResponse,
 };
 use tensorzero_core::inference::types::{Arguments, StoredInput, System};
 use tensorzero_core::observability::enter_fake_http_request_otel;
@@ -4156,3 +4156,5 @@ async fn test_internal_tag_auto_injection() {
         inference_id.to_string()
     );
 }
+
+pub mod tool_params;

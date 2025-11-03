@@ -1798,7 +1798,7 @@ dependencies = [
 
 [[package]]
 name = "evaluations"
-version = "2025.10.8"
+version = "2025.11.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "feedback-load-test"
-version = "2025.10.8"
+version = "2025.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2149,7 +2149,7 @@ dependencies = [
 
 [[package]]
 name = "gateway"
-version = "2025.10.8"
+version = "2025.11.0"
 dependencies = [
  "axum",
  "clap",
@@ -2160,10 +2160,13 @@ dependencies = [
  "pin-project",
  "reqwest",
  "reqwest-eventsource",
+ "secrecy",
  "serde",
  "serde_json",
+ "sqlx 0.9.0-alpha.1",
  "tempfile",
  "tensorzero",
+ "tensorzero-auth",
  "tensorzero-core",
  "tokio",
  "tokio-stream",
@@ -4513,7 +4516,7 @@ dependencies = [
 
 [[package]]
 name = "rate-limit-load-test"
-version = "2025.10.8"
+version = "2025.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6010,6 +6013,7 @@ name = "tensorzero"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "async-trait",
  "clap",
  "futures",
  "git2",
@@ -6026,6 +6030,7 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "tempfile",
+ "tensorzero-auth",
  "tensorzero-core",
  "tensorzero-derive",
  "thiserror 2.0.17",
@@ -6042,21 +6047,23 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-auth"
-version = "2025.10.8"
+version = "2025.11.0"
 dependencies = [
  "chrono",
  "futures",
  "hex",
  "rand 0.9.2",
  "secrecy",
+ "serde",
  "sha2",
  "sqlx 0.9.0-alpha.1",
  "thiserror 2.0.17",
+ "ts-rs",
 ]
 
 [[package]]
 name = "tensorzero-core"
-version = "2025.10.8"
+version = "2025.11.0"
 dependencies = [
  "arc-swap",
  "async-stream",
@@ -6083,6 +6090,7 @@ dependencies = [
  "futures",
  "futures-core",
  "gag",
+ "git2",
  "globset",
  "google-cloud-auth",
  "hex",
@@ -6170,15 +6178,17 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-node"
-version = "2025.10.8"
+version = "2025.11.0"
 dependencies = [
  "evaluations",
  "napi",
  "napi-build",
  "napi-derive",
+ "secrecy",
  "serde",
  "serde_json",
  "tensorzero",
+ "tensorzero-auth",
  "tensorzero-core",
  "ts-rs",
  "url",
@@ -6187,7 +6197,7 @@ dependencies = [
 
 [[package]]
 name = "tensorzero-python"
-version = "2025.10.8"
+version = "2025.11.0"
 dependencies = [
  "evaluations",
  "futures",

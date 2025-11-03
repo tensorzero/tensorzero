@@ -5,6 +5,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
@@ -329,6 +332,35 @@ struct HyperbolicRequest<'a> {
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+}
+
+fn apply_inference_params(
+    request: &mut HyperbolicRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> HyperbolicRequest<'a> {
@@ -362,7 +394,7 @@ impl<'a> HyperbolicRequest<'a> {
             },
         )
         .await?;
-        Ok(HyperbolicRequest {
+        let mut hyperbolic_request = HyperbolicRequest {
             messages,
             model,
             frequency_penalty: *frequency_penalty,
@@ -373,7 +405,12 @@ impl<'a> HyperbolicRequest<'a> {
             temperature: *temperature,
             top_p: *top_p,
             stop: stop_sequences.clone(),
-        })
+            reasoning_effort: None,
+        };
+
+        apply_inference_params(&mut hyperbolic_request, &request.inference_params_v2);
+
+        Ok(hyperbolic_request)
     }
 }
 
@@ -466,6 +503,7 @@ mod tests {
         OpenAIFinishReason, OpenAIResponseChoice, OpenAIResponseMessage, OpenAIUsage,
     };
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
+    use tracing_test::traced_test;
 
     #[tokio::test]
     async fn test_hyperbolic_request_new() {
@@ -606,5 +644,43 @@ mod tests {
                 response_time: Duration::from_secs(0)
             }
         );
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_hyperbolic_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = HyperbolicRequest {
+            messages: vec![],
+            model: "test-model",
+            frequency_penalty: None,
+            max_tokens: None,
+            presence_penalty: None,
+            seed: None,
+            stream: false,
+            temperature: None,
+            top_p: None,
+            stop: None,
+            reasoning_effort: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort is applied correctly
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "Hyperbolic does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Hyperbolic does not support the inference parameter `verbosity`"
+        ));
     }
 }

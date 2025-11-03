@@ -559,3 +559,118 @@ pub async fn test_embedding_dryrun_with_provider(provider: EmbeddingTestProvider
         .unwrap()
         .is_empty());
 }
+
+pub async fn test_single_token_array_with_provider(provider: EmbeddingTestProvider) {
+    // Token array for "The dog barked." (using cl100k_base encoding)
+    let tokens = vec![791, 5679, 293, 43161, 13];
+    let payload = json!({
+        "input": tokens,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("Single token array API response: {response_json:?}");
+    assert_eq!(response_json["object"].as_str().unwrap(), "list");
+    assert_eq!(
+        response_json["data"][0]["embedding"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1536
+    );
+    assert_eq!(response_json["data"].as_array().unwrap().len(), 1);
+    assert_eq!(response_json["data"][0]["index"].as_u64().unwrap(), 0);
+    assert_eq!(
+        response_json["data"][0]["object"].as_str().unwrap(),
+        "embedding"
+    );
+    assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
+    assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
+}
+
+pub async fn test_batch_token_arrays_semantic_similarity_with_provider(
+    provider: EmbeddingTestProvider,
+) {
+    // Token arrays (using cl100k_base encoding):
+    // "The dog barked." -> [791, 5679, 293, 43161, 13]
+    // "The cat meowed." -> [791, 8415, 757, 13111, 13]
+    // "Megumin cast an explosion spell." -> [80863, 10318, 6445, 459, 25176, 13141, 13]
+    let token_arrays = vec![
+        vec![791, 5679, 293, 43161, 13],
+        vec![791, 8415, 757, 13111, 13],
+        vec![80863, 10318, 6445, 459, 25176, 13141, 13],
+    ];
+    let payload = json!({
+        "input": token_arrays,
+        "model": format!("tensorzero::embedding_model_name::{}", provider.model_name),
+    });
+    let response = Client::new()
+        .post(get_gateway_endpoint("/openai/v1/embeddings"))
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let response_json = response.json::<Value>().await.unwrap();
+    println!("Batch token arrays API response: {response_json:?}");
+    assert_eq!(response_json["object"].as_str().unwrap(), "list");
+    assert_eq!(
+        response_json["model"].as_str().unwrap(),
+        format!("tensorzero::embedding_model_name::{}", provider.model_name)
+    );
+    assert_eq!(
+        response_json["data"].as_array().unwrap().len(),
+        token_arrays.len()
+    );
+
+    // Extract embeddings for similarity comparison
+    let embeddings: Vec<Vec<f64>> = response_json["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| {
+            item["embedding"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect()
+        })
+        .collect();
+
+    // Calculate cosine similarity between embeddings
+    let cosine_similarity = |a: &[f64], b: &[f64]| -> f64 {
+        let dot_product: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+        let magnitude_a: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let magnitude_b: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+        dot_product / (magnitude_a * magnitude_b)
+    };
+
+    let sim_dog_cat = cosine_similarity(&embeddings[0], &embeddings[1]);
+    let sim_dog_megumin = cosine_similarity(&embeddings[0], &embeddings[2]);
+    let sim_cat_megumin = cosine_similarity(&embeddings[1], &embeddings[2]);
+
+    println!("Similarity dog-cat: {sim_dog_cat}");
+    println!("Similarity dog-megumin: {sim_dog_megumin}");
+    println!("Similarity cat-megumin: {sim_cat_megumin}");
+
+    // Verify semantic relationships: dog and cat should be more similar to each other
+    // than either is to Megumin
+    assert!(
+        sim_dog_cat > sim_dog_megumin,
+        "Dog-cat similarity ({sim_dog_cat}) should be greater than dog-megumin similarity ({sim_dog_megumin})"
+    );
+    assert!(
+        sim_dog_cat > sim_cat_megumin,
+        "Dog-cat similarity ({sim_dog_cat}) should be greater than cat-megumin similarity ({sim_cat_megumin})"
+    );
+
+    assert!(response_json["usage"]["prompt_tokens"].as_u64().unwrap() > 0);
+    assert!(response_json["usage"]["total_tokens"].as_u64().unwrap() > 0);
+}

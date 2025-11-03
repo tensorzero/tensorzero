@@ -127,6 +127,9 @@ export default [
     "routes/optimization/supervised-fine-tuning/route.tsx",
   ),
 
+  // API Keys
+  route("api-keys", "routes/api-keys/route.tsx"),
+
   // Health
   route("health", "routes/health/route.tsx"),
 ] satisfies RouteConfig;

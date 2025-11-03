@@ -9,7 +9,9 @@ use uuid::Uuid;
 
 use tracing_subscriber::{self, EnvFilter};
 
-use tensorzero::{InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role};
+use tensorzero::{
+    ClientExt, InferenceOutputSource, LaunchOptimizationWorkflowParams, RenderedSample, Role,
+};
 use tensorzero_core::{
     cache::CacheOptions,
     config::{provider_types::ProviderTypesConfig, Config, ConfigFileGlob},
@@ -32,7 +34,7 @@ use tensorzero_core::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
-    tool::{Tool, ToolCall, ToolCallConfigDatabaseInsert, ToolCallOutput, ToolChoice, ToolResult},
+    tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
@@ -176,22 +178,9 @@ pub async fn run_test_case(test_case: &impl OptimizationTestCase) {
                 system: Some(system),
                 messages,
                 inference_id: Uuid::now_v7(),
-                tool_config: None,
-                temperature: None,
-                top_p: None,
-                max_tokens: None,
-                presence_penalty: None,
-                frequency_penalty: None,
-                seed: None,
-                stop_sequences: None,
-                stream: false,
                 json_mode: JsonMode::Off.into(),
                 function_type: FunctionType::Chat,
-                output_schema: None,
-                fetch_and_encode_input_files_before_inference: true,
-                extra_body: Default::default(),
-                extra_headers: Default::default(),
-                extra_cache_key: None,
+                ..Default::default()
             };
             let clients = InferenceClients {
                 http_client: client.clone(),
@@ -313,7 +302,7 @@ fn generate_text_example() -> RenderedSample {
         stored_output: Some(StoredOutput::Chat(output)),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         output_schema: None,
         dispreferred_outputs: vec![vec![ContentBlockChatOutput::Text(Text {
             text: "The capital of France is Marseille.".to_string(),
@@ -443,8 +432,9 @@ fn generate_tool_call_example() -> RenderedSample {
         },
         output: Some(tool_call_output.clone()),
         stored_output: Some(StoredOutput::Chat(tool_call_output)),
-        tool_params: Some(ToolCallConfigDatabaseInsert {
-            tools_available: vec![Tool {
+        tool_params: DynamicToolParams {
+            allowed_tools: None,
+            additional_tools: Some(vec![Tool {
                 name: "get_weather".to_string(),
                 description: "Get the weather for a location".to_string(),
                 parameters: serde_json::json!({
@@ -458,10 +448,11 @@ fn generate_tool_call_example() -> RenderedSample {
                     "required": ["location"]
                 }),
                 strict: false,
-            }],
-            tool_choice: ToolChoice::Auto,
+            }]),
+            tool_choice: Some(ToolChoice::Auto),
             parallel_tool_calls: None,
-        }),
+            provider_tools: None,
+        },
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,
@@ -529,7 +520,7 @@ fn generate_image_example() -> RenderedSample {
         },
         output: Some(output.clone()),
         stored_output: Some(StoredOutput::Chat(output)),
-        tool_params: None,
+        tool_params: DynamicToolParams::default(),
         episode_id: Some(Uuid::now_v7()),
         inference_id: Some(Uuid::now_v7()),
         output_schema: None,

@@ -18,6 +18,9 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::Thought;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -303,6 +306,7 @@ impl InferenceProvider for VLLMProvider {
 /// for more details.
 /// We are not handling many features of the API here.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct VLLMRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -330,6 +334,29 @@ struct VLLMRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+}
+
+fn apply_inference_params(
+    _request: &mut VLLMRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "thinking_budget_tokens", None);
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> VLLMRequest<'a> {
@@ -364,7 +391,7 @@ impl<'a> VLLMRequest<'a> {
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
-        Ok(VLLMRequest {
+        let mut vllm_request = VLLMRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -380,7 +407,11 @@ impl<'a> VLLMRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
-        })
+        };
+
+        apply_inference_params(&mut vllm_request, &request.inference_params_v2);
+
+        Ok(vllm_request)
     }
 }
 
@@ -817,5 +848,33 @@ mod tests {
         assert!(vllm_request.tools.is_none());
         assert!(vllm_request.tool_choice.is_none());
         assert!(vllm_request.parallel_tool_calls.is_none());
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_vllm_apply_inference_params_called() {
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = VLLMRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns
+        assert!(logs_contain(
+            "vLLM does not support the inference parameter `reasoning_effort`"
+        ));
+
+        // Test that thinking_budget_tokens warns
+        assert!(logs_contain(
+            "vLLM does not support the inference parameter `thinking_budget_tokens`"
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "vLLM does not support the inference parameter `verbosity`"
+        ));
     }
 }
