@@ -1,5 +1,5 @@
 # This workflow lets us test a PR from a fork, while still having secrets available
-# * We cannot use the 'pull_request' event in 'general.yml,', since Github unconditionally blocks
+# * We cannot use the 'pull_request' event in 'general.yml', since GitHub unconditionally blocks
 #   secrets when this event is triggered by a PR from a fork.
 # * We cannot use the 'pull_request_target' event in 'general.yml', since it runs unconditionally (!!),
 #   regardless of the repository approval settings:
@@ -18,7 +18,7 @@ permissions:
   actions: write
 
 env:
-  TARGET_BRANCH: external-contributor/pr-${{ github.event.client_payload.pull_request.id }}
+  TARGET_BRANCH: external-contributor/pr-${{ github.event.client_payload.pull_request.number }}
 
 jobs:
   check-fork:
@@ -41,7 +41,7 @@ jobs:
       - name: Force-push to a branch named ${{ env.TARGET_BRANCH }}
         run: |
           git checkout -b ${{ env.TARGET_BRANCH }}
-          git push origin ${{ env.TARGET_BRANCH }}
+          git push --force origin ${{ env.TARGET_BRANCH }}
       - name: Trigger 'General Checks' workflow on ${{ env.TARGET_BRANCH }}
         id: trigger
         run: |
@@ -71,7 +71,7 @@ jobs:
           repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
           issue-number: ${{ github.event.client_payload.pull_request.number }}
           body: |
-            🚀 General Checks queue workflow triggered on new branch ${{ env.TARGET_BRANCH }}!
+            🚀 General Checks workflow triggered on new branch ${{ env.TARGET_BRANCH }}!
 
             View the run: ${{ steps.trigger.outputs.run_url }}
 
