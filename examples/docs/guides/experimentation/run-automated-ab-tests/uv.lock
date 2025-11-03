@@ -706,7 +706,7 @@ wheels = [
 ]
 
 [[package]]
-name = "set-up-auth-for-tensorzero"
+name = "run-automated-ab-tests"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

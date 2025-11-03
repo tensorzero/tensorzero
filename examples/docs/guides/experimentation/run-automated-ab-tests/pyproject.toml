@@ -1,5 +1,5 @@
 [project]
-name = "set-up-auth-for-tensorzero"
+name = "run-automated-ab-tests"
 version = "0.0.0"
 readme = "README.md"
 requires-python = ">=3.9"

@@ -102,7 +102,10 @@
           },
           {
             "group": "Experimentation",
-            "pages": ["experimentation/run-ab-tests"]
+            "pages": [
+              "experimentation/run-automated-ab-tests",
+              "experimentation/run-static-ab-tests"
+            ]
           },
           {
             "group": "Deployment",
@@ -265,11 +268,19 @@
     },
     {
       "source": "/gateway/guides/experimentation",
-      "destination": "/experimentation/run-ab-tests"
+      "destination": "/experimentation/run-static-ab-tests"
     },
     {
       "source": "/gateway/guides/experimentation/",
-      "destination": "/experimentation/run-ab-tests"
+      "destination": "/experimentation/run-static-ab-tests"
+    },
+    {
+      "source": "/experimentation/run-ab-tests",
+      "destination": "/experimentation/run-static-ab-tests"
+    },
+    {
+      "source": "/experimentation/run-ab-tests/",
+      "destination": "/experimentation/run-static-ab-tests"
     },
     {
       "source": "/gateway/deployment",
