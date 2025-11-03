@@ -556,6 +556,12 @@ struct UninitializedLLMJudgeChatCompletionVariantConfig {
     seed: Option<u32>,
     json_mode: JsonMode, // This is a JSON function
     stop_sequences: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking_budget_tokens: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verbosity: Option<String>,
     #[serde(default)]
     retries: RetryConfig,
     #[serde(default)]
@@ -599,24 +605,27 @@ fn convert_chat_completion_judge_to_variant(
         LLMJudgeInputFormat::Messages => None,
     };
     UninitializedChatCompletionConfig {
-        weight: get_weight(params.active),
-        model: params.model,
-        templates: Default::default(),
-        system_template: Some(system_template.path),
-        user_template: user_template.map(|t| t.path),
         assistant_template: None,
-        input_wrappers: None,
-        temperature: params.temperature,
-        top_p: params.top_p,
-        max_tokens: params.max_tokens,
-        presence_penalty: params.presence_penalty,
-        frequency_penalty: params.frequency_penalty,
-        seed: params.seed,
-        stop_sequences: params.stop_sequences,
-        json_mode: Some(params.json_mode),
-        retries: params.retries,
         extra_body: params.extra_body,
         extra_headers: params.extra_headers,
+        frequency_penalty: params.frequency_penalty,
+        input_wrappers: None,
+        json_mode: Some(params.json_mode),
+        max_tokens: params.max_tokens,
+        model: params.model,
+        presence_penalty: params.presence_penalty,
+        reasoning_effort: params.reasoning_effort,
+        retries: params.retries,
+        seed: params.seed,
+        stop_sequences: params.stop_sequences,
+        system_template: Some(system_template.path),
+        temperature: params.temperature,
+        templates: Default::default(),
+        thinking_budget_tokens: params.thinking_budget_tokens,
+        top_p: params.top_p,
+        user_template: user_template.map(|t| t.path),
+        verbosity: params.verbosity,
+        weight: get_weight(params.active),
     }
     .load(
         &SchemaData::load(
@@ -770,24 +779,27 @@ impl UninitializedLLMJudgeVariantInfo {
                         candidates: params.candidates,
                         evaluator: UninitializedBestOfNEvaluatorConfig {
                             inner: UninitializedChatCompletionConfig {
-                                weight: None,
-                                model: params.evaluator.model,
-                                user_template: evaluator_user_template.map(|t| t.path),
-                                system_template: Some(evaluator_system_template.path),
-                                templates: Default::default(),
-                                input_wrappers: None,
                                 assistant_template: None,
-                                temperature: params.evaluator.temperature,
-                                top_p: params.evaluator.top_p,
-                                max_tokens: params.evaluator.max_tokens,
-                                presence_penalty: params.evaluator.presence_penalty,
-                                frequency_penalty: params.evaluator.frequency_penalty,
-                                seed: params.evaluator.seed,
-                                json_mode: Some(params.evaluator.json_mode),
-                                stop_sequences: params.evaluator.stop_sequences,
-                                retries: params.evaluator.retries,
                                 extra_body: params.evaluator.extra_body,
                                 extra_headers: params.evaluator.extra_headers,
+                                frequency_penalty: params.evaluator.frequency_penalty,
+                                input_wrappers: None,
+                                json_mode: Some(params.evaluator.json_mode),
+                                max_tokens: params.evaluator.max_tokens,
+                                model: params.evaluator.model,
+                                presence_penalty: params.evaluator.presence_penalty,
+                                reasoning_effort: params.evaluator.reasoning_effort,
+                                retries: params.evaluator.retries,
+                                seed: params.evaluator.seed,
+                                stop_sequences: params.evaluator.stop_sequences,
+                                system_template: Some(evaluator_system_template.path),
+                                temperature: params.evaluator.temperature,
+                                templates: Default::default(),
+                                thinking_budget_tokens: params.evaluator.thinking_budget_tokens,
+                                top_p: params.evaluator.top_p,
+                                user_template: evaluator_user_template.map(|t| t.path),
+                                verbosity: params.evaluator.verbosity,
+                                weight: None,
                             },
                         },
                     }
@@ -838,24 +850,27 @@ impl UninitializedLLMJudgeVariantInfo {
                         candidates: params.candidates,
                         fuser: UninitializedFuserConfig {
                             inner: UninitializedChatCompletionConfig {
-                                weight: None,
-                                model: params.fuser.model,
-                                user_template: fuser_user_template.map(|t| t.path),
-                                system_template: Some(fuser_system_template.path),
-                                templates: Default::default(),
                                 assistant_template: None,
-                                input_wrappers: None,
-                                temperature: params.fuser.temperature,
-                                top_p: params.fuser.top_p,
-                                max_tokens: params.fuser.max_tokens,
-                                presence_penalty: params.fuser.presence_penalty,
-                                frequency_penalty: params.fuser.frequency_penalty,
-                                seed: params.fuser.seed,
-                                json_mode: Some(params.fuser.json_mode),
-                                retries: params.fuser.retries,
-                                stop_sequences: params.fuser.stop_sequences,
                                 extra_body: params.fuser.extra_body,
                                 extra_headers: params.fuser.extra_headers,
+                                frequency_penalty: params.fuser.frequency_penalty,
+                                input_wrappers: None,
+                                json_mode: Some(params.fuser.json_mode),
+                                max_tokens: params.fuser.max_tokens,
+                                model: params.fuser.model,
+                                presence_penalty: params.fuser.presence_penalty,
+                                reasoning_effort: params.fuser.reasoning_effort,
+                                retries: params.fuser.retries,
+                                seed: params.fuser.seed,
+                                stop_sequences: params.fuser.stop_sequences,
+                                system_template: Some(fuser_system_template.path),
+                                temperature: params.fuser.temperature,
+                                templates: Default::default(),
+                                thinking_budget_tokens: params.fuser.thinking_budget_tokens,
+                                top_p: params.fuser.top_p,
+                                user_template: fuser_user_template.map(|t| t.path),
+                                verbosity: params.fuser.verbosity,
+                                weight: None,
                             },
                         },
                     }
@@ -906,6 +921,7 @@ impl UninitializedLLMJudgeVariantInfo {
                     retries: params.retries,
                     stop_sequences: params.stop_sequences,
                     max_distance: None,
+                    ..Default::default()
                 };
                 VariantConfig::Dicl(uninitialized_config.load()?)
             }
@@ -959,6 +975,9 @@ fn check_convert_variant_to_llm_judge_variant(
                     stop_sequences: variant.stop_sequences().cloned(),
                     extra_body: variant.extra_body().cloned(),
                     extra_headers: variant.extra_headers().cloned(),
+                    reasoning_effort: variant.reasoning_effort().cloned(),
+                    thinking_budget_tokens: variant.thinking_budget_tokens(),
+                    verbosity: variant.verbosity().cloned(),
                 },
             ))
         }
@@ -986,6 +1005,9 @@ fn check_convert_variant_to_llm_judge_variant(
                         stop_sequences: variant.evaluator().inner.stop_sequences().cloned(),
                         extra_body: variant.evaluator().inner.extra_body().cloned(),
                         extra_headers: variant.evaluator().inner.extra_headers().cloned(),
+                        reasoning_effort: variant.evaluator().inner.reasoning_effort().cloned(),
+                        thinking_budget_tokens: variant.evaluator().inner.thinking_budget_tokens(),
+                        verbosity: variant.evaluator().inner.verbosity().cloned(),
                     },
                 },
             ))
@@ -1014,6 +1036,18 @@ fn check_convert_variant_to_llm_judge_variant(
                         stop_sequences: variant.fuser().inner.stop_sequences().cloned(),
                         extra_body: variant.fuser().inner.extra_body().cloned(),
                         extra_headers: variant.fuser().inner.extra_headers().cloned(),
+                        reasoning_effort: variant
+                            .fuser()
+                            .inner
+                            .inference_params_v2
+                            .reasoning_effort
+                            .clone(),
+                        thinking_budget_tokens: variant
+                            .fuser()
+                            .inner
+                            .inference_params_v2
+                            .thinking_budget_tokens,
+                        verbosity: variant.fuser().inner.inference_params_v2.verbosity.clone(),
                     },
                 },
             ))
@@ -1059,6 +1093,16 @@ fn check_convert_variant_to_llm_judge_variant(
                         stop_sequences: variant.inner.stop_sequences().cloned(),
                         extra_body: variant.inner.extra_body().cloned(),
                         extra_headers: variant.inner.extra_headers().cloned(),
+                        reasoning_effort: variant
+                            .inner
+                            .inference_params_v2
+                            .reasoning_effort
+                            .clone(),
+                        thinking_budget_tokens: variant
+                            .inner
+                            .inference_params_v2
+                            .thinking_budget_tokens,
+                        verbosity: variant.inner.inference_params_v2.verbosity.clone(),
                     },
                 },
             ))
@@ -1160,6 +1204,9 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
+                            reasoning_effort: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1284,6 +1331,9 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
+                            reasoning_effort: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1435,6 +1485,9 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
+                            reasoning_effort: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1463,6 +1516,9 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
+                            reasoning_effort: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1580,6 +1636,9 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
+                            reasoning_effort: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1651,6 +1710,9 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
+                            reasoning_effort: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,
@@ -1724,6 +1786,9 @@ mod tests {
                             extra_body: Default::default(),
                             extra_headers: Default::default(),
                             stop_sequences: None,
+                            reasoning_effort: None,
+                            thinking_budget_tokens: None,
+                            verbosity: None,
                         },
                     ),
                     timeouts: None,

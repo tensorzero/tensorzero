@@ -56,7 +56,7 @@ pub use tensorzero_core::endpoints::workflow_evaluation_run::{
 pub use tensorzero_core::inference::types::storage::{StorageKind, StoragePath};
 pub use tensorzero_core::inference::types::{
     Base64File, ContentBlockChunk, File, Input, InputMessage, InputMessageContent,
-    ObjectStoragePointer, Role, System, Unknown, UrlFile,
+    ObjectStoragePointer, Role, System, Unknown, UnknownChunk, UrlFile,
 };
 pub use tensorzero_core::optimization::{OptimizationJobHandle, OptimizationJobInfo};
 pub use tensorzero_core::stored_inference::{
