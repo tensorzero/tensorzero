@@ -373,7 +373,7 @@ item_count: 7.15 ± 0.39</code></pre>
 
 > **Ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.**
 
-- [x] **[Run automated A/B tests](https://www.tensorzero.com/docs/experimentation/run-automated-ab-tests)** to ship with confidence and identify the best prompts and models for your use cases.
+- [x] **[Run adaptive A/B tests](https://www.tensorzero.com/docs/experimentation/run-adaptive-ab-tests)** to ship with confidence and identify the best prompts and models for your use cases.
 - [x] Enforce principled experiments in complex workflows, including support for multi-turn LLM systems, sequential testing, and more.
 
 ### & more!

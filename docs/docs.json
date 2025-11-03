@@ -103,7 +103,7 @@
           {
             "group": "Experimentation",
             "pages": [
-              "experimentation/run-automated-ab-tests",
+              "experimentation/run-adaptive-ab-tests",
               "experimentation/run-static-ab-tests"
             ]
           },
