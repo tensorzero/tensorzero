@@ -1,620 +1,102 @@
-use chrono::DateTime;
-use tensorzero::test_helpers::make_embedded_gateway;
-use tensorzero::{
-    BooleanMetricFilter, FloatComparisonOperator, FloatMetricFilter, InferenceFilter,
-    InferenceOutputSource, ListInferencesParams, StoredInference, TagComparisonOperator, TagFilter,
-    TimeComparisonOperator, TimeFilter,
-};
-use tensorzero_core::db::clickhouse::query_builder::{OrderBy, OrderByTerm, OrderDirection};
+/// Tests for the /v1/inferences/list_inferences and /v1/inferences/get_inferences endpoints.
+use reqwest::Client;
+use serde_json::{json, Value};
 use uuid::Uuid;
 
+use crate::common::get_gateway_endpoint;
+
+/// Helper function to call list_inferences via HTTP
+async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    let http_client = Client::new();
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/list_inferences"))
+        .json(&request)
+        .send()
+        .await?;
+
+    assert!(
+        resp.status().is_success(),
+        "list_inferences request failed: status={:?}, body={:?}",
+        resp.status(),
+        resp.text().await
+    );
+
+    let resp_json: Value = resp.json().await?;
+    let inferences = resp_json["inferences"]
+        .as_array()
+        .expect("Expected 'inferences' array in response")
+        .clone();
+
+    Ok(inferences)
+}
+
+/// Helper function to call get_inferences via HTTP
+async fn get_inferences_by_ids(ids: Vec<Uuid>) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+    let http_client = Client::new();
+    let id_strings: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
+
+    let resp = http_client
+        .post(get_gateway_endpoint("/v1/inferences/get_inferences"))
+        .json(&json!({
+            "ids": id_strings
+        }))
+        .send()
+        .await?;
+
+    assert!(
+        resp.status().is_success(),
+        "get_inferences request failed: status={:?}, body={:?}",
+        resp.status(),
+        resp.text().await
+    );
+
+    let resp_json: Value = resp.json().await?;
+    let inferences = resp_json["inferences"]
+        .as_array()
+        .expect("Expected 'inferences' array in response")
+        .clone();
+
+    Ok(inferences)
+}
+
+// Tests for list_inferences endpoint
+
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_simple_query_json_function() {
-    let client = make_embedded_gateway().await;
-    let order_by = vec![OrderBy {
-        term: OrderByTerm::Timestamp,
-        direction: OrderDirection::Desc,
-    }];
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        limit: Some(2),
-        order_by: Some(&order_by),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
+pub async fn test_list_simple_query_json_function() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 2,
+        "order_by": [
+            {
+                "term": {"type": "timestamp"},
+                "direction": "desc"
+            }
+        ]
+    });
+
+    let res = list_inferences(request).await.unwrap();
     assert_eq!(res.len(), 2);
 
     for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        assert_eq!(json_inference.function_name, "extract_entities");
-        assert!(json_inference.dispreferred_outputs.is_empty());
+        assert_eq!(inference["type"], "json");
+        assert_eq!(inference["function_name"], "extract_entities");
+        assert_eq!(
+            inference["dispreferred_outputs"].as_array().unwrap().len(),
+            0
+        );
     }
 
     // Verify ORDER BY timestamp DESC - check that timestamps are in descending order
-    let mut prev_timestamp = None;
+    let mut prev_timestamp: Option<String> = None;
     for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        if let Some(prev) = prev_timestamp {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
             assert!(
-                json_inference.timestamp <= prev,
+                timestamp <= *prev,
                 "Timestamps should be in descending order. Got: {} <= {}",
-                json_inference.timestamp,
+                timestamp,
                 prev
-            );
-        }
-        prev_timestamp = Some(json_inference.timestamp);
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_simple_query_chat_function() {
-    let client = make_embedded_gateway().await;
-    let order_by = vec![OrderBy {
-        term: OrderByTerm::Timestamp,
-        direction: OrderDirection::Asc,
-    }];
-    let opts = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        output_source: InferenceOutputSource::Demonstration,
-        limit: Some(3),
-        offset: Some(3),
-        order_by: Some(&order_by),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 3);
-
-    for inference in &res {
-        let StoredInference::Chat(chat_inference) = inference else {
-            panic!("Expected a Chat inference");
-        };
-        assert_eq!(chat_inference.function_name, "write_haiku");
-        assert_eq!(chat_inference.dispreferred_outputs.len(), 1);
-    }
-
-    // Verify ORDER BY timestamp ASC - check that timestamps are in ascending order
-    let mut prev_timestamp = None;
-    for inference in &res {
-        let StoredInference::Chat(chat_inference) = inference else {
-            panic!("Expected a Chat inference");
-        };
-        if let Some(prev) = prev_timestamp {
-            assert!(
-                chat_inference.timestamp >= prev,
-                "Timestamps should be in ascending order. Got: {} >= {}",
-                chat_inference.timestamp,
-                prev
-            );
-        }
-        prev_timestamp = Some(chat_inference.timestamp);
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_simple_query_with_float_filter() {
-    let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilter::FloatMetric(FloatMetricFilter {
-        metric_name: "jaccard_similarity".to_string(),
-        value: 0.5,
-        comparison_operator: FloatComparisonOperator::GreaterThan,
-    });
-    let order_by = vec![OrderBy {
-        term: OrderByTerm::Metric {
-            name: "jaccard_similarity".to_string(),
-        },
-        direction: OrderDirection::Desc,
-    }];
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        filters: Some(&filter_node),
-        limit: Some(3),
-        order_by: Some(&order_by),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 3);
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        assert_eq!(json_inference.function_name, "extract_entities");
-        assert!(json_inference.dispreferred_outputs.is_empty());
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_demonstration_output_source() {
-    let client = make_embedded_gateway().await;
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        output_source: InferenceOutputSource::Demonstration,
-        limit: Some(5),
-        offset: Some(1),
-        ..Default::default()
-    };
-
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 5);
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        assert_eq!(json_inference.function_name, "extract_entities");
-        assert_eq!(json_inference.dispreferred_outputs.len(), 1);
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_boolean_metric_filter() {
-    let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilter::BooleanMetric(BooleanMetricFilter {
-        metric_name: "exact_match".to_string(),
-        value: true,
-    });
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        filters: Some(&filter_node),
-        limit: Some(5),
-        offset: Some(1),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 5);
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        assert_eq!(json_inference.function_name, "extract_entities");
-        assert!(json_inference.dispreferred_outputs.is_empty());
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_and_filter_multiple_float_metrics() {
-    let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilter::And {
-        children: vec![
-            InferenceFilter::FloatMetric(FloatMetricFilter {
-                metric_name: "jaccard_similarity".to_string(),
-                value: 0.5,
-                comparison_operator: FloatComparisonOperator::GreaterThan,
-            }),
-            InferenceFilter::FloatMetric(FloatMetricFilter {
-                metric_name: "jaccard_similarity".to_string(),
-                value: 0.8,
-                comparison_operator: FloatComparisonOperator::LessThan,
-            }),
-        ],
-    };
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        filters: Some(&filter_node),
-        limit: Some(1),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 1);
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        assert_eq!(json_inference.function_name, "extract_entities");
-        assert!(json_inference.dispreferred_outputs.is_empty());
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_or_filter_mixed_metrics() {
-    let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilter::Or {
-        children: vec![
-            InferenceFilter::FloatMetric(FloatMetricFilter {
-                metric_name: "jaccard_similarity".to_string(),
-                value: 0.8,
-                comparison_operator: FloatComparisonOperator::GreaterThanOrEqual,
-            }),
-            InferenceFilter::BooleanMetric(BooleanMetricFilter {
-                metric_name: "exact_match".to_string(),
-                value: true,
-            }),
-            InferenceFilter::BooleanMetric(BooleanMetricFilter {
-                // Episode-level metric
-                metric_name: "goal_achieved".to_string(),
-                value: true,
-            }),
-        ],
-    };
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        filters: Some(&filter_node),
-        limit: Some(1),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 1);
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        assert_eq!(json_inference.function_name, "extract_entities");
-        assert!(json_inference.dispreferred_outputs.is_empty());
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_not_filter() {
-    let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilter::Not {
-        child: Box::new(InferenceFilter::Or {
-            children: vec![
-                InferenceFilter::BooleanMetric(BooleanMetricFilter {
-                    metric_name: "exact_match".to_string(),
-                    value: true,
-                }),
-                InferenceFilter::BooleanMetric(BooleanMetricFilter {
-                    metric_name: "exact_match".to_string(),
-                    value: false,
-                }),
-            ],
-        }),
-    };
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        filters: Some(&filter_node),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 0);
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_simple_time_filter() {
-    let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilter::Time(TimeFilter {
-        time: DateTime::from_timestamp(1672531200, 0).unwrap(), // 2023-01-01 00:00:00 UTC
-        comparison_operator: TimeComparisonOperator::GreaterThan,
-    });
-    let order_by = vec![
-        OrderBy {
-            term: OrderByTerm::Metric {
-                name: "exact_match".to_string(),
-            },
-            direction: OrderDirection::Desc,
-        },
-        OrderBy {
-            term: OrderByTerm::Timestamp,
-            direction: OrderDirection::Asc,
-        },
-    ];
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        filters: Some(&filter_node),
-        limit: Some(5),
-        order_by: Some(&order_by),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 5);
-
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        assert_eq!(json_inference.function_name, "extract_entities");
-    }
-
-    // Verify ORDER BY timestamp ASC (secondary sort) - check that for same metric values, timestamps are ascending
-    let mut prev_timestamp = None;
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        if let Some(prev) = prev_timestamp {
-            assert!(
-                json_inference.timestamp >= prev,
-                "Timestamps should be in ascending order for secondary sort. Got: {} >= {}",
-                json_inference.timestamp,
-                prev
-            );
-        }
-        prev_timestamp = Some(json_inference.timestamp);
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_simple_tag_filter() {
-    let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilter::Tag(TagFilter {
-        key: "tensorzero::evaluation_name".to_string(),
-        value: "entity_extraction".to_string(),
-        comparison_operator: TagComparisonOperator::Equal,
-    });
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        filters: Some(&filter_node),
-        limit: Some(200),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 200);
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected a JSON inference");
-        };
-        assert_eq!(json_inference.function_name, "extract_entities");
-        assert_eq!(
-            json_inference.tags["tensorzero::evaluation_name"],
-            "entity_extraction"
-        );
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_combined_time_and_tag_filter() {
-    let client = make_embedded_gateway().await;
-    let filter_node = InferenceFilter::And {
-        children: vec![
-            InferenceFilter::Time(TimeFilter {
-                // 2025-04-14 23:30:00 UTC (should exclude some of these elements)
-                time: DateTime::from_timestamp(1744673400, 0).unwrap(),
-                comparison_operator: TimeComparisonOperator::GreaterThanOrEqual,
-            }),
-            InferenceFilter::Tag(TagFilter {
-                key: "tensorzero::evaluation_name".to_string(),
-                value: "haiku".to_string(),
-                comparison_operator: TagComparisonOperator::Equal,
-            }),
-        ],
-    };
-    let opts = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        filters: Some(&filter_node),
-        limit: Some(50),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(res.len(), 50);
-    for inference in &res {
-        let StoredInference::Chat(chat_inference) = inference else {
-            panic!("Expected a Chat inference");
-        };
-        assert_eq!(chat_inference.function_name, "write_haiku");
-        assert_eq!(chat_inference.tags["tensorzero::evaluation_name"], "haiku");
-        assert!(chat_inference.timestamp >= DateTime::from_timestamp(1744673400, 0).unwrap());
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_query_by_ids_json_only() {
-    let client = make_embedded_gateway().await;
-
-    // First, get some JSON inference IDs
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        limit: Some(3),
-        ..Default::default()
-    };
-    let initial_res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(initial_res.len(), 3);
-
-    // Extract the IDs
-    let ids: Vec<_> = initial_res
-        .iter()
-        .map(|inf| match inf {
-            StoredInference::Json(j) => j.inference_id,
-            StoredInference::Chat(_) => panic!("Expected JSON inference"),
-        })
-        .collect();
-
-    // Now query by IDs without function_name
-    let opts = ListInferencesParams {
-        function_name: None,
-        ids: Some(&ids),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-
-    // Should get back the same 3 inferences
-    assert_eq!(res.len(), 3);
-    for inference in &res {
-        let StoredInference::Json(json_inference) = inference else {
-            panic!("Expected JSON inference");
-        };
-        assert!(ids.contains(&json_inference.inference_id));
-        assert_eq!(json_inference.function_name, "extract_entities");
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_query_by_ids_chat_only() {
-    let client = make_embedded_gateway().await;
-
-    // First, get some Chat inference IDs
-    let opts = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        limit: Some(2),
-        ..Default::default()
-    };
-    let initial_res = client.experimental_list_inferences(opts).await.unwrap();
-    assert_eq!(initial_res.len(), 2);
-
-    // Extract the IDs
-    let ids: Vec<_> = initial_res
-        .iter()
-        .map(|inf| match inf {
-            StoredInference::Chat(c) => c.inference_id,
-            StoredInference::Json(_) => panic!("Expected Chat inference"),
-        })
-        .collect();
-
-    // Now query by IDs without function_name
-    let opts = ListInferencesParams {
-        ids: Some(&ids),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-
-    // Should get back the same 2 inferences
-    assert_eq!(res.len(), 2);
-    for inference in &res {
-        let StoredInference::Chat(chat_inference) = inference else {
-            panic!("Expected Chat inference");
-        };
-        assert!(ids.contains(&chat_inference.inference_id));
-        assert_eq!(chat_inference.function_name, "write_haiku");
-    }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_query_by_ids_unknown_id_returns_empty() {
-    let client = make_embedded_gateway().await;
-
-    // Query by an unknown ID
-    let unknown_ids = [Uuid::now_v7()];
-    let opts = ListInferencesParams {
-        ids: Some(&unknown_ids),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-
-    assert!(res.is_empty(), "Expected empty result for unknown ID");
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_query_by_ids_mixed_types() {
-    let client = make_embedded_gateway().await;
-
-    // Get some JSON inference IDs
-    let json_opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        limit: Some(2),
-        ..Default::default()
-    };
-    let json_res = client
-        .experimental_list_inferences(json_opts)
-        .await
-        .unwrap();
-
-    // Get some Chat inference IDs
-    let chat_opts = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        limit: Some(2),
-        ..Default::default()
-    };
-    let chat_res = client
-        .experimental_list_inferences(chat_opts)
-        .await
-        .unwrap();
-
-    // Combine the IDs
-    let mut ids: Vec<_> = json_res
-        .iter()
-        .map(|inf| match inf {
-            StoredInference::Json(j) => j.inference_id,
-            StoredInference::Chat(_) => panic!("Expected JSON inference"),
-        })
-        .collect();
-    ids.extend(chat_res.iter().map(|inf| match inf {
-        StoredInference::Chat(c) => c.inference_id,
-        StoredInference::Json(_) => panic!("Expected Chat inference"),
-    }));
-
-    // Now query by mixed IDs without function_name
-    let opts = ListInferencesParams {
-        ids: Some(&ids),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-
-    // Should get back 4 inferences (2 JSON + 2 Chat)
-    assert_eq!(res.len(), 4);
-
-    let mut json_count = 0;
-    let mut chat_count = 0;
-    for inference in &res {
-        match inference {
-            StoredInference::Json(json_inference) => {
-                assert!(ids.contains(&json_inference.inference_id));
-                assert_eq!(json_inference.function_name, "extract_entities");
-                json_count += 1;
-            }
-            StoredInference::Chat(chat_inference) => {
-                assert!(ids.contains(&chat_inference.inference_id));
-                assert_eq!(chat_inference.function_name, "write_haiku");
-                chat_count += 1;
-            }
-        }
-    }
-    assert_eq!(json_count, 2);
-    assert_eq!(chat_count, 2);
-}
-
-#[tokio::test(flavor = "multi_thread")]
-pub async fn test_query_by_ids_with_order_by_timestamp() {
-    let client = make_embedded_gateway().await;
-
-    // Get some mixed inference IDs
-    let json_opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        limit: Some(3),
-        ..Default::default()
-    };
-    let json_res = client
-        .experimental_list_inferences(json_opts)
-        .await
-        .unwrap();
-
-    let chat_opts = ListInferencesParams {
-        function_name: Some("write_haiku"),
-        limit: Some(3),
-        ..Default::default()
-    };
-    let chat_res = client
-        .experimental_list_inferences(chat_opts)
-        .await
-        .unwrap();
-
-    let mut ids: Vec<_> = json_res
-        .iter()
-        .map(|inf| match inf {
-            StoredInference::Json(j) => j.inference_id,
-            StoredInference::Chat(_) => panic!("Expected JSON inference"),
-        })
-        .collect();
-    ids.extend(chat_res.iter().map(|inf| match inf {
-        StoredInference::Chat(c) => c.inference_id,
-        StoredInference::Json(_) => panic!("Expected Chat inference"),
-    }));
-
-    // Query with ORDER BY timestamp DESC
-    let order_by = vec![OrderBy {
-        term: OrderByTerm::Timestamp,
-        direction: OrderDirection::Desc,
-    }];
-    let opts = ListInferencesParams {
-        ids: Some(&ids),
-        order_by: Some(&order_by),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await.unwrap();
-
-    assert_eq!(res.len(), 6);
-
-    // Verify timestamps are in descending order
-    let mut prev_timestamp = None;
-    for inference in &res {
-        let timestamp = match inference {
-            StoredInference::Json(j) => j.timestamp,
-            StoredInference::Chat(c) => c.timestamp,
-        };
-        if let Some(prev) = prev_timestamp {
-            assert!(
-                timestamp <= prev,
-                "Timestamps should be in descending order. Got: {timestamp} <= {prev}"
             );
         }
         prev_timestamp = Some(timestamp);
@@ -622,41 +104,518 @@ pub async fn test_query_by_ids_with_order_by_timestamp() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-pub async fn test_query_by_ids_with_order_by_metric_errors() {
-    let client = make_embedded_gateway().await;
+pub async fn test_list_simple_query_chat_function() {
+    let request = json!({
+        "function_name": "write_haiku",
+        "output_source": "demonstration",
+        "page_size": 3,
+        "offset": 3,
+        "order_by": [
+            {
+                "term": {"type": "timestamp"},
+                "direction": "asc"
+            }
+        ]
+    });
 
-    // Get some JSON inference IDs
-    let opts = ListInferencesParams {
-        function_name: Some("extract_entities"),
-        limit: Some(2),
-        ..Default::default()
-    };
-    let initial_res = client.experimental_list_inferences(opts).await.unwrap();
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 3);
 
-    let ids: Vec<_> = initial_res
+    for inference in &res {
+        assert_eq!(inference["type"], "chat");
+        assert_eq!(inference["function_name"], "write_haiku");
+        assert_eq!(
+            inference["dispreferred_outputs"].as_array().unwrap().len(),
+            1
+        );
+    }
+
+    // Verify ORDER BY timestamp ASC - check that timestamps are in ascending order
+    let mut prev_timestamp: Option<String> = None;
+    for inference in &res {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
+            assert!(
+                timestamp >= *prev,
+                "Timestamps should be in ascending order. Got: {} >= {}",
+                timestamp,
+                prev
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_query_with_float_filter() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 3,
+        "filter": {
+            "type": "float_metric",
+            "metric_name": "jaccard_similarity",
+            "value": 0.5,
+            "comparison_operator": "greater_than"
+        },
+        "order_by": [
+            {
+                "term": {
+                    "type": "metric",
+                    "name": "jaccard_similarity"
+                },
+                "direction": "desc"
+            }
+        ]
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 3);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "json");
+        assert_eq!(inference["function_name"], "extract_entities");
+        assert_eq!(
+            inference["dispreferred_outputs"].as_array().unwrap().len(),
+            0
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_demonstration_output_source() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "demonstration",
+        "page_size": 5,
+        "offset": 1
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 5);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "json");
+        assert_eq!(inference["function_name"], "extract_entities");
+        assert_eq!(
+            inference["dispreferred_outputs"].as_array().unwrap().len(),
+            1
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_boolean_metric_filter() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 5,
+        "offset": 1,
+        "filter": {
+            "type": "boolean_metric",
+            "metric_name": "exact_match",
+            "value": true
+        }
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 5);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "json");
+        assert_eq!(inference["function_name"], "extract_entities");
+        assert_eq!(
+            inference["dispreferred_outputs"].as_array().unwrap().len(),
+            0
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_list_and_filter_multiple_float_metrics() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 1,
+        "filter": {
+            "type": "and",
+            "children": [
+                {
+                    "type": "float_metric",
+                    "metric_name": "jaccard_similarity",
+                    "value": 0.5,
+                    "comparison_operator": "greater_than"
+                },
+                {
+                    "type": "float_metric",
+                    "metric_name": "jaccard_similarity",
+                    "value": 0.8,
+                    "comparison_operator": "less_than"
+                }
+            ]
+        }
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 1);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "json");
+        assert_eq!(inference["function_name"], "extract_entities");
+        assert_eq!(
+            inference["dispreferred_outputs"].as_array().unwrap().len(),
+            0
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_or_filter_mixed_metrics() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 1,
+        "filter": {
+            "type": "or",
+            "children": [
+                {
+                    "type": "float_metric",
+                    "metric_name": "jaccard_similarity",
+                    "value": 0.8,
+                    "comparison_operator": "greater_than_or_equal"
+                },
+                {
+                    "type": "boolean_metric",
+                    "metric_name": "exact_match",
+                    "value": true
+                },
+                {
+                    "type": "boolean_metric",
+                    "metric_name": "goal_achieved",
+                    "value": true
+                }
+            ]
+        }
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 1);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "json");
+        assert_eq!(inference["function_name"], "extract_entities");
+        assert_eq!(
+            inference["dispreferred_outputs"].as_array().unwrap().len(),
+            0
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_not_filter() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "filter": {
+            "type": "not",
+            "child": {
+                "type": "or",
+                "children": [
+                    {
+                        "type": "boolean_metric",
+                        "metric_name": "exact_match",
+                        "value": true
+                    },
+                    {
+                        "type": "boolean_metric",
+                        "metric_name": "exact_match",
+                        "value": false
+                    }
+                ]
+            }
+        }
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_simple_time_filter() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 5,
+        "filter": {
+            "type": "time",
+            "time": "2023-01-01T00:00:00Z",
+            "comparison_operator": "greater_than"
+        },
+        "order_by": [
+            {
+                "term": {
+                    "type": "metric",
+                    "name": "exact_match"
+                },
+                "direction": "desc"
+            },
+            {
+                "term": {"type": "timestamp"},
+                "direction": "asc"
+            }
+        ]
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 5);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "json");
+        assert_eq!(inference["function_name"], "extract_entities");
+    }
+
+    // Verify ORDER BY timestamp ASC (secondary sort)
+    let mut prev_timestamp: Option<String> = None;
+    for inference in &res {
+        let timestamp = inference["timestamp"].as_str().unwrap().to_string();
+        if let Some(prev) = &prev_timestamp {
+            assert!(
+                timestamp >= *prev,
+                "Timestamps should be in ascending order for secondary sort. Got: {} >= {}",
+                timestamp,
+                prev
+            );
+        }
+        prev_timestamp = Some(timestamp);
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_simple_tag_filter() {
+    let request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 200,
+        "filter": {
+            "type": "tag",
+            "key": "tensorzero::evaluation_name",
+            "value": "entity_extraction",
+            "comparison_operator": "equal"
+        }
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 200);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "json");
+        assert_eq!(inference["function_name"], "extract_entities");
+        assert_eq!(
+            inference["tags"]["tensorzero::evaluation_name"],
+            "entity_extraction"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_list_combined_time_and_tag_filter() {
+    let request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "page_size": 50,
+        "filter": {
+            "type": "and",
+            "children": [
+                {
+                    "type": "time",
+                    "time": "2025-04-14T23:30:00Z",
+                    "comparison_operator": "greater_than_or_equal"
+                },
+                {
+                    "type": "tag",
+                    "key": "tensorzero::evaluation_name",
+                    "value": "haiku",
+                    "comparison_operator": "equal"
+                }
+            ]
+        }
+    });
+
+    let res = list_inferences(request).await.unwrap();
+    assert_eq!(res.len(), 50);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "chat");
+        assert_eq!(inference["function_name"], "write_haiku");
+        assert_eq!(inference["tags"]["tensorzero::evaluation_name"], "haiku");
+
+        let timestamp = inference["timestamp"].as_str().unwrap();
+        assert!(timestamp >= "2025-04-14T23:30:00Z");
+    }
+}
+
+// Tests for get_inferences endpoint (by ID)
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_json_only() {
+    // First, list some JSON inference IDs
+    let list_request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 3
+    });
+
+    let initial_res = list_inferences(list_request).await.unwrap();
+    assert_eq!(initial_res.len(), 3);
+
+    // Extract the IDs
+    let ids: Vec<Uuid> = initial_res
         .iter()
-        .map(|inf| match inf {
-            StoredInference::Json(j) => j.inference_id,
-            StoredInference::Chat(_) => panic!("Expected JSON inference"),
-        })
+        .map(|inf| Uuid::parse_str(inf["inference_id"].as_str().unwrap()).unwrap())
         .collect();
 
-    // Try to ORDER BY a metric without function_name - should error
-    let order_by = vec![OrderBy {
-        term: OrderByTerm::Metric {
-            name: "jaccard_similarity".to_string(),
-        },
-        direction: OrderDirection::Desc,
-    }];
-    let opts = ListInferencesParams {
-        ids: Some(&ids),
-        order_by: Some(&order_by),
-        ..Default::default()
-    };
-    let res = client.experimental_list_inferences(opts).await;
+    // Now get by IDs
+    let res = get_inferences_by_ids(ids.clone()).await.unwrap();
 
-    // Should error because ORDER BY metric is not supported without function_name
-    assert!(res.is_err());
-    let err_msg = format!("{:?}", res.unwrap_err());
-    assert!(err_msg.contains("not supported"));
+    // Should get back the same 3 inferences
+    assert_eq!(res.len(), 3);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "json");
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(ids.contains(&inference_id));
+        assert_eq!(inference["function_name"], "extract_entities");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_chat_only() {
+    // First, list some Chat inference IDs
+    let list_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "page_size": 2
+    });
+
+    let initial_res = list_inferences(list_request).await.unwrap();
+    assert_eq!(initial_res.len(), 2);
+
+    // Extract the IDs
+    let ids: Vec<Uuid> = initial_res
+        .iter()
+        .map(|inf| Uuid::parse_str(inf["inference_id"].as_str().unwrap()).unwrap())
+        .collect();
+
+    // Now get by IDs
+    let res = get_inferences_by_ids(ids.clone()).await.unwrap();
+
+    // Should get back the same 2 inferences
+    assert_eq!(res.len(), 2);
+
+    for inference in &res {
+        assert_eq!(inference["type"], "chat");
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(ids.contains(&inference_id));
+        assert_eq!(inference["function_name"], "write_haiku");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_unknown_id_returns_empty() {
+    // Get by an unknown ID
+    let unknown_ids = vec![Uuid::now_v7()];
+    let res = get_inferences_by_ids(unknown_ids).await.unwrap();
+
+    assert!(res.is_empty(), "Expected empty result for unknown ID");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_mixed_types() {
+    // Get some JSON inference IDs
+    let json_request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 2
+    });
+    let json_res = list_inferences(json_request).await.unwrap();
+
+    // Get some Chat inference IDs
+    let chat_request = json!({
+        "function_name": "write_haiku",
+        "output_source": "inference",
+        "page_size": 2
+    });
+    let chat_res = list_inferences(chat_request).await.unwrap();
+
+    // Combine the IDs
+    let mut ids: Vec<Uuid> = json_res
+        .iter()
+        .map(|inf| Uuid::parse_str(inf["inference_id"].as_str().unwrap()).unwrap())
+        .collect();
+    ids.extend(
+        chat_res
+            .iter()
+            .map(|inf| Uuid::parse_str(inf["inference_id"].as_str().unwrap()).unwrap()),
+    );
+
+    // Now get by mixed IDs
+    let res = get_inferences_by_ids(ids.clone()).await.unwrap();
+
+    // Should get back 4 inferences (2 JSON + 2 Chat)
+    assert_eq!(res.len(), 4);
+
+    let mut json_count = 0;
+    let mut chat_count = 0;
+
+    for inference in &res {
+        let inference_id = Uuid::parse_str(inference["inference_id"].as_str().unwrap()).unwrap();
+        assert!(ids.contains(&inference_id));
+
+        match inference["type"].as_str().unwrap() {
+            "json" => {
+                assert_eq!(inference["function_name"], "extract_entities");
+                json_count += 1;
+            }
+            "chat" => {
+                assert_eq!(inference["function_name"], "write_haiku");
+                chat_count += 1;
+            }
+            other => panic!("Unexpected inference type: {}", other),
+        }
+    }
+
+    assert_eq!(json_count, 2);
+    assert_eq!(chat_count, 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_empty_list() {
+    // Get by empty list of IDs should return empty result
+    let res = get_inferences_by_ids(vec![]).await.unwrap();
+    assert!(res.is_empty(), "Expected empty result for empty ID list");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+pub async fn test_get_by_ids_duplicate_ids() {
+    // First, get one inference ID
+    let list_request = json!({
+        "function_name": "extract_entities",
+        "output_source": "inference",
+        "page_size": 1
+    });
+
+    let initial_res = list_inferences(list_request).await.unwrap();
+    assert_eq!(initial_res.len(), 1);
+
+    let id = Uuid::parse_str(initial_res[0]["inference_id"].as_str().unwrap()).unwrap();
+
+    // Query with the same ID duplicated
+    let duplicate_ids = vec![id, id, id];
+    let res = get_inferences_by_ids(duplicate_ids).await.unwrap();
+
+    // Should still only get back 1 inference (deduplicated by ClickHouse)
+    assert_eq!(res.len(), 1);
+    assert_eq!(res[0]["type"], "json");
+    let returned_id = Uuid::parse_str(res[0]["inference_id"].as_str().unwrap()).unwrap();
+    assert_eq!(returned_id, id);
 }

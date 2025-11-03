@@ -25,7 +25,6 @@ mod human_feedback;
 mod image_url;
 mod inference;
 mod inference_evaluation_human_feedback;
-mod list_inferences;
 mod mixture_of_n;
 mod object_storage;
 mod openai_compatible;
