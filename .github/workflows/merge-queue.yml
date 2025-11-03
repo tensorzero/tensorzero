@@ -109,6 +109,10 @@ jobs:
         run: |
           docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml run --rm -e TENSORZERO_CI=1 live-tests
 
+      - name: Print live tests logs
+        if: always()
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs -t
+
       # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
       # # For now, we only check for deprecation warnings after running the Rust e2e tests
       # - name: Check e2e logs for deprecation warnings (gateway e2e tests only)
