@@ -69,10 +69,12 @@ pub fn warn_discarded_cache_write(raw_response: &str) {
 
 pub fn warn_discarded_thought_block(provider_type: &str, thought: &Thought) {
     if *DEBUG.get().unwrap_or(&false) {
-        tracing::warn!("Provider type `{provider_type}` does not support input thought blocks, discarding: {thought:?}");
+        tracing::warn!(
+            "TensorZero doesn't support input thought blocks for the `{provider_type}` provider. Many providers don't support them; if this provider does, please let us know: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests\n\n{thought:?}"
+        );
     } else {
         tracing::warn!(
-            "Provider type `{provider_type}` does not support input thought blocks, discarding"
+            "TensorZero doesn't support input thought blocks for the `{provider_type}` provider. Many providers don't support them; if this provider does, please let us know: https://github.com/tensorzero/tensorzero/discussions/categories/feature-requests"
         );
     }
 }

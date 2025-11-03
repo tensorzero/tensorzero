@@ -143,6 +143,26 @@ async fn tensorzero_auth_middleware(
                 message: "PostgreSQL connection is disabled".to_string(),
             }));
         };
+
+        // Check cache first if available
+        if let Some(cache) = &app_state.auth_cache {
+            let cache_key = parsed_key.cache_key();
+            if let Some(cached_result) = cache.get(&cache_key) {
+                return match cached_result {
+                    AuthResult::Success(key_info) => Ok(key_info),
+                    AuthResult::Disabled(disabled_at) => {
+                        Err(Error::new(ErrorDetails::TensorZeroAuth {
+                            message: format!("API key was disabled at: {disabled_at}"),
+                        }))
+                    }
+                    AuthResult::MissingKey => Err(Error::new(ErrorDetails::TensorZeroAuth {
+                        message: "Provided API key does not exist in the database".to_string(),
+                    })),
+                };
+            }
+        }
+
+        // Cache miss or no cache - query database
         let postgres_key = match tensorzero_auth::postgres::check_key(&parsed_key, pool).await {
             Ok(key) => key,
             Err(e) => {
@@ -151,6 +171,13 @@ async fn tensorzero_auth_middleware(
                 }));
             }
         };
+
+        // Store result in cache if available
+        if let Some(cache) = &app_state.auth_cache {
+            let cache_key = parsed_key.cache_key();
+            cache.insert(cache_key, postgres_key.clone());
+        }
+
         match postgres_key {
             AuthResult::Success(key_info) => Ok(key_info),
             AuthResult::Disabled(disabled_at) => Err(Error::new(ErrorDetails::TensorZeroAuth {

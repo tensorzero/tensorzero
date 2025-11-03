@@ -48,15 +48,31 @@ pub enum FunctionConfig {
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "FunctionConfigChat")]
+#[pyclass(str, name = "FunctionConfigChat")]
 pub struct FunctionConfigChatPyClass {
     pub inner: Arc<FunctionConfig>,
 }
 
 #[cfg(feature = "pyo3")]
-#[pyclass(name = "FunctionConfigJson")]
+impl std::fmt::Display for FunctionConfigChatPyClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(&self.inner).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pyclass(str, name = "FunctionConfigJson")]
 pub struct FunctionConfigJsonPyClass {
     pub inner: Arc<FunctionConfig>,
+}
+
+#[cfg(feature = "pyo3")]
+impl std::fmt::Display for FunctionConfigJsonPyClass {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = serde_json::to_string_pretty(&self.inner).map_err(|_| std::fmt::Error)?;
+        write!(f, "{json}")
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]

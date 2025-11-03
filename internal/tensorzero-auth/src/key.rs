@@ -3,7 +3,7 @@ use rand::{
     distr::{Alphanumeric, SampleString},
     rngs::StdRng,
 };
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -12,7 +12,7 @@ use thiserror::Error;
 #[derive(Debug)]
 pub struct TensorZeroApiKey {
     pub public_id: String,
-    pub(crate) hashed_long_key: SecretString,
+    pub hashed_long_key: SecretString,
 }
 
 const SK_PREFIX: &str = "sk";
@@ -99,6 +99,21 @@ impl TensorZeroApiKey {
             public_id: public_id.to_string(),
             hashed_long_key: Self::hash_long_key(long_key).into(),
         })
+    }
+
+    /// Returns a cache key that includes both the public_id and the hashed long key.
+    /// This ensures that cache entries are unique per full API key, not just per public_id.
+    /// This is critical for security - using only the public_id would allow an attacker
+    /// to bypass authentication by crafting a key with the same public_id but different secret.
+    ///
+    /// TODO: This is `pub` while we run the cache from the gateway but later we should internalize it.
+    pub fn cache_key(&self) -> String {
+        let TensorZeroApiKey {
+            public_id,
+            hashed_long_key,
+        } = self;
+
+        format!("{public_id}:{}", hashed_long_key.expose_secret())
     }
 }
 
