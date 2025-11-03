@@ -70,10 +70,15 @@ export const FunctionExperimentation = memo(function FunctionExperimentation({
       : "";
 
   // Create a centralized chart config to ensure consistent colors across all panels
-  // Use sorted variant names from variantWeights to ensure consistency
-  const sortedVariantNames = variantWeights
-    .map((v) => v.variant_name)
-    .sort((a, b) => a.localeCompare(b));
+  // Use union of variant names from current weights and historical feedback data
+  // to handle recently disabled variants that still appear in historical timeseries
+  const allVariantNames = new Set([
+    ...variantWeights.map((v) => v.variant_name),
+    ...variantNames,
+  ]);
+  const sortedVariantNames = Array.from(allVariantNames).sort((a, b) =>
+    a.localeCompare(b),
+  );
 
   const chartConfig: Record<string, { label: string; color: string }> =
     sortedVariantNames.reduce(
