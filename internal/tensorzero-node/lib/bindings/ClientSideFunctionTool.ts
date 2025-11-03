@@ -4,7 +4,7 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * A Tool object describes how a tool can be dynamically configured by the user.
  */
-export type Tool = {
+export type ClientSideFunctionTool = {
   description: string;
   parameters: JsonValue;
   name: string;

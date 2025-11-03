@@ -12,7 +12,7 @@ import type { ToolConfig } from "./ToolConfig";
 export type ToolCallConfig = {
   static_tools_available: Array<ToolConfig>;
   dynamic_tools_available: Array<ToolConfig>;
-  provider_tools: Array<ProviderTool>;
+  provider_tools: Array<ProviderTool> | null;
   tool_choice: ToolChoice;
   parallel_tool_calls: boolean | null;
   allowed_tools: AllowedTools;

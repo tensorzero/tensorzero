@@ -11,9 +11,9 @@ use crate::inference::types::pyo3_helpers::{
 };
 use crate::inference::types::stored_input::StoredInput;
 use crate::inference::types::{RequestMessage, ResolvedRequestMessage, Text};
+use crate::tool::{deserialize_tool_info, DynamicToolParams, StaticToolConfig};
 #[cfg(feature = "pyo3")]
-use crate::tool::{deserialize_tool_info, ClientSideFunctionTool, ProviderTool, ToolChoice};
-use crate::tool::{DynamicToolParams, StaticToolConfig};
+use crate::tool::{ClientSideFunctionTool, ProviderTool, ToolChoice};
 use crate::{
     config::Config,
     error::{Error, ErrorDetails},
