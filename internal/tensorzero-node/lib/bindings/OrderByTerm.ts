@@ -3,4 +3,6 @@
 /**
  * Order by terms for querying inferences.
  */
-export type OrderByTerm = { by: "timestamp" } | { by: "metric"; name: string };
+export type OrderByTerm =
+  | { type: "timestamp" }
+  | { type: "metric"; name: string };

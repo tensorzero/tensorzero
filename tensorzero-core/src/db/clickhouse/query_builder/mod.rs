@@ -103,12 +103,13 @@ impl TagComparisonOperator {
 }
 
 /// Order by terms for querying inferences.
-#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum OrderDirection {
+    #[serde(rename = "ascending")]
     Asc,
+    #[serde(rename = "descending")]
     Desc,
 }
 
@@ -125,7 +126,7 @@ impl OrderDirection {
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[cfg_attr(test, ts(export))]
-#[serde(tag = "by", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum OrderByTerm {
     Timestamp,
     Metric { name: String },

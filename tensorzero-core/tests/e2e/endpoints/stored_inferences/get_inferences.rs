@@ -33,7 +33,7 @@ async fn list_inferences(request: Value) -> Result<Vec<Value>, Box<dyn std::erro
 /// Helper function to call get_inferences via HTTP
 async fn get_inferences_by_ids(ids: Vec<Uuid>) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
     let http_client = Client::new();
-    let id_strings: Vec<String> = ids.iter().map(|id| id.to_string()).collect();
+    let id_strings: Vec<String> = ids.iter().map(std::string::ToString::to_string).collect();
 
     let resp = http_client
         .post(get_gateway_endpoint("/v1/inferences/get_inferences"))
@@ -69,8 +69,8 @@ pub async fn test_list_simple_query_json_function() {
         "page_size": 2,
         "order_by": [
             {
-                "term": {"type": "timestamp"},
-                "direction": "DESC"
+                "type": "timestamp",
+                "direction": "descending"
             }
         ]
     });
@@ -87,16 +87,14 @@ pub async fn test_list_simple_query_json_function() {
         );
     }
 
-    // Verify ORDER BY timestamp DESC - check that timestamps are in descending order
+    // Verify ORDER BY timestamp descending - check that timestamps are in descendingending order
     let mut prev_timestamp: Option<String> = None;
     for inference in &res {
         let timestamp = inference["timestamp"].as_str().unwrap().to_string();
         if let Some(prev) = &prev_timestamp {
             assert!(
                 timestamp <= *prev,
-                "Timestamps should be in descending order. Got: {} <= {}",
-                timestamp,
-                prev
+                "Timestamps should be in descendingending order. Got: {timestamp} <= {prev}"
             );
         }
         prev_timestamp = Some(timestamp);
@@ -112,8 +110,8 @@ pub async fn test_list_simple_query_chat_function() {
         "offset": 3,
         "order_by": [
             {
-                "term": {"type": "timestamp"},
-                "direction": "ASC"
+                "type": "timestamp",
+                "direction": "ascending"
             }
         ]
     });
@@ -137,9 +135,7 @@ pub async fn test_list_simple_query_chat_function() {
         if let Some(prev) = &prev_timestamp {
             assert!(
                 timestamp >= *prev,
-                "Timestamps should be in ascending order. Got: {} >= {}",
-                timestamp,
-                prev
+                "Timestamps should be in ascending order. Got: {timestamp} >= {prev}"
             );
         }
         prev_timestamp = Some(timestamp);
@@ -160,11 +156,9 @@ pub async fn test_list_query_with_float_filter() {
         },
         "order_by": [
             {
-                "term": {
-                    "type": "metric",
-                    "name": "jaccard_similarity"
-                },
-                "direction": "DESC"
+                "type": "metric",
+                "name": "jaccard_similarity",
+                "direction": "descending"
             }
         ]
     });
@@ -353,15 +347,13 @@ async fn test_list_simple_time_filter() {
         },
         "order_by": [
             {
-                "term": {
-                    "type": "metric",
-                    "name": "exact_match"
-                },
-                "direction": "DESC"
+                "type": "metric",
+                "name": "exact_match",
+                "direction": "descending"
             },
             {
-                "term": {"type": "timestamp"},
-                "direction": "ASC"
+                "type": "timestamp",
+                "direction": "ascending"
             }
         ]
     });
@@ -381,9 +373,7 @@ async fn test_list_simple_time_filter() {
         if let Some(prev) = &prev_timestamp {
             assert!(
                 timestamp >= *prev,
-                "Timestamps should be in ascending order for secondary sort. Got: {} >= {}",
-                timestamp,
-                prev
+                "Timestamps should be in ascending order for secondary sort. Got: {timestamp} >= {prev}"
             );
         }
         prev_timestamp = Some(timestamp);
@@ -580,7 +570,7 @@ pub async fn test_get_by_ids_mixed_types() {
                 assert_eq!(inference["function_name"], "write_haiku");
                 chat_count += 1;
             }
-            other => panic!("Unexpected inference type: {}", other),
+            other => panic!("Unexpected inference type: {other}"),
         }
     }
 

@@ -3,4 +3,4 @@
 /**
  * Order by terms for querying inferences.
  */
-export type OrderDirection = "ASC" | "DESC";
+export type OrderDirection = "ascending" | "descending";

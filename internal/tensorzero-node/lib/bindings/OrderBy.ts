@@ -5,6 +5,6 @@ import type { OrderDirection } from "./OrderDirection";
  * Order by direction for querying inferences.
  */
 export type OrderBy = { direction: OrderDirection } & (
-  | { by: "timestamp" }
-  | { by: "metric"; name: string }
+  | { type: "timestamp" }
+  | { type: "metric"; name: string }
 );
