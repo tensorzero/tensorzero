@@ -48,6 +48,7 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       OPENAI_API_KEY: ${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?Environment variable ANTHROPIC_API_KEY must be set.}
     ports:
       - "3000:3000"
     extra_hosts:
@@ -72,7 +73,6 @@ services:
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero
       TENSORZERO_GATEWAY_URL: http://gateway:3000
-      TENSORZERO_API_KEY: ${TENSORZERO_API_KEY:?Environment variable TENSORZERO_API_KEY must be set.}
     ports:
       - "4000:4000"
     depends_on:

@@ -403,7 +403,7 @@ func TestBasicInference(t *testing.T) {
 
 		// Second request (cached)
 		req.WithExtraFields(map[string]any{
-			"tensorzero::cache_options": map[string]any{
+			"tensorzero::*.tomltions": map[string]any{
 				"max_age_s": 10,
 				"enabled":   "on",
 			},

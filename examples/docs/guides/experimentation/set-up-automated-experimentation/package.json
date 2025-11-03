@@ -1,0 +1,12 @@
+{
+  "name": "tensorzero-examples-docs-operations-require-virtual-api-keys-auth",
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "type": "module",
+  "dependencies": {
+    "openai": "^6.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2"
+  }
+}
