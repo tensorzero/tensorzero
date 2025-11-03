@@ -34,7 +34,7 @@ git2 = { workspace = true }
 serde_path_to_error = { workspace = true }
 tensorzero-derive = { path = "../../internal/tensorzero-derive" }
 mime = { workspace = true }
-tokio-util = "0.7.15"
+tokio-util = "0.7.17"
 tempfile = { version = "3.21.0" }
 paste = { version = "1.0.15", optional = true }
 lazy_static = { workspace = true }

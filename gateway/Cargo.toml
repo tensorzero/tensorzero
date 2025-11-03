@@ -20,7 +20,7 @@ clap = { workspace = true }
 serde = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = { workspace = true }
 tower-http = { workspace = true, features = ["metrics"] }
-tokio-util = "0.7.15"
+tokio-util = "0.7.17"
 metrics-exporter-prometheus = { workspace = true }
 http = { workspace = true }
 pin-project = { workspace = true }
