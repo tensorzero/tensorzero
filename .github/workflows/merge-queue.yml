@@ -25,7 +25,6 @@ env:
   AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
   AZURE_OPENAI_DEPLOYMENT_ID: ${{secrets.AZURE_OPENAI_DEPLOYMENT_ID }}
   DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-  #DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests
   FIREWORKS_ACCOUNT_ID: ${{ secrets.FIREWORKS_ACCOUNT_ID }}
   FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
   FORCE_COLOR: 1
@@ -44,7 +43,6 @@ env:
   R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
   R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
   SGLANG_API_KEY: ${{ secrets.SGLANG_API_KEY }}
-  #TENSORZERO_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests
   TGI_API_KEY: ${{ secrets.TGI_API_KEY }}
   TOGETHER_API_KEY: ${{ secrets.TOGETHER_API_KEY }}
   VLLM_API_BASE: ${{ secrets.VLLM_API_BASE }}
@@ -251,10 +249,12 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
-      - name: Set up TENSORZERO_CLICKHOUSE_URL for E2E tests
+      - name: Set up database URLs for E2E tests
         run: |
           echo "TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@localhost:8123/tensorzero_e2e_tests" >> $GITHUB_ENV
           echo "TENSORZERO_CLICKHOUSE_BATCH_WRITES=${{ matrix.batch_writes }}" >> $GITHUB_ENV
+          echo "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
+          echo "TENSORZERO_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/tensorzero-e2e-tests" >> $GITHUB_ENV
 
       - name: Configure batch writes in tensorzero.toml
         if: matrix.batch_writes == true
