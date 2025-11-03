@@ -67,6 +67,34 @@ api_key_location = "dynamic::my_dynamic_api_key_name"
 
 </Accordion>
 
+#### `tensorzero::deny_unknown_fields`
+
+- **Type:** boolean
+- **Required:** no (default: `false`)
+
+If `true`, the gateway will return an error if the request contains any unknown or unrecognized fields.
+By default, unknown fields are ignored with a warning logged.
+
+This field does not affect the `tensorzero::extra_body` field, only unknown fields at the root of the request body.
+
+This field should be provided as an extra body parameter in the request body.
+
+```python
+response = oai.chat.completions.create(
+    model="tensorzero::model_name::openai::gpt-5-mini",
+    messages=[
+        {
+            "role": "user",
+            "content": "Tell me a fun fact.",
+        }
+    ],
+    extra_body={
+        "tensorzero::deny_unknown_fields": True,
+    },
+    ultrathink=True,  # made-up parameter → `deny_unknown_fields` will reject this request
+)
+```
+
 #### `tensorzero::dryrun`
 
 - **Type:** boolean
