@@ -195,11 +195,11 @@ impl<'de> Deserialize<'de> for ApiKeyPublicIdValueScope {
             Ok(ApiKeyPublicIdValueScope::Each)
         } else if s.starts_with("tensorzero::") {
             Err(serde::de::Error::custom(
-                r#"Api key public id values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
+                r#"Api key public ID values in rate limiting scopes besides tensorzero::each may not start with "tensorzero::"."#,
             ))
         } else if s.len() != PUBLIC_ID_LENGTH {
             Err(serde::de::Error::custom(format!(
-                "API key public id `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public id."
+                "API key public ID `{s}` must be {PUBLIC_ID_LENGTH} characters long. Check that this is a TensorZero API key public ID."
             )))
         } else {
             Ok(ApiKeyPublicIdValueScope::Concrete(s))
@@ -881,7 +881,7 @@ mod tests {
         let err = result.unwrap_err();
         assert!(
             err.to_string()
-                .contains("API key public id `my_bad_public_id` must be 12 characters long."),
+                .contains("API key public ID `my_bad_public_id` must be 12 characters long."),
             "Unexpected error message: {err}",
         );
     }

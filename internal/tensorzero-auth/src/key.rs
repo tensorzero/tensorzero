@@ -56,7 +56,7 @@ impl TensorZeroApiKey {
 
     /// Validates that the provided key is of the format `sk-t0-<public_id>-<long_key>`,
     /// where <public_id> is 12 alphanumeric characters and <long_key> is 48 alphanumeric characters.
-    /// Returns a `TensorZeroApiKey` containing the extracted short ID and long key.
+    /// Returns a `TensorZeroApiKey` containing the extracted public ID and long key.
     pub fn parse(key: &str) -> Result<Self, TensorZeroAuthError> {
         let parts = key.split('-').collect::<Vec<&str>>();
         let [sk, t0, public_id, long_key] = parts.as_slice() else {
@@ -76,7 +76,7 @@ impl TensorZeroApiKey {
         }
         if public_id.len() != PUBLIC_ID_LENGTH {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
-                "Short ID must be 12 characters",
+                "Public ID must be 12 characters",
             ));
         }
         if long_key.len() != LONG_KEY_LENGTH {
@@ -86,7 +86,7 @@ impl TensorZeroApiKey {
         }
         if !public_id.chars().all(char::is_alphanumeric) {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
-                "Short ID must be alphanumeric",
+                "Public ID must be alphanumeric",
             ));
         }
         if !long_key.chars().all(char::is_alphanumeric) {
@@ -159,7 +159,7 @@ mod tests {
             TensorZeroApiKey::parse("sk-t0-12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                 .unwrap_err()
                 .to_string(),
-            "Invalid format for TensorZero API key: Short ID must be 12 characters"
+            "Invalid format for TensorZero API key: Public ID must be 12 characters"
         );
         assert_eq!(
             TensorZeroApiKey::parse("sk-t0-aaaaaaaaaaaa-bb")
@@ -173,7 +173,7 @@ mod tests {
             )
             .unwrap_err()
             .to_string(),
-            "Invalid format for TensorZero API key: Short ID must be alphanumeric"
+            "Invalid format for TensorZero API key: Public ID must be alphanumeric"
         );
         assert_eq!(
             TensorZeroApiKey::parse(
