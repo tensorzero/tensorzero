@@ -144,19 +144,12 @@ impl VariantSampler for StaticWeightsConfig {
         // Check if there are any candidate variants with positive weight
         let has_positive_weight = self.candidate_variants.values().any(|&w| w > 0.0);
 
-        if !has_positive_weight {
-            if self.fallback_variants.is_empty() {
-                return Err(Error::new(ErrorDetails::Config {
-                    message: format!(
-                        "Static weights config for function '{_function_name}' has no candidate variants with positive weight and no fallback variants. At least one is required."
-                    ),
-                }));
-            } else {
-                tracing::warn!(
-                    function_name = %_function_name,
-                    "Static weights config has no candidate variants with positive weight. Will use uniform sampling from fallback variants."
-                );
-            }
+        if !has_positive_weight && self.fallback_variants.is_empty() {
+            return Err(Error::new(ErrorDetails::Config {
+                message: format!(
+                    "Static weights config for function '{_function_name}' has no candidate variants with positive weight and no fallback variants. At least one is required."
+                ),
+            }));
         }
 
         Ok(())
@@ -362,26 +355,6 @@ mod tests {
             .to_string()
             .contains("no candidate variants with positive weight"));
         assert!(err.to_string().contains("no fallback variants"));
-    }
-
-    #[tokio::test]
-    async fn test_setup_warning_no_positive_weights_with_fallbacks() {
-        let config = StaticWeightsConfig {
-            candidate_variants: BTreeMap::new(),
-            fallback_variants: vec!["A".to_string(), "B".to_string()],
-        };
-
-        let db = Arc::new(ClickHouseConnectionInfo::new_disabled())
-            as Arc<dyn FeedbackQueries + Send + Sync>;
-        let postgres = PostgresConnectionInfo::new_disabled();
-        let cancel_token = CancellationToken::new();
-
-        // Should succeed but log a warning
-        let result = config
-            .setup(db, "test_function", &postgres, cancel_token)
-            .await;
-
-        assert!(result.is_ok());
     }
 
     #[tokio::test]
