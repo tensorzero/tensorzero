@@ -1,6 +1,6 @@
 # ========== base ==========
 
-FROM rust:1.88.0-slim AS base
+FROM rust:1.90.0-slim AS base
 
 # Install required system dependencies
 RUN apt-get update && \
@@ -21,7 +21,7 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
 
 # ========== build-env ==========
 
-FROM rust:1.88.0 AS builder
+FROM rust:1.90.0 AS builder
 
 # Install cargo-binstall for faster tool installation
 RUN curl -L --proto '=https' --tlsv1.2 -sSf \
