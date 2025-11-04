@@ -283,6 +283,9 @@ export const displayModelInferenceInputMessageContentSchema =
     toolResultContentSchema,
     resolvedFileContentSchema,
     resolvedFileContentErrorSchema,
+    thoughtContentSchema,
+    rawTextInputSchema,
+    unknownSchema,
   ]);
 
 export const displayModelInferenceInputMessageSchema = z.object({

@@ -19,6 +19,7 @@ import {
 } from "./inference.server";
 import { countInferencesForFunction } from "./inference.server";
 import type { TextContent } from "./common";
+import { displayModelInferenceInputMessageContentSchema } from "./common";
 import { getClickhouseClient } from "./client.server";
 import type {
   ContentBlockChatOutput,
@@ -581,6 +582,61 @@ describe("getAdjacentInferenceIds", () => {
     );
     expect(adjacentInferenceIds.next_id).toBeNull();
   });
+});
+
+test("displayModelInferenceInputMessageContentSchema accepts thought content blocks", () => {
+  // Test thought content block with all fields
+  const thoughtContentWithSignature = {
+    type: "thought",
+    text: "This is a thinking step",
+    signature: "anthropic::2024-10-22::claude-3-7-sonnet-20250219",
+    _internal_provider_type: "anthropic",
+  };
+
+  const result1 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentWithSignature,
+  );
+  expect(result1.success).toBe(true);
+  if (result1.success && result1.data.type === "thought") {
+    expect(result1.data.type).toBe("thought");
+    expect(result1.data.text).toBe("This is a thinking step");
+  }
+
+  // Test thought content block with minimal fields
+  const thoughtContentMinimal = {
+    type: "thought",
+    text: null,
+  };
+
+  const result2 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentMinimal,
+  );
+  expect(result2.success).toBe(true);
+  if (result2.success && result2.data.type === "thought") {
+    expect(result2.data.type).toBe("thought");
+    expect(result2.data.text).toBeNull();
+  }
+
+  // Test raw_text content block
+  const rawTextContent = {
+    type: "raw_text",
+    value: "Raw text content",
+  };
+
+  const result3 =
+    displayModelInferenceInputMessageContentSchema.safeParse(rawTextContent);
+  expect(result3.success).toBe(true);
+
+  // Test unknown content block
+  const unknownContent = {
+    type: "unknown",
+    data: { some: "data" },
+    model_provider_name: null,
+  };
+
+  const result4 =
+    displayModelInferenceInputMessageContentSchema.safeParse(unknownContent);
+  expect(result4.success).toBe(true);
 });
 
 describe("getAdjacentEpisodeIds", () => {
