@@ -941,7 +941,7 @@ mod tests {
         model::{ModelConfig, ModelProvider, ProviderConfig},
         model_table::ProviderTypeDefaultCredentials,
         providers::dummy::DummyProvider,
-        tool::{ToolCallConfig, ToolCallOutput, ToolChoice},
+        tool::{InferenceResponseToolCall, ToolCallConfig, ToolChoice},
     };
 
     use super::*;
@@ -1441,6 +1441,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let input = LazyResolvedInput {
@@ -1700,7 +1701,7 @@ mod tests {
                     ContentBlockChatOutput::Text(Text {
                         text: "First text message".to_string(),
                     }),
-                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "123".into(),
                         name: Some("first_tool".into()),
                         raw_name: "first_tool".into(),
@@ -1721,7 +1722,7 @@ mod tests {
                         summary: None,
                         provider_type: None,
                     }),
-                    ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                    ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                         id: "456".into(),
                         name: Some("second_tool".into()),
                         raw_name: "second_tool".into(),

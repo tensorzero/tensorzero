@@ -26,7 +26,7 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
-use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ToolCallInput};
+use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ToolCallWrapper};
 use url::Url;
 use uuid::Uuid;
 
@@ -1235,6 +1235,7 @@ async fn test_embedding_request() {
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
                     tags: Arc::new(HashMap::new()),
+                    api_key_public_id: None,
                 },
             },
         )
@@ -1323,6 +1324,7 @@ async fn test_embedding_request() {
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
                     tags: Arc::new(HashMap::new()),
+                    api_key_public_id: None,
                 },
             },
         )
@@ -1396,6 +1398,7 @@ async fn test_embedding_sanity_check() {
         deferred_tasks: tokio_util::task::TaskTracker::new(),
         scope_info: ScopeInfo {
             tags: Arc::new(HashMap::new()),
+            api_key_public_id: None,
         },
     };
 
@@ -2477,15 +2480,9 @@ model = "test-model"
             ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
                 text: text.text.clone(),
             }),
-            ContentBlockChatOutput::ToolCall(tool_call) => {
-                ClientInputMessageContent::ToolCall(ToolCallInput {
-                    id: tool_call.id.clone(),
-                    name: tool_call.name.clone(),
-                    arguments: tool_call.arguments.clone(),
-                    raw_name: None,
-                    raw_arguments: None,
-                })
-            }
+            ContentBlockChatOutput::ToolCall(tool_call) => ClientInputMessageContent::ToolCall(
+                ToolCallWrapper::InferenceResponseToolCall(tool_call.clone()),
+            ),
             ContentBlockChatOutput::Thought(thought) => {
                 ClientInputMessageContent::Thought(thought.clone())
             }
@@ -2872,15 +2869,9 @@ model = "test-model"
             ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
                 text: text.text.clone(),
             }),
-            ContentBlockChatOutput::ToolCall(tool_call) => {
-                ClientInputMessageContent::ToolCall(ToolCallInput {
-                    id: tool_call.id.clone(),
-                    name: tool_call.name.clone(),
-                    arguments: tool_call.arguments.clone(),
-                    raw_name: None,
-                    raw_arguments: None,
-                })
-            }
+            ContentBlockChatOutput::ToolCall(tool_call) => ClientInputMessageContent::ToolCall(
+                ToolCallWrapper::InferenceResponseToolCall(tool_call.clone()),
+            ),
             ContentBlockChatOutput::Thought(thought) => {
                 ClientInputMessageContent::Thought(thought.clone())
             }
