@@ -16,7 +16,7 @@ import type {
   ResolvedTomlPath,
   ChatTemplates,
   StaticToolConfig,
-  Tool,
+  ClientSideFunctionTool,
   ToolChoice,
 } from "tensorzero-node";
 import type {
@@ -306,7 +306,7 @@ interface ClickHouseDatapointActionArgs {
   input: DisplayInput;
   functionName: string;
   allowed_tools?: string[];
-  additional_tools?: Array<Tool> | null;
+  additional_tools?: Array<ClientSideFunctionTool> | null;
   tool_choice?: ToolChoice | null;
   parallel_tool_calls?: boolean | null;
   output_schema?: JsonValue;

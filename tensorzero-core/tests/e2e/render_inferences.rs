@@ -3,7 +3,7 @@ use object_store::path::Path;
 use serde_json::json;
 use std::collections::HashMap;
 use tensorzero::{
-    ClientSideFunctionTool, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
+    ClientExt, ClientSideFunctionTool, JsonInferenceDatapoint, Role, StorageKind, StoragePath,
     StoredChatInferenceDatabase, StoredChatInferenceDatapoint, StoredDatapoint,
     StoredInferenceDatabase, StoredJsonInference,
 };
@@ -15,12 +15,10 @@ use tensorzero_core::inference::types::stored_input::{
 use tensorzero_core::inference::types::{
     Arguments, ResolvedContentBlock, ResolvedRequestMessage, System,
 };
+use tensorzero_core::tool::InferenceResponseToolCall;
 use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Template, Text},
-    tool::{
-        AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolCallOutput,
-        ToolChoice,
-    },
+    tool::{AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolChoice},
 };
 use tracing_test::traced_test;
 use uuid::Uuid;
@@ -233,7 +231,7 @@ pub async fn test_render_samples_normal() {
                     })],
                 }],
             },
-            output: vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            output: vec![ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 name: Some("get_temperature".to_string()),
                 arguments: Some(json!({"location": "Tokyo"})),
                 id: Uuid::now_v7().to_string(),
@@ -789,7 +787,7 @@ pub async fn test_render_datapoints_normal() {
                     })],
                 }],
             },
-            output: Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            output: Some(vec![ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 name: Some("get_temperature".to_string()),
                 arguments: Some(json!({"location": "Tokyo"})),
                 id: Uuid::now_v7().to_string(),

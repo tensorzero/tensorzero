@@ -96,7 +96,7 @@ async fn update_datapoints(
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
             ids: Some(datapoint_ids),
-            page_size: u32::MAX, // No limit - fetch all matching datapoints
+            limit: u32::MAX, // No limit - fetch all matching datapoints
             offset: 0,
             allow_stale: false,
             filter: None, // No filtering when updating datapoints
@@ -443,7 +443,7 @@ async fn update_datapoints_metadata(
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
             ids: Some(datapoint_ids.clone()),
-            page_size: u32::MAX,
+            limit: u32::MAX,
             offset: 0,
             allow_stale: false,
             filter: None,
@@ -476,10 +476,8 @@ async fn update_datapoints_metadata(
                     }));
                 }
 
-                if let Some(metadata) = update.metadata {
-                    if let Some(new_name) = metadata.name {
-                        existing_datapoint.name = new_name;
-                    }
+                if let Some(new_name) = update.metadata.name {
+                    existing_datapoint.name = new_name;
                 }
 
                 datapoints.push(DatapointInsert::Chat(existing_datapoint.into()));
@@ -494,10 +492,8 @@ async fn update_datapoints_metadata(
                     }));
                 }
 
-                if let Some(metadata) = update.metadata {
-                    if let Some(new_name) = metadata.name {
-                        existing_datapoint.name = new_name;
-                    }
+                if let Some(new_name) = update.metadata.name {
+                    existing_datapoint.name = new_name;
                 }
 
                 datapoints.push(DatapointInsert::Json(existing_datapoint.into()));
@@ -1886,9 +1882,9 @@ mod tests {
             let request = UpdateDatapointsMetadataRequest {
                 datapoints: vec![UpdateDatapointMetadataRequest {
                     id: datapoint_id,
-                    metadata: Some(DatapointMetadataUpdate {
+                    metadata: DatapointMetadataUpdate {
                         name: Some(Some("new_name".to_string())),
-                    }),
+                    },
                 }],
             };
 
@@ -1940,9 +1936,9 @@ mod tests {
             let request = UpdateDatapointsMetadataRequest {
                 datapoints: vec![UpdateDatapointMetadataRequest {
                     id: datapoint_id,
-                    metadata: Some(DatapointMetadataUpdate {
+                    metadata: DatapointMetadataUpdate {
                         name: Some(Some("updated_json_name".to_string())),
-                    }),
+                    },
                 }],
             };
 
@@ -1976,39 +1972,7 @@ mod tests {
             let request = UpdateDatapointsMetadataRequest {
                 datapoints: vec![UpdateDatapointMetadataRequest {
                     id: datapoint_id,
-                    metadata: Some(DatapointMetadataUpdate { name: Some(None) }),
-                }],
-            };
-
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
-            assert!(result.is_ok());
-        }
-
-        #[tokio::test]
-        async fn test_update_metadata_no_metadata_provided() {
-            let dataset_name = "test_dataset";
-            let existing_datapoint = create_sample_chat_datapoint(dataset_name);
-            let datapoint_id = existing_datapoint.id;
-            let original_name = existing_datapoint.name.clone();
-
-            let mut mock_db = MockDatasetQueries::new();
-            let existing_datapoint_clone = existing_datapoint.clone();
-            mock_db.expect_get_datapoints().returning(move |_| {
-                let dp = existing_datapoint_clone.clone();
-                Box::pin(async move { Ok(vec![StoredDatapoint::Chat(dp)]) })
-            });
-            mock_db
-                .expect_insert_datapoints()
-                .withf(move |datapoints| {
-                    datapoints.len() == 1
-                        && matches!(&datapoints[0], DatapointInsert::Chat(dp) if dp.name == original_name)
-                })
-                .returning(|_| Box::pin(async move { Ok(1) }));
-
-            let request = UpdateDatapointsMetadataRequest {
-                datapoints: vec![UpdateDatapointMetadataRequest {
-                    id: datapoint_id,
-                    metadata: None,
+                    metadata: DatapointMetadataUpdate { name: Some(None) },
                 }],
             };
 
@@ -2029,9 +1993,9 @@ mod tests {
             let request = UpdateDatapointsMetadataRequest {
                 datapoints: vec![UpdateDatapointMetadataRequest {
                     id: non_existent_id,
-                    metadata: Some(DatapointMetadataUpdate {
+                    metadata: DatapointMetadataUpdate {
                         name: Some(Some("new_name".to_string())),
-                    }),
+                    },
                 }],
             };
 
@@ -2054,15 +2018,15 @@ mod tests {
                 datapoints: vec![
                     UpdateDatapointMetadataRequest {
                         id: duplicate_id,
-                        metadata: Some(DatapointMetadataUpdate {
+                        metadata: DatapointMetadataUpdate {
                             name: Some(Some("name1".to_string())),
-                        }),
+                        },
                     },
                     UpdateDatapointMetadataRequest {
                         id: duplicate_id,
-                        metadata: Some(DatapointMetadataUpdate {
+                        metadata: DatapointMetadataUpdate {
                             name: Some(Some("name2".to_string())),
-                        }),
+                        },
                     },
                 ],
             };
@@ -2122,15 +2086,15 @@ mod tests {
                 datapoints: vec![
                     UpdateDatapointMetadataRequest {
                         id: id1,
-                        metadata: Some(DatapointMetadataUpdate {
+                        metadata: DatapointMetadataUpdate {
                             name: Some(Some("updated_name1".to_string())),
-                        }),
+                        },
                     },
                     UpdateDatapointMetadataRequest {
                         id: id2,
-                        metadata: Some(DatapointMetadataUpdate {
+                        metadata: DatapointMetadataUpdate {
                             name: Some(Some("updated_name2".to_string())),
-                        }),
+                        },
                     },
                 ],
             };

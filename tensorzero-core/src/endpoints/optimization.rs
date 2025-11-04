@@ -19,7 +19,7 @@ use crate::{
         },
         inferences::{InferenceOutputSource, InferenceQueries, ListInferencesParams},
     },
-    endpoints::{inference::InferenceCredentials, stored_inference::render_samples},
+    endpoints::{inference::InferenceCredentials, stored_inferences::render_samples},
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     model_table::ProviderTypeDefaultCredentials,

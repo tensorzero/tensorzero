@@ -54,7 +54,8 @@ Take what you need, adopt incrementally, and complement with other tools.
 - [x] Use any programming language: **[integrate via our Python client, any OpenAI SDK, or our HTTP API](https://www.tensorzero.com/docs/gateway/clients)**
 - [x] **[Ensure high availability](https://www.tensorzero.com/docs/gateway/guides/retries-fallbacks)** with routing, retries, fallbacks, load balancing, granular timeouts, etc.
 - [x] **[Enforce custom rate limits](https://www.tensorzero.com/docs/operations/enforce-custom-rate-limits)** with granular scopes (e.g. user-defined tags) to keep usage under control
-- [ ] Soon: spend tracking and budgeting, service accounts
+- [x] **[Set up auth for TensorZero](https://www.tensorzero.com/docs/operations/set-up-auth-for-tensorzero)** to allow clients to access models without sharing provider API keys
+- [ ] Soon: spend tracking and budgeting
 
 <br>
 
@@ -372,9 +373,8 @@ item_count: 7.15 ± 0.39</code></pre>
 
 > **Ship with confidence with built-in A/B testing, routing, fallbacks, retries, etc.**
 
-- [x] Ship with confidence with built-in **[A/B testing](https://www.tensorzero.com/docs/experimentation/run-ab-tests)** for models, prompts, providers, hyperparameters, etc.
-- [x] Enforce principled experiments (RCTs) in complex workflows, including multi-turn and compound LLM systems
-- [ ] Soon: multi-armed bandits; AI-managed experiments
+- [x] **[Run adaptive A/B tests](https://www.tensorzero.com/docs/experimentation/run-adaptive-ab-tests)** to ship with confidence and identify the best prompts and models for your use cases.
+- [x] Enforce principled experiments in complex workflows, including support for multi-turn LLM systems, sequential testing, and more.
 
 ### & more!
 

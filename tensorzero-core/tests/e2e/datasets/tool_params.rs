@@ -513,7 +513,7 @@ async fn test_list_datapoints_with_tool_params() {
         )))
         .json(&json!({
             "function_name": "weather_helper",
-            "page_size": 10
+            "limit": 10
         }))
         .send()
         .await

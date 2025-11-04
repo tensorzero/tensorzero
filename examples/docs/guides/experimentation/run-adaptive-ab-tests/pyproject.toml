@@ -1,0 +1,16 @@
+[project]
+name = "tensorzero-examples-docs-guides-experimentation-run-adaptive-ab-tests"
+version = "0.0.0"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "openai>=2.6.1",
+    "pandas>=2.3.3",
+    "tensorzero>=2025.11.0",
+    "tqdm>=4.66.0",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.0",
+]

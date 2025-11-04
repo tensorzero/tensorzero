@@ -6013,6 +6013,7 @@ name = "tensorzero"
 version = "0.1.0"
 dependencies = [
  "async-stream",
+ "async-trait",
  "clap",
  "futures",
  "git2",
@@ -6089,6 +6090,7 @@ dependencies = [
  "futures",
  "futures-core",
  "gag",
+ "git2",
  "globset",
  "google-cloud-auth",
  "hex",

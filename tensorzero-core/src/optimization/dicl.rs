@@ -562,7 +562,8 @@ async fn process_embedding_batch(
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),
         deferred_tasks: deferred_tasks.clone(),
-        scope_info: ScopeInfo { tags: tags.clone() },
+        // We don't currently use API keys for optimization workflows
+        scope_info: ScopeInfo::new(tags.clone(), None),
     };
 
     let response = embedding_model_config
