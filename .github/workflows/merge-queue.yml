@@ -120,9 +120,14 @@ jobs:
 
       # # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
       # # For now, we only check for deprecation warnings after running the Rust e2e tests
-      # - name: Check e2e logs for deprecation warnings (gateway e2e tests only)
-      # run: |
-      #   ! grep -i "Deprecation Warning" e2e_logs.txt
+      - name: Check e2e logs for deprecation warnings (gateway e2e tests only)
+        run: |
+          LOGS=$(docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml logs gateway)
+          if [ -z "$LOGS" ]; then
+            echo "ERROR: Gateway logs are empty"
+            exit 1
+          fi
+          ! grep -i "Deprecation Warning" "$LOGS"
 
       - name: Upload provider-proxy cache
         # Only upload the cache when we're running from a 'good' run
