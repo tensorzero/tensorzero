@@ -26,12 +26,18 @@ from tensorzero import (
     AsyncTensorZeroGateway,
     ChatDatapoint,
     ChatDatapointInsert,
+    ChatDatapointUpdate,
+    DatapointMetadataUpdate,
     JsonDatapoint,
     JsonDatapointInsert,
+    JsonDatapointUpdate,
+    JsonDatapointOutputUpdate,
+    Null,
     Template,
     TensorZeroError,
     TensorZeroGateway,
     Text,
+    Unchanged,
 )
 from uuid_utils import uuid7
 
@@ -759,3 +765,237 @@ async def test_async_datapoints_with_name(async_client: AsyncTensorZeroGateway):
     # Clean up
     for datapoint_id in datapoint_ids:
         await async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=datapoint_id)
+
+
+def test_sync_update_chat_datapoint(sync_client: TensorZeroGateway):
+    """Test updating a chat datapoint (sync version)."""
+    dataset_name = f"test_update_chat_{uuid7()}"
+
+    # Create initial datapoint
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "TestBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "What is 2+2?"}],
+                    }
+                ],
+            },
+            output=[{"type": "text", "text": "The answer is 4."}],
+            tags={"version": "v1"},
+            name="math_question",
+        )
+    ]
+
+    datapoint_ids = sync_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    assert len(datapoint_ids) == 1
+    original_id = datapoint_ids[0]
+
+    # Update the datapoint with new output
+    updates = [
+        ChatDatapointUpdate(
+            id=original_id,
+            output=[{"type": "text", "text": "2 + 2 = 4"}],
+            tags={"version": "v2"},
+        )
+    ]
+
+    new_ids = sync_client.update_datapoints(dataset_name=dataset_name, datapoints=updates)
+
+    # Verify new ID is returned (not in-place update)
+    assert len(new_ids) == 1
+    assert isinstance(new_ids[0], UUID)
+    assert new_ids[0] != original_id
+
+    # Verify the new datapoint has the updated output
+    updated_datapoint = sync_client.get_datapoint(dataset_name=dataset_name, datapoint_id=new_ids[0])
+    assert isinstance(updated_datapoint, ChatDatapoint)
+    assert updated_datapoint.function_name == "basic_test"
+    assert len(updated_datapoint.output) == 1
+    assert updated_datapoint.output[0].text == "2 + 2 = 4"
+
+    # Clean up - only delete the new datapoint since update replaces the old one
+    sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=new_ids[0])
+
+
+@pytest.mark.asyncio
+async def test_async_update_chat_datapoint(async_client: AsyncTensorZeroGateway):
+    """Test updating a chat datapoint (async version)."""
+    dataset_name = f"test_update_chat_async_{uuid7()}"
+
+    # Create initial datapoint
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "AsyncBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Hello"}],
+                    }
+                ],
+            },
+            output=[{"type": "text", "text": "Hi!"}],
+        )
+    ]
+
+    datapoint_ids = await async_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    assert len(datapoint_ids) == 1
+    original_id = datapoint_ids[0]
+
+    # Update with new output
+    updates = [
+        ChatDatapointUpdate(
+            id=original_id,
+            output=[{"type": "text", "text": "Hello! How can I help you today?"}],
+        )
+    ]
+
+    new_ids = await async_client.update_datapoints(dataset_name=dataset_name, datapoints=updates)
+
+    # Verify new ID is returned
+    assert len(new_ids) == 1
+    assert isinstance(new_ids[0], UUID)
+    assert new_ids[0] != original_id
+
+    # Clean up - only delete the new datapoint since update replaces the old one
+    await async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=new_ids[0])
+
+
+def test_sync_update_json_datapoint(sync_client: TensorZeroGateway):
+    """Test updating a JSON datapoint."""
+    dataset_name = f"test_update_json_{uuid7()}"
+
+    # Create initial datapoint
+    datapoints = [
+        JsonDatapointInsert(
+            function_name="json_success",
+            input={
+                "system": {"assistant_name": "JsonBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "arguments": {"country": "France"}}],
+                    }
+                ],
+            },
+            output={"answer": "Paris"},
+        )
+    ]
+
+    datapoint_ids = sync_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    assert len(datapoint_ids) == 1
+    original_id = datapoint_ids[0]
+
+    # Update the output
+    updates = [
+        JsonDatapointUpdate(
+            id=original_id,
+            output=JsonDatapointOutputUpdate(raw='{"answer": "Paris is the capital"}'),
+        )
+    ]
+
+    new_ids = sync_client.update_datapoints(dataset_name=dataset_name, datapoints=updates)
+
+    # Verify new ID is returned
+    assert len(new_ids) == 1
+    assert isinstance(new_ids[0], UUID)
+    assert new_ids[0] != original_id
+
+    # Clean up - only delete the new datapoint since update replaces the old one
+    sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=new_ids[0])
+
+
+def test_sync_update_with_null(sync_client: TensorZeroGateway):
+    """Test setting a field to null using the Null sentinel."""
+    dataset_name = f"test_update_null_{uuid7()}"
+
+    # Create datapoint with tool_params
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "TestBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Test"}],
+                    }
+                ],
+            },
+            name="test_datapoint",
+        )
+    ]
+
+    datapoint_ids = sync_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    original_id = datapoint_ids[0]
+
+    # Update to set name to null
+    updates = [
+        ChatDatapointUpdate(
+            id=original_id,
+            metadata=DatapointMetadataUpdate(name=Null),
+        )
+    ]
+
+    new_ids = sync_client.update_datapoints(dataset_name=dataset_name, datapoints=updates)
+    assert len(new_ids) == 1
+    assert new_ids[0] != original_id
+
+    # Verify name is set to null
+    updated_datapoint = sync_client.get_datapoint(dataset_name=dataset_name, datapoint_id=new_ids[0])
+    assert updated_datapoint.name is None
+
+    # Clean up - only delete the new datapoint since update replaces the old one
+    sync_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=new_ids[0])
+
+
+@pytest.mark.asyncio
+async def test_async_update_with_unchanged(async_client: AsyncTensorZeroGateway):
+    """Test that Unchanged fields remain the same."""
+    dataset_name = f"test_update_unchanged_{uuid7()}"
+
+    # Create initial datapoint with tags and name
+    datapoints = [
+        ChatDatapointInsert(
+            function_name="basic_test",
+            input={
+                "system": {"assistant_name": "TestBot"},
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Original"}],
+                    }
+                ],
+            },
+            tags={"environment": "test", "version": "v1"},
+            name="original_name",
+        )
+    ]
+
+    datapoint_ids = await async_client.create_datapoints(dataset_name=dataset_name, datapoints=datapoints)
+    original_id = datapoint_ids[0]
+
+    # Update only the output, leave everything else unchanged
+    updates = [
+        ChatDatapointUpdate(
+            id=original_id,
+            output=[{"type": "text", "text": "Updated output"}],
+        )
+    ]
+
+    new_ids = await async_client.update_datapoints(dataset_name=dataset_name, datapoints=updates)
+    assert len(new_ids) == 1
+
+    # Verify unchanged fields are preserved
+    updated_datapoint = await async_client.get_datapoint(dataset_name=dataset_name, datapoint_id=new_ids[0])
+    assert updated_datapoint.name == "original_name"
+    assert len(updated_datapoint.output) == 1
+    assert updated_datapoint.output[0].text == "Updated output"
+
+    # Clean up - only delete the new datapoint since update replaces the old one
+    await async_client.delete_datapoint(dataset_name=dataset_name, datapoint_id=new_ids[0])

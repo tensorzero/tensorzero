@@ -11,6 +11,19 @@ import uuid_utils
 from typing_extensions import NotRequired, TypedDict
 
 
+# Sentinel classes for update operations
+class Unchanged:
+    """Sentinel to indicate a field should remain unchanged during update."""
+
+    pass
+
+
+class Null:
+    """Sentinel to explicitly set a field to null during update."""
+
+    pass
+
+
 @dataclass
 class Usage:
     input_tokens: int
@@ -515,6 +528,139 @@ class JsonDatapointInsert:
     output_schema: Optional[Any] = None
     tags: Optional[Dict[str, str]] = None
     name: Optional[str] = None
+
+
+@dataclass
+class DatapointMetadataUpdate:
+    """Update metadata for a datapoint.
+
+    Fields can be:
+    - Unchanged() to leave the field as-is
+    - Null() to explicitly set to null
+    - A value to update the field
+    """
+
+    name: Union[type[Unchanged], type[Null], str, None] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to a dict for serialization, handling Unchanged and Null."""
+        result = {}
+        if self.name is not Unchanged:
+            if self.name is Null:
+                result["name"] = None
+            elif self.name is not None:
+                result["name"] = self.name
+            # If name is None (not the class Unchanged or Null), we still include it
+            elif not isinstance(self.name, type):
+                result["name"] = self.name
+        return result
+
+
+@dataclass
+class JsonDatapointOutputUpdate:
+    """Update output for a JSON datapoint."""
+
+    raw: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to a dict for serialization."""
+        return {"raw": self.raw}
+
+
+@dataclass
+class ChatDatapointUpdate:
+    """Update a chat datapoint.
+
+    Fields can be:
+    - Unchanged() to leave the field as-is
+    - Null() to explicitly set to null (for nullable fields)
+    - A value to update the field
+    """
+
+    id: UUID
+    input: Union[type[Unchanged], InferenceInput] = Unchanged
+    output: Union[type[Unchanged], Any] = Unchanged
+    tool_params: Union[type[Unchanged], type[Null], Dict[str, Any], None] = Unchanged
+    tags: Union[type[Unchanged], Dict[str, str], None] = Unchanged
+    metadata: Union[type[Unchanged], DatapointMetadataUpdate, None] = Unchanged
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to a dict for serialization, handling Unchanged and Null."""
+        result: Dict[str, Any] = {"type": "chat", "id": str(self.id)}
+
+        if self.input is not Unchanged:
+            result["input"] = self.input
+
+        if self.output is not Unchanged:
+            result["output"] = self.output
+
+        if self.tool_params is not Unchanged:
+            if self.tool_params is Null:
+                result["tool_params"] = None
+            else:
+                result["tool_params"] = self.tool_params
+
+        if self.tags is not Unchanged:
+            result["tags"] = self.tags
+
+        if self.metadata is not Unchanged:
+            if self.metadata is None:
+                result["metadata"] = None
+            elif isinstance(self.metadata, DatapointMetadataUpdate):
+                result["metadata"] = self.metadata.to_dict()
+            else:
+                result["metadata"] = self.metadata
+
+        return result
+
+
+@dataclass
+class JsonDatapointUpdate:
+    """Update a JSON datapoint.
+
+    Fields can be:
+    - Unchanged() to leave the field as-is
+    - Null() to explicitly set to null (for nullable fields)
+    - A value to update the field
+    """
+
+    id: UUID
+    input: Union[type[Unchanged], InferenceInput] = Unchanged
+    output: Union[type[Unchanged], type[Null], JsonDatapointOutputUpdate, None] = Unchanged
+    output_schema: Union[type[Unchanged], Any, None] = Unchanged
+    tags: Union[type[Unchanged], Dict[str, str], None] = Unchanged
+    metadata: Union[type[Unchanged], DatapointMetadataUpdate, None] = Unchanged
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to a dict for serialization, handling Unchanged and Null."""
+        result: Dict[str, Any] = {"type": "json", "id": str(self.id)}
+
+        if self.input is not Unchanged:
+            result["input"] = self.input
+
+        if self.output is not Unchanged:
+            if self.output is Null:
+                result["output"] = None
+            elif isinstance(self.output, JsonDatapointOutputUpdate):
+                result["output"] = self.output.to_dict()
+            else:
+                result["output"] = self.output
+
+        if self.output_schema is not Unchanged:
+            result["output_schema"] = self.output_schema
+
+        if self.tags is not Unchanged:
+            result["tags"] = self.tags
+
+        if self.metadata is not Unchanged:
+            if self.metadata is None:
+                result["metadata"] = None
+            elif isinstance(self.metadata, DatapointMetadataUpdate):
+                result["metadata"] = self.metadata.to_dict()
+            else:
+                result["metadata"] = self.metadata
+
+        return result
 
 
 @dataclass

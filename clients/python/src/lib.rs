@@ -987,6 +987,41 @@ impl TensorZeroGateway {
         PyList::new(this.py(), uuids).map(Bound::unbind)
     }
 
+    /// Update datapoints in a dataset.
+    ///
+    /// This creates NEW datapoint versions with new IDs rather than updating in-place.
+    /// The returned UUIDs are the new datapoint IDs, not the original ones.
+    ///
+    /// Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset containing the datapoints to update.
+    /// :param datapoints: A list of datapoint update requests (ChatDatapointUpdate or JsonDatapointUpdate).
+    /// :return: A list of new UUIDs for the created datapoint versions.
+    #[pyo3(signature = (*, dataset_name, datapoints))]
+    fn update_datapoints(
+        this: PyRef<'_, Self>,
+        dataset_name: String,
+        datapoints: Vec<Bound<'_, PyAny>>,
+    ) -> PyResult<Py<PyList>> {
+        let client = this.as_super().client.clone();
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(this.py(), dp))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let fut = client.update_datapoints(dataset_name, datapoints);
+        let self_module = PyModule::import(this.py(), "uuid")?;
+        let uuid = self_module.getattr("UUID")?.unbind();
+        let res =
+            tokio_block_on_without_gil(this.py(), fut).map_err(|e| convert_error(this.py(), e))?;
+        let uuids = res
+            .ids
+            .iter()
+            .map(|x| uuid.call(this.py(), (x.to_string(),), None))
+            .collect::<Result<Vec<_>, _>>()?;
+        PyList::new(this.py(), uuids).map(Bound::unbind)
+    }
+
     /// Make a DELETE request to the /datasets/{dataset_name}/datapoints/{datapoint_id} endpoint.
     ///
     /// :param dataset_name: The name of the dataset to delete the datapoint from.
@@ -1830,6 +1865,46 @@ impl AsyncTensorZeroGateway {
                 Ok(uuids) => Ok(PyList::new(
                     py,
                     uuids
+                        .iter()
+                        .map(|id| uuid.call(py, (id.to_string(),), None))
+                        .collect::<Result<Vec<_>, _>>()?,
+                )?
+                .unbind()),
+                Err(e) => Err(convert_error(py, e)),
+            })
+        })
+    }
+
+    /// Update datapoints in a dataset.
+    ///
+    /// This creates NEW datapoint versions with new IDs rather than updating in-place.
+    /// The returned UUIDs are the new datapoint IDs, not the original ones.
+    ///
+    /// Make a PATCH request to the /v1/datasets/{dataset_name}/datapoints endpoint.
+    ///
+    /// :param dataset_name: The name of the dataset containing the datapoints to update.
+    /// :param datapoints: A list of datapoint update requests (ChatDatapointUpdate or JsonDatapointUpdate).
+    /// :return: A list of new UUIDs for the created datapoint versions.
+    #[pyo3(signature = (*, dataset_name, datapoints))]
+    fn update_datapoints<'a>(
+        this: PyRef<'a, Self>,
+        dataset_name: String,
+        datapoints: Vec<Bound<'a, PyAny>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let client = this.as_super().client.clone();
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(this.py(), dp))
+            .collect::<Result<Vec<_>, _>>()?;
+        let self_module = PyModule::import(this.py(), "uuid")?;
+        let uuid = self_module.getattr("UUID")?.unbind();
+        pyo3_async_runtimes::tokio::future_into_py(this.py(), async move {
+            let res = client.update_datapoints(dataset_name, datapoints).await;
+            Python::attach(|py| match res {
+                Ok(response) => Ok(PyList::new(
+                    py,
+                    response
+                        .ids
                         .iter()
                         .map(|id| uuid.call(py, (id.to_string(),), None))
                         .collect::<Result<Vec<_>, _>>()?,

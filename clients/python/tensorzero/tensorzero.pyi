@@ -18,8 +18,10 @@ import uuid_utils
 
 from tensorzero import (
     ChatDatapointInsert,
+    ChatDatapointUpdate,
     ChatInferenceOutput,
     ContentBlock,
+    DatapointMetadataUpdate,
     DynamicEvaluationRunEpisodeResponse,  # DEPRECATED
     DynamicEvaluationRunResponse,  # DEPRECATED
     ExtraBody,
@@ -28,7 +30,11 @@ from tensorzero import (
     InferenceInput,
     InferenceResponse,
     JsonDatapointInsert,
+    JsonDatapointOutputUpdate,
+    JsonDatapointUpdate,
+    Null,
     OptimizationConfig,
+    Unchanged,
     WorkflowEvaluationRunEpisodeResponse,
     WorkflowEvaluationRunResponse,
 )
@@ -723,6 +729,23 @@ class TensorZeroGateway(BaseTensorZeroGateway):
         :param datapoints: A list of datapoints to insert.
         """
 
+    def update_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        datapoints: Sequence[Union[ChatDatapointUpdate, JsonDatapointUpdate]],
+    ) -> List[UUID]:
+        """
+        Update datapoints in a dataset.
+
+        This creates NEW datapoint versions with new IDs rather than updating in-place.
+        The returned UUIDs are the new datapoint IDs, not the original ones.
+
+        :param dataset_name: The name of the dataset containing the datapoints to update.
+        :param datapoints: A list of datapoint update requests.
+        :return: A list of new UUIDs for the created datapoint versions.
+        """
+
     def delete_datapoint(
         self,
         *,
@@ -1135,6 +1158,23 @@ class AsyncTensorZeroGateway(BaseTensorZeroGateway):
 
         :param dataset_name: The name of the dataset to insert the datapoints into.
         :param datapoints: A list of datapoints to insert.
+        """
+
+    async def update_datapoints(
+        self,
+        *,
+        dataset_name: str,
+        datapoints: Sequence[Union[ChatDatapointUpdate, JsonDatapointUpdate]],
+    ) -> List[UUID]:
+        """
+        Update datapoints in a dataset.
+
+        This creates NEW datapoint versions with new IDs rather than updating in-place.
+        The returned UUIDs are the new datapoint IDs, not the original ones.
+
+        :param dataset_name: The name of the dataset containing the datapoints to update.
+        :param datapoints: A list of datapoint update requests.
+        :return: A list of new UUIDs for the created datapoint versions.
         """
 
     async def delete_datapoint(
