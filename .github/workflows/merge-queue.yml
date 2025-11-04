@@ -102,6 +102,11 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Write GCP JWT key to file
+        env:
+          GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
+        run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
+
       - name: Pull images referenced by the compose file
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml pull --ignore-pull-failures
 
