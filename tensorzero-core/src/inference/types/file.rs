@@ -704,8 +704,6 @@ pub fn filename_to_mime_type(filename: &str) -> Result<MediaType, Error> {
 
 #[cfg(test)]
 mod tests {
-    use tracing_test::traced_test;
-
     use crate::inference::types::{
         file::{
             filename_to_mime_type, sanitize_raw_request, ObjectStorageFile, ObjectStoragePointer,
@@ -825,8 +823,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_filename_to_mime_type() {
+        let logs_contain = crate::utils::testing::capture_logs();
         assert_eq!(filename_to_mime_type("test.png").unwrap(), mime::IMAGE_PNG);
         assert_eq!(filename_to_mime_type("test.jpg").unwrap(), mime::IMAGE_JPEG);
         assert_eq!(
@@ -843,8 +841,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_guessed_mime_type_warning() {
+        let logs_contain = crate::utils::testing::capture_logs();
         assert_eq!(
             filename_to_mime_type("my_file.txt").unwrap(),
             mime::TEXT_PLAIN
