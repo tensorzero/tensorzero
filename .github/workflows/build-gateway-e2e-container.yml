@@ -11,6 +11,7 @@ on:
 env:
   TAG: tensorzero/gateway-e2e:sha-${{ github.sha }}
   LATEST_TAG: tensorzero/gateway-e2e:latest
+  TENSORZERO_COMMIT_TAG: sha-${{ github.sha }}
 
 jobs:
   build-gateway-container:
@@ -53,4 +54,4 @@ jobs:
       # Note that this pushes an e2e build of the gateway to 'tensorzero/gateway-e2e'.
       # It does *not* push to the production 'tensorzero/gateway' repo.
       - name: Build and push test containers
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml build --push gateway live-tests
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml build --push mock-inference-provider provider-proxy gateway live-tests
