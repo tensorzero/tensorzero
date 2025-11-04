@@ -2464,6 +2464,7 @@ pub async fn test_warn_ignored_thought_block_with_provider(
 
     if ["anthropic", "aws-bedrock", "gcp_vertex_anthropic"]
         .contains(&provider.model_provider_name.as_str())
+        || ["openai-responses"].contains(&provider.variant_name.as_str())
     {
         assert!(
             !logs_contain("TensorZero doesn't support input thought blocks for the"),
@@ -2472,7 +2473,9 @@ pub async fn test_warn_ignored_thought_block_with_provider(
     } else {
         assert!(
             logs_contain("TensorZero doesn't support input thought blocks for the"),
-            "Missing expected warning"
+            "Missing expected warning for model_provider {} variant {}",
+            provider.model_provider_name,
+            provider.variant_name
         );
     }
 }

@@ -13,7 +13,7 @@ use tracing_subscriber::{fmt::MakeWriter, FmtSubscriber};
 
 // This can be tweaked as needed if we want to capture more or less output
 // in tests that use `capture_logs`
-const TEST_LOG_FILTER: &str = "hyper_util=warn,trace";
+const TEST_LOG_FILTER: &str = "gateway=trace,tensorzero_core=trace,tower_http::trace=debug,warn";
 
 static GLOBAL_BUF: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
 
@@ -36,7 +36,15 @@ pub fn capture_logs() -> impl Fn(&str) -> bool {
     }
 }
 
+pub fn get_captured_logs() -> String {
+    String::from_utf8(GLOBAL_BUF.get().unwrap().lock().unwrap().to_vec()).unwrap()
+}
+
+/// Clears the current global buffer of captured logs.
+/// You should idelaly create a separate `#[tokio::test]` function instead of using this function,
+/// as it results in confusing log output when the tests fail.
 pub fn reset_capture_logs() {
+    eprintln!("Called reset_capture_logs");
     GLOBAL_BUF.get().unwrap().lock().unwrap().clear();
 }
 
