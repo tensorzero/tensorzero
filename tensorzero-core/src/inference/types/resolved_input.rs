@@ -92,6 +92,7 @@ impl LazyFile {
 pub struct FileUrl {
     pub url: Url,
     pub mime_type: Option<MediaType>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<Detail>,
 }
 
