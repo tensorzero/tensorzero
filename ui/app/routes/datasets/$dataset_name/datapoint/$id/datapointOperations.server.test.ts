@@ -18,7 +18,7 @@ import type {
 
 // TODO(shuyangli): Once we remove all custom logic from the Node client, make mocking more ergonomic by providing a mock client at the tensorzero-node level.
 
-// Mock TensorZero client at the module boundary
+// Mock TensorZero client for saveDatapoint operations
 const mockUpdateDatapoint = vi.fn(
   async (_datasetName: string, datapoint: Datapoint) => ({
     id: datapoint.id,
@@ -28,6 +28,23 @@ vi.mock("~/utils/tensorzero.server", () => ({
   getTensorZeroClient: vi.fn(() => ({
     updateDatapoint: mockUpdateDatapoint,
   })),
+}));
+
+// Mock native database client for renameDatapoint metadata operations
+const mockUpdateDatapointsMetadata = vi.fn(
+  async (
+    _datasetName: string,
+    _request: {
+      datapoints: Array<{ id: string; metadata: { name?: string } }>;
+    },
+  ) => ({
+    ids: _request.datapoints.map((d) => d.id),
+  }),
+);
+vi.mock("~/utils/tensorzero/native_client.server", () => ({
+  getNativeDatabaseClient: async () => ({
+    updateDatapointsMetadata: mockUpdateDatapointsMetadata,
+  }),
 }));
 
 // Mock the datasets server functions
@@ -393,21 +410,17 @@ describe("datapointOperations", () => {
         newName,
       });
 
-      // Verify updateDatapoint was called with the new name
-      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
-        datasetName,
-        expect.objectContaining({
-          id: datapointId,
-          function_name: "write_haiku",
-          episode_id: episodeId,
-          tags: { environment: "test" },
-          is_custom: false,
-          source_inference_id: sourceInferenceId,
-          auxiliary: "",
-          name: newName,
-          staled_at: undefined,
-        }),
-      );
+      // Verify updateDatapointsMetadata was called with the new name
+      expect(mockUpdateDatapointsMetadata).toHaveBeenCalledWith(datasetName, {
+        datapoints: [
+          {
+            id: datapointId,
+            metadata: {
+              name: newName,
+            },
+          },
+        ],
+      });
 
       // Verify staleDatapoint was NOT called (rename doesn't stale)
       expect(mockStaleDatapoint).not.toHaveBeenCalled();
@@ -476,60 +489,20 @@ describe("datapointOperations", () => {
         newName,
       });
 
-      // Verify updateDatapoint was called with the new name and output_schema
-      expect(mockUpdateDatapoint).toHaveBeenCalledWith(
-        datasetName,
-        expect.objectContaining({
-          id: datapointId,
-          episode_id: episodeId,
-          function_name: "extract_entities",
-          tags: { source: "test" },
-          is_custom: false,
-          source_inference_id: sourceInferenceId,
-          output_schema: datapoint.output_schema,
-          auxiliary: "",
-          name: newName,
-          staled_at: undefined,
-        }),
-      );
+      // Verify updateDatapointsMetadata was called with the new name
+      expect(mockUpdateDatapointsMetadata).toHaveBeenCalledWith(datasetName, {
+        datapoints: [
+          {
+            id: datapointId,
+            metadata: {
+              name: newName,
+            },
+          },
+        ],
+      });
 
       // Verify staleDatapoint was NOT called
       expect(mockStaleDatapoint).not.toHaveBeenCalled();
-    });
-
-    test("should throw error when json datapoint is missing output_schema", async () => {
-      // This is explicitly typed as unknown because we are missing the output_schema field.
-      const datapoint = {
-        dataset_name: "test_dataset",
-        function_name: "extract_entities",
-        name: "old_name",
-        id: uuid(),
-        episode_id: null,
-        input: {
-          messages: [
-            {
-              role: "user",
-              content: [{ type: "text", text: "Test" }],
-            },
-          ],
-        },
-        output: undefined,
-        tags: {},
-        auxiliary: "",
-        is_deleted: false,
-        updated_at: new Date().toISOString(),
-        staled_at: null,
-        source_inference_id: null,
-        is_custom: false,
-      } as unknown as ParsedJsonInferenceDatapointRow;
-
-      await expect(
-        renameDatapoint({
-          datasetName: "test_dataset",
-          datapointId: datapoint.id,
-          newName: "new_name",
-        }),
-      ).rejects.toThrow("Json datapoint is missing output_schema");
     });
   });
 });
