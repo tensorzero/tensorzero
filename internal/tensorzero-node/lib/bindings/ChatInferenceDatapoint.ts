@@ -13,11 +13,11 @@ export type ChatInferenceDatapoint = {
   dataset_name: string;
   function_name: string;
   id: string;
-  episode_id: string | null;
+  episode_id?: string;
   input: StoredInput;
   output?: Array<ContentBlockChatOutput>;
   tags?: Record<string, string>;
-  auxiliary?: string;
+  auxiliary: string;
   is_deleted: boolean;
   is_custom: boolean;
   source_inference_id?: string;

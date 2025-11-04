@@ -41,7 +41,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const [counts, rows] = await Promise.all([
     getDatasetMetadata({}),
-    listDatapoints(dataset_name, undefined, pageSize, offset),
+    listDatapoints({ dataset_name, page_size: pageSize, offset }),
   ]);
   const count_info = counts.find(
     (count) => count.dataset_name === dataset_name,

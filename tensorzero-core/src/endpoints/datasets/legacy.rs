@@ -1454,7 +1454,7 @@ pub struct JsonDatapointInsert {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[cfg_attr(feature = "pyo3", pyclass(str))]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct ChatInferenceDatapoint {
     pub dataset_name: String,
     pub function_name: String,

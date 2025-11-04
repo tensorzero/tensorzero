@@ -5,6 +5,7 @@ import type {
   DatasetDetailRow,
   GetDatasetMetadataParams,
   GetDatapointParams,
+  ListDatapointsRequest,
   Datapoint,
   AdjacentDatapointIds,
 } from "tensorzero-node";
@@ -71,27 +72,22 @@ export async function countDatasets(): Promise<number> {
   return await dbClient.countDatasets();
 }
 
+/// TODO (GabrielBianconi): This method currently retrieves the entire datapoint.
+/// For performance reasons, consider implementing a version that only returns what we need for the table view.
+// `input` and `output` can be especially large.
 export async function listDatapoints(
-  dataset_name: string,
-  function_name?: string,
-  page_size?: number,
-  offset?: number,
+  params: ListDatapointsRequest & { dataset_name: string },
 ): Promise<DatasetDetailRow[]> {
   const dbClient = await getNativeDatabaseClient();
-  const response = await dbClient.listDatapoints({
-    dataset_name,
-    function_name,
-    page_size,
-    offset,
-  });
+  const response = await dbClient.listDatapoints(params);
 
   // Convert full Datapoint objects to DatasetDetailRow summaries
   return response.datapoints.map((dp) => ({
     id: dp.id,
     type: dp.type,
     function_name: dp.function_name,
-    name: dp.name ?? undefined,
-    episode_id: dp.episode_id ?? undefined,
+    name: dp.name,
+    episode_id: dp.episode_id,
     updated_at: dp.updated_at,
   }));
 }
