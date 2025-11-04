@@ -68,6 +68,7 @@ fn apply_inference_params(
     let mut bedrock_request = bedrock_request;
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -86,6 +87,10 @@ fn apply_inference_params(
             .clone();
         let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
         bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {
@@ -102,6 +107,7 @@ fn apply_inference_params_stream(
     let mut bedrock_request = bedrock_request;
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -120,6 +126,10 @@ fn apply_inference_params_stream(
             .clone();
         let merged_fields = build_bedrock_additional_fields(existing_fields, *budget_tokens);
         bedrock_request = bedrock_request.set_additional_model_request_fields(Some(merged_fields));
+    }
+
+    if service_tier.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier", None);
     }
 
     if verbosity.is_some() {

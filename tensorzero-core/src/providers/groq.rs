@@ -18,7 +18,7 @@ use crate::error::{
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk,
@@ -909,6 +909,8 @@ struct GroqRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<ServiceTier>,
 }
 
 fn apply_inference_params(
@@ -917,12 +919,29 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    // Groq supports auto and flex, but not priority and default
+    if let Some(tier) = service_tier {
+        match tier {
+            ServiceTier::Auto | ServiceTier::Flex => {
+                request.service_tier = Some(tier.clone());
+            }
+            ServiceTier::Priority | ServiceTier::Default => {
+                warn_inference_parameter_not_supported(
+                    PROVIDER_NAME,
+                    &format!("service_tier ({tier})"),
+                    None,
+                );
+            }
+        }
     }
 
     if thinking_budget_tokens.is_some() {
@@ -991,6 +1010,7 @@ impl<'a> GroqRequest<'a> {
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None,
+            service_tier: None, // handled below
         };
 
         apply_inference_params(&mut groq_request, &request.inference_params_v2);
@@ -1672,6 +1692,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
             reasoning_effort: None,
+            service_tier: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let raw_response = "test_response".to_string();
@@ -1770,6 +1791,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
             reasoning_effort: None,
+            service_tier: None,
         };
         let raw_request = serde_json::to_string(&request_body).unwrap();
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
@@ -1838,6 +1860,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
             reasoning_effort: None,
+            service_tier: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_no_choices,
@@ -1896,6 +1919,7 @@ mod tests {
             parallel_tool_calls: None,
             stop: None,
             reasoning_effort: None,
+            service_tier: None,
         };
         let result = ProviderInferenceResponse::try_from(GroqResponseWithMetadata {
             response: invalid_response_multiple_choices,
@@ -2495,6 +2519,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };

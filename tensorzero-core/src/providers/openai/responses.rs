@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::inference::types::{
     chat_completion_inference_params::{
-        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+        warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
     },
     ProviderInferenceResponseStreamInner, ThoughtSummaryBlock,
 };
@@ -62,6 +62,8 @@ pub struct OpenAIResponsesRequest<'a> {
     include: Option<Vec<OpenAIResponsesInclude>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning: Option<OpenAIResponsesReasoningConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<ServiceTier>,
     stream: bool,
 }
 
@@ -448,7 +450,8 @@ impl<'a> OpenAIResponsesRequest<'a> {
             } else {
                 None
             },
-            reasoning: None, // handled below
+            reasoning: None,    // handled below
+            service_tier: None, // handled below
             stream: request.stream,
         };
         apply_inference_params(&mut openai_responses_request, &request.inference_params_v2);
@@ -462,6 +465,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -470,6 +474,10 @@ fn apply_inference_params(
         request.reasoning = Some(OpenAIResponsesReasoningConfig {
             effort: reasoning_effort.clone(),
         });
+    }
+
+    if service_tier.is_some() {
+        request.service_tier = service_tier.clone();
     }
 
     if thinking_budget_tokens.is_some() {
@@ -2459,6 +2467,7 @@ mod tests {
             function_type: FunctionType::Chat,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: Some("high".to_string()),
+                service_tier: None,
                 thinking_budget_tokens: Some(1024),
                 verbosity: Some("low".to_string()),
             },

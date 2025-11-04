@@ -35,7 +35,7 @@ use crate::inference::types::batch::{
     ProviderBatchInferenceOutput, ProviderBatchInferenceResponse,
 };
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::file::mime_type_to_ext;
@@ -809,12 +809,17 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
 
     if reasoning_effort.is_some() {
         request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if service_tier.is_some() {
+        request.service_tier = service_tier.clone();
     }
 
     if thinking_budget_tokens.is_some() {
@@ -2050,6 +2055,8 @@ struct OpenAIRequest<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<ServiceTier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     verbosity: Option<String>,
 }
 
@@ -2117,6 +2124,7 @@ impl<'a> OpenAIRequest<'a> {
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
             reasoning_effort: None, // handled below
+            service_tier: None,     // handled below
             verbosity: None,        // handled below
         };
 
@@ -4406,6 +4414,7 @@ mod tests {
             output_schema: None,
             inference_params_v2: ChatCompletionInferenceParamsV2 {
                 reasoning_effort: Some("high".to_string()),
+                service_tier: None,
                 thinking_budget_tokens: Some(1024),
                 verbosity: Some("low".to_string()),
             },

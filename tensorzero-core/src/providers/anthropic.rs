@@ -21,7 +21,7 @@ use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
 use crate::inference::types::chat_completion_inference_params::{
-    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2, ServiceTier,
 };
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
@@ -720,6 +720,8 @@ struct AnthropicRequestBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    service_tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     stop_sequences: Option<Cow<'a, [String]>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     tool_choice: Option<AnthropicToolChoice<'a>>,
@@ -804,6 +806,7 @@ impl<'a> AnthropicRequestBody<'a> {
             temperature: request.temperature,
             thinking: None,
             top_p: request.top_p,
+            service_tier: None, // handled below
             tool_choice,
             tools,
             stop_sequences: request.borrow_stop_sequences(),
@@ -821,6 +824,7 @@ fn apply_inference_params(
 ) {
     let ChatCompletionInferenceParamsV2 {
         reasoning_effort,
+        service_tier,
         thinking_budget_tokens,
         verbosity,
     } = inference_params;
@@ -831,6 +835,21 @@ fn apply_inference_params(
             "reasoning_effort",
             Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
         );
+    }
+
+    // Map service_tier values to Anthropic-compatible values
+    if let Some(tier) = service_tier {
+        match tier {
+            ServiceTier::Auto | ServiceTier::Priority => {
+                request.service_tier = Some("auto".to_string());
+            }
+            ServiceTier::Default => {
+                request.service_tier = Some("standard_only".to_string());
+            }
+            ServiceTier::Flex => {
+                warn_inference_parameter_not_supported(PROVIDER_NAME, "service_tier (flex)", None);
+            }
+        }
     }
 
     if let Some(budget_tokens) = thinking_budget_tokens {
@@ -3256,6 +3275,7 @@ mod tests {
         let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
+            service_tier: None,
             thinking_budget_tokens: Some(1024),
             verbosity: Some("low".to_string()),
         };
