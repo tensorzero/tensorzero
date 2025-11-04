@@ -1160,66 +1160,54 @@ impl TryFrom<ToolChoice> for AWSBedrockToolChoice {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use tracing_test::traced_test;
-
+    use crate::utils::testing::reset_capture_logs;
     #[tokio::test]
     async fn test_get_aws_bedrock_client_no_aws_credentials() {
-        #[traced_test]
-        async fn first_run() {
-            AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
-                .await
-                .unwrap();
-
-            assert!(logs_contain(
-                "Creating new AWS config for region: uk-hogwarts-1"
-            ));
-        }
-
-        #[traced_test]
-        async fn second_run() {
-            AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
-                .await
-                .unwrap();
-
-            assert!(logs_contain(
-                "Creating new AWS config for region: uk-hogwarts-1"
-            ));
-        }
-
-        #[traced_test]
-        async fn third_run() {
-            // We want auto-detection to fail, so we clear this environment variable.
-            // We use 'nextest' as our runner, so each test runs in its own process
-            std::env::remove_var("AWS_REGION");
-            std::env::remove_var("AWS_DEFAULT_REGION");
-            let err = AWSBedrockProvider::new("test".to_string(), None)
-                .await
-                .expect_err("AWS bedrock provider should fail when it cannot detect region");
-            let err_msg = err.to_string();
-            assert!(
-                err_msg.contains("Failed to determine AWS region."),
-                "Unexpected error message: {err_msg}"
-            );
-
-            assert!(logs_contain("Failed to determine AWS region."));
-        }
-
-        #[traced_test]
-        async fn fourth_run() {
-            AWSBedrockProvider::new("test".to_string(), Some(Region::new("me-shire-2")))
-                .await
-                .unwrap();
-
-            assert!(logs_contain(
-                "Creating new AWS config for region: me-shire-2"
-            ));
-        }
-
+        let logs_contain = crate::utils::testing::capture_logs();
         // Every call should trigger client creation since each provider has its own AWS Bedrock client
-        first_run().await;
-        second_run().await;
-        third_run().await;
-        fourth_run().await;
+        AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
+            .await
+            .unwrap();
+
+        assert!(logs_contain(
+            "Creating new AWS config for region: uk-hogwarts-1"
+        ));
+
+        reset_capture_logs();
+
+        AWSBedrockProvider::new("test".to_string(), Some(Region::new("uk-hogwarts-1")))
+            .await
+            .unwrap();
+
+        assert!(logs_contain(
+            "Creating new AWS config for region: uk-hogwarts-1"
+        ));
+
+        reset_capture_logs();
+
+        // We want auto-detection to fail, so we clear this environment variable.
+        // We use 'nextest' as our runner, so each test runs in its own process
+        std::env::remove_var("AWS_REGION");
+        std::env::remove_var("AWS_DEFAULT_REGION");
+        let err = AWSBedrockProvider::new("test".to_string(), None)
+            .await
+            .expect_err("AWS bedrock provider should fail when it cannot detect region");
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("Failed to determine AWS region."),
+            "Unexpected error message: {err_msg}"
+        );
+
+        assert!(logs_contain("Failed to determine AWS region."));
+
+        reset_capture_logs();
+
+        AWSBedrockProvider::new("test".to_string(), Some(Region::new("me-shire-2")))
+            .await
+            .unwrap();
+
+        assert!(logs_contain(
+            "Creating new AWS config for region: me-shire-2"
+        ));
     }
 }

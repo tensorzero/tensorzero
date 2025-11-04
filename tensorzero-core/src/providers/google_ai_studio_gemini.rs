@@ -1430,17 +1430,25 @@ fn handle_google_ai_studio_error(
 mod tests {
     use std::borrow::Cow;
 
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+    use base64::Engine;
     use serde_json::json;
-    use tracing_test::traced_test;
 
     use super::*;
-    use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::file::Detail;
+    use crate::inference::types::resolved_input::LazyFile;
+    use crate::inference::types::storage::{StorageKind, StoragePath};
+    use crate::inference::types::{
+        ContentBlock, FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode,
+        ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
+    };
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
+    use crate::utils::testing::capture_logs;
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_content_block_warn() {
+        let logs_contain = capture_logs();
         use std::time::Duration;
         let content = GeminiResponseContent {
             parts: vec![GeminiResponseContentPart {
@@ -2831,8 +2839,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_google_ai_studio_gemini_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),
@@ -2870,16 +2878,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_gemini_warns_on_detail() {
-        use crate::inference::types::file::Detail;
-        use crate::inference::types::resolved_input::LazyFile;
-        use crate::inference::types::storage::{StorageKind, StoragePath};
-        use crate::inference::types::{
-            ContentBlock, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
-        };
-        use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-        use base64::Engine;
+        let logs_contain = capture_logs();
 
         // Test with resolved file with detail
         let dummy_storage_path = StoragePath {

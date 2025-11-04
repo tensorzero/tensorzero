@@ -1,9 +1,7 @@
+use super::*;
 use std::{io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 use toml::de::DeTable;
-use tracing_test::traced_test;
-
-use super::*;
 
 use std::env;
 
@@ -1516,8 +1514,8 @@ async fn test_config_load_shorthand_models_only() {
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_empty_config() {
+    let logs_contain = crate::utils::testing::capture_logs();
     let tempfile = NamedTempFile::new().unwrap();
     write!(&tempfile, "").unwrap();
     Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
@@ -1692,8 +1690,6 @@ async fn test_bedrock_region_and_allow_auto() {
         .await
         .expect("Failed to construct config with valid AWS bedrock provider");
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_load_no_config_file() {
     let err = &ConfigFileGlob::new_from_path(Path::new("nonexistent.toml"))
@@ -1731,8 +1727,8 @@ async fn test_config_missing_filesystem_object_store() {
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_config_no_verify_creds_missing_filesystem_object_store() {
+    let logs_contain = crate::utils::testing::capture_logs();
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1753,8 +1749,6 @@ async fn test_config_no_verify_creds_missing_filesystem_object_store() {
     assert!(config.object_store_info.is_none());
     assert!(logs_contain("Filesystem object store path does not exist: /fake-tensorzero-path/other-path. Treating object store as unconfigured"));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_load_invalid_s3_creds() {
     // Set invalid credentials (tests are isolated per-process)
@@ -1783,10 +1777,9 @@ async fn test_config_load_invalid_s3_creds() {
         "Unexpected error message: {err}"
     );
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_blocked_s3_http_endpoint_default() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
     std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
@@ -1818,10 +1811,9 @@ async fn test_config_blocked_s3_http_endpoint_default() {
     );
     assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_blocked_s3_http_endpoint_override() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
     std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
@@ -1855,10 +1847,9 @@ async fn test_config_blocked_s3_http_endpoint_override() {
     );
     assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_s3_allow_http_config() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
     std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
@@ -1896,10 +1887,9 @@ async fn test_config_s3_allow_http_config() {
         "[object_storage.allow_http]` is set to `true` - this is insecure"
     ));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_s3_allow_http_env_var() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
     std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");

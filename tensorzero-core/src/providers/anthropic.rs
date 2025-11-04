@@ -1523,14 +1523,19 @@ fn parse_usage_info(usage_info: &Value) -> AnthropicUsage {
 mod tests {
     use std::borrow::Cow;
 
+    use futures::FutureExt;
+    use serde_json::json;
+    use url::Url;
+    use uuid::Uuid;
+
     use super::*;
-    use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
+    use crate::inference::types::file::Detail;
+    use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+    use crate::inference::types::{ContentBlock, FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
-    use serde_json::json;
-    use tracing_test::traced_test;
-    use uuid::Uuid;
+    use crate::utils::testing::capture_logs;
 
     #[test]
     fn test_try_from_tool_call_config() {
@@ -3241,8 +3246,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_chunk_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             AnthropicStreamMessage::ContentBlockStart {
@@ -3264,8 +3269,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_anthropic_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),
@@ -3301,13 +3306,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_anthropic_warns_on_detail() {
-        use crate::inference::types::file::Detail;
-        use crate::inference::types::resolved_input::{FileUrl, LazyFile};
-        use crate::inference::types::ContentBlock;
-        use futures::FutureExt;
-        use url::Url;
+        let logs_contain = capture_logs();
 
         // Test URL forwarding path with detail
         let url = Url::parse("https://example.com/image.png").unwrap();

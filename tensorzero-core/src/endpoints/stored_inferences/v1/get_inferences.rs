@@ -9,7 +9,7 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{GetInferencesRequest, GetInferencesResponse, ListInferencesRequest};
 
-const DEFAULT_PAGE_SIZE: u32 = 20;
+const DEFAULT_LIMIT: u32 = 20;
 const DEFAULT_OFFSET: u32 = 0;
 
 /// Handler for the POST `/v1/inferences/get_inferences` endpoint.
@@ -80,7 +80,7 @@ async fn list_inferences(
     clickhouse: &impl InferenceQueries,
     request: ListInferencesRequest,
 ) -> Result<GetInferencesResponse, Error> {
-    let page_size = request.page_size.unwrap_or(DEFAULT_PAGE_SIZE) as u64;
+    let limit = request.limit.unwrap_or(DEFAULT_LIMIT) as u64;
     let offset = request.offset.unwrap_or(DEFAULT_OFFSET) as u64;
 
     let params = ListInferencesParams {
@@ -90,7 +90,7 @@ async fn list_inferences(
         episode_id: request.episode_id.as_ref(),
         filters: request.filter.as_ref(),
         output_source: request.output_source,
-        limit: Some(page_size),
+        limit: Some(limit),
         offset: Some(offset),
         order_by: request.order_by.as_deref(),
     };
@@ -309,7 +309,7 @@ mod tests {
             .expect_list_inferences()
             .withf(|_, params| {
                 // Verify default pagination values
-                assert_eq!(params.limit, Some(20), "Should use default page_size of 20");
+                assert_eq!(params.limit, Some(20), "Should use default limit of 20");
                 assert_eq!(params.offset, Some(0), "Should use default offset of 0");
                 assert_eq!(params.ids, None);
                 true
@@ -325,7 +325,7 @@ mod tests {
             variant_name: None,
             episode_id: None,
             output_source: InferenceOutputSource::Inference,
-            page_size: None,
+            limit: None,
             offset: None,
             filter: None,
             order_by: None,
@@ -349,7 +349,7 @@ mod tests {
             .expect_list_inferences()
             .withf(|_, params| {
                 // Verify custom pagination values
-                assert_eq!(params.limit, Some(50), "Should use custom page_size");
+                assert_eq!(params.limit, Some(50), "Should use custom limit");
                 assert_eq!(params.offset, Some(100), "Should use custom offset");
                 true
             })
@@ -364,7 +364,7 @@ mod tests {
             variant_name: None,
             episode_id: None,
             output_source: InferenceOutputSource::Inference,
-            page_size: Some(50),
+            limit: Some(50),
             offset: Some(100),
             filter: None,
             order_by: None,
@@ -420,7 +420,7 @@ mod tests {
             variant_name: Some(variant_name),
             episode_id: Some(episode_id),
             output_source: InferenceOutputSource::Inference,
-            page_size: None,
+            limit: None,
             offset: None,
             filter: None,
             order_by: None,
@@ -466,7 +466,7 @@ mod tests {
             variant_name: None,
             episode_id: None,
             output_source: InferenceOutputSource::Inference,
-            page_size: None,
+            limit: None,
             offset: None,
             filter: None,
             order_by: Some(order_by),
@@ -494,7 +494,7 @@ mod tests {
             variant_name: None,
             episode_id: None,
             output_source: InferenceOutputSource::Inference,
-            page_size: None,
+            limit: None,
             offset: None,
             filter: None,
             order_by: None,

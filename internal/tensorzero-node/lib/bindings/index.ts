@@ -6,6 +6,8 @@ export * from "./AllowedToolsChoice";
 export * from "./AnthropicDefaults";
 export * from "./AnthropicProvider";
 export * from "./AnthropicProviderTypeConfig";
+export * from "./ApiKeyPublicIdConfigScope";
+export * from "./ApiKeyPublicIdValueScope";
 export * from "./Arguments";
 export * from "./AuthConfig";
 export * from "./AzureDefaults";

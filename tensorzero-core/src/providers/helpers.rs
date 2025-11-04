@@ -725,14 +725,12 @@ impl<T> UrlParseErrExt<T> for Result<T, url::ParseError> {
 mod tests {
     use std::time::Duration;
 
-    use futures::{stream, StreamExt};
-    use tracing_test::traced_test;
-
     use crate::inference::types::{
         extra_body::{ExtraBodyConfig, ExtraBodyReplacement, FilteredInferenceExtraBody},
         extra_headers::{ExtraHeadersConfig, FilteredInferenceExtraHeaders, InferenceExtraHeader},
         ContentBlockChunk, TextChunk,
     };
+    use futures::{stream, StreamExt};
 
     use super::*;
 
@@ -1349,8 +1347,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_delete_json_pointer_errors() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let mut obj = serde_json::json!({"other": "value"});
         delete_json_pointer(&mut obj, "/object1").unwrap();
         assert!(logs_contain(

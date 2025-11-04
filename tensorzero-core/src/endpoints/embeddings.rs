@@ -1,5 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
+use axum::Extension;
 use serde::Deserialize;
 use tokio_util::task::TaskTracker;
 use tracing::instrument;
@@ -9,7 +10,7 @@ use crate::{
     config::Config,
     db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
     embeddings::{Embedding, EmbeddingEncodingFormat, EmbeddingInput, EmbeddingRequest},
-    endpoints::inference::InferenceClients,
+    endpoints::{inference::InferenceClients, RequestApiKeyExtension},
     error::{Error, ErrorDetails},
     http::TensorzeroHttpClient,
     inference::types::Usage,
@@ -40,6 +41,7 @@ pub async fn embeddings(
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
     params: Params,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<EmbeddingResponse, Error> {
     let span = tracing::Span::current();
     span.record("model", &params.model_name);
@@ -81,7 +83,7 @@ pub async fn embeddings(
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
-        scope_info: ScopeInfo { tags: tags.clone() },
+        scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
     };
     let response = embedding_model
         .embed(&request, &params.model_name, &clients)
@@ -109,11 +111,9 @@ mod tests {
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;
     use std::collections::HashMap;
-    use tracing_test::traced_test;
-
-    #[traced_test]
     #[tokio::test]
     async fn test_no_warning_when_model_exists() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Create a config with a valid embedding model
         let dummy_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good-model".into(),
@@ -169,6 +169,7 @@ mod tests {
             PostgresConnectionInfo::Disabled,
             tokio_util::task::TaskTracker::new(),
             params,
+            None,
         )
         .await;
 
@@ -178,10 +179,9 @@ mod tests {
         // Check that no warnings were logged for model not found
         assert!(!logs_contain("Model not found"));
     }
-
-    #[traced_test]
     #[tokio::test]
     async fn test_warning_when_model_not_found() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Create an empty config with no embedding models
         let config = Arc::new(Config::default());
 
@@ -205,6 +205,7 @@ mod tests {
             PostgresConnectionInfo::Disabled,
             tokio_util::task::TaskTracker::new(),
             params,
+            None,
         )
         .await;
 
