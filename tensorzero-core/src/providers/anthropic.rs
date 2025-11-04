@@ -14,10 +14,15 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_unknown_chunk, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    warn_discarded_unknown_chunk, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::BatchRequestRow;
 use crate::inference::types::batch::PollBatchInferenceResponse;
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlock, ContentBlockChunk, FinishReason,
@@ -27,7 +32,8 @@ use crate::inference::types::{
     ContentBlockOutput, FlattenUnknown, ModelInferenceRequest,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponse,
     ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk, Usage,
+    ProviderInferenceResponseStreamInner, RequestMessage, TextChunk, Thought, ThoughtChunk,
+    UnknownChunk, Usage,
 };
 use crate::inference::InferenceProvider;
 use crate::model::{fully_qualified_name, Credential, ModelProvider};
@@ -121,33 +127,34 @@ impl AnthropicCredentials {
     fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             AnthropicCredentials::Static(api_key) => Ok(api_key),
             AnthropicCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             AnthropicCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            AnthropicCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            AnthropicCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -176,7 +183,10 @@ impl InferenceProvider for AnthropicProvider {
                         ),
                     })
                 })?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(self.base_url().as_ref())
@@ -253,7 +263,7 @@ impl InferenceProvider for AnthropicProvider {
         &'a self,
         ModelProviderRequest {
             request,
-            provider_name: _,
+            provider_name,
             model_name,
             otlp_config: _,
         }: ModelProviderRequest<'a>,
@@ -272,7 +282,7 @@ impl InferenceProvider for AnthropicProvider {
                     })
                 })?;
         let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(api_key)?;
+        let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
         let builder = http_client
             .post(self.base_url().as_ref())
             .header("anthropic-version", ANTHROPIC_API_VERSION)
@@ -288,7 +298,14 @@ impl InferenceProvider for AnthropicProvider {
             builder,
         )
         .await?;
-        let mut stream = stream_anthropic(event_source, start_time, model_provider).peekable();
+        let mut stream = stream_anthropic(
+            event_source,
+            start_time,
+            model_provider,
+            model_name,
+            provider_name,
+        )
+        .peekable();
         let chunk = peek_first_chunk(&mut stream, &raw_request, PROVIDER_TYPE).await?;
         if matches!(
             request.json_mode,
@@ -332,8 +349,12 @@ fn stream_anthropic(
     mut event_source: TensorZeroEventSource,
     start_time: Instant,
     model_provider: &ModelProvider,
+    model_name: &str,
+    provider_name: &str,
 ) -> ProviderInferenceResponseStreamInner {
     let discard_unknown_chunks = model_provider.discard_unknown_chunks;
+    let model_name = model_name.to_string();
+    let provider_name = provider_name.to_string();
     Box::pin(async_stream::stream! {
         let mut current_tool_id : Option<String> = None;
         let mut current_tool_name: Option<String> = None;
@@ -369,6 +390,8 @@ fn stream_anthropic(
                                 &mut current_tool_id,
                                 &mut current_tool_name,
                                 discard_unknown_chunks,
+                                &model_name,
+                                &provider_name,
                             )
                         });
 
@@ -675,6 +698,12 @@ enum AnthropicSystemBlock<'a> {
 }
 
 #[derive(Debug, PartialEq, Serialize)]
+struct AnthropicThinkingConfig {
+    r#type: &'static str,
+    budget_tokens: i32,
+}
+
+#[derive(Debug, Default, PartialEq, Serialize)]
 struct AnthropicRequestBody<'a> {
     model: &'a str,
     messages: Vec<AnthropicMessage<'a>>,
@@ -686,6 +715,8 @@ struct AnthropicRequestBody<'a> {
     system: Option<Vec<AnthropicSystemBlock<'a>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<AnthropicThinkingConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     top_p: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -764,18 +795,53 @@ impl<'a> AnthropicRequestBody<'a> {
         }?;
 
         // NOTE: Anthropic does not support seed
-        Ok(AnthropicRequestBody {
+        let mut anthropic_request = AnthropicRequestBody {
             model: model_name,
             messages,
             max_tokens,
             stream: Some(request.stream),
             system,
             temperature: request.temperature,
+            thinking: None,
             top_p: request.top_p,
             tool_choice,
             tools,
             stop_sequences: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut anthropic_request, &request.inference_params_v2);
+
+        Ok(anthropic_request)
+    }
+}
+
+fn apply_inference_params(
+    request: &mut AnthropicRequestBody,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "reasoning_effort",
+            Some("Tip: You might want to use `thinking_budget_tokens` for this provider."),
+        );
+    }
+
+    if let Some(budget_tokens) = thinking_budget_tokens {
+        request.thinking = Some(AnthropicThinkingConfig {
+            r#type: "enabled",
+            budget_tokens: *budget_tokens,
+        });
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
     }
 }
 
@@ -1178,6 +1244,7 @@ enum AnthropicStreamMessage {
 /// subsequent InputJSONDelta chunks can be initialized with this information as well.
 /// There is no need to do the same bookkeeping for TextDelta chunks since they come with an index (which we use as an ID for a text chunk).
 /// See the Anthropic [docs](https://docs.anthropic.com/en/api/messages-streaming) on streaming messages for details on the types of events and their semantics.
+#[expect(clippy::too_many_arguments)]
 fn anthropic_to_tensorzero_stream_message(
     raw_message: String,
     message: AnthropicStreamMessage,
@@ -1185,6 +1252,8 @@ fn anthropic_to_tensorzero_stream_message(
     current_tool_id: &mut Option<String>,
     current_tool_name: &mut Option<String>,
     discard_unknown_chunks: bool,
+    model_name: &str,
+    provider_name: &str,
 ) -> Result<Option<ProviderInferenceResponseChunk>, Error> {
     match message {
         AnthropicStreamMessage::ContentBlockDelta {
@@ -1370,11 +1439,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: delta.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1390,11 +1459,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: index.to_string(),
                     data: content_block.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1410,11 +1479,11 @@ fn anthropic_to_tensorzero_stream_message(
                 return Ok(None);
             }
             Ok(Some(ProviderInferenceResponseChunk::new(
-                vec![ContentBlockChunk::Unknown {
+                vec![ContentBlockChunk::Unknown(UnknownChunk {
                     id: "message_delta".to_string(),
                     data: delta.into_owned(),
-                    provider_type: Some(PROVIDER_TYPE.to_string()),
-                }],
+                    model_provider_name: Some(fully_qualified_name(model_name, provider_name)),
+                })],
                 None,
                 raw_message,
                 message_latency,
@@ -1449,7 +1518,6 @@ mod tests {
     use crate::providers::test_helpers::WEATHER_TOOL_CONFIG;
     use crate::tool::{DynamicToolConfig, ToolConfig, ToolResult};
     use serde_json::json;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     #[test]
@@ -1744,11 +1812,7 @@ mod tests {
                 system: Some(vec![AnthropicSystemBlock::Text {
                     text: "test_system"
                 }]),
-                temperature: None,
-                top_p: None,
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -1812,10 +1876,7 @@ mod tests {
                     text: "test_system"
                 }]),
                 temperature: Some(0.5),
-                top_p: None,
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -1873,12 +1934,7 @@ mod tests {
                 messages: expected_messages,
                 max_tokens: 64_000,
                 stream: Some(false),
-                system: None,
-                temperature: None,
-                top_p: None,
-                tool_choice: None,
-                tools: None,
-                stop_sequences: None,
+                ..Default::default()
             }
         );
 
@@ -2046,6 +2102,18 @@ mod tests {
         let model = "claude-3-haiku-20240307".to_string();
         let body = AnthropicRequestBody::new(&model, &request).await;
         assert_eq!(body.unwrap().max_tokens, 4_096);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-haiku-4-5-20251001".to_string();
+        let body = AnthropicRequestBody::new(&model, &request).await;
+        assert_eq!(body.unwrap().max_tokens, 64_000);
+        let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
+        assert_eq!(body.unwrap().max_tokens, 100);
+
+        let model = "claude-sonnet-4-5-20250929".to_string();
+        let body = AnthropicRequestBody::new(&model, &request).await;
+        assert_eq!(body.unwrap().max_tokens, 64_000);
         let body = AnthropicRequestBody::new(&model, &request_with_max_tokens).await;
         assert_eq!(body.unwrap().max_tokens, 100);
 
@@ -2405,10 +2473,7 @@ mod tests {
             stream: Some(false),
             system: None,
             top_p: Some(0.5),
-            temperature: None,
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let raw_response = "{\"foo\": \"bar\"}".to_string();
         let input_messages = vec![RequestMessage {
@@ -2466,12 +2531,8 @@ mod tests {
             messages: vec![],
             max_tokens: 100,
             stream: Some(false),
-            system: None,
-            temperature: None,
             top_p: Some(0.5),
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let input_messages = vec![RequestMessage {
             role: Role::Assistant,
@@ -2541,12 +2602,8 @@ mod tests {
             messages: vec![],
             max_tokens: 100,
             stream: Some(false),
-            system: None,
-            temperature: None,
             top_p: Some(0.5),
-            tool_choice: None,
-            tools: None,
-            stop_sequences: None,
+            ..Default::default()
         };
         let input_messages = vec![RequestMessage {
             role: Role::User,
@@ -2611,6 +2668,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2641,6 +2700,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2671,6 +2732,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2703,6 +2766,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2735,6 +2800,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let chunk = result.unwrap().unwrap();
         assert_eq!(chunk.content.len(), 1);
@@ -2757,6 +2824,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2773,6 +2842,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         let error = result.unwrap_err();
         let details = error.get_details();
@@ -2802,6 +2873,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2825,6 +2898,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         let chunk = result.unwrap().unwrap();
@@ -2845,6 +2920,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -2859,6 +2936,8 @@ mod tests {
             &mut current_tool_id,
             &mut current_tool_name,
             false,
+            "test_model",
+            "test_provider",
         );
         assert!(result.is_ok());
         assert!(result.unwrap().is_none());
@@ -3130,13 +3209,15 @@ mod tests {
             &mut Default::default(),
             &mut Default::default(),
             false,
+            "test_model",
+            "test_provider",
         )
         .unwrap()
         .unwrap();
 
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ContentBlockChunk::Unknown { id, data, .. } => {
+            ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                 assert_eq!(id, "0");
                 assert_eq!(
                     data.get("my_unknown").and_then(|v| v.as_str()),
@@ -3148,8 +3229,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_chunk_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let res = anthropic_to_tensorzero_stream_message(
             "my_raw_chunk".to_string(),
             AnthropicStreamMessage::ContentBlockStart {
@@ -3162,9 +3243,48 @@ mod tests {
             &mut Default::default(),
             &mut Default::default(),
             true,
+            "test_model",
+            "test_provider",
         )
         .unwrap();
         assert_eq!(res, None);
         assert!(logs_contain("Discarding unknown chunk"));
+    }
+
+    #[test]
+    fn test_anthropic_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = AnthropicRequestBody {
+            model: "claude-3-5-sonnet-20241022",
+            messages: vec![],
+            max_tokens: 1024,
+            ..Default::default()
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns with tip about thinking_budget_tokens
+        assert!(logs_contain(
+            "Anthropic does not support the inference parameter `reasoning_effort`, so it will be ignored. Tip: You might want to use `thinking_budget_tokens` for this provider."
+        ));
+
+        // Test that thinking_budget_tokens is applied correctly
+        assert_eq!(
+            request.thinking,
+            Some(AnthropicThinkingConfig {
+                r#type: "enabled",
+                budget_tokens: 1024,
+            })
+        );
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Anthropic does not support the inference parameter `verbosity`"
+        ));
     }
 }

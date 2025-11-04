@@ -13,9 +13,12 @@ use super::helpers::{
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::{TensorZeroEventSource, TensorzeroHttpClient};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, Latency, ModelInferenceRequest,
     ModelInferenceRequestJsonMode, ProviderInferenceResponse,
@@ -88,33 +91,34 @@ impl DeepSeekCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             DeepSeekCredentials::Static(api_key) => Ok(api_key),
             DeepSeekCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             DeepSeekCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            DeepSeekCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            DeepSeekCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -167,7 +171,10 @@ impl InferenceProvider for DeepSeekProvider {
         })?;
 
         let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
@@ -268,7 +275,10 @@ impl InferenceProvider for DeepSeekProvider {
         })?;
 
         let request_url = get_chat_url(&DEEPSEEK_DEFAULT_BASE_URL)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
@@ -333,7 +343,7 @@ impl DeepSeekResponseFormat {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 struct DeepSeekRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -361,6 +371,29 @@ struct DeepSeekRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_format: Option<DeepSeekResponseFormat>,
+}
+
+fn apply_inference_params(
+    _request: &mut DeepSeekRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "thinking_budget_tokens", None);
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> DeepSeekRequest<'a> {
@@ -410,7 +443,7 @@ impl<'a> DeepSeekRequest<'a> {
 
         let (tools, tool_choice, _) = prepare_openai_tools(request);
 
-        Ok(DeepSeekRequest {
+        let mut deepseek_request = DeepSeekRequest {
             messages,
             model,
             temperature,
@@ -425,7 +458,11 @@ impl<'a> DeepSeekRequest<'a> {
             response_format,
             tools,
             tool_choice,
-        })
+        };
+
+        apply_inference_params(&mut deepseek_request, &request.inference_params_v2);
+
+        Ok(deepseek_request)
     }
 }
 
@@ -1219,6 +1256,34 @@ mod tests {
             content,
             tool_call_id,
         })
+    }
+
+    #[test]
+    fn test_deepseek_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = DeepSeekRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns
+        assert!(logs_contain(
+            "DeepSeek does not support the inference parameter `reasoning_effort`"
+        ));
+
+        // Test that thinking_budget_tokens warns
+        assert!(logs_contain(
+            "DeepSeek does not support the inference parameter `thinking_budget_tokens`"
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "DeepSeek does not support the inference parameter `verbosity`"
+        ));
     }
 
     #[tokio::test]

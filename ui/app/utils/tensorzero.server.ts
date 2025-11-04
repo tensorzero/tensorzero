@@ -5,10 +5,10 @@ import {
   TensorZeroServerError,
   type FeedbackResponse,
 } from "~/utils/tensorzero";
-import type { JsonValue } from "tensorzero-node";
+import type { JsonValue } from "~/types/tensorzero";
 import { getEnv } from "./env.server";
 import { getFeedbackConfig } from "./config/feedback";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 
@@ -17,7 +17,10 @@ export function getTensorZeroClient() {
     return _tensorZeroClient;
   }
 
-  _tensorZeroClient = new TensorZeroClient(getEnv().TENSORZERO_GATEWAY_URL);
+  _tensorZeroClient = new TensorZeroClient(
+    getEnv().TENSORZERO_GATEWAY_URL,
+    getEnv().TENSORZERO_API_KEY,
+  );
   return _tensorZeroClient;
 }
 

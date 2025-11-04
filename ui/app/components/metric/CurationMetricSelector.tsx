@@ -5,7 +5,7 @@ import {
   type Path,
   type PathValue,
 } from "react-hook-form";
-import type { Config } from "tensorzero-node";
+import type { Config } from "~/types/tensorzero";
 import {
   FormField,
   FormItem,

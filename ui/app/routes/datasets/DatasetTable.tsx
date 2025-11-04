@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { DatasetMetadata } from "tensorzero-node";
+import type { DatasetMetadata } from "~/types/tensorzero";
 import { Link, useFetcher } from "react-router";
 import { TableItemTime } from "~/components/ui/TableItems";
 import { toDatasetUrl } from "~/utils/urls";

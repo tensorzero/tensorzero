@@ -26,7 +26,6 @@ use crate::{
     providers::openai::OpenAICredentials,
     rate_limiting::ScopeInfo,
     stored_inference::RenderedSample,
-    utils::retries::RetryConfig,
     variant::dicl::UninitializedDiclConfig,
 };
 
@@ -392,23 +391,10 @@ impl JobHandle for DiclOptimizationJobHandle {
         Ok(OptimizationJobInfo::Completed {
             output: OptimizerOutput::Variant(Box::new(UninitializedVariantConfig::Dicl(
                 UninitializedDiclConfig {
-                    weight: None,
                     embedding_model: self.embedding_model.to_string(),
                     k: self.k,
                     model: self.model.to_string(),
-                    system_instructions: None,
-                    temperature: None,
-                    top_p: None,
-                    stop_sequences: None,
-                    presence_penalty: None,
-                    frequency_penalty: None,
-                    max_tokens: None,
-                    seed: None,
-                    json_mode: None,
-                    extra_body: None,
-                    extra_headers: None,
-                    retries: RetryConfig::default(),
-                    max_distance: None,
+                    ..Default::default()
                 },
             ))),
         })
@@ -576,7 +562,8 @@ async fn process_embedding_batch(
         // We don't currently perform any OTLP export in optimization workflows
         otlp_config: Default::default(),
         deferred_tasks: deferred_tasks.clone(),
-        scope_info: ScopeInfo { tags: tags.clone() },
+        // We don't currently use API keys for optimization workflows
+        scope_info: ScopeInfo::new(tags.clone(), None),
     };
 
     let response = embedding_model_config

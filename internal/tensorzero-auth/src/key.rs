@@ -3,7 +3,7 @@ use rand::{
     distr::{Alphanumeric, SampleString},
     rngs::StdRng,
 };
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -12,12 +12,12 @@ use thiserror::Error;
 #[derive(Debug)]
 pub struct TensorZeroApiKey {
     pub public_id: String,
-    pub(crate) hashed_long_key: SecretString,
+    pub hashed_long_key: SecretString,
 }
 
 const SK_PREFIX: &str = "sk";
 const T0_PREFIX: &str = "t0";
-const SHORT_ID_LENGTH: usize = 12;
+pub const PUBLIC_ID_LENGTH: usize = 12;
 const LONG_KEY_LENGTH: usize = 48;
 
 /// Securely generates a fresh API key
@@ -25,7 +25,7 @@ const LONG_KEY_LENGTH: usize = 48;
 pub(crate) fn secure_fresh_api_key() -> SecretString {
     // Use a cryptographically secure RNG, seeded from the OS
     let mut rng = StdRng::from_os_rng();
-    let short_key = Alphanumeric.sample_string(&mut rng, SHORT_ID_LENGTH);
+    let short_key = Alphanumeric.sample_string(&mut rng, PUBLIC_ID_LENGTH);
     let long_key = Alphanumeric.sample_string(&mut rng, LONG_KEY_LENGTH);
     let key = format!("{SK_PREFIX}-{T0_PREFIX}-{short_key}-{long_key}");
     SecretString::from(key)
@@ -45,9 +45,8 @@ impl TensorZeroApiKey {
         }
     }
 
-    #[cfg(feature = "e2e_tests")]
-    pub fn get_public_id(&self) -> String {
-        self.public_id.clone()
+    pub fn get_public_id(&self) -> &str {
+        &self.public_id
     }
 
     #[cfg(feature = "e2e_tests")]
@@ -57,7 +56,7 @@ impl TensorZeroApiKey {
 
     /// Validates that the provided key is of the format `sk-t0-<public_id>-<long_key>`,
     /// where <public_id> is 12 alphanumeric characters and <long_key> is 48 alphanumeric characters.
-    /// Returns a `TensorZeroApiKey` containing the extracted short ID and long key.
+    /// Returns a `TensorZeroApiKey` containing the extracted public ID and long key.
     pub fn parse(key: &str) -> Result<Self, TensorZeroAuthError> {
         let parts = key.split('-').collect::<Vec<&str>>();
         let [sk, t0, public_id, long_key] = parts.as_slice() else {
@@ -75,9 +74,9 @@ impl TensorZeroApiKey {
                 "API key must start with `sk-t0-`",
             ));
         }
-        if public_id.len() != SHORT_ID_LENGTH {
+        if public_id.len() != PUBLIC_ID_LENGTH {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
-                "Short ID must be 12 characters",
+                "Public ID must be 12 characters",
             ));
         }
         if long_key.len() != LONG_KEY_LENGTH {
@@ -87,7 +86,7 @@ impl TensorZeroApiKey {
         }
         if !public_id.chars().all(char::is_alphanumeric) {
             return Err(TensorZeroAuthError::InvalidKeyFormat(
-                "Short ID must be alphanumeric",
+                "Public ID must be alphanumeric",
             ));
         }
         if !long_key.chars().all(char::is_alphanumeric) {
@@ -99,6 +98,21 @@ impl TensorZeroApiKey {
             public_id: public_id.to_string(),
             hashed_long_key: Self::hash_long_key(long_key).into(),
         })
+    }
+
+    /// Returns a cache key that includes both the public_id and the hashed long key.
+    /// This ensures that cache entries are unique per full API key, not just per public_id.
+    /// This is critical for security - using only the public_id would allow an attacker
+    /// to bypass authentication by crafting a key with the same public_id but different secret.
+    ///
+    /// TODO: This is `pub` while we run the cache from the gateway but later we should internalize it.
+    pub fn cache_key(&self) -> String {
+        let TensorZeroApiKey {
+            public_id,
+            hashed_long_key,
+        } = self;
+
+        format!("{public_id}:{}", hashed_long_key.expose_secret())
     }
 }
 
@@ -145,7 +159,7 @@ mod tests {
             TensorZeroApiKey::parse("sk-t0-12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
                 .unwrap_err()
                 .to_string(),
-            "Invalid format for TensorZero API key: Short ID must be 12 characters"
+            "Invalid format for TensorZero API key: Public ID must be 12 characters"
         );
         assert_eq!(
             TensorZeroApiKey::parse("sk-t0-aaaaaaaaaaaa-bb")
@@ -159,7 +173,7 @@ mod tests {
             )
             .unwrap_err()
             .to_string(),
-            "Invalid format for TensorZero API key: Short ID must be alphanumeric"
+            "Invalid format for TensorZero API key: Public ID must be alphanumeric"
         );
         assert_eq!(
             TensorZeroApiKey::parse(

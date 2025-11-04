@@ -1,5 +1,5 @@
 import { Code } from "~/components/ui/code";
-import type { VariantConfig } from "tensorzero-node";
+import type { VariantConfig } from "~/types/tensorzero";
 import { VariantLink } from "./VariantLink";
 
 type VariantInfoProps = {

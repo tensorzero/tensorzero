@@ -24,6 +24,7 @@ use crate::error::ErrorDetails;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
 use crate::function::FunctionConfig;
 use crate::inference::types::batch::StartBatchModelInferenceWithMetadata;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use crate::inference::types::extra_headers::{
     FullExtraHeadersConfig, UnfilteredInferenceExtraHeaders,
@@ -649,6 +650,11 @@ fn prepare_model_inference_request<'request>(
                 fetch_and_encode_input_files_before_inference: inference_config
                     .fetch_and_encode_input_files_before_inference,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             }
         }
         FunctionConfig::Json(json_config) => {
@@ -692,6 +698,11 @@ fn prepare_model_inference_request<'request>(
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             }
         }
     })
@@ -889,8 +900,6 @@ mod tests {
 
     use serde_json::json;
     use std::collections::HashMap;
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_prepare_model_inference_request() {
         // Setup common variables
@@ -929,6 +938,7 @@ mod tests {
                 seed: Some(42),
                 json_mode: None,
                 stop_sequences: None,
+                ..Default::default()
             },
         };
 
@@ -1141,6 +1151,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let templates = Arc::new(get_test_template_config());
@@ -1425,8 +1436,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_infer_model_request_errors() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
@@ -1446,6 +1457,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let templates = Arc::new(get_test_template_config());
@@ -1590,7 +1602,7 @@ mod tests {
             InferenceResult::Json(_) => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
@@ -1615,6 +1627,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let retry_config = RetryConfig::default();
@@ -1748,8 +1761,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_infer_model_request_errors_stream() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
@@ -1769,6 +1782,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let inference_params = InferenceParams::default();
@@ -1918,7 +1932,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

@@ -2,7 +2,7 @@ use axum::body::Body;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
-use axum::{debug_handler, Json};
+use axum::{debug_handler, Extension, Json};
 use futures::stream::Stream;
 use futures::FutureExt;
 use futures_core::FusedStream;
@@ -27,11 +27,13 @@ use crate::config::{Config, ErrorContext, OtlpConfig, SchemaData, UninitializedV
 use crate::db::clickhouse::{ClickHouseConnectionInfo, TableName};
 use crate::db::postgres::PostgresConnectionInfo;
 use crate::embeddings::EmbeddingModelTable;
+use crate::endpoints::RequestApiKeyExtension;
 use crate::error::{Error, ErrorDetails, IMPOSSIBLE_ERROR_MESSAGE};
 use crate::experimentation::ExperimentationConfig;
 use crate::function::FunctionConfig;
 use crate::function::FunctionConfigChat;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -52,8 +54,8 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
-use super::validate_tags;
-use super::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
+use crate::endpoints::validate_tags;
+use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Deserialize)]
@@ -160,6 +162,7 @@ pub async fn inference_handler(
         deferred_tasks,
         ..
     }): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(params): StructuredJson<Params>,
 ) -> Result<Response<Body>, Error> {
     let inference_output = inference(
@@ -169,6 +172,7 @@ pub async fn inference_handler(
         postgres_connection_info,
         deferred_tasks,
         params,
+        api_key_ext,
     )
     .await?;
     match inference_output {
@@ -227,6 +231,7 @@ pub async fn inference(
     postgres_connection_info: PostgresConnectionInfo,
     deferred_tasks: TaskTracker,
     mut params: Params,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
 ) -> Result<InferenceOutput, Error> {
     let span = tracing::Span::current();
     if let Some(function_name) = &params.function_name {
@@ -356,7 +361,7 @@ pub async fn inference(
         rate_limiting_config: Arc::new(config.rate_limiting.clone()),
         otlp_config: config.gateway.export.otlp.clone(),
         deferred_tasks,
-        scope_info: ScopeInfo { tags: tags.clone() },
+        scope_info: ScopeInfo::new(tags.clone(), api_key_ext),
     };
 
     let inference_models = InferenceModels {
@@ -1337,6 +1342,15 @@ pub struct ChatCompletionInferenceParams {
     pub json_mode: Option<JsonMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_sequences: Option<Vec<String>>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget_tokens: Option<i32>,
+    #[cfg_attr(test, ts(optional))]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verbosity: Option<String>,
 }
 
 impl ChatCompletionInferenceParams {
@@ -1350,6 +1364,7 @@ impl ChatCompletionInferenceParams {
         presence_penalty: Option<f32>,
         frequency_penalty: Option<f32>,
         stop_sequences: Option<Vec<String>>,
+        inference_params_v2: ChatCompletionInferenceParamsV2,
     ) {
         if self.temperature.is_none() {
             self.temperature = temperature;
@@ -1371,6 +1386,21 @@ impl ChatCompletionInferenceParams {
         }
         if self.stop_sequences.is_none() {
             self.stop_sequences = stop_sequences;
+        }
+        let ChatCompletionInferenceParamsV2 {
+            reasoning_effort,
+            thinking_budget_tokens,
+            verbosity,
+        } = inference_params_v2;
+
+        if self.reasoning_effort.is_none() {
+            self.reasoning_effort = reasoning_effort;
+        }
+        if self.thinking_budget_tokens.is_none() {
+            self.thinking_budget_tokens = thinking_budget_tokens;
+        }
+        if self.verbosity.is_none() {
+            self.verbosity = verbosity;
         }
     }
 }

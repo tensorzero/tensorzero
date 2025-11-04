@@ -1,9 +1,7 @@
+use super::*;
 use std::{io::Write, path::PathBuf};
 use tempfile::NamedTempFile;
 use toml::de::DeTable;
-use tracing_test::traced_test;
-
-use super::*;
 
 use std::env;
 
@@ -1516,8 +1514,8 @@ async fn test_config_load_shorthand_models_only() {
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_empty_config() {
+    let logs_contain = crate::utils::testing::capture_logs();
     let tempfile = NamedTempFile::new().unwrap();
     write!(&tempfile, "").unwrap();
     Config::load_and_verify_from_path(&ConfigFileGlob::new_from_path(tempfile.path()).unwrap())
@@ -1692,8 +1690,6 @@ async fn test_bedrock_region_and_allow_auto() {
         .await
         .expect("Failed to construct config with valid AWS bedrock provider");
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_load_no_config_file() {
     let err = &ConfigFileGlob::new_from_path(Path::new("nonexistent.toml"))
@@ -1731,8 +1727,8 @@ async fn test_config_missing_filesystem_object_store() {
 }
 
 #[tokio::test]
-#[traced_test]
 async fn test_config_no_verify_creds_missing_filesystem_object_store() {
+    let logs_contain = crate::utils::testing::capture_logs();
     let tempfile = NamedTempFile::new().unwrap();
     write!(
         &tempfile,
@@ -1753,8 +1749,6 @@ async fn test_config_no_verify_creds_missing_filesystem_object_store() {
     assert!(config.object_store_info.is_none());
     assert!(logs_contain("Filesystem object store path does not exist: /fake-tensorzero-path/other-path. Treating object store as unconfigured"));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_load_invalid_s3_creds() {
     // Set invalid credentials (tests are isolated per-process)
@@ -1783,10 +1777,9 @@ async fn test_config_load_invalid_s3_creds() {
         "Unexpected error message: {err}"
     );
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_blocked_s3_http_endpoint_default() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
     std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
@@ -1818,10 +1811,9 @@ async fn test_config_blocked_s3_http_endpoint_default() {
     );
     assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_blocked_s3_http_endpoint_override() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
     std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
@@ -1855,10 +1847,9 @@ async fn test_config_blocked_s3_http_endpoint_override() {
     );
     assert!(logs_contain("Consider setting `[object_storage.allow_http]` to `true` if you are using a non-HTTPs endpoint"));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_s3_allow_http_config() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
     std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
@@ -1896,10 +1887,9 @@ async fn test_config_s3_allow_http_config() {
         "[object_storage.allow_http]` is set to `true` - this is insecure"
     ));
 }
-
-#[traced_test]
 #[tokio::test]
 async fn test_config_s3_allow_http_env_var() {
+    let logs_contain = crate::utils::testing::capture_logs();
     // Set invalid credentials (tests are isolated per-process)
     // to make sure that the write fails quickly.
     std::env::set_var("AWS_ACCESS_KEY_ID", "invalid");
@@ -2725,6 +2715,153 @@ async fn test_config_schema_missing_template() {
         .expect_err("Config should fail to load");
 
     assert_eq!(err.to_string(), "`functions.test.variants.missing_template.templates.my_custom_schema` is required when `functions.test.schemas.my_custom_schema` is specified");
+}
+
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_uniform() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.5
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.5
+
+        [functions.test_function.experimentation]
+        type = "uniform"
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a") && err_msg.contains("variant_b"),
+        "Error should list both variants with weights: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_static_weights() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.7
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "static_weights"
+        candidate_variants = {"variant_a" = 0.3, "variant_b" = 0.7}
+        fallback_variants = ["variant_a", "variant_b"]
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a"),
+        "Error should list the variant with weight: {err_msg}"
+    );
+}
+
+#[tokio::test]
+async fn test_experimentation_with_variant_weights_error_track_and_stop() {
+    let config_str = r#"
+        [models.test]
+        routing = ["test"]
+
+        [models.test.providers.test]
+        type = "dummy"
+        model_name = "test"
+
+        [metrics.test_metric]
+        type = "boolean"
+        optimize = "max"
+        level = "inference"
+
+        [functions.test_function]
+        type = "chat"
+
+        [functions.test_function.variants.variant_a]
+        type = "chat_completion"
+        model = "test"
+        weight = 0.6
+
+        [functions.test_function.variants.variant_b]
+        type = "chat_completion"
+        model = "test"
+
+        [functions.test_function.experimentation]
+        type = "track_and_stop"
+        metric = "test_metric"
+        candidate_variants = ["variant_a", "variant_b"]
+        fallback_variants = ["variant_a"]
+        min_samples_per_variant = 100
+        delta = 0.05
+        epsilon = 0.1
+        update_period_s = 60
+        "#;
+
+    let config = toml::from_str(config_str).expect("Failed to parse config");
+    let err = Config::load_from_toml(config, &SpanMap::new_empty())
+        .await
+        .expect_err("Config should fail to load");
+
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(
+            "Cannot mix `experimentation` configuration with individual variant `weight` values"
+        ),
+        "Unexpected error message: {err_msg}"
+    );
+    assert!(
+        err_msg.contains("variant_a"),
+        "Error should list the variant with weight: {err_msg}"
+    );
 }
 
 // Unit tests for glob pattern matching functionality

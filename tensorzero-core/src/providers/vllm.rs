@@ -15,9 +15,12 @@ use super::openai::{
 };
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::Thought;
 use crate::inference::types::{
     batch::StartBatchProviderInferenceResponse, ContentBlockOutput, Latency, ModelInferenceRequest,
@@ -96,12 +99,12 @@ impl VLLMCredentials {
     fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Option<&'a SecretString>, Error> {
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
         match self {
             VLLMCredentials::Static(api_key) => Ok(Some(api_key)),
             VLLMCredentials::Dynamic(key_name) => {
                 Ok(Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    Error::new(ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
                     })
@@ -109,13 +112,16 @@ impl VLLMCredentials {
             }
             VLLMCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
             VLLMCredentials::None => Ok(None),
         }
@@ -150,7 +156,10 @@ impl InferenceProvider for VLLMProvider {
             })?;
         let request_url = get_chat_url(&self.api_base)?;
         let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let mut request_builder = http_client.post(request_url);
         if let Some(key) = api_key {
             request_builder = request_builder.bearer_auth(key.expose_secret());
@@ -238,7 +247,10 @@ impl InferenceProvider for VLLMProvider {
                 })
             })?;
 
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let request_url = get_chat_url(&self.api_base)?;
         let start_time = Instant::now();
         let mut request_builder = http_client.post(request_url);
@@ -294,6 +306,7 @@ impl InferenceProvider for VLLMProvider {
 /// for more details.
 /// We are not handling many features of the API here.
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct VLLMRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
     model: &'a str,
@@ -321,6 +334,29 @@ struct VLLMRequest<'a> {
     tool_choice: Option<OpenAIToolChoice<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parallel_tool_calls: Option<bool>,
+}
+
+fn apply_inference_params(
+    _request: &mut VLLMRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "thinking_budget_tokens", None);
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> VLLMRequest<'a> {
@@ -355,7 +391,7 @@ impl<'a> VLLMRequest<'a> {
 
         let (tools, tool_choice, parallel_tool_calls) = prepare_openai_tools(request);
 
-        Ok(VLLMRequest {
+        let mut vllm_request = VLLMRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -371,7 +407,11 @@ impl<'a> VLLMRequest<'a> {
             tools,
             tool_choice,
             parallel_tool_calls,
-        })
+        };
+
+        apply_inference_params(&mut vllm_request, &request.inference_params_v2);
+
+        Ok(vllm_request)
     }
 }
 
@@ -487,7 +527,6 @@ mod tests {
     use std::{borrow::Cow, time::Duration};
 
     use serde_json::json;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use super::*;
@@ -695,8 +734,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_vllm_provider_new_api_base_check() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let model_name = "test-model".to_string();
 
         // Valid cases (should not warn)
@@ -808,5 +847,33 @@ mod tests {
         assert!(vllm_request.tools.is_none());
         assert!(vllm_request.tool_choice.is_none());
         assert!(vllm_request.parallel_tool_calls.is_none());
+    }
+
+    #[test]
+    fn test_vllm_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = VLLMRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns
+        assert!(logs_contain(
+            "vLLM does not support the inference parameter `reasoning_effort`"
+        ));
+
+        // Test that thinking_budget_tokens warns
+        assert!(logs_contain(
+            "vLLM does not support the inference parameter `thinking_budget_tokens`"
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "vLLM does not support the inference parameter `verbosity`"
+        ));
     }
 }

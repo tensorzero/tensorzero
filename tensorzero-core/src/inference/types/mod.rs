@@ -44,8 +44,46 @@
 //!
 //! The upper branch (constructing a `RequestMessage`) is used when invoking a chat completion variant.
 //! The lower branch (constructing a `StoredInput`) is used when we to write to `ChatInference`/`JsonInference` in ClickHouse.
+
+use derive_builder::Builder;
+use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
+use extra_headers::FullExtraHeadersConfig;
+use file::sanitize_raw_request;
+pub use file::{
+    Base64File, File, ObjectStorageError, ObjectStorageFile, ObjectStoragePointer,
+    PendingObjectStoreFile, UrlFile,
+};
+use futures::future::{join_all, try_join_all};
+use futures::FutureExt;
+use itertools::Itertools;
+#[cfg(feature = "pyo3")]
+use pyo3::prelude::*;
+#[cfg(feature = "pyo3")]
+use pyo3::types::PyAny;
+#[cfg(feature = "pyo3")]
+use pyo3_helpers::serialize_to_dict;
+pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::{Map, Value};
+use std::borrow::Borrow;
+use std::ops::Add;
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
+use uuid::Uuid;
+
+use crate::cache::{CacheData, NonStreamingCacheData};
+use crate::config::ObjectStoreInfo;
+use crate::endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceParams};
 use crate::endpoints::object_storage::get_object;
+use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens};
+use crate::function::FunctionConfigType;
 use crate::http::TensorzeroHttpClient;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::file::Base64FileMetadata;
 use crate::inference::types::resolved_input::{
     write_file, FileUrl, LazyFile, LazyResolvedInput, LazyResolvedInputMessage,
@@ -60,51 +98,14 @@ use crate::rate_limiting::{
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
 };
-use crate::tool::ToolCallInput;
-use crate::variant::chat_completion::{ASSISTANT_TEXT_TEMPLATE_VAR, USER_TEXT_TEMPLATE_VAR};
-use derive_builder::Builder;
-use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
-use extra_headers::FullExtraHeadersConfig;
-use file::sanitize_raw_request;
-pub use file::{
-    Base64File, File, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
+use crate::tool::{
+    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    ToolCallWrapper, ToolResult,
 };
-use futures::future::{join_all, try_join_all};
-use futures::FutureExt;
-use itertools::Itertools;
-#[cfg(feature = "pyo3")]
-use pyo3::prelude::*;
-#[cfg(feature = "pyo3")]
-use pyo3::types::PyAny;
-#[cfg(feature = "pyo3")]
-use pyo3_helpers::serialize_to_dict;
-pub use resolved_input::{ResolvedInput, ResolvedInputMessage, ResolvedInputMessageContent};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::{Map, Value};
-use std::borrow::Borrow;
-use std::ops::Add;
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
-use uuid::Uuid;
-
-use crate::cache::NonStreamingCacheData;
-use crate::function::FunctionConfigType;
-use crate::tool::ToolCallConfigDatabaseInsert;
-use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{cache::CacheData, config::ObjectStoreInfo};
-use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
-use crate::{
-    endpoints::inference::InferenceParams,
-    error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
-};
-use crate::{error::Error, variant::JsonMode};
-use serde::de::Error as _;
+use crate::variant::{InferenceConfig, JsonMode};
 
 pub mod batch;
+pub mod chat_completion_inference_params;
 pub mod extra_body;
 pub mod extra_headers;
 pub mod file;
@@ -112,11 +113,13 @@ mod input_message;
 #[cfg(feature = "pyo3")]
 pub mod pyo3_helpers;
 pub mod resolved_input;
+mod role;
 pub mod storage;
 pub mod stored_input;
 pub mod streams;
 
 pub use resolved_input::ResolvedRequestMessage;
+pub use role::Role;
 pub use stored_input::{
     StoredInput, StoredInputMessage, StoredInputMessageContent, StoredRequestMessage,
 };
@@ -124,7 +127,7 @@ pub use streams::{
     collect_chunks, ChatInferenceResultChunk, CollectChunksArgs, ContentBlockChunk,
     InferenceResultChunk, InferenceResultStream, JsonInferenceResultChunk,
     PeekableProviderInferenceResponseStream, ProviderInferenceResponseChunk,
-    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk,
+    ProviderInferenceResponseStreamInner, TextChunk, ThoughtChunk, UnknownChunk,
 };
 
 /*
@@ -363,20 +366,24 @@ impl InputMessageContent {
                             }),
                         )))
                     }
+                    // # File::ObjectStoragePointer
+                    //
                     // User provided a reference to a file already in object storage.
                     // We create a lazy future that will fetch the file data when needed.
                     // The future is not executed immediately - it only runs when awaited.
                     // This allows us to skip fetching if the file data isn't needed (e.g., just storing metadata).
                     // When the future does run, it fetches the file from object storage.
-                    File::ObjectStoragePointer(ObjectStoragePointer {
-                        source_url,
-                        mime_type,
-                        storage_path,
-                    }) => {
-                        let source_url_for_future = source_url.clone();
+                    //
+                    // # File::ObjectStorageError
+                    //
+                    // User provided a failed that we previously attempted and failed to fetch from object storage.
+                    // Here, we disregard the previous attempt and retry, as if the user had only sent the pointer.
+                    File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        let source_url_for_future = file.source_url.clone();
                         let object_store_info = context.object_store_info.clone();
-                        let owned_storage_path = storage_path.clone();
-                        let mime_type_for_closure = mime_type.clone();
+                        let owned_storage_path = file.storage_path.clone();
+                        let mime_type_for_closure = file.mime_type.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -396,10 +403,10 @@ impl InputMessageContent {
                         LazyResolvedInputMessageContent::File(Box::new(
                             LazyFile::ObjectStoragePointer {
                                 metadata: Base64FileMetadata {
-                                    source_url: source_url.clone(),
-                                    mime_type: mime_type.clone(),
+                                    source_url: file.source_url.clone(),
+                                    mime_type: file.mime_type.clone(),
                                 },
-                                storage_path: storage_path.clone(),
+                                storage_path: file.storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),
                             },
                         ))
@@ -589,7 +596,7 @@ pub enum System {
 pub enum InputMessageContent {
     Text(Text),
     Template(Template),
-    ToolCall(ToolCallInput),
+    ToolCall(ToolCallWrapper),
     ToolResult(ToolResult),
     RawText(RawText),
     Thought(Thought),
@@ -642,50 +649,6 @@ impl<'de> Deserialize<'de> for TextKind {
                 "Unknown key `{key}` in text content"
             ))),
         }
-    }
-}
-
-#[derive(ts_rs::TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
-#[ts(export)]
-#[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "pyo3", pyclass)]
-pub enum Role {
-    User,
-    Assistant,
-}
-
-impl Role {
-    /// The template name to use for `{"type": "text", "arguments": {}}` inputs.
-    /// This will eventually be deprecated in favor of explicit `{"type": "template", "name": "user", "arguments": {}}` inputs.
-    pub fn implicit_template_name(&self) -> &'static str {
-        match self {
-            Role::User => "user",
-            Role::Assistant => "assistant",
-        }
-    }
-
-    pub fn implicit_template_var(&self) -> &'static str {
-        match self {
-            Role::User => USER_TEXT_TEMPLATE_VAR,
-            Role::Assistant => ASSISTANT_TEXT_TEMPLATE_VAR,
-        }
-    }
-}
-
-impl std::fmt::Display for Role {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Role::User => write!(f, "user"),
-            Role::Assistant => write!(f, "assistant"),
-        }
-    }
-}
-
-#[cfg(feature = "pyo3")]
-#[pymethods]
-impl Role {
-    pub fn __repr__(&self) -> String {
-        self.to_string()
     }
 }
 
@@ -793,11 +756,12 @@ pub enum ThoughtSummaryBlock {
     SummaryText { text: String },
 }
 
-/// Struct that represents Chain of Thought reasoning
+/// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
+    #[ts(optional)]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.
@@ -1053,7 +1017,7 @@ pub enum ContentBlockOutput {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),
-    ToolCall(ToolCallOutput),
+    ToolCall(InferenceResponseToolCall),
     Thought(Thought),
     Unknown {
         data: Value,
@@ -1174,6 +1138,8 @@ pub struct ModelInferenceRequest<'a> {
     /// This is used by best_of_n/mixture_of_n to force different sub-variants
     /// to have different cache keys.
     pub extra_cache_key: Option<String>,
+    #[serde(flatten)]
+    pub inference_params_v2: ChatCompletionInferenceParamsV2,
 }
 
 impl<'a> ModelInferenceRequest<'a> {
@@ -1207,6 +1173,7 @@ impl RateLimitedRequest for ModelInferenceRequest<'_> {
             fetch_and_encode_input_files_before_inference: _,
             extra_headers: _,
             extra_cache_key: _,
+            inference_params_v2: _,
         } = self;
 
         let tokens = if resources.contains(&RateLimitResource::Token) {
@@ -1948,8 +1915,11 @@ pub async fn parse_chat_output(
             }
             ContentBlockOutput::ToolCall(tool_call) => {
                 // Parse the tool call arguments
-                let tool_call_output = ToolCallOutput::new(tool_call, tool_config).await;
-                output.push(ContentBlockChatOutput::ToolCall(tool_call_output));
+                let inference_response_tool_call =
+                    InferenceResponseToolCall::new(tool_call, tool_config).await;
+                output.push(ContentBlockChatOutput::ToolCall(
+                    inference_response_tool_call,
+                ));
             }
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
@@ -2064,8 +2034,8 @@ impl ProviderInferenceResponseChunk {
     }
 }
 
-impl From<ToolCallOutput> for ToolCall {
-    fn from(output: ToolCallOutput) -> Self {
+impl From<InferenceResponseToolCall> for ToolCall {
+    fn from(output: InferenceResponseToolCall) -> Self {
         Self {
             id: output.id,
             name: output.raw_name,
@@ -2078,8 +2048,8 @@ impl From<ContentBlockChatOutput> for ContentBlock {
     fn from(output: ContentBlockChatOutput) -> Self {
         match output {
             ContentBlockChatOutput::Text(text) => ContentBlock::Text(text),
-            ContentBlockChatOutput::ToolCall(tool_call_output) => {
-                ContentBlock::ToolCall(tool_call_output.into())
+            ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
+                ContentBlock::ToolCall(inference_response_tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
             ContentBlockChatOutput::Unknown {
@@ -2875,13 +2845,20 @@ mod tests {
             _ => panic!("Expected Text content"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(tool_call) => {
-                assert_eq!(tool_call.id, "123");
-                assert_eq!(tool_call.name, Some("test_tool".to_string()));
-                assert_eq!(tool_call.arguments, Some(json!("{}")));
-                assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None);
-            }
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, "test_tool");
+                    assert_eq!(tc.arguments, "{}");
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, Some("test_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!("{}")));
+                    assert_eq!(tc.raw_name, "test_tool");
+                    assert_eq!(tc.raw_arguments, "{}");
+                }
+            },
             _ => panic!("Expected ToolCall content"),
         }
         // Test case for multiple content items with JSON object in text block
@@ -2908,13 +2885,18 @@ mod tests {
             _ => panic!("Expected Text content with JSON object"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(tool_call) => {
-                assert_eq!(tool_call.id, "456");
-                assert_eq!(tool_call.name, Some("another_tool".to_string()));
-                assert_eq!(tool_call.arguments, Some(json!({"key":"value"})));
-                assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None,);
-            }
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, "another_tool");
+                    assert_eq!(tc.arguments, json!({"key":"value"}).to_string());
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, Some("another_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!({"key":"value"})));
+                }
+            },
             _ => panic!("Expected ToolCall content"),
         }
 

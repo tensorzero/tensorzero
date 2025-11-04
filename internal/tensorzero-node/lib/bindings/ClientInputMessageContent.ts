@@ -4,14 +4,14 @@ import type { RawText } from "./RawText";
 import type { Template } from "./Template";
 import type { TextKind } from "./TextKind";
 import type { Thought } from "./Thought";
-import type { ToolCallInput } from "./ToolCallInput";
+import type { ToolCallWrapper } from "./ToolCallWrapper";
 import type { ToolResult } from "./ToolResult";
 import type { Unknown } from "./Unknown";
 
 export type ClientInputMessageContent =
   | ({ type: "text" } & TextKind)
   | ({ type: "template" } & Template)
-  | ({ type: "tool_call" } & ToolCallInput)
+  | ({ type: "tool_call" } & ToolCallWrapper)
   | ({ type: "tool_result" } & ToolResult)
   | ({ type: "raw_text" } & RawText)
   | ({ type: "thought" } & Thought)

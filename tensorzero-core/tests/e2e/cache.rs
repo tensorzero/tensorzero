@@ -33,8 +33,7 @@ use tensorzero_core::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::TextChunk;
 use tensorzero_core::inference::types::TextKind;
-use tensorzero_core::tool::ToolCallOutput;
-use tracing_test::traced_test;
+use tensorzero_core::tool::InferenceResponseToolCall;
 use uuid::Uuid;
 
 use tensorzero_core::cache::cache_lookup;
@@ -337,10 +336,9 @@ async fn test_cache_stream_write_and_read() {
             .unwrap();
     assert!(result.is_none());
 }
-
-#[traced_test]
 #[tokio::test]
 pub async fn test_dont_cache_invalid_tool_call() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
         Ok(value) => value == "true",
         Err(_) => false,
@@ -388,10 +386,9 @@ pub async fn test_dont_cache_invalid_tool_call() {
         .unwrap();
     assert_eq!(model_inference.get("cached").unwrap(), false);
 }
-
-#[traced_test]
 #[tokio::test]
 pub async fn test_dont_cache_tool_call_schema_error() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let is_batched_writes = match std::env::var("TENSORZERO_CLICKHOUSE_BATCH_WRITES") {
         Ok(value) => value == "true",
         Err(_) => false,
@@ -445,7 +442,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
     assert_eq!(res.content.len(), 1);
     assert_eq!(
         res.content[0],
-        ContentBlockChatOutput::ToolCall(ToolCallOutput {
+        ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
             name: Some("get_temperature".to_string()),
             raw_name: "get_temperature".to_string(),
             arguments: None,

@@ -14,6 +14,7 @@ use crate::config::{ErrorContext, PathWithContents, SchemaData};
 use crate::embeddings::EmbeddingModelTable;
 use crate::endpoints::inference::{InferenceClients, InferenceModels};
 use crate::error::ErrorDetails;
+use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
 use crate::inference::types::extra_body::FullExtraBodyConfig;
 use crate::inference::types::extra_headers::FullExtraHeadersConfig;
 use crate::inference::types::resolved_input::LazyResolvedInput;
@@ -745,6 +746,7 @@ impl BestOfNEvaluatorConfig {
                 self.inner.presence_penalty(),
                 self.inner.frequency_penalty(),
                 self.inner.stop_sequences().cloned(),
+                self.inner.inference_params_v2.clone(),
             );
         let json_mode = inference_params
             .chat_completion
@@ -796,6 +798,11 @@ impl BestOfNEvaluatorConfig {
                 extra_body,
                 extra_headers,
                 extra_cache_key: inference_config.extra_cache_key.clone(),
+                inference_params_v2: ChatCompletionInferenceParamsV2 {
+                    reasoning_effort: inference_params.chat_completion.reasoning_effort.clone(),
+                    thinking_budget_tokens: inference_params.chat_completion.thinking_budget_tokens,
+                    verbosity: inference_params.chat_completion.verbosity.clone(),
+                },
             },
             skipped_indices,
         ))
@@ -1365,6 +1372,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let input = LazyResolvedInput {

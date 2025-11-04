@@ -1,5 +1,8 @@
 use std::{borrow::Cow, time::Duration};
 
+use crate::inference::types::chat_completion_inference_params::{
+    warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
+};
 use crate::inference::types::RequestMessage;
 use crate::providers::openai::{OpenAIMessagesConfig, OpenAIToolChoiceString};
 use futures::{future::try_join_all, StreamExt};
@@ -27,7 +30,7 @@ use crate::providers::helpers::{
 use crate::tool::ToolChoice;
 use crate::{
     endpoints::inference::InferenceCredentials,
-    error::{Error, ErrorDetails},
+    error::{DelayedError, Error, ErrorDetails},
     inference::types::{
         batch::{BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse},
         ContentBlockChunk, ContentBlockOutput, ProviderInferenceResponseChunk,
@@ -121,31 +124,34 @@ impl TogetherCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Cow<'a, SecretString>, Error> {
+    ) -> Result<Cow<'a, SecretString>, DelayedError> {
         match self {
             TogetherCredentials::Static(api_key) => Ok(Cow::Owned(api_key.clone())),
-            TogetherCredentials::Dynamic(key_name) => {
-                Ok(Cow::Borrowed(dynamic_api_keys.get(key_name).ok_or_else(
-                    || ErrorDetails::ApiKeyMissing {
+            TogetherCredentials::Dynamic(key_name) => Ok(Cow::Borrowed(
+                dynamic_api_keys.get(key_name).ok_or_else(|| {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    },
-                )?))
-            }
+                    })
+                })?,
+            )),
             TogetherCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            TogetherCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            TogetherCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            })?,
+            })),
         }
     }
 }
@@ -175,7 +181,10 @@ impl InferenceProvider for TogetherProvider {
             })
         })?;
         let request_url = get_chat_url(&TOGETHER_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_builder = http_client
             .post(request_url)
@@ -272,7 +281,10 @@ impl InferenceProvider for TogetherProvider {
                 ),
             })
         })?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let request_url = get_chat_url(&TOGETHER_API_BASE)?;
         let start_time = Instant::now();
         let request_builder = http_client
@@ -334,8 +346,10 @@ enum TogetherResponseFormat<'a> {
 /// presence_penalty, frequency_penalty, seed, service_tier, stop, user,
 /// or context_length_exceeded_behavior
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Default))]
 struct TogetherRequest<'a> {
     messages: Vec<OpenAIRequestMessage<'a>>,
+    #[cfg_attr(test, serde(default))]
     model: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
@@ -360,6 +374,35 @@ struct TogetherRequest<'a> {
     parallel_tool_calls: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stop: Option<Cow<'a, [String]>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
+}
+
+fn apply_inference_params(
+    request: &mut TogetherRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        request.reasoning_effort = reasoning_effort.clone();
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(
+            PROVIDER_NAME,
+            "thinking_budget_tokens",
+            Some("Tip: You might want to use `reasoning_effort` for this provider."),
+        );
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
 }
 
 impl<'a> TogetherRequest<'a> {
@@ -402,7 +445,7 @@ impl<'a> TogetherRequest<'a> {
             tool_choice = Some(OpenAIToolChoice::String(OpenAIToolChoiceString::Auto));
         }
 
-        Ok(TogetherRequest {
+        let mut together_request = TogetherRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -417,7 +460,12 @@ impl<'a> TogetherRequest<'a> {
             tool_choice,
             parallel_tool_calls,
             stop: request.borrow_stop_sequences(),
-        })
+            reasoning_effort: None,
+        };
+
+        apply_inference_params(&mut together_request, &request.inference_params_v2);
+
+        Ok(together_request)
     }
 }
 
@@ -803,7 +851,6 @@ struct TogetherChatChunk {
 mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
-
     use uuid::Uuid;
 
     use super::*;
@@ -1586,5 +1633,31 @@ mod tests {
                 id: "0".to_string(),
             })]
         );
+    }
+
+    #[test]
+    fn test_together_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = TogetherRequest::default();
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort is applied correctly
+        assert_eq!(request.reasoning_effort, Some("high".to_string()));
+
+        // Test that thinking_budget_tokens warns with tip about reasoning_effort
+        assert!(logs_contain(
+            "Together does not support the inference parameter `thinking_budget_tokens`, so it will be ignored. Tip: You might want to use `reasoning_effort` for this provider."
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Together does not support the inference parameter `verbosity`"
+        ));
     }
 }

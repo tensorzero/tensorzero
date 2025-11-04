@@ -232,15 +232,8 @@ jobs:
       # The 'CARGO_NEXTEST_FLAKY_TESTS' variable allows us to mark tests as flaky without merging a PR (if a provider happens to break or goes down)
       # We run the tests without the flaky tests, and require them to pass
       - name: Run all tests (including E2E tests)
-        # When running from a cron job (the 'schedule' event), use '--no-fail-fast' so that we get full coverage of flaky providers.
         run: |
-          cargo test-e2e ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})" ${{ github.event_name == 'schedule' && '--no-fail-fast' || '' }}
-
-      # TODO(https://github.com/tensorzero/tensorzero/issues/3989) - move this back to the end of the job
-      # For now, we only check for deprecation warnings after running the Rust e2e tests
-      - name: Check e2e logs for deprecation warnings (gateway e2e tests only)
-        run: |
-          ! grep -i "Deprecation Warning" e2e_logs.txt
+          cargo test-e2e ${{ vars.CARGO_NEXTEST_EXTRA_ARGS }} -E "not (${{ vars.CARGO_NEXTEST_FLAKY_TESTS }})" --no-fail-fast
 
       # As a separate step, we run just the flaky tests, and allow them to fail.
       # This lets us see if any flaky tests have started succeeding (by looking at the job output),
@@ -408,6 +401,7 @@ jobs:
     with:
       regen_cache: true
       is_merge_group: true
+      force_no_auth: true
     secrets:
       S3_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       S3_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

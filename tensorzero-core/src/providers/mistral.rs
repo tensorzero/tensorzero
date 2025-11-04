@@ -16,11 +16,14 @@ use url::Url;
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
-    error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
         types::{
             batch::{
                 BatchRequestRow, PollBatchInferenceResponse, StartBatchProviderInferenceResponse,
+            },
+            chat_completion_inference_params::{
+                warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
             },
             ContentBlockChunk, ContentBlockOutput, FinishReason, Latency, ModelInferenceRequest,
             ModelInferenceRequestJsonMode, PeekableProviderInferenceResponseStream,
@@ -110,33 +113,34 @@ impl MistralCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             MistralCredentials::Static(api_key) => Ok(api_key),
             MistralCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             MistralCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            MistralCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            MistralCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -166,7 +170,10 @@ impl InferenceProvider for MistralProvider {
             })
         })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -260,7 +267,10 @@ impl InferenceProvider for MistralProvider {
             })
         })?;
         let request_url = get_chat_url(&MISTRAL_API_BASE)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -507,6 +517,29 @@ struct MistralRequest<'a> {
     stop: Option<Cow<'a, [String]>>,
 }
 
+fn apply_inference_params(
+    _request: &mut MistralRequest,
+    inference_params: &ChatCompletionInferenceParamsV2,
+) {
+    let ChatCompletionInferenceParamsV2 {
+        reasoning_effort,
+        thinking_budget_tokens,
+        verbosity,
+    } = inference_params;
+
+    if reasoning_effort.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "reasoning_effort", None);
+    }
+
+    if thinking_budget_tokens.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "thinking_budget_tokens", None);
+    }
+
+    if verbosity.is_some() {
+        warn_inference_parameter_not_supported(PROVIDER_NAME, "verbosity", None);
+    }
+}
+
 impl<'a> MistralRequest<'a> {
     pub async fn new(
         model: &'a str,
@@ -530,7 +563,7 @@ impl<'a> MistralRequest<'a> {
         .await?;
         let (tools, tool_choice) = prepare_mistral_tools(request)?;
 
-        Ok(MistralRequest {
+        let mut mistral_request = MistralRequest {
             messages,
             model,
             temperature: request.temperature,
@@ -544,7 +577,11 @@ impl<'a> MistralRequest<'a> {
             tools,
             tool_choice,
             stop: request.borrow_stop_sequences(),
-        })
+        };
+
+        apply_inference_params(&mut mistral_request, &request.inference_params_v2);
+
+        Ok(mistral_request)
     }
 }
 
@@ -805,7 +842,6 @@ mod tests {
 
     use crate::inference::types::{FunctionType, RequestMessage, Role};
     use crate::providers::test_helpers::{WEATHER_TOOL, WEATHER_TOOL_CONFIG};
-
     #[tokio::test]
     async fn test_mistral_request_new() {
         let request_with_tools = ModelInferenceRequest {
@@ -1239,6 +1275,48 @@ mod tests {
         assert!(matches!(
             result.unwrap_err().get_details(),
             ErrorDetails::Config { message } if message.contains("Invalid api_key_location")
+        ));
+    }
+
+    #[test]
+    fn test_mistral_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
+        let inference_params = ChatCompletionInferenceParamsV2 {
+            reasoning_effort: Some("high".to_string()),
+            thinking_budget_tokens: Some(1024),
+            verbosity: Some("low".to_string()),
+        };
+        let mut request = MistralRequest {
+            messages: vec![],
+            model: "test-model",
+            temperature: None,
+            top_p: None,
+            presence_penalty: None,
+            frequency_penalty: None,
+            max_tokens: None,
+            random_seed: None,
+            stream: false,
+            response_format: None,
+            tools: None,
+            tool_choice: None,
+            stop: None,
+        };
+
+        apply_inference_params(&mut request, &inference_params);
+
+        // Test that reasoning_effort warns
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `reasoning_effort`"
+        ));
+
+        // Test that thinking_budget_tokens warns
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `thinking_budget_tokens`"
+        ));
+
+        // Test that verbosity warns
+        assert!(logs_contain(
+            "Mistral does not support the inference parameter `verbosity`"
         ));
     }
 }

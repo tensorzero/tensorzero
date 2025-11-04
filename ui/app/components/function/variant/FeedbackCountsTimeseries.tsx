@@ -1,7 +1,6 @@
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
-  CHART_COLORS,
   formatChartNumber,
   formatXAxisTimestamp,
   formatTooltipTimestamp,
@@ -30,6 +29,7 @@ export function FeedbackCountsTimeseries({
   metricName,
   time_granularity,
   onTimeGranularityChange,
+  chartConfig,
 }: {
   countsData: FeedbackCountsTimeseriesData[];
   variantNames: string[];
@@ -37,24 +37,13 @@ export function FeedbackCountsTimeseries({
   metricName: string;
   time_granularity: TimeWindow;
   onTimeGranularityChange: (value: TimeWindow) => void;
+  chartConfig: Record<string, { label: string; color: string }>;
 }) {
   // Convert date strings to timestamps for proper spacing
   const countsDataWithTimestamps = countsData.map((row) => ({
     ...row,
     timestamp: new Date(row.date).getTime(),
   }));
-
-  const chartConfig: Record<string, { label: string; color: string }> =
-    variantNames.reduce(
-      (config, variantName, index) => ({
-        ...config,
-        [variantName]: {
-          label: variantName,
-          color: CHART_COLORS[index % CHART_COLORS.length],
-        },
-      }),
-      {},
-    );
 
   // Format x-axis labels based on time granularity
   const formatXAxisTick = (value: number) =>

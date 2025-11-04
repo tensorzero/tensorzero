@@ -7,9 +7,9 @@ use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
 use tensorzero::test_helpers::make_embedded_gateway_with_config;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     ContentBlockChunk, File, InferenceOutput, InferenceResponse, InferenceResponseChunk, Input,
-    InputMessage, InputMessageContent, Role, Unknown, UrlFile,
+    InputMessage, InputMessageContent, Role, Unknown, UnknownChunk, UrlFile,
 };
 use tensorzero_core::cache::{CacheEnabledMode, CacheOptions};
 use tensorzero_core::config::provider_types::ProviderTypesConfig;
@@ -26,7 +26,7 @@ use tensorzero_core::inference::types::{
 };
 use tensorzero_core::model_table::ProviderTypeDefaultCredentials;
 use tensorzero_core::rate_limiting::ScopeInfo;
-use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ToolCallInput};
+use tensorzero_core::tool::{ProviderTool, ProviderToolScope, ToolCallWrapper};
 use url::Url;
 use uuid::Uuid;
 
@@ -271,7 +271,6 @@ async fn get_providers() -> E2ETestProviders {
         json_mode_off_inference: json_mode_off_providers.clone(),
         image_inference: image_providers.clone(),
         pdf_inference: image_providers.clone(),
-
         shorthand_inference: shorthand_providers.clone(),
         credential_fallbacks,
     }
@@ -1236,6 +1235,7 @@ async fn test_embedding_request() {
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
                     tags: Arc::new(HashMap::new()),
+                    api_key_public_id: None,
                 },
             },
         )
@@ -1324,6 +1324,7 @@ async fn test_embedding_request() {
                 deferred_tasks: tokio_util::task::TaskTracker::new(),
                 scope_info: ScopeInfo {
                     tags: Arc::new(HashMap::new()),
+                    api_key_public_id: None,
                 },
             },
         )
@@ -1397,6 +1398,7 @@ async fn test_embedding_sanity_check() {
         deferred_tasks: tokio_util::task::TaskTracker::new(),
         scope_info: ScopeInfo {
             tags: Arc::new(HashMap::new()),
+            api_key_public_id: None,
         },
     };
 
@@ -2478,15 +2480,9 @@ model = "test-model"
             ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
                 text: text.text.clone(),
             }),
-            ContentBlockChatOutput::ToolCall(tool_call) => {
-                ClientInputMessageContent::ToolCall(ToolCallInput {
-                    id: tool_call.id.clone(),
-                    name: tool_call.name.clone(),
-                    arguments: tool_call.arguments.clone(),
-                    raw_name: None,
-                    raw_arguments: None,
-                })
-            }
+            ContentBlockChatOutput::ToolCall(tool_call) => ClientInputMessageContent::ToolCall(
+                ToolCallWrapper::InferenceResponseToolCall(tool_call.clone()),
+            ),
             ContentBlockChatOutput::Thought(thought) => {
                 ClientInputMessageContent::Thought(thought.clone())
             }
@@ -2636,7 +2632,7 @@ model = "test-model"
                     ContentBlockChunk::Text(text_chunk) => {
                         full_text.push_str(&text_chunk.text);
                     }
-                    ContentBlockChunk::Unknown { id, data, .. } => {
+                    ContentBlockChunk::Unknown(UnknownChunk { id, data, .. }) => {
                         unknown_chunks.push((id.clone(), data.clone()));
                     }
                     _ => {}
@@ -2873,15 +2869,9 @@ model = "test-model"
             ContentBlockChatOutput::Text(text) => ClientInputMessageContent::Text(TextKind::Text {
                 text: text.text.clone(),
             }),
-            ContentBlockChatOutput::ToolCall(tool_call) => {
-                ClientInputMessageContent::ToolCall(ToolCallInput {
-                    id: tool_call.id.clone(),
-                    name: tool_call.name.clone(),
-                    arguments: tool_call.arguments.clone(),
-                    raw_name: None,
-                    raw_arguments: None,
-                })
-            }
+            ContentBlockChatOutput::ToolCall(tool_call) => ClientInputMessageContent::ToolCall(
+                ToolCallWrapper::InferenceResponseToolCall(tool_call.clone()),
+            ),
             ContentBlockChatOutput::Thought(thought) => {
                 ClientInputMessageContent::Thought(thought.clone())
             }

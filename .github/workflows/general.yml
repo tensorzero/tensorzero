@@ -7,6 +7,7 @@ on:
       - "docs/**"
   pull_request:
     branches: ["main"]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.ref == 'refs/heads/main' && github.run_id || format('{0}-{1}', github.workflow, github.ref) }}
@@ -75,6 +76,22 @@ jobs:
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
 
+      - name: Apply Postgres migrations for the set-up-auth-for-tensorzero example
+        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/docs/guides/operations/set-up-auth-for-tensorzero
+          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose down
+
+      - name: Apply Postgres migrations for the run-adaptive-ab-tests example
+        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/docs/guides/experimentation/run-adaptive-ab-tests
+          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose down
+
       - name: Check latest docker-compose
         run: ./ci/check-all-docker-compose.sh
 
@@ -118,6 +135,22 @@ jobs:
         # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
         run: |
           cd examples/docs/guides/operations/enforce-custom-rate-limits
+          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose down
+
+      - name: Apply Postgres migrations for the set-up-auth-for-tensorzero example
+        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/docs/guides/operations/set-up-auth-for-tensorzero
+          OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
+          OPENAI_API_KEY=dummy docker compose down
+
+      - name: Apply Postgres migrations for the run-adaptive-ab-tests example
+        # Note: In isolation, applying migrations should not require `OPENAI_API_KEY`, but Docker Compose will complain if it's not set given our docker-compose.yml file.
+        # Note: We must delete the Docker network because later we use `ci/internal-network.yml`
+        run: |
+          cd examples/docs/guides/experimentation/run-adaptive-ab-tests
           OPENAI_API_KEY=dummy docker compose run --rm gateway --run-postgres-migrations
           OPENAI_API_KEY=dummy docker compose down
 
@@ -255,14 +288,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       # We deliberately install our MSRV here (rather than 'stable') to ensure that everything compiles with that version
-      - name: Install Rust 1.86.0
+      - name: Install Rust 1.88.0
         run: |
           for attempt in 1 2 3; do
-            if rustup install 1.86.0 && rustup default 1.86.0; then
+            if rustup install 1.88.0 && rustup default 1.88.0; then
               break
             fi
             if [ $attempt -eq 3 ]; then
-              echo "Failed to install Rust 1.86.0 after 3 attempts"
+              echo "Failed to install Rust 1.88.0 after 3 attempts"
               exit 1
             fi
             sleep $((10 * attempt))
@@ -729,6 +762,9 @@ jobs:
 
   build-gateway-e2e-container:
     uses: ./.github/workflows/build-gateway-e2e-container.yml
+    # Skip running this on PR ci for forks, since it needs secrets.
+    # TensorZero organization members can use `/check-fork` to manually run all checks for a PR from a fork.
+    if: ${{!(github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]'))}}
     permissions:
       # Permission to checkout the repository
       contents: read

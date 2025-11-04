@@ -10,7 +10,7 @@ import {
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
 
 /**
  * Roles for input messages.
@@ -322,13 +322,16 @@ export type StatusResponse = z.infer<typeof StatusResponseSchema>;
  */
 export class TensorZeroClient {
   private baseUrl: string;
+  private apiKey: string | null;
 
   /**
    * @param baseUrl - The base URL of the TensorZero Gateway (e.g. "http://localhost:3000")
+   * @param apiKey - Optional API key for bearer authentication
    */
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, apiKey?: string | null) {
     // Remove any trailing slash for consistency.
     this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.apiKey = apiKey ?? null;
   }
 
   // Overloads for inference:
@@ -592,6 +595,12 @@ export class TensorZeroClient {
     if (!headers.has("content-type")) {
       headers.set("content-type", "application/json");
     }
+
+    // Add bearer auth for all endpoints except /status
+    if (this.apiKey && path !== "/status") {
+      headers.set("authorization", `Bearer ${this.apiKey}`);
+    }
+
     return await fetch(url, { method, headers, body });
   }
 

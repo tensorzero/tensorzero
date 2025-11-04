@@ -3,7 +3,7 @@ import { ParsedDatasetRowSchema } from "~/utils/clickhouse/datasets";
 import type {
   ContentBlockChatOutput,
   JsonInferenceOutput,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 /**
  * Type for a datapoint with editable fields that can be modified in the UI.
