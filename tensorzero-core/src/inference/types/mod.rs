@@ -75,8 +75,11 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::cache::NonStreamingCacheData;
+use crate::cache::{CacheData, NonStreamingCacheData};
+use crate::config::ObjectStoreInfo;
+use crate::endpoints::inference::{InferenceDatabaseInsertMetadata, InferenceParams};
 use crate::endpoints::object_storage::get_object;
+use crate::error::{Error, ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens};
 use crate::function::FunctionConfigType;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::chat_completion_inference_params::ChatCompletionInferenceParamsV2;
@@ -94,16 +97,11 @@ use crate::rate_limiting::{
 use crate::serde_util::{
     deserialize_defaulted_json_string, deserialize_json_string, deserialize_optional_json_string,
 };
-use crate::tool::ToolCallConfigDatabaseInsert;
-use crate::tool::ToolCallInput;
-use crate::tool::{ToolCall, ToolCallConfig, ToolCallOutput, ToolResult};
-use crate::{cache::CacheData, config::ObjectStoreInfo};
-use crate::{endpoints::inference::InferenceDatabaseInsertMetadata, variant::InferenceConfig};
-use crate::{
-    endpoints::inference::InferenceParams,
-    error::{ErrorDetails, ErrorDetails::RateLimitMissingMaxTokens},
+use crate::tool::{
+    InferenceResponseToolCall, ToolCall, ToolCallConfig, ToolCallConfigDatabaseInsert,
+    ToolCallWrapper, ToolResult,
 };
-use crate::{error::Error, variant::JsonMode};
+use crate::variant::{InferenceConfig, JsonMode};
 
 pub mod batch;
 pub mod chat_completion_inference_params;
@@ -593,7 +591,7 @@ pub enum System {
 pub enum InputMessageContent {
     Text(Text),
     Template(Template),
-    ToolCall(ToolCallInput),
+    ToolCall(ToolCallWrapper),
     ToolResult(ToolResult),
     RawText(RawText),
     Thought(Thought),
@@ -1013,7 +1011,7 @@ pub enum ContentBlockOutput {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlockChatOutput {
     Text(Text),
-    ToolCall(ToolCallOutput),
+    ToolCall(InferenceResponseToolCall),
     Thought(Thought),
     Unknown {
         data: Value,
@@ -1911,8 +1909,11 @@ pub async fn parse_chat_output(
             }
             ContentBlockOutput::ToolCall(tool_call) => {
                 // Parse the tool call arguments
-                let tool_call_output = ToolCallOutput::new(tool_call, tool_config).await;
-                output.push(ContentBlockChatOutput::ToolCall(tool_call_output));
+                let inference_response_tool_call =
+                    InferenceResponseToolCall::new(tool_call, tool_config).await;
+                output.push(ContentBlockChatOutput::ToolCall(
+                    inference_response_tool_call,
+                ));
             }
             ContentBlockOutput::Thought(thought) => {
                 output.push(ContentBlockChatOutput::Thought(thought));
@@ -2027,8 +2028,8 @@ impl ProviderInferenceResponseChunk {
     }
 }
 
-impl From<ToolCallOutput> for ToolCall {
-    fn from(output: ToolCallOutput) -> Self {
+impl From<InferenceResponseToolCall> for ToolCall {
+    fn from(output: InferenceResponseToolCall) -> Self {
         Self {
             id: output.id,
             name: output.raw_name,
@@ -2041,8 +2042,8 @@ impl From<ContentBlockChatOutput> for ContentBlock {
     fn from(output: ContentBlockChatOutput) -> Self {
         match output {
             ContentBlockChatOutput::Text(text) => ContentBlock::Text(text),
-            ContentBlockChatOutput::ToolCall(tool_call_output) => {
-                ContentBlock::ToolCall(tool_call_output.into())
+            ContentBlockChatOutput::ToolCall(inference_response_tool_call) => {
+                ContentBlock::ToolCall(inference_response_tool_call.into())
             }
             ContentBlockChatOutput::Thought(thought) => ContentBlock::Thought(thought),
             ContentBlockChatOutput::Unknown {
@@ -2838,13 +2839,20 @@ mod tests {
             _ => panic!("Expected Text content"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(tool_call) => {
-                assert_eq!(tool_call.id, "123");
-                assert_eq!(tool_call.name, Some("test_tool".to_string()));
-                assert_eq!(tool_call.arguments, Some(json!("{}")));
-                assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None);
-            }
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, "test_tool");
+                    assert_eq!(tc.arguments, "{}");
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "123");
+                    assert_eq!(tc.name, Some("test_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!("{}")));
+                    assert_eq!(tc.raw_name, "test_tool");
+                    assert_eq!(tc.raw_arguments, "{}");
+                }
+            },
             _ => panic!("Expected ToolCall content"),
         }
         // Test case for multiple content items with JSON object in text block
@@ -2871,13 +2879,18 @@ mod tests {
             _ => panic!("Expected Text content with JSON object"),
         }
         match &message.content[1] {
-            InputMessageContent::ToolCall(tool_call) => {
-                assert_eq!(tool_call.id, "456");
-                assert_eq!(tool_call.name, Some("another_tool".to_string()));
-                assert_eq!(tool_call.arguments, Some(json!({"key":"value"})));
-                assert_eq!(tool_call.raw_name, None);
-                assert_eq!(tool_call.raw_arguments, None,);
-            }
+            InputMessageContent::ToolCall(wrapper) => match wrapper {
+                ToolCallWrapper::ToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, "another_tool");
+                    assert_eq!(tc.arguments, json!({"key":"value"}).to_string());
+                }
+                ToolCallWrapper::InferenceResponseToolCall(tc) => {
+                    assert_eq!(tc.id, "456");
+                    assert_eq!(tc.name, Some("another_tool".to_string()));
+                    assert_eq!(tc.arguments, Some(json!({"key":"value"})));
+                }
+            },
             _ => panic!("Expected ToolCall content"),
         }
 

@@ -34,7 +34,7 @@ use tensorzero_core::{
         JobHandle, OptimizationJobInfo, Optimizer, OptimizerOutput, UninitializedOptimizerInfo,
     },
     stored_inference::StoredOutput,
-    tool::{DynamicToolParams, Tool, ToolCall, ToolCallOutput, ToolChoice, ToolResult},
+    tool::{DynamicToolParams, InferenceResponseToolCall, Tool, ToolCall, ToolChoice, ToolResult},
     variant::JsonMode,
 };
 
@@ -317,18 +317,20 @@ fn generate_tool_call_example() -> RenderedSample {
     let id = Uuid::now_v7().to_string();
     let system_prompt =
         format!("You are a helpful assistant named Dr. M.M. Patel with id number {id}.");
-    let tool_call_output = vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-        name: Some("get_weather".to_string()),
-        arguments: Some(serde_json::json!({
-            "location": "London",
-        })),
-        raw_name: "get_weather".to_string(),
-        raw_arguments: serde_json::json!({
-            "location": "London",
-        })
-        .to_string(),
-        id: "call_2".to_string(),
-    })];
+    let inference_response_tool_call = vec![ContentBlockChatOutput::ToolCall(
+        InferenceResponseToolCall {
+            name: Some("get_weather".to_string()),
+            arguments: Some(serde_json::json!({
+                "location": "London",
+            })),
+            raw_name: "get_weather".to_string(),
+            raw_arguments: serde_json::json!({
+                "location": "London",
+            })
+            .to_string(),
+            id: "call_2".to_string(),
+        },
+    )];
     RenderedSample {
         function_name: "basic_test".to_string(),
         input: ModelInput {
@@ -431,8 +433,8 @@ fn generate_tool_call_example() -> RenderedSample {
                 },
             ],
         },
-        output: Some(tool_call_output.clone()),
-        stored_output: Some(StoredOutput::Chat(tool_call_output)),
+        output: Some(inference_response_tool_call.clone()),
+        stored_output: Some(StoredOutput::Chat(inference_response_tool_call)),
         tool_params: DynamicToolParams {
             allowed_tools: None,
             additional_tools: Some(vec![Tool {

@@ -33,7 +33,7 @@ use tensorzero_core::inference::types::ProviderInferenceResponseChunk;
 use tensorzero_core::inference::types::Text;
 use tensorzero_core::inference::types::TextChunk;
 use tensorzero_core::inference::types::TextKind;
-use tensorzero_core::tool::ToolCallOutput;
+use tensorzero_core::tool::InferenceResponseToolCall;
 use tracing_test::traced_test;
 use uuid::Uuid;
 
@@ -445,7 +445,7 @@ pub async fn test_dont_cache_tool_call_schema_error() {
     assert_eq!(res.content.len(), 1);
     assert_eq!(
         res.content[0],
-        ContentBlockChatOutput::ToolCall(ToolCallOutput {
+        ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
             name: Some("get_temperature".to_string()),
             raw_name: "get_temperature".to_string(),
             arguments: None,

@@ -54,8 +54,8 @@ use crate::variant::chat_completion::UninitializedChatCompletionConfig;
 use crate::variant::dynamic::load_dynamic_variant_info;
 use crate::variant::{InferenceConfig, JsonMode, Variant, VariantConfig, VariantInfo};
 
-use super::validate_tags;
-use super::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
+use crate::endpoints::validate_tags;
+use crate::endpoints::workflow_evaluation_run::validate_inference_episode_id_and_apply_workflow_evaluation_run;
 
 /// The expected payload is a JSON object with the following fields:
 #[derive(Debug, Default, Deserialize)]

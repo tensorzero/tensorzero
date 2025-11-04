@@ -13,7 +13,7 @@ pub mod object_storage;
 pub mod openai_compatible;
 pub mod optimization;
 pub mod status;
-pub mod stored_inference;
+pub mod stored_inferences;
 pub mod variant_probabilities;
 pub mod workflow_evaluation_run;
 use crate::utils::gateway::AppStateData;
