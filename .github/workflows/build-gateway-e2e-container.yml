@@ -33,7 +33,8 @@ jobs:
       - name: Login to DockerHub
         uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          # We're using an organization access token, so we need to use the org name for the username.
+          username: tensorzero
           password: ${{ secrets.DOCKERHUB_LIMITED_TOKEN }}
 
       # We allow the namespace builder setup to fail on Dependabot PRs and PRs from forks
