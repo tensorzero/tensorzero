@@ -130,9 +130,9 @@ jobs:
       - name: Print ClickHouse error logs
         if: always()
         working-directory: ui
-        run: docker compose -f fixtures/docker-compose.yml exec clickhouse cat /var/log/clickhouse-server/clickhouse-server.err.log
+        run: docker cp fixtures-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.err.log -
 
       - name: Print ClickHouse trace logs
         if: always()
         working-directory: ui
-        run: docker compose -f fixtures/docker-compose.yml exec clickhouse cat /var/log/clickhouse-server/clickhouse-server.log
+        run: docker cp fixtures-clickhouse-1:/var/log/clickhouse-server/clickhouse-server.log -
