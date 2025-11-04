@@ -37,6 +37,8 @@ import type {
   Datapoint,
   GetCumulativeFeedbackTimeseriesParams,
   KeyInfo,
+  UpdateDatapointsMetadataRequest,
+  UpdateDatapointsResponse,
 } from "./bindings";
 import type {
   TensorZeroClient as NativeTensorZeroClientType,
@@ -415,6 +417,16 @@ export class DatabaseClient {
     const result =
       await this.nativeDatabaseClient.getFeedbackByVariant(paramsString);
     return JSON.parse(result) as FeedbackByVariant[];
+  }
+
+  async updateDatapointsMetadata(
+    dataset_name: string,
+    params: UpdateDatapointsMetadataRequest,
+  ): Promise<UpdateDatapointsResponse> {
+    const paramsString = safeStringify({ dataset_name, ...params });
+    const result =
+      await this.nativeDatabaseClient.updateDatapointsMetadata(paramsString);
+    return JSON.parse(result) as UpdateDatapointsResponse;
   }
 }
 

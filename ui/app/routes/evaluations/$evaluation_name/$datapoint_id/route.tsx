@@ -206,13 +206,9 @@ export async function action({ request }: Route.ActionArgs) {
         );
       }
 
-      // A bit of a hack in the evaluation page, we don't have the function type in the datapoint, so we check if the datapoint contains an output schema (which indicates it's JSON).
-      const functionType = "output_schema" in datapoint ? "json" : "chat";
       await renameDatapoint({
-        functionType,
         datasetName: dataset_name,
-        // TODO: convert to Rust-generated bindings
-        datapoint,
+        datapointId: datapoint_id,
         newName,
       });
 

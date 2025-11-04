@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::num::ParseIntError;
 use tokio::try_join;
 use uuid::Uuid;
@@ -14,6 +14,9 @@ use crate::db::datasets::{
     DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
     GetDatasetMetadataParams, GetDatasetRowsParams, JsonInferenceDatapointInsert,
     StaleDatapointParams,
+};
+use crate::endpoints::datasets::v1::types::{
+    UpdateDatapointsMetadataRequest, UpdateDatapointsResponse,
 };
 use crate::endpoints::datasets::{validate_dataset_name, DatapointKind, StoredDatapoint};
 use crate::error::{Error, ErrorDetails};
@@ -748,6 +751,99 @@ impl DatasetQueries for ClickHouseConnectionInfo {
         written_rows += chat_written_rows?;
         written_rows += json_written_rows?;
         Ok(written_rows)
+    }
+
+    async fn update_datapoints_metadata(
+        &self,
+        dataset_name: &str,
+        request: UpdateDatapointsMetadataRequest,
+    ) -> Result<UpdateDatapointsResponse, Error> {
+        validate_dataset_name(dataset_name)?;
+
+        if request.datapoints.is_empty() {
+            return Err(Error::new(ErrorDetails::InvalidRequest {
+                message: "At least one datapoint must be provided".to_string(),
+            }));
+        }
+
+        let mut seen_ids = HashSet::new();
+        for datapoint in &request.datapoints {
+            if !seen_ids.insert(datapoint.id) {
+                return Err(Error::new(ErrorDetails::InvalidRequest {
+                    message: format!("Duplicate datapoint id provided: {}", datapoint.id),
+                }));
+            }
+        }
+
+        // Fetch all datapoints in a single batch query
+        let datapoint_ids: Vec<Uuid> = request.datapoints.iter().map(|d| d.id).collect();
+        let datapoints_vec = self
+            .get_datapoints(&GetDatapointsParams {
+                dataset_name: Some(dataset_name.to_string()),
+                function_name: None,
+                ids: Some(datapoint_ids.clone()),
+                page_size: u32::MAX,
+                offset: 0,
+                allow_stale: false,
+                filter: None,
+            })
+            .await?;
+
+        // Build a HashMap for quick lookup
+        let mut datapoints_map: HashMap<Uuid, StoredDatapoint> =
+            datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
+
+        let mut datapoints: Vec<DatapointInsert> = Vec::with_capacity(request.datapoints.len());
+
+        for update in request.datapoints {
+            let datapoint_id = update.id;
+            let existing = datapoints_map.remove(&datapoint_id).ok_or_else(|| {
+                Error::new(ErrorDetails::DatapointNotFound {
+                    dataset_name: dataset_name.to_string(),
+                    datapoint_id,
+                })
+            })?;
+
+            match existing {
+                StoredDatapoint::Chat(mut existing_datapoint) => {
+                    if existing_datapoint.dataset_name != dataset_name {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "Datapoint {datapoint_id} belongs to dataset '{}' instead of '{dataset_name}'",
+                                existing_datapoint.dataset_name
+                            ),
+                        }));
+                    }
+
+                    if let Some(new_name) = update.metadata.name {
+                        existing_datapoint.name = new_name;
+                    }
+
+                    datapoints.push(DatapointInsert::Chat(existing_datapoint.into()));
+                }
+                StoredDatapoint::Json(mut existing_datapoint) => {
+                    if existing_datapoint.dataset_name != dataset_name {
+                        return Err(Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "Datapoint {datapoint_id} belongs to dataset '{}' instead of '{dataset_name}'",
+                                existing_datapoint.dataset_name
+                            ),
+                        }));
+                    }
+
+                    if let Some(new_name) = update.metadata.name {
+                        existing_datapoint.name = new_name;
+                    }
+
+                    datapoints.push(DatapointInsert::Json(existing_datapoint.into()));
+                }
+            }
+        }
+
+        self.insert_datapoints(&datapoints).await?;
+
+        // Return the same IDs (not new ones, since we didn't create new datapoints)
+        Ok(UpdateDatapointsResponse { ids: datapoint_ids })
     }
 }
 

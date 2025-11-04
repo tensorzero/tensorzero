@@ -4,6 +4,7 @@ use tensorzero::{
     DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
     GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams, TimeWindow,
 };
+use tensorzero_core::endpoints::datasets::v1::types::UpdateDatapointsMetadataRequest;
 use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
@@ -221,6 +222,23 @@ impl DatabaseClient {
 
         serde_json::to_string(&result).map_err(|e| napi::Error::from_reason(e.to_string()))
     }
+
+    #[napi]
+    pub async fn update_datapoints_metadata(&self, params: String) -> Result<String, napi::Error> {
+        let request_with_dataset: UpdateDatapointsMetadataRequestWithDatasetName =
+            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        let response = self
+            .0
+            .update_datapoints_metadata(
+                &request_with_dataset.dataset_name,
+                request_with_dataset.request,
+            )
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        serde_json::to_string(&response).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
 }
 
 #[derive(Deserialize, ts_rs::TS)]
@@ -293,4 +311,12 @@ struct GetFeedbackByVariantParams {
     function_name: String,
     #[ts(optional)]
     variant_names: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UpdateDatapointsMetadataRequestWithDatasetName {
+    dataset_name: String,
+    #[serde(flatten)]
+    request: UpdateDatapointsMetadataRequest,
 }

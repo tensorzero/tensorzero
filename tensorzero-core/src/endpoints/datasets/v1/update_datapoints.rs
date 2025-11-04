@@ -402,109 +402,11 @@ pub async fn update_datapoints_metadata_handler(
     Path(path_params): Path<UpdateDatapointsMetadataPathParams>,
     StructuredJson(request): StructuredJson<UpdateDatapointsMetadataRequest>,
 ) -> Result<Json<UpdateDatapointsResponse>, Error> {
-    let response = update_datapoints_metadata(
-        &app_state.clickhouse_connection_info,
-        &path_params.dataset_name,
-        request,
-    )
-    .await?;
-    Ok(Json(response))
-}
-
-/// Business logic for updating datapoint metadata in a dataset.
-/// This function only updates metadata fields (like name) without creating new datapoint IDs.
-/// Unlike update_datapoints, this does NOT stale the old datapoint or create a new ID.
-async fn update_datapoints_metadata(
-    clickhouse_handler: &impl DatasetQueries,
-    dataset_name: &str,
-    request: UpdateDatapointsMetadataRequest,
-) -> Result<UpdateDatapointsResponse, Error> {
-    validate_dataset_name(dataset_name)?;
-
-    if request.datapoints.is_empty() {
-        return Err(Error::new(ErrorDetails::InvalidRequest {
-            message: "At least one datapoint must be provided".to_string(),
-        }));
-    }
-
-    let mut seen_ids = HashSet::new();
-    for datapoint in &request.datapoints {
-        if !seen_ids.insert(datapoint.id) {
-            return Err(Error::new(ErrorDetails::InvalidRequest {
-                message: format!("Duplicate datapoint id provided: {}", datapoint.id),
-            }));
-        }
-    }
-
-    // Fetch all datapoints in a single batch query
-    let datapoint_ids: Vec<Uuid> = request.datapoints.iter().map(|d| d.id).collect();
-    let datapoints_vec = clickhouse_handler
-        .get_datapoints(&GetDatapointsParams {
-            dataset_name: Some(dataset_name.to_string()),
-            function_name: None,
-            ids: Some(datapoint_ids.clone()),
-            page_size: u32::MAX,
-            offset: 0,
-            allow_stale: false,
-            filter: None,
-        })
+    let response = app_state
+        .clickhouse_connection_info
+        .update_datapoints_metadata(&path_params.dataset_name, request)
         .await?;
-
-    // Build a HashMap for quick lookup
-    let mut datapoints_map: HashMap<Uuid, StoredDatapoint> =
-        datapoints_vec.into_iter().map(|dp| (dp.id(), dp)).collect();
-
-    let mut datapoints: Vec<DatapointInsert> = Vec::with_capacity(request.datapoints.len());
-
-    for update in request.datapoints {
-        let datapoint_id = update.id;
-        let existing = datapoints_map.remove(&datapoint_id).ok_or_else(|| {
-            Error::new(ErrorDetails::DatapointNotFound {
-                dataset_name: dataset_name.to_string(),
-                datapoint_id,
-            })
-        })?;
-
-        match existing {
-            StoredDatapoint::Chat(mut existing_datapoint) => {
-                if existing_datapoint.dataset_name != dataset_name {
-                    return Err(Error::new(ErrorDetails::InvalidRequest {
-                        message: format!(
-                            "Datapoint {datapoint_id} belongs to dataset '{}' instead of '{dataset_name}'",
-                            existing_datapoint.dataset_name
-                        ),
-                    }));
-                }
-
-                if let Some(new_name) = update.metadata.name {
-                    existing_datapoint.name = new_name;
-                }
-
-                datapoints.push(DatapointInsert::Chat(existing_datapoint.into()));
-            }
-            StoredDatapoint::Json(mut existing_datapoint) => {
-                if existing_datapoint.dataset_name != dataset_name {
-                    return Err(Error::new(ErrorDetails::InvalidRequest {
-                        message: format!(
-                            "Datapoint {datapoint_id} belongs to dataset '{}' instead of '{dataset_name}'",
-                            existing_datapoint.dataset_name
-                        ),
-                    }));
-                }
-
-                if let Some(new_name) = update.metadata.name {
-                    existing_datapoint.name = new_name;
-                }
-
-                datapoints.push(DatapointInsert::Json(existing_datapoint.into()));
-            }
-        }
-    }
-
-    clickhouse_handler.insert_datapoints(&datapoints).await?;
-
-    // Return the same IDs (not new ones, since we didn't create new datapoints)
-    Ok(UpdateDatapointsResponse { ids: datapoint_ids })
+    Ok(Json(response))
 }
 
 #[cfg(test)]
@@ -1875,7 +1777,9 @@ mod tests {
                 }],
             };
 
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            let result = mock_db
+                .update_datapoints_metadata(dataset_name, request)
+                .await;
             assert!(result.is_ok());
             let response = result.unwrap();
             assert_eq!(response.ids.len(), 1);
@@ -1929,7 +1833,9 @@ mod tests {
                 }],
             };
 
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            let result = mock_db
+                .update_datapoints_metadata(dataset_name, request)
+                .await;
             assert!(result.is_ok());
             let response = result.unwrap();
             assert_eq!(response.ids.len(), 1);
@@ -1963,7 +1869,9 @@ mod tests {
                 }],
             };
 
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            let result = mock_db
+                .update_datapoints_metadata(dataset_name, request)
+                .await;
             assert!(result.is_ok());
         }
 
@@ -1986,7 +1894,9 @@ mod tests {
                 }],
             };
 
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            let result = mock_db
+                .update_datapoints_metadata(dataset_name, request)
+                .await;
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err().get_details(),
@@ -2018,7 +1928,9 @@ mod tests {
                 ],
             };
 
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            let result = mock_db
+                .update_datapoints_metadata(dataset_name, request)
+                .await;
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err().get_details(),
@@ -2033,7 +1945,9 @@ mod tests {
 
             let request = UpdateDatapointsMetadataRequest { datapoints: vec![] };
 
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            let result = mock_db
+                .update_datapoints_metadata(dataset_name, request)
+                .await;
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err().get_details(),
@@ -2086,7 +2000,9 @@ mod tests {
                 ],
             };
 
-            let result = update_datapoints_metadata(&mock_db, dataset_name, request).await;
+            let result = mock_db
+                .update_datapoints_metadata(dataset_name, request)
+                .await;
             assert!(result.is_ok());
             let response = result.unwrap();
             assert_eq!(response.ids.len(), 2);

@@ -8,6 +8,9 @@ use mockall::automock;
 
 use crate::config::{MetricConfigLevel, MetricConfigType};
 use crate::db::clickhouse::query_builder::{DatapointFilter, FloatComparisonOperator};
+use crate::endpoints::datasets::v1::types::{
+    UpdateDatapointsMetadataRequest, UpdateDatapointsResponse,
+};
 use crate::endpoints::datasets::{DatapointKind, StoredDatapoint};
 use crate::error::Error;
 use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput};
@@ -376,4 +379,13 @@ pub trait DatasetQueries {
         dataset_name: &str,
         datapoint_ids: Option<&[Uuid]>,
     ) -> Result<u64, Error>;
+
+    /// Updates metadata (e.g., name) for one or more datapoints without creating new IDs.
+    /// This is a true in-place update that preserves datapoint IDs.
+    /// Unlike creating new datapoints, this does NOT stale the old datapoint or create a new ID.
+    async fn update_datapoints_metadata(
+        &self,
+        dataset_name: &str,
+        request: UpdateDatapointsMetadataRequest,
+    ) -> Result<UpdateDatapointsResponse, Error>;
 }

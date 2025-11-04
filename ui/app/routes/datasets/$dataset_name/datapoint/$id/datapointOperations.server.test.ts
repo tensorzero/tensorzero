@@ -388,9 +388,8 @@ describe("datapointOperations", () => {
       const newName = "new_name";
 
       await renameDatapoint({
-        functionType: "chat",
         datasetName,
-        datapoint,
+        datapointId: datapoint.id,
         newName,
       });
 
@@ -472,9 +471,8 @@ describe("datapointOperations", () => {
       const newName = "new_json_name";
 
       await renameDatapoint({
-        functionType: "json",
         datasetName,
-        datapoint,
+        datapointId: datapoint.id,
         newName,
       });
 
@@ -527,9 +525,8 @@ describe("datapointOperations", () => {
 
       await expect(
         renameDatapoint({
-          functionType: "json",
           datasetName: "test_dataset",
-          datapoint,
+          datapointId: datapoint.id,
           newName: "new_name",
         }),
       ).rejects.toThrow("Json datapoint is missing output_schema");
