@@ -477,7 +477,6 @@ impl ToolCallConfig {
     }
 }
 
-/// TODO (Viraj): improve documentation
 /// Storage representation of tool call configuration for database persistence.
 ///
 /// This type is the **database/storage format** for tool configurations, designed to be stored
@@ -513,7 +512,6 @@ pub struct ToolCallConfigDatabaseInsert {
     tool_params: LegacyToolCallConfigDatabaseInsert,
 }
 
-/// TODO(Viraj): do we still need this to be optional?
 /// Custom deserializer implementation for ToolCallConfigDatabaseInsert that handles three formats:
 /// 1. Full format: Contains all fields (dynamic_tools, dynamic_provider_tools, allowed_tools, etc.)
 /// 2. Legacy format: Contains only tool_config field (for backwards compatibility)
@@ -855,7 +853,8 @@ impl ToolCallConfigDatabaseInsert {
         }
     }
 
-    /// TODO (Viraj): document extensively
+    /// Converts back from a `ToolCallConfigDatabaseInsert` (storage type) to
+    /// `ToolCallConfig` (internal type with nonserializable state).
     pub fn into_tool_call_config(
         self,
         function_config: &FunctionConfig,
@@ -871,7 +870,6 @@ impl ToolCallConfigDatabaseInsert {
                 dynamic_additional_tools: Some(self.dynamic_tools),
                 dynamic_parallel_tool_calls: self.parallel_tool_calls,
                 dynamic_provider_tools: Some(self.dynamic_provider_tools),
-                // Note to reviewer: should we store this as an option so that
                 dynamic_tool_choice: Some(self.tool_choice),
             }),
             FunctionConfig::Json(_) => Ok(None),
