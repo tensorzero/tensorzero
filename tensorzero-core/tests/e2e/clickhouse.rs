@@ -114,7 +114,7 @@ macro_rules! invoke_all_separate_tests {
     ($target_fn:ident, $prefix:ident, [$($migration_num:literal),*]) => {
         // For each value in the literal array, generate a new `#[tokio::test]` function
         // that calls the target function with that value
-        // This lets us use `capture_logs()` to independently capture logs for each test 
+        // This lets us use `capture_logs()` to independently capture logs for each test
         const _MIGRATIONS_NUM_ARRAY: [usize; tensorzero_core::db::clickhouse::migration_manager::NUM_MIGRATIONS] = [$($migration_num),*];
         $(
             paste! {
