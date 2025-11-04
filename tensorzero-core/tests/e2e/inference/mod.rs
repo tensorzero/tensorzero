@@ -3228,6 +3228,7 @@ async fn test_image_inference_without_object_store() {
                             source_url: None,
                             mime_type: mime::IMAGE_PNG,
                             data: BASE64_STANDARD.encode(FERRIS_PNG),
+                            detail: None,
                         })),
                     ],
                 }],

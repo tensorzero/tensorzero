@@ -1286,6 +1286,8 @@ impl Serialize for OpenAIContentBlock<'_> {
 #[serde(rename_all = "snake_case")]
 pub struct OpenAIImageUrl {
     pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<crate::inference::types::file::Detail>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1615,7 +1617,12 @@ pub(super) async fn prepare_file_message(
         //
         // OpenAI doesn't support passing in urls for 'file' content blocks, so we can only forward image urls.
         LazyFile::Url {
-            file_url: FileUrl { mime_type, url },
+            file_url:
+                FileUrl {
+                    mime_type,
+                    url,
+                    detail,
+                },
             future: _,
         } if !messages_config.fetch_and_encode_input_files_before_inference
         // If the mime type was provided by the caller we know we should only forward image URLs and fetch the rest
@@ -1624,6 +1631,7 @@ pub(super) async fn prepare_file_message(
             Ok(OpenAIContentBlock::ImageUrl {
                 image_url: OpenAIImageUrl {
                     url: url.to_string(),
+                    detail: detail.clone(),
                 },
             })
         }
@@ -1637,6 +1645,7 @@ pub(super) async fn prepare_file_message(
                         // This will only produce an error if we pass in a bad
                         // `Base64File` (with missing file data)
                         url: base64_url,
+                        detail: file.detail.clone(),
                     },
                 })
             } else {
@@ -2707,6 +2716,7 @@ struct OpenAIBatchFileResponse {
 
 #[cfg(test)]
 mod tests {
+    use crate::inference::types::file::Detail;
     use base64::prelude::*;
     use base64::Engine;
     use futures::FutureExt;
@@ -4066,6 +4076,7 @@ mod tests {
                 source_url: None,
                 mime_type: mime::TEXT_PLAIN,
                 storage_path: dummy_storage_path.clone(),
+                detail: None,
             },
             data: BASE64_STANDARD.encode(b"Hello, world!"),
         }));
@@ -4109,6 +4120,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_prepare_resolved_file_message_with_detail() {
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let file = LazyFile::Base64(PendingObjectStoreFile(ObjectStorageFile {
+            file: ObjectStoragePointer {
+                source_url: None,
+                mime_type: mime::IMAGE_PNG,
+                storage_path: dummy_storage_path.clone(),
+                detail: Some(Detail::High),
+            },
+            data: BASE64_STANDARD.encode(b"fake image data"),
+        }));
+        let res = prepare_file_message(
+            &file,
+            OpenAIMessagesConfig {
+                fetch_and_encode_input_files_before_inference: true,
+                json_mode: None,
+                provider_type: PROVIDER_TYPE,
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: format!(
+                        "data:image/png;base64,{}",
+                        BASE64_STANDARD.encode(b"fake image data")
+                    ),
+                    detail: Some(Detail::High),
+                },
+            }
+        );
+    }
+
+    #[tokio::test]
     #[traced_test]
     async fn test_file_url_no_mime_type_fetch_and_encode() {
         let fetch_and_encode = OpenAIMessagesConfig {
@@ -4126,6 +4177,7 @@ mod tests {
                 file_url: FileUrl {
                     url: url.clone(),
                     mime_type: None,
+                    detail: None,
                 },
                 future: async move {
                     Ok(ObjectStorageFile {
@@ -4134,6 +4186,7 @@ mod tests {
                             // Deliberately use a different mime type to make sure we adjust the input filename
                             mime_type: mime::IMAGE_JPEG,
                             storage_path: dummy_storage_path.clone(),
+                            detail: None,
                         },
                         data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })
@@ -4154,6 +4207,7 @@ mod tests {
                         "data:image/jpeg;base64,{}",
                         BASE64_STANDARD.encode(FERRIS_PNG)
                     ),
+                    detail: None,
                 },
             }
         );
@@ -4180,6 +4234,7 @@ mod tests {
                 file_url: FileUrl {
                     url: url.clone(),
                     mime_type: None,
+                    detail: None,
                 },
                 future: async move {
                     Ok(ObjectStorageFile {
@@ -4188,6 +4243,7 @@ mod tests {
                             // Deliberately use a different mime type to make sure we adjust the input filename
                             mime_type: mime::IMAGE_JPEG,
                             storage_path: dummy_storage_path.clone(),
+                            detail: None,
                         },
                         data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })
@@ -4206,6 +4262,7 @@ mod tests {
             OpenAIContentBlock::ImageUrl {
                 image_url: OpenAIImageUrl {
                     url: url.to_string(),
+                    detail: None,
                 },
             }
         );
@@ -4225,6 +4282,7 @@ mod tests {
                 file_url: FileUrl {
                     url: url.clone(),
                     mime_type: Some(mime::IMAGE_JPEG),
+                    detail: None,
                 },
                 future: async { panic!("File future should not be resolved") }
                     .boxed()
@@ -4240,12 +4298,118 @@ mod tests {
             res,
             OpenAIContentBlock::ImageUrl {
                 image_url: OpenAIImageUrl {
-                    url: url.to_string()
+                    url: url.to_string(),
+                    detail: None,
                 },
             }
         );
 
         assert!(!logs_contain("mime_type"));
+    }
+
+    #[tokio::test]
+    async fn test_forward_image_url_with_detail_low() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: Some(mime::IMAGE_JPEG),
+                    detail: Some(Detail::Low),
+                },
+                future: async { panic!("File future should not be resolved") }
+                    .boxed()
+                    .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: url.to_string(),
+                    detail: Some(Detail::Low),
+                },
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_forward_image_url_with_detail_high() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: Some(mime::IMAGE_JPEG),
+                    detail: Some(Detail::High),
+                },
+                future: async { panic!("File future should not be resolved") }
+                    .boxed()
+                    .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: url.to_string(),
+                    detail: Some(Detail::High),
+                },
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_forward_image_url_with_detail_auto() {
+        let fetch_and_encode = OpenAIMessagesConfig {
+            json_mode: None,
+            provider_type: PROVIDER_TYPE,
+            fetch_and_encode_input_files_before_inference: false,
+        };
+        let url = Url::parse("https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png").unwrap();
+        let res = prepare_file_message(
+            &LazyFile::Url {
+                file_url: FileUrl {
+                    url: url.clone(),
+                    mime_type: Some(mime::IMAGE_JPEG),
+                    detail: Some(Detail::Auto),
+                },
+                future: async { panic!("File future should not be resolved") }
+                    .boxed()
+                    .shared(),
+            },
+            fetch_and_encode,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            res,
+            OpenAIContentBlock::ImageUrl {
+                image_url: OpenAIImageUrl {
+                    url: url.to_string(),
+                    detail: Some(Detail::Auto),
+                },
+            }
+        );
     }
 
     #[tokio::test]
@@ -4263,6 +4427,7 @@ mod tests {
                     url: url.clone(),
                     // By specifying a non-image mime type, we should end up using a 'file' content block
                     mime_type: Some(mime::APPLICATION_PDF),
+                    detail: None,
                 },
                 future: async {
                     Ok(ObjectStorageFile {
@@ -4273,6 +4438,7 @@ mod tests {
                                 kind: StorageKind::Disabled,
                                 path: object_store::path::Path::parse("dummy-path").unwrap(),
                             },
+                            detail: None,
                         },
                         data: BASE64_STANDARD.encode(FERRIS_PNG),
                     })

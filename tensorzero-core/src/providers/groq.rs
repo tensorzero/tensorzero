@@ -656,6 +656,11 @@ async fn tensorzero_to_groq_user_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "Image detail parameter is not supported by Groq. The detail setting will be ignored."
+                    );
+                }
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         url: format!("data:{};base64,{}", file.mime_type, data),
@@ -720,6 +725,11 @@ async fn tensorzero_to_groq_assistant_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "Image detail parameter is not supported by Groq. The detail setting will be ignored."
+                    );
+                }
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
                     image_url: GroqImageUrl {
                         url: format!("data:{};base64,{}", file.mime_type, data),
@@ -2518,6 +2528,43 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Groq does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_groq_warns_on_detail() {
+        use crate::inference::types::file::Detail;
+        use crate::inference::types::resolved_input::LazyFile;
+        use crate::inference::types::storage::{StorageKind, StoragePath};
+        use crate::inference::types::{
+            ContentBlock, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
+        };
+        use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+        use base64::Engine;
+
+        // Test with resolved file (base64 encoding path) with detail
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let content_blocks = vec![ContentBlock::File(Box::new(LazyFile::Base64(
+            PendingObjectStoreFile(ObjectStorageFile {
+                file: ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::IMAGE_PNG,
+                    storage_path: dummy_storage_path,
+                    detail: Some(Detail::High),
+                },
+                data: BASE64_STANDARD.encode(b"fake image data"),
+            }),
+        )))];
+
+        let _result = tensorzero_to_groq_user_messages(&content_blocks).await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "Image detail parameter is not supported by Groq"
         ));
     }
 }

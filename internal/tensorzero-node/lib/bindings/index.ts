@@ -58,6 +58,7 @@ export * from "./DeepSeekProviderTypeConfig";
 export * from "./DeleteDatapointsRequest";
 export * from "./DeleteDatapointsResponse";
 export * from "./DemonstrationFeedbackRow";
+export * from "./Detail";
 export * from "./DiclConfig";
 export * from "./DiclOptimizationConfig";
 export * from "./DiclOptimizationJobHandle";

@@ -303,7 +303,11 @@ impl InputMessageContent {
                     // 1. Fetches the file from the URL
                     // 2. Computes a content-addressed `storage_path`
                     // 3. Returns a `ObjectStorageFile` with the data
-                    File::Url(UrlFile { url, mime_type }) => {
+                    File::Url(UrlFile {
+                        url,
+                        mime_type,
+                        detail,
+                    }) => {
                         // Check that we have an object store *outside* of the future that we're going to store in
                         // `LazyResolvedInputMessageContent::File`. We want to error immediately if the user tries
                         // to use a file input without explicitly configuring an object store (either explicit enabled or disabled)
@@ -318,6 +322,8 @@ impl InputMessageContent {
                         // we will skip downloading the file entirely.
                         let url = url.clone();
                         let mime_type = mime_type.clone();
+                        let detail_clone = detail.clone();
+                        let detail_for_future = detail.clone();
                         let delayed_file_future = async move {
                             let base64_file = file.take_or_fetch(&client).await?;
                             let path = storage_kind.file_path(&base64_file)?;
@@ -326,12 +332,17 @@ impl InputMessageContent {
                                     source_url: base64_file.source_url,
                                     mime_type: base64_file.mime_type,
                                     storage_path: path,
+                                    detail: detail_for_future,
                                 },
                                 data: base64_file.data,
                             })
                         };
                         LazyResolvedInputMessageContent::File(Box::new(LazyFile::Url {
-                            file_url: FileUrl { url, mime_type },
+                            file_url: FileUrl {
+                                url,
+                                mime_type,
+                                detail: detail_clone,
+                            },
                             future: delayed_file_future.boxed().shared(),
                         }))
                     }
@@ -345,12 +356,14 @@ impl InputMessageContent {
                         source_url,
                         mime_type,
                         data,
+                        detail,
                     }) => {
                         let storage_kind = get_storage_kind(&context)?;
                         let base64_file = Base64File {
                             source_url: source_url.clone(),
                             mime_type: mime_type.clone(),
                             data: data.clone(),
+                            detail: None,
                         };
                         let path = storage_kind.file_path(&base64_file)?;
 
@@ -360,6 +373,7 @@ impl InputMessageContent {
                                     source_url: source_url.clone(),
                                     mime_type: mime_type.clone(),
                                     storage_path: path,
+                                    detail: detail.clone(),
                                 },
                                 data: data.clone(),
                             }),
@@ -374,11 +388,13 @@ impl InputMessageContent {
                         source_url,
                         mime_type,
                         storage_path,
+                        detail,
                     }) => {
                         let source_url_for_future = source_url.clone();
                         let object_store_info = context.object_store_info.clone();
                         let owned_storage_path = storage_path.clone();
                         let mime_type_for_closure = mime_type.clone();
+                        let detail_for_future = detail.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -391,6 +407,7 @@ impl InputMessageContent {
                                     source_url: source_url_for_future,
                                     mime_type: mime_type_for_closure,
                                     storage_path: owned_storage_path,
+                                    detail: detail_for_future,
                                 },
                                 data: object_response.data,
                             })
@@ -496,6 +513,7 @@ impl LazyResolvedInputMessageContent {
                     source_url: metadata.source_url,
                     mime_type: metadata.mime_type,
                     storage_path,
+                    detail: None,
                 }))),
                 // File reference to object storage with data in memory.
                 // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)
@@ -519,6 +537,7 @@ impl LazyResolvedInputMessageContent {
                             source_url: resolved_file.file.source_url.clone(),
                             mime_type: resolved_file.file.mime_type.clone(),
                             data: resolved_file.data.clone(),
+                            detail: resolved_file.file.detail.clone(),
                         },
                         resolved_file.file.storage_path.clone(),
                     )
@@ -537,6 +556,7 @@ impl LazyResolvedInputMessageContent {
                             source_url: pending.0.file.source_url.clone(),
                             mime_type: pending.0.file.mime_type.clone(),
                             data: pending.0.data.clone(),
+                            detail: pending.0.file.detail.clone(),
                         },
                         pending.0.file.storage_path.clone(),
                     )

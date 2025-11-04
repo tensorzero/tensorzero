@@ -588,11 +588,17 @@ impl<'a> AnthropicMessageContent<'a> {
                         FileUrl {
                             mime_type: Some(mime_type),
                             url,
+                            detail,
                         },
                     future: _,
                 } if !messages_config.fetch_and_encode_input_files_before_inference => {
                     // If the user provided a url, and we're not configured to fetch the file beforehand,
                     // then forward the url directly to Anthropic.
+                    if detail.is_some() {
+                        tracing::warn!(
+                            "Image detail parameter is not supported by Anthropic. The detail setting will be ignored."
+                        );
+                    }
                     if mime_type.type_() == mime::IMAGE {
                         Ok(Some(FlattenUnknown::Normal(
                             AnthropicMessageContent::Image {
@@ -620,6 +626,11 @@ impl<'a> AnthropicMessageContent<'a> {
                     // Otherwise, fetch the file, encode it as base64, and send it to Anthropic
                     let resolved_file = file.resolve().await?;
                     let ObjectStorageFile { file, data } = &*resolved_file;
+                    if file.detail.is_some() {
+                        tracing::warn!(
+                            "Image detail parameter is not supported by Anthropic. The detail setting will be ignored."
+                        );
+                    }
                     let document = AnthropicDocumentSource::Base64 {
                         media_type: file.mime_type.clone(),
                         data: data.clone(),
@@ -3286,6 +3297,38 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Anthropic does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_anthropic_warns_on_detail() {
+        use crate::inference::types::file::Detail;
+        use crate::inference::types::resolved_input::{FileUrl, LazyFile};
+        use crate::inference::types::ContentBlock;
+        use futures::FutureExt;
+        use url::Url;
+
+        // Test URL forwarding path with detail
+        let url = Url::parse("https://example.com/image.png").unwrap();
+        let content_block = ContentBlock::File(Box::new(LazyFile::Url {
+            file_url: FileUrl {
+                url: url.clone(),
+                mime_type: Some(mime::IMAGE_PNG),
+                detail: Some(Detail::Low),
+            },
+            future: async { panic!("Should not resolve") }.boxed().shared(),
+        }));
+
+        let config = AnthropicMessagesConfig {
+            fetch_and_encode_input_files_before_inference: false,
+        };
+
+        let _result = AnthropicMessageContent::from_content_block(&content_block, config).await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "Image detail parameter is not supported by Anthropic"
         ));
     }
 }

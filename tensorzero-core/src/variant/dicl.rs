@@ -1157,6 +1157,7 @@ mod tests {
                                         kind: StorageKind::Disabled,
                                         path: Default::default(),
                                     },
+                                    detail: None,
                                 },
                             ))),
                         ],

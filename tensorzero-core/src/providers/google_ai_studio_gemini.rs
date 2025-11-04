@@ -628,6 +628,11 @@ async fn convert_non_thought_content_block(
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
             let ObjectStorageFile { file, data } = &*resolved_file;
+            if file.detail.is_some() {
+                tracing::warn!(
+                    "Image detail parameter is not supported by Google AI Studio Gemini. The detail setting will be ignored."
+                );
+            }
             Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
                 inline_data: GeminiInlineData {
                     mime_type: file.mime_type.to_string(),
@@ -2861,6 +2866,43 @@ mod tests {
         // Test that verbosity warns
         assert!(logs_contain(
             "Google AI Studio Gemini does not support the inference parameter `verbosity`"
+        ));
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn test_gemini_warns_on_detail() {
+        use crate::inference::types::file::Detail;
+        use crate::inference::types::resolved_input::LazyFile;
+        use crate::inference::types::storage::{StorageKind, StoragePath};
+        use crate::inference::types::{
+            ContentBlock, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
+        };
+        use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+        use base64::Engine;
+
+        // Test with resolved file with detail
+        let dummy_storage_path = StoragePath {
+            kind: StorageKind::Disabled,
+            path: object_store::path::Path::parse("dummy-path").unwrap(),
+        };
+        let content_block = ContentBlock::File(Box::new(LazyFile::Base64(PendingObjectStoreFile(
+            ObjectStorageFile {
+                file: ObjectStoragePointer {
+                    source_url: None,
+                    mime_type: mime::IMAGE_PNG,
+                    storage_path: dummy_storage_path,
+                    detail: Some(Detail::Auto),
+                },
+                data: BASE64_STANDARD.encode(b"fake image data"),
+            },
+        ))));
+
+        let _result = convert_non_thought_content_block(&content_block).await;
+
+        // Should log a warning about detail not being supported
+        assert!(logs_contain(
+            "Image detail parameter is not supported by Google AI Studio Gemini"
         ));
     }
 }

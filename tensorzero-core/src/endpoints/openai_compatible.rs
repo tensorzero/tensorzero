@@ -944,6 +944,8 @@ struct OpenAICompatibleImageUrl {
     url: Url,
     #[serde(rename = "tensorzero::mime_type")]
     mime_type: Option<MediaType>,
+    #[serde(default)]
+    detail: Option<crate::inference::types::file::Detail>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1036,13 +1038,13 @@ fn convert_openai_message_content(
                         if image_url.url.scheme() == "data" {
                             let url_str = image_url.url.to_string();
                             let (mime_type, data) = parse_base64_image_data_url(&url_str)?;
-                            InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type, data: data.to_string() }))
+                            InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type, data: data.to_string(), detail: image_url.detail }))
                         } else {
-                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type }))
+                            InputMessageContent::File(File::Url(UrlFile { url: image_url.url, mime_type: image_url.mime_type, detail: image_url.detail }))
                         }
                     }
                     Ok(OpenAICompatibleContentBlock::File { file }) => {
-                        InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data }))
+                        InputMessageContent::File(File::Base64(Base64File { source_url: None, mime_type: filename_to_mime_type(&file.filename)?, data: file.file_data, detail: None }))
                     }
                     Err(e) => {
                         if let Some(obj) = val.as_object() {
@@ -2633,5 +2635,86 @@ mod tests {
         let required_mode = OpenAICompatibleAllowedToolsMode::Required;
         let tool_choice: ToolChoice = required_mode.into();
         assert_eq!(tool_choice, ToolChoice::Required);
+    }
+
+    #[test]
+    fn test_deserialize_image_url_with_detail() {
+        use crate::inference::types::file::Detail;
+        use serde_json::json;
+
+        // Test deserialization with detail: low
+        let json_low = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png",
+                "detail": "low"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_low).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::ImageUrl { image_url } => {
+                assert_eq!(image_url.url.as_str(), "https://example.com/image.png");
+                assert_eq!(image_url.detail, Some(Detail::Low));
+            }
+            _ => panic!("Expected ImageUrl variant"),
+        }
+
+        // Test deserialization with detail: high
+        let json_high = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png",
+                "detail": "high"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_high).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::ImageUrl { image_url } => {
+                assert_eq!(image_url.detail, Some(Detail::High));
+            }
+            _ => panic!("Expected ImageUrl variant"),
+        }
+
+        // Test deserialization with detail: auto
+        let json_auto = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png",
+                "detail": "auto"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_auto).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::ImageUrl { image_url } => {
+                assert_eq!(image_url.detail, Some(Detail::Auto));
+            }
+            _ => panic!("Expected ImageUrl variant"),
+        }
+
+        // Test deserialization without detail (should default to None)
+        let json_none = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png"
+            }
+        });
+        let block: OpenAICompatibleContentBlock = serde_json::from_value(json_none).unwrap();
+        match block {
+            OpenAICompatibleContentBlock::ImageUrl { image_url } => {
+                assert_eq!(image_url.detail, None);
+            }
+            _ => panic!("Expected ImageUrl variant"),
+        }
+
+        // Test deserialization with invalid detail should fail
+        let json_invalid = json!({
+            "type": "image_url",
+            "image_url": {
+                "url": "https://example.com/image.png",
+                "detail": "invalid"
+            }
+        });
+        let result: Result<OpenAICompatibleContentBlock, _> = serde_json::from_value(json_invalid);
+        assert!(result.is_err());
     }
 }

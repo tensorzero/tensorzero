@@ -92,6 +92,7 @@ impl LazyFile {
 pub struct FileUrl {
     pub url: Url,
     pub mime_type: Option<MediaType>,
+    pub detail: Option<crate::inference::types::file::Detail>,
 }
 
 /// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.
@@ -231,6 +232,7 @@ impl ResolvedInput {
                             source_url: resolved.file.source_url.clone(),
                             mime_type: resolved.file.mime_type.clone(),
                             data: resolved.data.clone(),
+                            detail: resolved.file.detail.clone(),
                         };
                         let storage_path = resolved.file.storage_path.clone();
 
