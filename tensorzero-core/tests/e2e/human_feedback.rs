@@ -676,7 +676,7 @@ async fn e2e_test_demonstration_feedback_tool() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
-    let expected_value = json!([{"type": "tool_call", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}, "raw_name": "get_temperature", "raw_arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}", "id": "tool_call_id" }]);
+    let expected_value = json!([{"type": "tool_call", "id": "tool_call_id", "raw_name": "get_temperature", "raw_arguments": "{\"location\":\"Tokyo\",\"units\":\"celsius\"}", "name": "get_temperature", "arguments": {"location": "Tokyo", "units": "celsius"}}]);
     assert_eq!(retrieved_value, expected_value);
 }
 
@@ -835,7 +835,7 @@ async fn e2e_test_demonstration_feedback_dynamic_tool() {
     assert_eq!(retrieved_inference_id_uuid, inference_id);
     let retrieved_value = result.get("value").unwrap().as_str().unwrap();
     let retrieved_value = serde_json::from_str::<Value>(retrieved_value).unwrap();
-    let expected_value = json!([{"type": "tool_call", "name": "get_humidity", "arguments": {"location": "Tokyo"}, "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "id": "tool_call_id" }]);
+    let expected_value = json!([{"type": "tool_call", "id": "tool_call_id", "raw_name": "get_humidity", "raw_arguments": "{\"location\":\"Tokyo\"}", "name": "get_humidity", "arguments": {"location": "Tokyo"}}]);
     assert_eq!(retrieved_value, expected_value);
 }
 

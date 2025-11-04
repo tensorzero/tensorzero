@@ -4,7 +4,7 @@ use crate::{
         File, InputMessageContent, RawText, Role, System, Template, Text, TextKind, Thought,
         Unknown,
     },
-    tool::{ToolCallInput, ToolResult},
+    tool::{ToolCallWrapper, ToolResult},
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_untagged::UntaggedEnumVisitor;
@@ -42,7 +42,7 @@ pub struct ClientInputMessage {
 pub enum ClientInputMessageContent {
     Text(TextKind),
     Template(Template),
-    ToolCall(ToolCallInput),
+    ToolCall(ToolCallWrapper),
     ToolResult(ToolResult),
     RawText(RawText),
     Thought(Thought),
@@ -90,7 +90,6 @@ impl ClientInputMessageContent {
 pub fn deserialize_content<'de, D: Deserializer<'de>>(
     deserializer: D,
 ) -> Result<Vec<ClientInputMessageContent>, D::Error> {
-    #[expect(clippy::redundant_closure_for_method_calls)]
     UntaggedEnumVisitor::new()
         .string(|text| {
             Ok(vec![ClientInputMessageContent::Text(TextKind::Text {
@@ -146,19 +145,7 @@ pub(super) fn test_client_to_message_content(
             })
         }
         ClientInputMessageContent::Template(template) => InputMessageContent::Template(template),
-        ClientInputMessageContent::ToolCall(ToolCallInput {
-            id,
-            name,
-            raw_name,
-            arguments,
-            raw_arguments,
-        }) => InputMessageContent::ToolCall(ToolCallInput {
-            name,
-            arguments,
-            id,
-            raw_arguments,
-            raw_name,
-        }),
+        ClientInputMessageContent::ToolCall(tool_call) => InputMessageContent::ToolCall(tool_call),
         ClientInputMessageContent::ToolResult(tool_result) => {
             InputMessageContent::ToolResult(tool_result)
         }

@@ -181,7 +181,7 @@ pub struct ListInferencesRequest {
 
     /// The maximum number of inferences to return.
     /// Defaults to 20.
-    pub page_size: Option<u32>,
+    pub limit: Option<u32>,
 
     /// The number of inferences to skip before starting to return results.
     /// Defaults to 0.

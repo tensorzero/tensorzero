@@ -747,7 +747,10 @@ impl Optimizer for TogetherSFTConfig {
             None
         };
         // Upload the training and validation rows to Together files
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let api_key = self
+            .credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let train_file_fut = self.upload_file(client, &api_key, &train_rows, "fine-tune");
         let (train_file_id, val_file_id) = if let Some(val_rows) = val_rows.as_ref() {
             // Upload the files in parallel
@@ -855,7 +858,9 @@ impl JobHandle for TogetherSFTJobHandle {
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
             .await?;
 
-        let api_key = together_credentials.get_api_key(credentials)?;
+        let api_key = together_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let res: TogetherJobResponse = client
             .get(
                 self.api_base
