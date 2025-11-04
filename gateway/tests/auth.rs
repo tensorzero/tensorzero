@@ -808,7 +808,7 @@ async fn test_rate_limit_auth_each_key() {
     model_inferences_per_minute = 1
     always = true
     scope = [
-        {{ api_key_public_id = "tensorzero::each" }}
+        { api_key_public_id = "tensorzero::each" }
     ]
     "#,
         None,
