@@ -3,7 +3,7 @@ import type {
   MetricConfig,
   MetricConfigLevel,
   MetricConfigOptimize,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import { z } from "zod";
 
 export const FeedbackTypeSchema = z.enum([

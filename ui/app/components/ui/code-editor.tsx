@@ -24,7 +24,7 @@ import {
   ClipboardIcon,
   X,
 } from "lucide-react";
-import type { JsonValue } from "tensorzero-node";
+import type { JsonValue } from "~/types/tensorzero";
 import debounce from "lodash-es/debounce";
 
 export type Language = "json" | "markdown" | "jinja2" | "text";

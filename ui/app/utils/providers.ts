@@ -1,4 +1,4 @@
-import type { ProviderConfig } from "tensorzero-node";
+import type { ProviderConfig } from "~/types/tensorzero";
 
 export function formatProvider(provider: ProviderConfig["type"]): {
   name: string;

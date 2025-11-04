@@ -1,4 +1,4 @@
-import type { TimeWindow } from "tensorzero-node";
+import type { TimeWindow } from "~/types/tensorzero";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,

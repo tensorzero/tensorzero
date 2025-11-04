@@ -10,7 +10,7 @@ import {
   type StoragePath,
 } from "~/utils/clickhouse/common";
 import { TensorZeroServerError } from "./errors";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
 
 /**
  * Roles for input messages.

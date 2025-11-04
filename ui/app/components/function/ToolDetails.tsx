@@ -1,7 +1,7 @@
 import { Sheet, SheetContent } from "~/components/ui/sheet";
 import { useConfig } from "~/context/config";
 import { useCallback, useEffect, useState } from "react";
-import type { StaticToolConfig } from "tensorzero-node";
+import type { StaticToolConfig } from "~/types/tensorzero";
 import { CodeEditor } from "../ui/code-editor";
 import {
   PageHeader,

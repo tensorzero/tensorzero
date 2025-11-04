@@ -4,7 +4,7 @@ import type {
   DiclConfig,
   MixtureOfNConfig,
   FunctionConfig,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 import {
   BasicInfoLayout,
   BasicInfoItem,

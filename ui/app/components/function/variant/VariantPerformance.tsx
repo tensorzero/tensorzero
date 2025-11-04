@@ -1,5 +1,4 @@
 import type { VariantPerformanceRow } from "~/utils/clickhouse/function";
-// import { TrendingUp } from "lucide-react";
 import { Bar, BarChart, ErrorBar, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   formatChartNumber,

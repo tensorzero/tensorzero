@@ -1,4 +1,4 @@
-import type { FeedbackRow } from "tensorzero-node";
+import type { FeedbackRow } from "~/types/tensorzero";
 import {
   PageLayout,
   PageHeader,

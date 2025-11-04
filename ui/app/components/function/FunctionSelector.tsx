@@ -18,7 +18,7 @@ import {
 import clsx from "clsx";
 import { getFunctionTypeIcon } from "~/utils/icon";
 import { useMemo, useState } from "react";
-import type { FunctionConfig } from "tensorzero-node";
+import type { FunctionConfig } from "~/types/tensorzero";
 
 interface FunctionSelectorProps {
   selected: string | null;

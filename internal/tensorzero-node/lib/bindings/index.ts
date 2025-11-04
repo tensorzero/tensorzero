@@ -178,6 +178,7 @@ export * from "./ModelProvider";
 export * from "./ModelUsageTimePoint";
 export * from "./NonStreamingTimeouts";
 export * from "./Nursery";
+export * from "./ObjectStorageError";
 export * from "./ObjectStorageFile";
 export * from "./ObjectStoragePointer";
 export * from "./ObjectStoreInfo";

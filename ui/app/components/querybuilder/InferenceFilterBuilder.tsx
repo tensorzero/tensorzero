@@ -1,7 +1,7 @@
 import { useState, memo } from "react";
 import { FormLabel } from "~/components/ui/form";
 import { useConfig } from "~/context/config";
-import type { InferenceFilter, MetricConfig } from "tensorzero-node";
+import type { InferenceFilter, MetricConfig } from "~/types/tensorzero";
 import { Button } from "~/components/ui/button";
 import { Plus } from "lucide-react";
 import {
@@ -30,8 +30,8 @@ import {
   FloatMetricFilterRow,
   BooleanMetricFilterRow,
 } from "./FilterRows";
-import DeleteButton from "./DeleteButton";
 import AddButton from "./AddButton";
+import { DeleteButton } from "../ui/DeleteButton";
 
 // Constants
 const MAX_NESTING_DEPTH = 2;
@@ -191,10 +191,10 @@ const FilterGroup = memo(function FilterGroup({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-
         <DeleteButton
           onDelete={() => onChange(undefined)}
-          ariaLabel="Delete filter group"
+          label="Delete filter group"
+          icon="x"
         />
       </div>
       <div
@@ -263,7 +263,8 @@ function MissingMetricError({
       </span>
       <DeleteButton
         onDelete={onDelete}
-        ariaLabel={`Delete missing metric ${metricName}`}
+        label={`Delete missing metric ${metricName}`}
+        icon="x"
       />
     </div>
   );
