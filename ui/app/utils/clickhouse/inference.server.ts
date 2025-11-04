@@ -111,12 +111,12 @@ export async function queryInferenceTable(params: {
     // No "before"/"after" => get the most recent page_size items
     query = `
       SELECT
-        uint_to_uuid(id_uint) as id,
+        tensorzero_uint_to_uuid(id_uint) as id,
         function_name,
         variant_name,
         episode_id,
         function_type,
-        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+        formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
       FROM InferenceById FINAL
       ${combinedWhere}
       ORDER BY id_uint DESC
@@ -126,12 +126,12 @@ export async function queryInferenceTable(params: {
     // "Most recent" page_size before given ID
     query = `
       SELECT
-        uint_to_uuid(id_uint) as id,
+        tensorzero_uint_to_uuid(id_uint) as id,
         function_name,
         variant_name,
         episode_id,
         function_type,
-        formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+        formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
       FROM InferenceById FINAL
       ${combinedWhere}
       ORDER BY id_uint DESC
@@ -150,13 +150,13 @@ export async function queryInferenceTable(params: {
       FROM
       (
         SELECT
-          uint_to_uuid(id_uint) as id,
+          tensorzero_uint_to_uuid(id_uint) as id,
           id_uint,
           function_name,
           variant_name,
           episode_id,
           function_type,
-          formatDateTime(UUIDv7ToDateTime(uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
+          formatDateTime(UUIDv7ToDateTime(tensorzero_uint_to_uuid(id_uint)), '%Y-%m-%dT%H:%i:%SZ') AS timestamp
         FROM InferenceById FINAL
         ${combinedWhere}
         ORDER BY id_uint ASC
@@ -195,8 +195,8 @@ export async function queryInferenceTableBounds(params?: {
   // IMPORTANT: This query will return zero UUIDs if there are no results, so we need to handle this case below.
   const query = `
   SELECT
-    uint_to_uuid(MIN(id_uint)) AS first_id,
-    uint_to_uuid(MAX(id_uint)) AS last_id,
+    tensorzero_uint_to_uuid(MIN(id_uint)) AS first_id,
+    tensorzero_uint_to_uuid(MAX(id_uint)) AS last_id,
     toUInt32(COUNT()) AS count
   FROM InferenceById FINAL
   ${whereClause}
@@ -547,11 +547,11 @@ export async function getAdjacentInferenceIds(
   const query = `
     SELECT
       NULLIF(
-        (SELECT uint_to_uuid(max(id_uint)) FROM InferenceById WHERE id_uint < toUInt128({current_inference_id:UUID})),
+        (SELECT tensorzero_uint_to_uuid(max(id_uint)) FROM InferenceById WHERE id_uint < toUInt128({current_inference_id:UUID})),
         toUUID('00000000-0000-0000-0000-000000000000')
       ) as previous_id,
       NULLIF(
-        (SELECT uint_to_uuid(min(id_uint)) FROM InferenceById WHERE id_uint > toUInt128({current_inference_id:UUID})),
+        (SELECT tensorzero_uint_to_uuid(min(id_uint)) FROM InferenceById WHERE id_uint > toUInt128({current_inference_id:UUID})),
         toUUID('00000000-0000-0000-0000-000000000000')
       ) as next_id
   `;
@@ -571,11 +571,11 @@ export async function getAdjacentEpisodeIds(
   const query = `
     SELECT
       NULLIF(
-        (SELECT DISTINCT uint_to_uuid(max(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint < toUInt128({current_episode_id:UUID})),
+        (SELECT DISTINCT tensorzero_uint_to_uuid(max(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint < toUInt128({current_episode_id:UUID})),
         toUUID('00000000-0000-0000-0000-000000000000')
       ) as previous_id,
       NULLIF(
-        (SELECT DISTINCT uint_to_uuid(min(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint > toUInt128({current_episode_id:UUID})),
+        (SELECT DISTINCT tensorzero_uint_to_uuid(min(episode_id_uint)) FROM InferenceByEpisodeId WHERE episode_id_uint > toUInt128({current_episode_id:UUID})),
         toUUID('00000000-0000-0000-0000-000000000000')
       ) as next_id
   `;

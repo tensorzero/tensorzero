@@ -33,7 +33,7 @@ test("should not allow paging right when when at the end of episodes", async ({
   const clickhouseClient = getClickhouseClient();
   const resultSet = await clickhouseClient.query({
     query:
-      "SELECT uint_to_uuid(min(episode_id_uint) + 1) as min_episode_id FROM EpisodeById",
+      "SELECT tensorzero_uint_to_uuid(min(episode_id_uint) + 1) as min_episode_id FROM EpisodeById",
     format: "JSONEachRow",
   });
   const rows = await resultSet.json<{ min_episode_id: string }>();

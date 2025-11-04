@@ -57,7 +57,7 @@ pub async fn get_inferences_in_time_range(
     };
 
     let mut query = r"WITH inference_ids AS (
-        SELECT uint_to_uuid(id_uint) as id
+        SELECT tensorzero_uint_to_uuid(id_uint) as id
         FROM InferenceById
         WHERE id_uint >= toUInt128({lower_bound:UUID})
         AND id_uint <= toUInt128({upper_bound:UUID})

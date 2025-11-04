@@ -415,11 +415,11 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             )
             SELECT
                 NULLIF(
-                    (SELECT uint_to_uuid(min(id_uint)) FROM DatasetIds WHERE id_uint > toUInt128({datapoint_id:UUID})),
+                    (SELECT tensorzero_uint_to_uuid(min(id_uint)) FROM DatasetIds WHERE id_uint > toUInt128({datapoint_id:UUID})),
                     toUUID('00000000-0000-0000-0000-000000000000')
                 ) as next_id,
                 NULLIF(
-                    (SELECT uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
+                    (SELECT tensorzero_uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
                     toUUID('00000000-0000-0000-0000-000000000000')
                 ) as previous_id
             FORMAT JSONEachRow
@@ -2939,11 +2939,11 @@ mod tests {
                 )
                 SELECT
                     NULLIF(
-                        (SELECT uint_to_uuid(min(id_uint)) FROM DatasetIds WHERE id_uint > toUInt128({datapoint_id:UUID})),
+                        (SELECT tensorzero_uint_to_uuid(min(id_uint)) FROM DatasetIds WHERE id_uint > toUInt128({datapoint_id:UUID})),
                         toUUID('00000000-0000-0000-0000-000000000000')
                     ) as next_id,
                     NULLIF(
-                        (SELECT uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
+                        (SELECT tensorzero_uint_to_uuid(max(id_uint)) FROM DatasetIds WHERE id_uint < toUInt128({datapoint_id:UUID})),
                         toUUID('00000000-0000-0000-0000-000000000000')
                     ) as previous_id
                 FORMAT JSONEachRow");

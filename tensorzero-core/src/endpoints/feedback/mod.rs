@@ -543,7 +543,7 @@ async fn get_function_info(
             SETTINGS max_threads=1"
         ),
         MetricConfigLevel::Episode => format!(
-            "SELECT function_name as name, function_type, variant_name, uint_to_uuid(episode_id_uint) as episode_id
+            "SELECT function_name as name, function_type, variant_name, tensorzero_uint_to_uuid(episode_id_uint) as episode_id
             FROM InferenceByEpisodeId
             WHERE episode_id_uint = toUInt128(toUUID('{target_id}'))
             LIMIT 1
