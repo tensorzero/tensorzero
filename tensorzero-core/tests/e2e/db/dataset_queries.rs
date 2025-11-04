@@ -476,7 +476,7 @@ async fn test_count_rows_json_datapoints_with_float_metric_filter_and_demonstrat
 async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets() {
     let params = GetDatasetMetadataParams {
         function_name: None,
-        page_size: None,
+        limit: None,
         offset: None,
     };
     let metadata = get_clickhouse()
@@ -503,7 +503,7 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_all_datasets() {
 async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function() {
     let params = GetDatasetMetadataParams {
         function_name: Some("write_haiku".to_string()),
-        page_size: None,
+        limit: None,
         offset: None,
     };
     let metadata = get_clickhouse()
