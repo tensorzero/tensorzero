@@ -361,6 +361,7 @@ pub trait DatasetQueries {
 
     /// Gets a single datapoint by dataset name and ID
     /// TODO(shuyangli): To deprecate in favor of `get_datapoints`
+    #[deprecated(since = "2025.11.1", note = "Use `get_datapoints` instead")]
     async fn get_datapoint(&self, params: &GetDatapointParams) -> Result<StoredDatapoint, Error>;
 
     /// Gets multiple datapoints with various filters and pagination
