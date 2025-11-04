@@ -159,6 +159,9 @@ pub struct Base64FileMetadata {
     pub source_url: Option<Url>,
     #[ts(type = "string")]
     pub mime_type: MediaType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub detail: Option<Detail>,
 }
 
 /// Implement a custom deserializer for Base64FileMetadata to show a deprecation warning for the `url` field
@@ -172,6 +175,8 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
             #[serde(alias = "url")]
             source_url: Option<Url>,
             mime_type: MediaType,
+            #[serde(default)]
+            detail: Option<Detail>,
         }
 
         let value = serde_json::Value::deserialize(deserializer)?;
@@ -190,6 +195,7 @@ impl<'de> Deserialize<'de> for Base64FileMetadata {
         Ok(Base64FileMetadata {
             source_url: helper.source_url,
             mime_type: helper.mime_type,
+            detail: helper.detail,
         })
     }
 }
@@ -497,7 +503,7 @@ impl File {
     pub async fn take_or_fetch(self, client: &TensorzeroHttpClient) -> Result<Base64File, Error> {
         match self {
             File::Url(url_file) => {
-                let UrlFile { url, mime_type, .. } = url_file;
+                let UrlFile { url, mime_type, detail } = url_file;
                 let response = client.get(url.clone()).send().await.map_err(|e| {
                     Error::new(ErrorDetails::BadFileFetch {
                         url: url.clone(),
@@ -600,7 +606,7 @@ impl File {
                     source_url: Some(url.clone()),
                     mime_type,
                     data,
-                    detail: None,
+                    detail,
                 })
             }
             File::Base64(base64_file) => {

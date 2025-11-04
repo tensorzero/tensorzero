@@ -585,7 +585,7 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
                 let ObjectStorageFile { file, data } = &*resolved_file;
                 if file.detail.is_some() {
                     tracing::warn!(
-                        "Image detail parameter is not supported by GCP Vertex Anthropic. The detail setting will be ignored."
+                        "The image detail parameter is not supported by GCP Vertex Anthropic. The `detail` field will be ignored."
                     );
                 }
                 require_image(&file.mime_type, PROVIDER_TYPE)?;

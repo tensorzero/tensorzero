@@ -36,7 +36,7 @@ use crate::endpoints::inference::{
 use crate::error::{Error, ErrorDetails};
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
-use crate::inference::types::file::filename_to_mime_type;
+use crate::inference::types::file::{filename_to_mime_type, Detail};
 use crate::inference::types::{
     current_timestamp, Arguments, Base64File, ContentBlockChatOutput, ContentBlockChunk, File,
     FinishReason, Input, InputMessage, InputMessageContent, RawText, Role, System, Template, Text,
@@ -945,7 +945,7 @@ struct OpenAICompatibleImageUrl {
     #[serde(rename = "tensorzero::mime_type")]
     mime_type: Option<MediaType>,
     #[serde(default)]
-    detail: Option<crate::inference::types::file::Detail>,
+    detail: Option<Detail>,
 }
 
 #[derive(Deserialize, Debug)]

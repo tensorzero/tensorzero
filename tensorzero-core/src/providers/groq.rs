@@ -658,7 +658,7 @@ async fn tensorzero_to_groq_user_messages(
                 let ObjectStorageFile { file, data } = &*resolved_file;
                 if file.detail.is_some() {
                     tracing::warn!(
-                        "Image detail parameter is not supported by Groq. The detail setting will be ignored."
+                        "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
                     );
                 }
                 user_content_blocks.push(GroqContentBlock::ImageUrl {
@@ -727,7 +727,7 @@ async fn tensorzero_to_groq_assistant_messages(
                 let ObjectStorageFile { file, data } = &*resolved_file;
                 if file.detail.is_some() {
                     tracing::warn!(
-                        "Image detail parameter is not supported by Groq. The detail setting will be ignored."
+                        "The image detail parameter is not supported by Groq. The `detail` field will be ignored."
                     );
                 }
                 assistant_content_blocks.push(GroqContentBlock::ImageUrl {
@@ -2564,7 +2564,7 @@ mod tests {
 
         // Should log a warning about detail not being supported
         assert!(logs_contain(
-            "Image detail parameter is not supported by Groq"
+            "The image detail parameter is not supported by Groq"
         ));
     }
 }

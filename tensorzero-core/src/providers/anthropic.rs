@@ -596,7 +596,7 @@ impl<'a> AnthropicMessageContent<'a> {
                     // then forward the url directly to Anthropic.
                     if detail.is_some() {
                         tracing::warn!(
-                            "Image detail parameter is not supported by Anthropic. The detail setting will be ignored."
+                            "The image detail parameter is not supported by Anthropic. The `detail` field will be ignored."
                         );
                     }
                     if mime_type.type_() == mime::IMAGE {
@@ -628,7 +628,7 @@ impl<'a> AnthropicMessageContent<'a> {
                     let ObjectStorageFile { file, data } = &*resolved_file;
                     if file.detail.is_some() {
                         tracing::warn!(
-                            "Image detail parameter is not supported by Anthropic. The detail setting will be ignored."
+                            "The image detail parameter is not supported by Anthropic. The `detail` field will be ignored."
                         );
                     }
                     let document = AnthropicDocumentSource::Base64 {
@@ -3328,7 +3328,7 @@ mod tests {
 
         // Should log a warning about detail not being supported
         assert!(logs_contain(
-            "Image detail parameter is not supported by Anthropic"
+            "The image detail parameter is not supported by Anthropic"
         ));
     }
 }

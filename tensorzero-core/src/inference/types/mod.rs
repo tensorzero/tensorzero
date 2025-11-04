@@ -417,6 +417,7 @@ impl InputMessageContent {
                                 metadata: Base64FileMetadata {
                                     source_url: source_url.clone(),
                                     mime_type: mime_type.clone(),
+                                    detail: detail.clone(),
                                 },
                                 storage_path: storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),
@@ -513,7 +514,7 @@ impl LazyResolvedInputMessageContent {
                     source_url: metadata.source_url,
                     mime_type: metadata.mime_type,
                     storage_path,
-                    detail: None,
+                    detail: metadata.detail,
                 }))),
                 // File reference to object storage with data in memory.
                 // Origin: Roundtripping from database (e.g., list_inferences → update_datapoints)

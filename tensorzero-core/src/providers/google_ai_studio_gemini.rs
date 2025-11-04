@@ -630,7 +630,7 @@ async fn convert_non_thought_content_block(
             let ObjectStorageFile { file, data } = &*resolved_file;
             if file.detail.is_some() {
                 tracing::warn!(
-                    "Image detail parameter is not supported by Google AI Studio Gemini. The detail setting will be ignored."
+                    "The image detail parameter is not supported by Google AI Studio Gemini. The `detail` field will be ignored."
                 );
             }
             Ok(FlattenUnknown::Normal(GeminiPartData::InlineData {
@@ -2902,7 +2902,7 @@ mod tests {
 
         // Should log a warning about detail not being supported
         assert!(logs_contain(
-            "Image detail parameter is not supported by Google AI Studio Gemini"
+            "The image detail parameter is not supported by Google AI Studio Gemini"
         ));
     }
 }

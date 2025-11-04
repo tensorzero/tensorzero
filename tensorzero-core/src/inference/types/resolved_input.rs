@@ -15,7 +15,7 @@ use super::{
 };
 use crate::config::{Config, ObjectStoreInfo};
 use crate::error::{Error, ErrorDetails};
-use crate::inference::types::file::Base64FileMetadata;
+use crate::inference::types::file::{Base64FileMetadata, Detail};
 use crate::inference::types::stored_input::{
     StoredFile, StoredInput, StoredInputMessage, StoredInputMessageContent,
 };
@@ -92,7 +92,7 @@ impl LazyFile {
 pub struct FileUrl {
     pub url: Url,
     pub mime_type: Option<MediaType>,
-    pub detail: Option<crate::inference::types::file::Detail>,
+    pub detail: Option<Detail>,
 }
 
 /// Holds a lazily-resolved file from a `LazyResolvedInputMessageContent::File`.

@@ -38,7 +38,7 @@ use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
 };
 use crate::inference::types::extra_body::FullExtraBodyConfig;
-use crate::inference::types::file::mime_type_to_ext;
+use crate::inference::types::file::{mime_type_to_ext, Detail};
 use crate::inference::types::resolved_input::{FileUrl, LazyFile};
 use crate::inference::types::ObjectStorageFile;
 use crate::inference::types::{
@@ -1287,7 +1287,7 @@ impl Serialize for OpenAIContentBlock<'_> {
 pub struct OpenAIImageUrl {
     pub url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<crate::inference::types::file::Detail>,
+    pub detail: Option<Detail>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1636,7 +1636,7 @@ pub(super) async fn prepare_file_message(
                 && !supports_detail_parameter(messages_config.provider_type)
             {
                 tracing::warn!(
-                    "Image detail parameter is not supported by {}. The detail setting will be ignored. Only OpenAI, Azure, and xAI support this parameter.",
+                    "The image detail setting is not supported by `{}`. The `detail` field will be ignored.",
                     messages_config.provider_type
                 );
                 None
@@ -1659,7 +1659,7 @@ pub(super) async fn prepare_file_message(
                     && !supports_detail_parameter(messages_config.provider_type)
                 {
                     tracing::warn!(
-                        "Image detail parameter is not supported by {}. The detail setting will be ignored. Only OpenAI, Azure, and xAI support this parameter.",
+                        "The image detail setting is not supported by `{}`. The `detail` field will be ignored.",
                         messages_config.provider_type
                     );
                     None

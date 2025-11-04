@@ -22,10 +22,10 @@ use url::Url;
 use crate::{
     error::{warn_discarded_thought_block, Error, ErrorDetails},
     inference::types::{
-        ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason, FlattenUnknown, Latency,
-        ModelInferenceRequest, ModelInferenceRequestJsonMode, ProviderInferenceResponse,
-        ProviderInferenceResponseArgs, ProviderInferenceResponseChunk, RequestMessage, Role, Text,
-        TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
+        file::Detail, ContentBlock, ContentBlockChunk, ContentBlockOutput, FinishReason,
+        FlattenUnknown, Latency, ModelInferenceRequest, ModelInferenceRequestJsonMode,
+        ProviderInferenceResponse, ProviderInferenceResponseArgs, ProviderInferenceResponseChunk,
+        RequestMessage, Role, Text, TextChunk, Thought, ThoughtChunk, UnknownChunk, Usage,
     },
     model::fully_qualified_name,
     providers::openai::{
@@ -581,7 +581,7 @@ pub enum OpenAIResponsesInputMessageContent<'a> {
     InputImage {
         image_url: Cow<'a, str>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        detail: Option<crate::inference::types::file::Detail>,
+        detail: Option<Detail>,
     },
     InputFile {
         #[serde(flatten)]
@@ -612,7 +612,7 @@ impl Serialize for OpenAIResponsesInputMessageContent<'_> {
             InputImage {
                 image_url: &'a str,
                 #[serde(skip_serializing_if = "Option::is_none")]
-                detail: Option<&'a crate::inference::types::file::Detail>,
+                detail: Option<&'a Detail>,
             },
             InputFile {
                 #[serde(flatten)]

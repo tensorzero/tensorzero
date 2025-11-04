@@ -785,7 +785,7 @@ async fn bedrock_content_block_from_content_block(
             let ObjectStorageFile { file, data } = &*resolved_file;
             if file.detail.is_some() {
                 tracing::warn!(
-                    "Image detail parameter is not supported by AWS Bedrock. The detail setting will be ignored."
+                    "The image detail parameter is not supported by AWS Bedrock. The `detail` field will be ignored."
                 );
             }
             let file_bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
