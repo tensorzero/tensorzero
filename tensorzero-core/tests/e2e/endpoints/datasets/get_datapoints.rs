@@ -539,7 +539,7 @@ mod list_datapoints_tests {
         clickhouse.insert_datapoints(&inserts).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
-        // Test default pagination (page_size: 20, offset: 0)
+        // Test default pagination (limit: 20, offset: 0)
         let resp = http_client
             .post(get_gateway_endpoint(&format!(
                 "/v1/datasets/{dataset_name}/list_datapoints",
@@ -554,13 +554,13 @@ mod list_datapoints_tests {
         let datapoints = resp_json["datapoints"].as_array().unwrap();
         assert_eq!(datapoints.len(), 5);
 
-        // Test page_size = 2
+        // Test limit = 2
         let resp = http_client
             .post(get_gateway_endpoint(&format!(
                 "/v1/datasets/{dataset_name}/list_datapoints"
             )))
             .json(&json!({
-                "page_size": 2
+                "limit": 2
             }))
             .send()
             .await
@@ -579,7 +579,7 @@ mod list_datapoints_tests {
                 "/v1/datasets/{dataset_name}/list_datapoints"
             )))
             .json(&json!({
-                "page_size": 3,
+                "limit": 3,
                 "offset": 2
             }))
             .send()
@@ -1317,7 +1317,7 @@ mod list_datapoints_tests {
     }
 
     #[tokio::test]
-    async fn test_list_datapoints_with_large_page_size() {
+    async fn test_list_datapoints_with_large_limit() {
         let http_client = Client::new();
         let clickhouse = get_clickhouse().await;
         let dataset_name = format!("test-list-dp-large-page-{}", Uuid::now_v7());
@@ -1357,13 +1357,13 @@ mod list_datapoints_tests {
         clickhouse.insert_datapoints(&inserts).await.unwrap();
         tokio::time::sleep(Duration::from_millis(500)).await;
 
-        // Request with page_size larger than available datapoints
+        // Request with limit larger than available datapoints
         let resp = http_client
             .post(get_gateway_endpoint(&format!(
                 "/v1/datasets/{dataset_name}/list_datapoints"
             )))
             .json(&json!({
-                "page_size": 100
+                "limit": 100
             }))
             .send()
             .await

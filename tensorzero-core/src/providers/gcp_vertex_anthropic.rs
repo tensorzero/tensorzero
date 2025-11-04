@@ -214,7 +214,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client.post(&self.request_url).headers(auth_headers);
 
@@ -311,7 +312,8 @@ impl InferenceProvider for GCPVertexAnthropicProvider {
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(&self.streaming_request_url)

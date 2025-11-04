@@ -7,11 +7,3 @@ type = "chat"
 [functions.generate_haiku.variants.gpt_4o_mini]
 type = "chat_completion"
 model = "openai::gpt-4o-mini"
-
-[models."gpt-4o-mini-azure"]
-routing = ["azure"]
-
-[models."gpt-4o-mini-azure".providers.azure]
-type = "azure"
-deployment_id = "gpt4o-mini-20240718"
-endpoint = "https://t0-azure-openai-east.openai.azure.com"

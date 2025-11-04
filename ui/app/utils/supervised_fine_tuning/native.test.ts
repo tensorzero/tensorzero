@@ -31,7 +31,7 @@ describe("native sft", () => {
       template_variant_name: "baseline",
       query_variant_name: null,
       filters: filters,
-      output_source: "Inference",
+      output_source: "inference",
       limit: BigInt(100),
       offset: BigInt(0),
       val_fraction: 0.1,

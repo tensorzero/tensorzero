@@ -949,7 +949,7 @@ mod tests {
             storage::{StorageKind, StoragePath},
             Arguments, ResolvedInputMessage, ResolvedInputMessageContent, Role, Template, Text,
         },
-        tool::{ToolCall, ToolCallOutput},
+        tool::{InferenceResponseToolCall, ToolCall},
     };
     use serde_json::json;
     use std::collections::HashMap;
@@ -988,7 +988,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "This is a test response.".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 id: "tool_call_1".to_string(),
                 raw_name: "search_tool".to_string(),
                 raw_arguments: "{\"query\": \"rust programming\"}".to_string(),

@@ -18,10 +18,6 @@ Additionally, TensorZero has more features around LLM optimization (e.g. advance
   Both TensorZero and Portkey offer automatic fallbacks, retries, and load balancing features to increase reliability.<br />
   [→ Retries & Fallbacks with TensorZero](/gateway/guides/retries-fallbacks/)
 
-- **Experimentation (A/B Testing or Canary Testing).**
-  Both TensorZero and Portkey offer experimentation features to help you test your prompts and models.<br />
-  [→ Experimentation (A/B Testing) with TensorZero](/gateway/guides/experimentation/)
-
 - **Schemas, Templates.**
   Both TensorZero and Portkey offer schema and template features to help you manage your LLM applications.<br />
   [→ Prompt Templates & Schemas with TensorZero](/gateway/create-a-prompt-template)
@@ -58,6 +54,11 @@ Additionally, TensorZero has more features around LLM optimization (e.g. advance
   Portkey doesn't offer similar features.<br />
   [→ Fine-Tuning Recipes with TensorZero](/recipes/)
 
+- **Automated Experimentation (A/B Testing).**
+  TensorZero offers advanced A/B testing features, including automated experimentation, to help your identify the best models and prompts for your use cases.
+  Portkey only offers simple canary and A/B testing features.<br />
+  [→ Run adaptive A/B tests with TensorZero](/gateway/guides/experimentation/)
+
 - **Inference-Time Optimizations.**
   TensorZero offers built-in inference-time optimizations (e.g. dynamic in-context learning), allowing you to optimize your inference performance.
   Portkey doesn't offer any inference-time optimizations.<br />
@@ -67,11 +68,12 @@ Additionally, TensorZero has more features around LLM optimization (e.g. advance
   TensorZero can be fully orchestrated programmatically in a GitOps-friendly way.
   Portkey can manage some of its features programmatically, but certain features depend on its external commercial hosted service.
 
-### Portkey
+- **Open-Source Access Control.**
+  Both TensorZero and Portkey offer access control features like TensorZero API keys.
+  Portkey only offers them in the commercial (hosted) offering, whereas TensorZero's solution is fully open-source.<br />
+  [→ Set up auth for TensorZero](/operations/set-up-auth-for-tensorzero)
 
-- **Access Control.**
-  Portkey offers access control features, including virtual keys and budgets; that said, these features are only available on their commercial (hosted) offering.
-  TensorZero doesn't offer built-in access control features, and instead requires you to manage it externally (e.g using Nginx).
+### Portkey
 
 - **Prompt Playground.**
   Portkey offers a prompt playground in its commercial (hosted) offering, allowing you to test your prompts and models in a graphical interface.

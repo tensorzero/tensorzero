@@ -4,6 +4,7 @@ use std::time::Duration;
 use std::{collections::HashMap, net::SocketAddr};
 
 use secrecy::SecretString;
+use tensorzero::ClientExt;
 
 use object_store::{aws::AmazonS3Builder, ObjectStore};
 use std::sync::Arc;
@@ -1302,7 +1303,11 @@ model = "test-model"
         result.err()
     );
 
-    assert!(logs_contain("attempting fallback"));
+    assert!(logs_contain("Using fallback credential"));
+    assert!(
+        !logs_contain("ERROR"),
+        "We should not log an error when credential fallback occurs"
+    );
 }
 
 pub async fn test_image_url_inference_with_provider_filesystem(provider: E2ETestProvider) {
