@@ -558,6 +558,10 @@ pub struct InsertDatapointPathParams {
 /// This inserts a new datapoint into `ChatInferenceDatapoint`/`JsonInferenceDatapoint`/
 /// DEPRECATED: Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead.
 #[tracing::instrument(name = "create_datapoints_handler", skip(app_state, params))]
+#[deprecated(
+    since = "2025.11.1",
+    note = "Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead."
+)]
 pub async fn create_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
@@ -580,6 +584,10 @@ pub async fn create_datapoints_handler(
 
 /// DEPRECATED: Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead.
 #[tracing::instrument(name = "bulk_insert_datapoints_handler", skip(app_state, params))]
+#[deprecated(
+    since = "2025.11.1",
+    note = "Use the POST `/v1/datasets/{dataset_name}/datapoints` endpoint instead."
+)]
 pub async fn bulk_insert_datapoints_handler(
     State(app_state): AppState,
     Path(path_params): Path<InsertDatapointPathParams>,
