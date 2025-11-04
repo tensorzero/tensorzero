@@ -1,4 +1,4 @@
-import type { MetricConfigLevel } from "tensorzero-node";
+import type { MetricConfigLevel } from "~/types/tensorzero";
 import {
   contentBlockChatOutputSchema,
   InferenceJoinKey,

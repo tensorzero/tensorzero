@@ -1,4 +1,4 @@
-import type { DatasetDetailRow } from "tensorzero-node";
+import type { DatasetDetailRow } from "~/types/tensorzero";
 import {
   Table,
   TableBody,

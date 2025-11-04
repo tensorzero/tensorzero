@@ -1,6 +1,10 @@
 import z from "zod";
 import { getInferenceTableName } from "./common";
-import type { FunctionConfig, MetricConfig, TimeWindow } from "tensorzero-node";
+import type {
+  FunctionConfig,
+  MetricConfig,
+  TimeWindow,
+} from "~/types/tensorzero";
 import { getClickhouseClient } from "./client.server";
 
 function getTimeWindowInMs(timeWindow: TimeWindow): number {

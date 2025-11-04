@@ -12,7 +12,7 @@ import type {
   JsonInferenceOutput,
   ContentBlockChatOutput,
   Tool,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 // Zod schemas for ToolCallConfigDatabaseInsert
 export const toolSchema = z.object({

@@ -7,7 +7,7 @@ import {
   TableRow,
   TableEmptyState,
 } from "~/components/ui/table";
-import type { KeyInfo } from "tensorzero-node";
+import type { KeyInfo } from "~/types/tensorzero";
 import {
   Tooltip,
   TooltipContent,

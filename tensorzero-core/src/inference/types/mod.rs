@@ -50,7 +50,8 @@ use extra_body::{FullExtraBodyConfig, UnfilteredInferenceExtraBody};
 use extra_headers::FullExtraHeadersConfig;
 use file::sanitize_raw_request;
 pub use file::{
-    Base64File, File, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile, UrlFile,
+    Base64File, File, ObjectStorageError, ObjectStorageFile, ObjectStoragePointer,
+    PendingObjectStoreFile, UrlFile,
 };
 use futures::future::{join_all, try_join_all};
 use futures::FutureExt;
@@ -365,20 +366,24 @@ impl InputMessageContent {
                             }),
                         )))
                     }
+                    // # File::ObjectStoragePointer
+                    //
                     // User provided a reference to a file already in object storage.
                     // We create a lazy future that will fetch the file data when needed.
                     // The future is not executed immediately - it only runs when awaited.
                     // This allows us to skip fetching if the file data isn't needed (e.g., just storing metadata).
                     // When the future does run, it fetches the file from object storage.
-                    File::ObjectStoragePointer(ObjectStoragePointer {
-                        source_url,
-                        mime_type,
-                        storage_path,
-                    }) => {
-                        let source_url_for_future = source_url.clone();
+                    //
+                    // # File::ObjectStorageError
+                    //
+                    // User provided a failed that we previously attempted and failed to fetch from object storage.
+                    // Here, we disregard the previous attempt and retry, as if the user had only sent the pointer.
+                    File::ObjectStoragePointer(file)
+                    | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
+                        let source_url_for_future = file.source_url.clone();
                         let object_store_info = context.object_store_info.clone();
-                        let owned_storage_path = storage_path.clone();
-                        let mime_type_for_closure = mime_type.clone();
+                        let owned_storage_path = file.storage_path.clone();
+                        let mime_type_for_closure = file.mime_type.clone();
                         // Construct a future that will fetch the file from the object store.
                         // Important: the future will not actually begin executing (including opening the network connection)
                         // until the first time the `Shared` wrapper is `.await`ed.
@@ -398,10 +403,10 @@ impl InputMessageContent {
                         LazyResolvedInputMessageContent::File(Box::new(
                             LazyFile::ObjectStoragePointer {
                                 metadata: Base64FileMetadata {
-                                    source_url: source_url.clone(),
-                                    mime_type: mime_type.clone(),
+                                    source_url: file.source_url.clone(),
+                                    mime_type: file.mime_type.clone(),
                                 },
-                                storage_path: storage_path.clone(),
+                                storage_path: file.storage_path.clone(),
                                 future: delayed_file_future.boxed().shared(),
                             },
                         ))
@@ -751,11 +756,12 @@ pub enum ThoughtSummaryBlock {
     SummaryText { text: String },
 }
 
-/// Struct that represents Chain of Thought reasoning
+/// Struct that represents a model's reasoning
 #[derive(ts_rs::TS, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[ts(export)]
 #[cfg_attr(feature = "pyo3", pyclass(get_all))]
 pub struct Thought {
+    #[ts(optional)]
     pub text: Option<String>,
     /// An optional signature - currently, this is only used with Anthropic,
     /// and is ignored by other providers.

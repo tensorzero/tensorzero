@@ -1,5 +1,5 @@
 import { Badge } from "~/components/ui/badge";
-import type { ProviderConfig } from "tensorzero-node";
+import type { ProviderConfig } from "~/types/tensorzero";
 import { formatProvider } from "~/utils/providers";
 
 interface ModelBadgeProps {
