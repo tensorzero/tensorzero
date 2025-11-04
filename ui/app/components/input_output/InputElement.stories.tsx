@@ -314,23 +314,21 @@ const COMPLEX_INPUT: Input = {
         },
         {
           type: "file",
-          file_type: "object_storage",
-          data: await getBase64File(
-            "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-          ),
-          mime_type: "image/png",
-          source_url:
-            "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-          storage_path: {
-            kind: {
-              type: "s3_compatible",
-              bucket_name: "images",
-              region: "us-east-1",
-              endpoint: null,
-              allow_http: null,
+          ...(await getBase64File({
+            source_url:
+              "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
+            mime_type: "image/png",
+            storage_path: {
+              kind: {
+                type: "s3_compatible",
+                bucket_name: "images",
+                region: "us-east-1",
+                endpoint: null,
+                allow_http: null,
+              },
+              path: "user-uploads/abc123.png",
             },
-            path: "user-uploads/abc123.png",
-          },
+          })),
         },
         {
           type: "template",

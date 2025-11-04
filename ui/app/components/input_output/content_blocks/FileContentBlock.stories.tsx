@@ -1,11 +1,13 @@
 import { FileContentBlock } from "./FileContentBlock";
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { File, ObjectStorageFile } from "~/types/tensorzero";
 import mp3Url from "./FileContentBlock.stories.fixture.mp3?url";
 import pdfUrl from "./FileContentBlock.stories.fixture.pdf?url";
 
 const meta = {
   title: "Input Output/Content Blocks/FileContentBlock",
   component: FileContentBlock,
+  excludeStories: ["getBase64File"],
   decorators: [
     (Story) => (
       <div className="w-[80vw] bg-orange-100 p-8">
@@ -20,39 +22,63 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-// TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
-export async function getBase64File(url: string): Promise<string> {
+/**
+ * Helper function for Storybook stories that fetches a file from a URL and returns
+ * either an ObjectStorageFile (on success) or ObjectStorageError (on failure).
+ * This allows stories to gracefully handle file loading errors instead of silently
+ * failing with empty strings.
+ */
+export async function getBase64File(
+  block: Omit<ObjectStorageFile, "data"> & { source_url: string },
+): Promise<File> {
   try {
-    const response = await fetch(url);
+    const response = await fetch(block.source_url);
     if (!response.ok) {
-      // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
-      return "";
+      return {
+        file_type: "object_storage_error",
+        error: `Failed to fetch file: ${response.status} ${response.statusText}`,
+        source_url: block.source_url,
+        mime_type: block.mime_type,
+        storage_path: block.storage_path,
+      };
     }
     const blob = await response.blob();
-    return new Promise((resolve) => {
+    const base64Data = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64String = reader.result as string;
         resolve(`data:${blob.type};base64,${base64String.split(",")[1]}`);
       };
-      // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
-      reader.onerror = () => resolve("");
+      reader.onerror = () => reject("Failed to read file");
       reader.readAsDataURL(blob);
     });
-  } catch {
-    // TODO (GabrielBianconi): in the future this should be an Option<String> so we can handle failures more gracefully (or alternatively, another variant for `File`)
-    return "";
+
+    return {
+      file_type: "object_storage",
+      data: base64Data,
+      source_url: block.source_url,
+      mime_type: block.mime_type,
+      storage_path: block.storage_path,
+    };
+  } catch (err: unknown) {
+    const errorMessage =
+      err && typeof err === "object" && "message" in err
+        ? String(err.message)
+        : String(err) || "Unknown error occurred";
+    return {
+      file_type: "object_storage_error",
+      error: errorMessage,
+      source_url: block.source_url,
+      mime_type: block.mime_type,
+      storage_path: block.storage_path,
+    };
   }
 }
 
 export const ImageObjectStorage: Story = {
   name: "Image (Object Storage)",
   args: {
-    block: {
-      file_type: "object_storage",
-      data: await getBase64File(
-        "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
-      ),
+    block: await getBase64File({
       source_url:
         "https://raw.githubusercontent.com/tensorzero/tensorzero/ff3e17bbd3e32f483b027cf81b54404788c90dc1/tensorzero-internal/tests/e2e/providers/ferris.png",
       mime_type: "image/png",
@@ -63,16 +89,15 @@ export const ImageObjectStorage: Story = {
         },
         path: "observability/files/ferris_image_base64.png",
       },
-    },
+    }),
   },
 };
 
 export const AudioObjectStorage: Story = {
   name: "Audio (Object Storage)",
   args: {
-    block: {
-      file_type: "object_storage",
-      data: await getBase64File(mp3Url),
+    block: await getBase64File({
+      source_url: mp3Url,
       mime_type: "audio/mp3",
       storage_path: {
         kind: {
@@ -84,16 +109,15 @@ export const AudioObjectStorage: Story = {
         },
         path: "observability/files/audio_sample_base64.mp3",
       },
-    },
+    }),
   },
 };
 
 export const PDFObjectStorage: Story = {
   name: "PDF (Object Storage)",
   args: {
-    block: {
-      file_type: "object_storage",
-      data: await getBase64File(pdfUrl),
+    block: await getBase64File({
+      source_url: pdfUrl,
       mime_type: "application/pdf",
       storage_path: {
         kind: {
@@ -102,7 +126,7 @@ export const PDFObjectStorage: Story = {
         },
         path: "observability/files/document_base64.pdf",
       },
-    },
+    }),
   },
 };
 
