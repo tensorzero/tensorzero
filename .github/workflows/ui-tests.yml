@@ -129,8 +129,8 @@ jobs:
 
       - name: Print ClickHouse error logs
         if: always()
-        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.err.log
+        run: docker compose exec -f fixtures/docker-compose.yml clickhouse cat /var/log/clickhouse-server/clickhouse-server.err.log
 
       - name: Print ClickHouse trace logs
         if: always()
-        run: docker exec fixtures-clickhouse-1 cat /var/log/clickhouse-server/clickhouse-server.log
+        run: docker compose exec -f fixtures/docker-compose.yml clickhouse cat /var/log/clickhouse-server/clickhouse-server.log
