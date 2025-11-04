@@ -31,4 +31,10 @@ jobs:
     name: Invoke helper workflow
     # Only run this job if the force-add-to-merge-queue label is present
     if: contains(github.event.pull_request.labels.*.name, 'force-add-to-merge-queue') && github.event.action == 'labeled'
-    uses: ./.github/workflows/force-merge-queue-helper.yml
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invoke helper workflow via GitHub CLI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run force-merge-queue-helper.yml --ref "${{ github.event.pull_request.head.sha }}"
