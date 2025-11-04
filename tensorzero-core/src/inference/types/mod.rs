@@ -363,6 +363,11 @@ impl InputMessageContent {
                             source_url: source_url.clone(),
                             mime_type: mime_type.clone(),
                             data: data.clone(),
+                            // We explicitly set detail to None when computing the storage path.
+                            // This is intentional for content-addressing: the detail parameter controls
+                            // how providers process the image (resolution/token cost), but shouldn't
+                            // affect the file's hash or storage location. The same image file with
+                            // different detail values should map to the same storage path for deduplication.
                             detail: None,
                         };
                         let path = storage_kind.file_path(&base64_file)?;
