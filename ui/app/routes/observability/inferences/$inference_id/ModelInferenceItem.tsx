@@ -74,7 +74,7 @@ export function ModelInferenceItem({ inference }: ModelInferenceItemProps) {
                 />
                 <Chip
                   icon={<Output className="text-fg-tertiary" />}
-                  label={`${inference.output_tokens} tok`}
+                  label={`${inference.output_tokens ?? 0} tok`}
                   tooltip="Output Tokens"
                 />
                 {inference.response_time_ms !== null && (
