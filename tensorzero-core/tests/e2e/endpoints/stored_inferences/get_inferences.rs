@@ -71,7 +71,7 @@ pub async fn test_list_simple_query_json_function() {
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 2,
+        "limit": 2,
         "order_by": [
             {
                 "by": "timestamp",
@@ -111,7 +111,7 @@ pub async fn test_list_simple_query_chat_function() {
     let request = json!({
         "function_name": "write_haiku",
         "output_source": "demonstration",
-        "page_size": 3,
+        "limit": 3,
         "offset": 3,
         "order_by": [
             {
@@ -152,7 +152,7 @@ pub async fn test_list_query_with_float_filter() {
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 3,
+        "limit": 3,
         "filter": {
             "type": "float_metric",
             "metric_name": "jaccard_similarity",
@@ -186,7 +186,7 @@ pub async fn test_list_demonstration_output_source() {
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "demonstration",
-        "page_size": 5,
+        "limit": 5,
         "offset": 1
     });
 
@@ -208,7 +208,7 @@ pub async fn test_list_boolean_metric_filter() {
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 5,
+        "limit": 5,
         "offset": 1,
         "filter": {
             "type": "boolean_metric",
@@ -235,7 +235,7 @@ pub async fn test_list_and_filter_multiple_float_metrics() {
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 1,
+        "limit": 1,
         "filter": {
             "type": "and",
             "children": [
@@ -273,7 +273,7 @@ async fn test_list_or_filter_mixed_metrics() {
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 1,
+        "limit": 1,
         "filter": {
             "type": "or",
             "children": [
@@ -344,7 +344,7 @@ async fn test_list_simple_time_filter() {
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 5,
+        "limit": 5,
         "filter": {
             "type": "time",
             "time": "2023-01-01T00:00:00Z",
@@ -390,7 +390,7 @@ async fn test_list_simple_tag_filter() {
     let request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 200,
+        "limit": 200,
         "filter": {
             "type": "tag",
             "key": "tensorzero::evaluation_name",
@@ -417,7 +417,7 @@ async fn test_list_combined_time_and_tag_filter() {
     let request = json!({
         "function_name": "write_haiku",
         "output_source": "inference",
-        "page_size": 50,
+        "limit": 50,
         "filter": {
             "type": "and",
             "children": [
@@ -457,7 +457,7 @@ pub async fn test_get_by_ids_json_only() {
     let list_request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 3
+        "limit": 3
     });
 
     let initial_res = list_inferences(list_request).await.unwrap();
@@ -491,7 +491,7 @@ pub async fn test_get_by_ids_chat_only() {
     let list_request = json!({
         "function_name": "write_haiku",
         "output_source": "inference",
-        "page_size": 2
+        "limit": 2
     });
 
     let initial_res = list_inferences(list_request).await.unwrap();
@@ -536,7 +536,7 @@ pub async fn test_get_by_ids_mixed_types() {
     let json_request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 2
+        "limit": 2
     });
     let json_res = list_inferences(json_request).await.unwrap();
 
@@ -544,7 +544,7 @@ pub async fn test_get_by_ids_mixed_types() {
     let chat_request = json!({
         "function_name": "write_haiku",
         "output_source": "inference",
-        "page_size": 2
+        "limit": 2
     });
     let chat_res = list_inferences(chat_request).await.unwrap();
 
@@ -606,7 +606,7 @@ pub async fn test_get_by_ids_duplicate_ids() {
     let list_request = json!({
         "function_name": "extract_entities",
         "output_source": "inference",
-        "page_size": 1
+        "limit": 1
     });
 
     let initial_res = list_inferences(list_request).await.unwrap();
