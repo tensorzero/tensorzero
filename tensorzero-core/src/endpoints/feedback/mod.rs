@@ -475,9 +475,20 @@ async fn throttled_get_function_info(
     target_id: &Uuid,
 ) -> Result<FunctionInfo, Error> {
     // Compute how long ago the target_id was created.
-    // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
-    // In this case we should be conservative and assume no time has passed.
-    let elapsed = uuid_elapsed(target_id).unwrap_or(Duration::from_secs(0));
+    let elapsed = match uuid_elapsed(target_id) {
+        Ok(elapsed) => elapsed,
+        Err(e) => {
+            // Some UUIDs are in the future, e.g. for dynamic evaluation runs.
+            // In this case we should be conservative and assume no time has passed.
+            if matches!(e.get_details(), ErrorDetails::UuidInFuture { .. }) {
+                // We don't log anything, since this is an expected case.
+                e.suppress_logging_of_error_message();
+                Duration::from_secs(0)
+            } else {
+                return Err(e.log());
+            }
+        }
+    };
 
     // Calculate the remaining cooldown (which may be zero) and ensure we wait at least FEEDBACK_MINIMUM_WAIT_TIME.
     let wait_time = max(
