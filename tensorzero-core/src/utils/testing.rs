@@ -44,7 +44,7 @@ pub fn get_captured_logs() -> String {
 /// You should idelaly create a separate `#[tokio::test]` function instead of using this function,
 /// as it results in confusing log output when the tests fail.
 pub fn reset_capture_logs() {
-    eprintln!("Called reset_capture_logs");
+    println!("Called reset_capture_logs");
     GLOBAL_BUF.get().unwrap().lock().unwrap().clear();
 }
 
