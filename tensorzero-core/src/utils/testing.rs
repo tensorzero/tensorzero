@@ -15,6 +15,8 @@ use tracing_subscriber::{fmt::MakeWriter, FmtSubscriber};
 // in tests that use `capture_logs`
 const TEST_LOG_FILTER: &str = "hyper_util=warn,trace";
 
+static GLOBAL_BUF: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
+
 /// A replacement for the `tracing_test` crate, specialized for our needs.
 /// * We install a global subscriber without any per-function filtering.
 ///   All of our tests run under 'cargo nextest', which runs tests in separate processes (instead of separate threads)
@@ -23,7 +25,6 @@ const TEST_LOG_FILTER: &str = "hyper_util=warn,trace";
 ///   Since we don't need the function name, this no longer needs to be a macro.
 ///  * We customize the filter to exclude annoying output from crates like `hyper`
 pub fn capture_logs() -> impl Fn(&str) -> bool {
-    static GLOBAL_BUF: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
     GLOBAL_BUF
         .set(Mutex::new(Vec::new()))
         .expect("Called `capture_logs` more than once");
@@ -33,6 +34,10 @@ pub fn capture_logs() -> impl Fn(&str) -> bool {
         let logs = String::from_utf8(GLOBAL_BUF.get().unwrap().lock().unwrap().to_vec()).unwrap();
         logs.split('\n').any(|line| line.contains(message))
     }
+}
+
+pub fn reset_capture_logs() {
+    GLOBAL_BUF.get().unwrap().lock().unwrap().clear();
 }
 
 // Copied from https://github.com/dbrgn/tracing-test/blob/cf7fe8c7a90eb36f00023237ae98928e7cd768e0/tracing-test/src/subscriber.rs#L11 (MIT-licensed)
