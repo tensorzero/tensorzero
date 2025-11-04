@@ -17,7 +17,6 @@ pub async fn start_gateway_on_random_port(
     let config_str = format!(
         r#"
         [gateway]
-        observability.enabled = false
         bind_address = "0.0.0.0:0"
         {config_suffix}
     "#

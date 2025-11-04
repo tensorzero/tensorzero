@@ -284,6 +284,12 @@ pub async fn inference(
     if params.episode_id.is_none() {
         tracing::Span::current().record("episode_id", episode_id.to_string());
     }
+    if let Some(api_key_ext) = &api_key_ext {
+        params.tags.insert(
+            "tensorzero::api_key_public_id".to_string(),
+            api_key_ext.0.api_key.get_public_id().into(),
+        );
+    }
 
     let (function, function_name) = find_function(&params, &config)?;
     let mut candidate_variants: BTreeMap<String, Arc<VariantInfo>> =

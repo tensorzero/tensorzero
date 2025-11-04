@@ -45,3 +45,4 @@ serde_json = { workspace = true }
 reqwest-eventsource = { workspace = true }
 futures = { workspace = true }
 secrecy = { workspace = true }
+uuid = { workspace = true }
