@@ -585,58 +585,63 @@ describe("getAdjacentInferenceIds", () => {
 });
 
 test("displayModelInferenceInputMessageContentSchema accepts thought content blocks", () => {
-  // Test thought content block with all fields
-  const thoughtContentWithSignature = {
+  // Test thought content block with all fields including summary
+  const thoughtContentWithSummary = {
     type: "thought",
     text: "This is a thinking step",
-    signature: "anthropic::2024-10-22::claude-3-7-sonnet-20250219",
+    signature: "abcdef",
+    summary: [
+      { text: "Summary of the thought", type: "summary_text" },
+      { text: "Another summary point", type: "summary_text" },
+    ],
     _internal_provider_type: "anthropic",
   };
 
   const result1 = displayModelInferenceInputMessageContentSchema.safeParse(
-    thoughtContentWithSignature,
+    thoughtContentWithSummary,
   );
   expect(result1.success).toBe(true);
   if (result1.success && result1.data.type === "thought") {
     expect(result1.data.type).toBe("thought");
     expect(result1.data.text).toBe("This is a thinking step");
+    expect(result1.data.summary).toHaveLength(2);
+    expect(result1.data.summary?.[0].text).toBe("Summary of the thought");
   }
 
-  // Test thought content block with minimal fields
-  const thoughtContentMinimal = {
+  // Test thought content block with signature but without summary
+  const thoughtContentWithSignature = {
     type: "thought",
-    text: null,
+    text: "Another thinking step",
+    signature: "abcdef",
+    _internal_provider_type: "anthropic",
   };
 
   const result2 = displayModelInferenceInputMessageContentSchema.safeParse(
-    thoughtContentMinimal,
+    thoughtContentWithSignature,
   );
   expect(result2.success).toBe(true);
   if (result2.success && result2.data.type === "thought") {
     expect(result2.data.type).toBe("thought");
-    expect(result2.data.text).toBeNull();
+    expect(result2.data.text).toBe("Another thinking step");
+    expect(result2.data.summary).toBeUndefined();
   }
 
-  // Test raw_text content block
-  const rawTextContent = {
-    type: "raw_text",
-    value: "Raw text content",
+  // Test thought content block with minimal fields (text is null)
+  const thoughtContentMinimal = {
+    type: "thought",
+    text: null,
+    signature: "abcdef",
   };
 
-  const result3 =
-    displayModelInferenceInputMessageContentSchema.safeParse(rawTextContent);
+  const result3 = displayModelInferenceInputMessageContentSchema.safeParse(
+    thoughtContentMinimal,
+  );
   expect(result3.success).toBe(true);
-
-  // Test unknown content block
-  const unknownContent = {
-    type: "unknown",
-    data: { some: "data" },
-    model_provider_name: null,
-  };
-
-  const result4 =
-    displayModelInferenceInputMessageContentSchema.safeParse(unknownContent);
-  expect(result4.success).toBe(true);
+  if (result3.success && result3.data.type === "thought") {
+    expect(result3.data.type).toBe("thought");
+    expect(result3.data.text).toBeNull();
+    expect(result3.data.summary).toBeUndefined();
+  }
 });
 
 describe("getAdjacentEpisodeIds", () => {

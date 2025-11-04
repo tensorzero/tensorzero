@@ -81,10 +81,17 @@ export const rawTextInputSchema = z.object({
 });
 export type RawTextInput = z.infer<typeof rawTextInputSchema>;
 
+export const thoughtSummaryBlockSchema = z.object({
+  text: z.string(),
+  type: z.literal("summary_text"),
+});
+export type ThoughtSummaryBlock = z.infer<typeof thoughtSummaryBlockSchema>;
+
 export const thoughtContentSchema = z.object({
   type: z.literal("thought"),
   text: z.string().nullable(),
   signature: z.string().optional(),
+  summary: z.array(thoughtSummaryBlockSchema).optional(),
   _internal_provider_type: z.string().optional(),
 });
 export type ThoughtContent = z.infer<typeof thoughtContentSchema>;
@@ -284,8 +291,6 @@ export const displayModelInferenceInputMessageContentSchema =
     resolvedFileContentSchema,
     resolvedFileContentErrorSchema,
     thoughtContentSchema,
-    rawTextInputSchema,
-    unknownSchema,
   ]);
 
 export const displayModelInferenceInputMessageSchema = z.object({
