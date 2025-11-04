@@ -319,12 +319,6 @@ pub trait DatasetQueries {
     /// Returns the number of rows inserted
     async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error>;
 
-    /// Gets rows from a dataset with pagination
-    async fn get_dataset_rows(
-        &self,
-        params: &GetDatasetRowsParams,
-    ) -> Result<Vec<DatasetDetailRow>, Error>;
-
     /// Gets dataset metadata (name, count, last updated)
     async fn get_dataset_metadata(
         &self,

@@ -12,8 +12,7 @@ use tensorzero_core::db::clickhouse::test_helpers::get_clickhouse;
 use tensorzero_core::db::datasets::{
     ChatInferenceDatapointInsert, CountDatapointsForDatasetFunctionParams, DatapointInsert,
     DatasetMetadata, DatasetOutputSource, DatasetQueries, GetAdjacentDatapointIdsParams,
-    GetDatapointsParams, GetDatasetRowsParams, JsonInferenceDatapointInsert, MetricFilter,
-    StaleDatapointParams,
+    GetDatapointsParams, JsonInferenceDatapointInsert, MetricFilter, StaleDatapointParams,
 };
 use tensorzero_core::endpoints::datasets::DatapointKind;
 use tensorzero_core::inference::types::file::ObjectStoragePointer;
@@ -519,56 +518,6 @@ async fn test_get_dataset_metadata_returns_correct_counts_for_specific_function(
         count: 77,
         last_updated: "2025-03-23T20:03:59Z".to_string(),
     }));
-}
-
-#[tokio::test]
-async fn test_get_dataset_rows_returns_correct_rows_for_specific_dataset() {
-    let params = GetDatasetRowsParams {
-        dataset_name: "notadataset".to_string(),
-        page_size: 10,
-        offset: 0,
-    };
-
-    let rows = get_clickhouse()
-        .await
-        .get_dataset_rows(&params)
-        .await
-        .unwrap();
-
-    assert!(rows.is_empty(), "Should have 0 rows");
-}
-
-#[tokio::test]
-async fn test_get_dataset_rows_pages_correctly() {
-    let mut all_rows = Vec::new();
-    let mut offset = 0;
-    let page_size = 10;
-
-    loop {
-        let params = GetDatasetRowsParams {
-            dataset_name: "foo".to_string(),
-            page_size,
-            offset,
-        };
-        let rows = get_clickhouse()
-            .await
-            .get_dataset_rows(&params)
-            .await
-            .unwrap();
-        let is_last_page = rows.len() != page_size as usize;
-
-        all_rows.extend(rows);
-        offset += page_size;
-
-        if is_last_page {
-            break;
-        }
-    }
-
-    // TODO(#3903): Stop making assumptions about what data exists in the database, and
-    // make data dependencies explicit in e2e tests, so tests can execute independently
-    // and without requiring loading database fixtures.
-    assert!(!all_rows.is_empty(), "Should have existing rows");
 }
 
 #[tokio::test]

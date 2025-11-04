@@ -5,9 +5,9 @@ use uuid::Uuid;
 use crate::config::Config;
 use crate::db::datasets::{
     AdjacentDatapointIds, CountDatapointsForDatasetFunctionParams, DatapointInsert,
-    DatasetDetailRow, DatasetMetadata, DatasetQueries, DatasetQueryParams,
-    GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatapointsParams,
-    GetDatasetMetadataParams, GetDatasetRowsParams, MockDatasetQueries, StaleDatapointParams,
+    DatasetMetadata, DatasetQueries, DatasetQueryParams, GetAdjacentDatapointIdsParams,
+    GetDatapointParams, GetDatapointsParams, GetDatasetMetadataParams, MockDatasetQueries,
+    StaleDatapointParams,
 };
 use crate::db::inferences::{InferenceQueries, ListInferencesParams, MockInferenceQueries};
 use crate::endpoints::datasets::StoredDatapoint;
@@ -57,13 +57,6 @@ impl DatasetQueries for MockClickHouseConnectionInfo {
 
     async fn insert_rows_for_dataset(&self, params: &DatasetQueryParams) -> Result<u32, Error> {
         self.dataset_queries.insert_rows_for_dataset(params).await
-    }
-
-    async fn get_dataset_rows(
-        &self,
-        params: &GetDatasetRowsParams,
-    ) -> Result<Vec<DatasetDetailRow>, Error> {
-        self.dataset_queries.get_dataset_rows(params).await
     }
 
     async fn get_dataset_metadata(
