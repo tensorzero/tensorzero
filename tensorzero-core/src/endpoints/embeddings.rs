@@ -111,11 +111,9 @@ mod tests {
     use crate::model_table::ProviderTypeDefaultCredentials;
     use crate::providers::dummy::DummyProvider;
     use std::collections::HashMap;
-    use tracing_test::traced_test;
-
-    #[traced_test]
     #[tokio::test]
     async fn test_no_warning_when_model_exists() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Create a config with a valid embedding model
         let dummy_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "good-model".into(),
@@ -181,10 +179,9 @@ mod tests {
         // Check that no warnings were logged for model not found
         assert!(!logs_contain("Model not found"));
     }
-
-    #[traced_test]
     #[tokio::test]
     async fn test_warning_when_model_not_found() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Create an empty config with no embedding models
         let config = Arc::new(Config::default());
 

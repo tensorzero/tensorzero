@@ -765,13 +765,6 @@ fn validate_single_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use std::io::Write;
-    use std::time::Duration;
-    use std::time::Instant;
-    use tempfile::NamedTempFile;
-    use tracing_test::traced_test;
-
     use crate::config::path::ResolvedTomlPath;
     use crate::config::UninitializedSchemas;
     use crate::endpoints::inference::InferenceIds;
@@ -788,6 +781,11 @@ mod tests {
     use crate::jsonschema_util::DynamicJSONSchema;
     use crate::minijinja_util::TemplateConfig;
     use crate::tool::ToolCall;
+    use serde_json::json;
+    use std::io::Write;
+    use std::time::Duration;
+    use std::time::Instant;
+    use tempfile::NamedTempFile;
 
     fn create_test_schema() -> StaticJSONSchema {
         let schema = r#"
@@ -1795,8 +1793,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_prepare_response_json() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // The Chat stuff is tested in types::test_create_chat_inference_response
         // Here we focus on the JSON stuff
         let output_schema = json!({

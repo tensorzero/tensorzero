@@ -1425,17 +1425,15 @@ fn handle_google_ai_studio_error(
 mod tests {
     use std::borrow::Cow;
 
-    use serde_json::json;
-    use tracing_test::traced_test;
-
     use super::*;
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
+    use serde_json::json;
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_content_block_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         use std::time::Duration;
         let content = GeminiResponseContent {
             parts: vec![GeminiResponseContentPart {
@@ -2826,8 +2824,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_google_ai_studio_gemini_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

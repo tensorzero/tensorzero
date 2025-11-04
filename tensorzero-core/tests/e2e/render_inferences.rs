@@ -20,7 +20,6 @@ use tensorzero_core::{
     inference::types::{ContentBlockChatOutput, JsonInferenceOutput, Template, Text},
     tool::{AllowedTools, AllowedToolsChoice, Tool, ToolCallConfigDatabaseInsert, ToolChoice},
 };
-use tracing_test::traced_test;
 use uuid::Uuid;
 
 /// Test that the render_samples function works when given an empty array of stored inferences.
@@ -40,8 +39,8 @@ pub async fn test_render_samples_empty() {
 /// Test that the render_samples function drops the stored inference when the variants map is empty.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 pub async fn test_render_samples_no_function() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
@@ -76,8 +75,8 @@ pub async fn test_render_samples_no_function() {
 /// Test that the render_samples function errors when the variants map contains a function with a nonexistent variant.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 pub async fn test_render_samples_no_variant() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
@@ -120,8 +119,8 @@ pub async fn test_render_samples_no_variant() {
 /// input is missing a required variable that the schema uses.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 pub async fn test_render_samples_missing_variable() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let stored_inferences = vec![StoredInferenceDatabase::Chat(StoredChatInferenceDatabase {
@@ -161,7 +160,6 @@ pub async fn test_render_samples_missing_variable() {
 
 /// Test that the render_samples function can render a normal chat example, a tool call example, a json example, and an example using images.
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 pub async fn test_render_samples_normal() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
@@ -571,8 +569,8 @@ pub async fn test_render_datapoints_empty() {
 /// Test that the render_samples function drops the datapoint when the variants map is empty.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 pub async fn test_render_datapoints_no_function() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
@@ -612,8 +610,8 @@ pub async fn test_render_datapoints_no_function() {
 /// Test that the render_samples function errors when the variants map contains a function with a nonexistent variant.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 pub async fn test_render_datapoints_no_variant() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
@@ -661,8 +659,8 @@ pub async fn test_render_datapoints_no_variant() {
 /// input is missing a required variable that the schema uses.
 /// Also test that a warning is logged.
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 pub async fn test_render_datapoints_missing_variable() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 
     let datapoints = vec![StoredDatapoint::Chat(StoredChatInferenceDatapoint {
@@ -707,7 +705,6 @@ pub async fn test_render_datapoints_missing_variable() {
 
 /// Test that the render_samples function can render a normal chat datapoint, a tool call datapoint, a json datapoint, and a datapoint using images.
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 pub async fn test_render_datapoints_normal() {
     let client = tensorzero::test_helpers::make_embedded_gateway().await;
 

@@ -773,8 +773,6 @@ impl<'a> Embedding {
 
 #[cfg(test)]
 mod tests {
-    use tracing_test::traced_test;
-
     use crate::{
         cache::{CacheEnabledMode, CacheOptions},
         db::{clickhouse::ClickHouseConnectionInfo, postgres::PostgresConnectionInfo},
@@ -782,10 +780,9 @@ mod tests {
     };
 
     use super::*;
-
-    #[traced_test]
     #[tokio::test]
     async fn test_embedding_fallbacks() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let bad_provider = EmbeddingProviderConfig::Dummy(DummyProvider {
             model_name: "error".into(),
             ..Default::default()
