@@ -164,6 +164,7 @@ services:
     environment:
       # Test environment variables
       TENSORZERO_GATEWAY_URL: http://gateway:3000
+      TENSORZERO_GATEWAY_HOST: gateway
       TENSORZERO_CLICKHOUSE_URL: http://chuser:chpassword@clickhouse:8123/tensorzero_e2e_tests
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
       TENSORZERO_POSTGRES_URL: postgres://postgres:postgres@postgres:5432/tensorzero-e2e-tests
