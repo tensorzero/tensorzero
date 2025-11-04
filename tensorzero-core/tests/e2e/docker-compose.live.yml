@@ -233,3 +233,5 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
+      tempo:
+        condition: service_started
