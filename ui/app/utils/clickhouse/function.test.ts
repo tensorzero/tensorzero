@@ -5,8 +5,7 @@ import {
   getVariantPerformances,
   getFunctionThroughputByVariant,
 } from "./function";
-import type { FunctionConfig } from "tensorzero-node";
-import type { MetricConfig } from "tensorzero-node";
+import type { FunctionConfig, MetricConfig } from "~/types/tensorzero";
 
 describe("getVariantPerformances", () => {
   test("getVariantPerformances for extract_entities", async () => {

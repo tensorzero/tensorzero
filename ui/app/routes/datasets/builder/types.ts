@@ -7,7 +7,7 @@ import type {
   MetricConfig,
   DatasetQueryParams,
   MetricConfigLevel,
-} from "tensorzero-node";
+} from "~/types/tensorzero";
 
 const MetricConfigSchema: ZodType<MetricConfig> = z.any();
 

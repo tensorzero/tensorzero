@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { TemplateDetailsDialog } from "./TemplateDetailsDialog";
-import type { ChatCompletionConfig } from "tensorzero-node";
+import type { ChatCompletionConfig } from "~/types/tensorzero";
 
 const meta = {
   title: "Optimization/TemplateDetailsDialog",

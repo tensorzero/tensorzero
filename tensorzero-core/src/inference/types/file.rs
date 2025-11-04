@@ -282,6 +282,17 @@ pub struct ObjectStorageFile {
     pub data: String,
 }
 
+/// A file that we failed to read from object storage.
+/// This struct can NOT be stored in the database.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, ts_rs::TS)]
+#[ts(export)]
+pub struct ObjectStorageError {
+    #[serde(flatten)]
+    pub file: ObjectStoragePointer,
+    #[ts(optional)]
+    pub error: Option<String>,
+}
+
 /// A newtype wrapper around `ObjectStorageFile` that represents file data
 /// from a base64 input that needs to be written to object storage.
 /// The `storage_path` inside is content-addressed (computed from data) and represents
@@ -350,6 +361,7 @@ pub enum File {
     Base64(Base64File),                         // a base64-encoded file
     ObjectStoragePointer(ObjectStoragePointer), // a pointer to an object storage file (metadata only)
     ObjectStorage(ObjectStorageFile),           // a file from object storage (metadata + data)
+    ObjectStorageError(ObjectStorageError), // a file we couldn't fetch from object storage (metadata + error)
 }
 
 // Allow deserializing File as either tagged or untagged format.
@@ -615,22 +627,27 @@ impl File {
             File::ObjectStoragePointer(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
-                message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+                message: format!("File::ObjectStoragePointer::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
             })),
             File::ObjectStorage(_) => Err(Error::new(ErrorDetails::InternalError {
                 // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
                 // the base File::Url type calls this method.
                 message: format!("File::ObjectStorage::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
             })),
+            File::ObjectStorageError(_) => Err(Error::new(ErrorDetails::InternalError {
+                // This path gets called from `InputMessageContent::into_lazy_resolved_input_message`, and only
+                // the base File::Url type calls this method.
+                message: format!("File::ObjectStorageError::take_or_fetch should be unreachable! {IMPOSSIBLE_ERROR_MESSAGE}"),
+            })),
         }
     }
 
     pub fn into_stored_file(self) -> Result<StoredFile, Error> {
         match self {
-            File::ObjectStorage(ObjectStorageFile { file, data: _ }) => {
+            File::ObjectStorage(ObjectStorageFile { file, .. }) | File::ObjectStoragePointer(file) | File::ObjectStorageError(ObjectStorageError { file, .. }) => {
                 Ok(StoredFile(file))
             }
-            File::Url(_) | File::Base64(_) | File::ObjectStoragePointer(_) => {
+            File::Url(_) | File::Base64(_) => {
                 Err(Error::new(ErrorDetails::InternalError {
                     message: format!(
                         "File::into_stored_file should only be called on ObjectStorage! {IMPOSSIBLE_ERROR_MESSAGE}"
@@ -691,8 +708,10 @@ pub fn sanitize_raw_request(input_messages: &[RequestMessage], mut raw_request: 
                     let data = match &*file {
                         File::ObjectStorage(resolved) => &resolved.data,
                         File::Base64(base64) => &base64.data,
-                        File::Url(_) | File::ObjectStoragePointer(_) => {
-                            // These variants should not occur in resolved files
+                        // These variants should not occur in resolved files
+                        File::Url(_)
+                        | File::ObjectStoragePointer(_)
+                        | File::ObjectStorageError(_) => {
                             continue;
                         }
                     };

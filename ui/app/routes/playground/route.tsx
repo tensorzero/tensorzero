@@ -21,7 +21,7 @@ import { listDatapoints } from "~/utils/tensorzero.server";
 import { tensorZeroStoredInputToInput } from "~/routes/api/tensorzero/inference.utils";
 import { resolveInput } from "~/utils/resolve.server";
 import { X } from "lucide-react";
-import type { Datapoint as TensorZeroDatapoint } from "tensorzero-node";
+import type { Datapoint as TensorZeroDatapoint } from "~/types/tensorzero";
 import { useMemo, useState } from "react";
 import { Button } from "~/components/ui/button";
 import PageButtons from "~/components/utils/PageButtons";
