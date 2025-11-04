@@ -34,6 +34,7 @@ use crate::endpoints::inference::{
     inference, ChatCompletionInferenceParams, InferenceParams, Params,
 };
 use crate::error::{Error, ErrorDetails};
+use crate::inference::types::chat_completion_inference_params::ServiceTier;
 use crate::inference::types::extra_body::UnfilteredInferenceExtraBody;
 use crate::inference::types::extra_headers::UnfilteredInferenceExtraHeaders;
 use crate::inference::types::file::filename_to_mime_type;
@@ -573,6 +574,7 @@ pub struct OpenAICompatibleParams {
     parallel_tool_calls: Option<bool>,
     stop: Option<Vec<String>>,
     reasoning_effort: Option<String>,
+    service_tier: Option<ServiceTier>,
     verbosity: Option<String>,
     #[serde(rename = "tensorzero::variant_name")]
     tensorzero_variant_name: Option<String>,
@@ -743,6 +745,9 @@ impl Params {
             reasoning_effort: openai_compatible_params
                 .reasoning_effort
                 .or(inference_params.chat_completion.reasoning_effort),
+            service_tier: openai_compatible_params
+                .service_tier
+                .or(inference_params.chat_completion.service_tier),
             seed: openai_compatible_params
                 .seed
                 .or(inference_params.chat_completion.seed),

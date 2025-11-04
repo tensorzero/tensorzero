@@ -244,6 +244,7 @@ export * from "./SGLangProvider";
 export * from "./SGLangProviderTypeConfig";
 export * from "./SchemaData";
 export * from "./SchemaWithMetadata";
+export * from "./ServiceTier";
 export * from "./StaleDatapointParams";
 export * from "./StaleDatasetResponse";
 export * from "./StaticJSONSchema";
