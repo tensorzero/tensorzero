@@ -583,6 +583,11 @@ impl<'a> GCPVertexAnthropicMessageContent<'a> {
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "Image detail parameter is not supported by GCP Vertex Anthropic. The detail setting will be ignored."
+                    );
+                }
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 Ok(Some(FlattenUnknown::Normal(
                     GCPVertexAnthropicMessageContent::Image {

@@ -783,6 +783,11 @@ async fn bedrock_content_block_from_content_block(
         ContentBlock::File(file) => {
             let resolved_file = file.resolve().await?;
             let ObjectStorageFile { file, data } = &*resolved_file;
+            if file.detail.is_some() {
+                tracing::warn!(
+                    "Image detail parameter is not supported by AWS Bedrock. The detail setting will be ignored."
+                );
+            }
             let file_bytes = aws_smithy_types::base64::decode(data).map_err(|e| {
                 Error::new(ErrorDetails::InferenceClient {
                     raw_request: None,

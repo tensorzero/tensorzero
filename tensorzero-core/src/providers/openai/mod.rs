@@ -1436,6 +1436,10 @@ pub struct OpenAIMessagesConfig<'a> {
     pub fetch_and_encode_input_files_before_inference: bool,
 }
 
+fn supports_detail_parameter(provider_type: &str) -> bool {
+    matches!(provider_type, "openai" | "azure" | "xai")
+}
+
 pub async fn prepare_openai_messages<'a>(
     system_or_developer: Option<SystemOrDeveloper<'a>>,
     messages: &'a [RequestMessage],
@@ -1628,10 +1632,21 @@ pub(super) async fn prepare_file_message(
         // If the mime type was provided by the caller we know we should only forward image URLs and fetch the rest
         && matches!(mime_type.as_ref().map(mime::MediaType::type_), Some(mime::IMAGE) | None) =>
         {
+            let detail_to_use = if detail.is_some()
+                && !supports_detail_parameter(messages_config.provider_type)
+            {
+                tracing::warn!(
+                    "Image detail parameter is not supported by {}. The detail setting will be ignored. Only OpenAI, Azure, and xAI support this parameter.",
+                    messages_config.provider_type
+                );
+                None
+            } else {
+                detail.clone()
+            };
             Ok(OpenAIContentBlock::ImageUrl {
                 image_url: OpenAIImageUrl {
                     url: url.to_string(),
-                    detail: detail.clone(),
+                    detail: detail_to_use,
                 },
             })
         }
@@ -1640,12 +1655,23 @@ pub(super) async fn prepare_file_message(
             let ObjectStorageFile { file, data } = &*resolved_file;
             let base64_url = format!("data:{};base64,{}", file.mime_type, data);
             if file.mime_type.type_() == mime::IMAGE {
+                let detail_to_use = if file.detail.is_some()
+                    && !supports_detail_parameter(messages_config.provider_type)
+                {
+                    tracing::warn!(
+                        "Image detail parameter is not supported by {}. The detail setting will be ignored. Only OpenAI, Azure, and xAI support this parameter.",
+                        messages_config.provider_type
+                    );
+                    None
+                } else {
+                    file.detail.clone()
+                };
                 Ok(OpenAIContentBlock::ImageUrl {
                     image_url: OpenAIImageUrl {
                         // This will only produce an error if we pass in a bad
                         // `Base64File` (with missing file data)
                         url: base64_url,
-                        detail: file.detail.clone(),
+                        detail: detail_to_use,
                     },
                 })
             } else {

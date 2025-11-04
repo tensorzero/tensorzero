@@ -726,6 +726,11 @@ async fn tensorzero_to_openrouter_user_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "Image detail parameter is not supported by OpenRouter. The detail setting will be ignored."
+                    );
+                }
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 user_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
@@ -795,6 +800,11 @@ async fn tensorzero_to_openrouter_assistant_messages(
             ContentBlock::File(file) => {
                 let resolved_file = file.resolve().await?;
                 let ObjectStorageFile { file, data } = &*resolved_file;
+                if file.detail.is_some() {
+                    tracing::warn!(
+                        "Image detail parameter is not supported by OpenRouter. The detail setting will be ignored."
+                    );
+                }
                 require_image(&file.mime_type, PROVIDER_TYPE)?;
                 assistant_content_blocks.push(OpenRouterContentBlock::ImageUrl {
                     image_url: OpenRouterImageUrl {
