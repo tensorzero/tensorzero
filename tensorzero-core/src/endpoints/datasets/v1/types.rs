@@ -193,7 +193,7 @@ pub struct UpdateDatapointMetadataRequest {
 /// Used by the `POST /v1/datasets/{dataset_id}/list_datapoints` endpoint.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(ts_rs::TS))]
-#[cfg_attr(test, ts(export))]
+#[cfg_attr(test, ts(export, optional_fields))]
 pub struct ListDatapointsRequest {
     /// Optional function name to filter datapoints by.
     /// If provided, only datapoints from this function will be returned.
@@ -201,6 +201,11 @@ pub struct ListDatapointsRequest {
 
     /// The maximum number of datapoints to return.
     /// Defaults to 20.
+    pub limit: Option<u32>,
+
+    /// The maximum number of datapoints to return. Defaults to 20.
+    /// Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
+    #[deprecated(since = "2025.11.1", note = "Use `limit` instead")]
     pub page_size: Option<u32>,
 
     /// The number of datapoints to skip before starting to return results.
