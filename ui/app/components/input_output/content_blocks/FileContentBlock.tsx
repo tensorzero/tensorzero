@@ -24,12 +24,12 @@ export function FileContentBlock({ block }: FileContentBlockProps) {
     case "object_storage":
       break; // handled below
     case "url":
-      // TODO (GabrielBianconi): we'll need to support this to allow CRUD on file content blocks
+      // TODO (#4407): we'll need to support this to allow CRUD on file content blocks
       throw new Error(
         "The UI should never receive a URL file. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
       );
     case "base64":
-      // TODO (GabrielBianconi): we'll need to support this to allow CRUD on file content blocks
+      // TODO (#4407): we'll need to support this to allow CRUD on file content blocks
       throw new Error(
         "The UI should never receive a base64 file. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.",
       );

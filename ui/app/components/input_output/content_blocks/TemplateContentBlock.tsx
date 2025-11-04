@@ -70,9 +70,19 @@ export function TemplateContentBlock({
         readOnly={!isEditing}
         // TODO (GabrielBianconi): DANGER! This does not prevent form submission!
         // The user can submit a stale value if an error is present.
-        onChange={(updatedArguments) => {
+        onChange={(updatedArgumentsString) => {
+          // First, try to parse the JSON string
+          let parsedArguments;
+          try {
+            parsedArguments = JSON.parse(updatedArgumentsString);
+          } catch {
+            setErrorMessage("Invalid JSON syntax");
+            return;
+          }
+
+          // Then, validate the parsed object structure
           const validationResult =
-            templateArgumentsSchema.safeParse(updatedArguments);
+            templateArgumentsSchema.safeParse(parsedArguments);
 
           if (!validationResult.success) {
             setErrorMessage("Invalid JSON Object");
