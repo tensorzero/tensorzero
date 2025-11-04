@@ -51,7 +51,11 @@ jobs:
           wait-for-builder: true
         continue-on-error: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
 
+      # For some reason, 'docker compose build --push' doesn't work when using a remote builder (i.e. Namespace)
+      - name: Build test containers
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml build --push mock-inference-provider provider-proxy gateway live-tests
+
       # Note that this pushes an e2e build of the gateway to 'tensorzero/gateway-e2e'.
       # It does *not* push to the production 'tensorzero/gateway' repo.
-      - name: Build and push test containers
-        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml build --push mock-inference-provider provider-proxy gateway live-tests
+      - name: Push test containers
+        run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml push mock-inference-provider provider-proxy gateway live-tests
