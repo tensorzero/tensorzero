@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -38,8 +39,19 @@ impl CreateChatDatapointRequest {
             .into_stored_input(fetch_context.object_store_info)
             .await?;
 
+        // Validate and re-parse the raw fields in ToolCallOutput blocks against the tool call config.
         let tool_config =
             function_config.prepare_tool_config(self.dynamic_tool_params, &config.tools)?;
+
+        let validated_output = if let Some(output) = self.output {
+            let validation_futures = output
+                .into_iter()
+                .map(|output| output.into_validated(tool_config.as_ref()));
+            let validated_output = join_all(validation_futures).await;
+            Some(validated_output)
+        } else {
+            None
+        };
 
         let insert = ChatInferenceDatapointInsert {
             dataset_name: dataset_name.to_string(),
@@ -48,7 +60,7 @@ impl CreateChatDatapointRequest {
             id: Uuid::now_v7(),
             episode_id: self.episode_id,
             input: stored_input,
-            output: self.output,
+            output: validated_output,
             tool_params: tool_config.map(ToolCallConfigDatabaseInsert::from),
             tags: self.tags,
             auxiliary: String::new(),
@@ -181,7 +193,7 @@ mod tests {
     };
     use crate::inference::types::{Role, StoredInputMessage, StoredInputMessageContent};
     use crate::jsonschema_util::DynamicJSONSchema;
-    use crate::tool::DynamicToolParams;
+    use crate::tool::{DynamicToolParams, ToolCallOutput};
     use serde_json::json;
     use std::collections::HashMap;
     use std::path::Path;
@@ -329,6 +341,59 @@ mod tests {
         assert!(err
             .to_string()
             .contains("not configured as a chat function"));
+    }
+
+    #[tokio::test]
+    async fn test_chat_datapoint_stores_only_raw_tool_output_for_unknown_tools() {
+        let config = get_e2e_config().await;
+        let http_client = TensorzeroHttpClient::new().unwrap();
+        let fetch_context = FetchContext {
+            client: &http_client,
+            object_store_info: &None,
+        };
+
+        let episode_id = Uuid::now_v7();
+
+        let mut tags = HashMap::new();
+        tags.insert("environment".to_string(), "test".to_string());
+        tags.insert("version".to_string(), "1.0".to_string());
+
+        // This tool call is not present in either function config or dynamic tool params, so we store the raw output
+        // and drop any arguments and names before going to database.
+        let outputs = vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            arguments: Some(json!({"foo": "bar"})),
+            id: "test_id".to_string(),
+            name: Some("unknown_tool_name".to_string()),
+            raw_arguments: r#"{"foo": "bar"}"#.to_string(),
+            raw_name: "unknown_tool_name".to_string(),
+        })];
+
+        let request = CreateChatDatapointRequest {
+            function_name: "write_haiku".to_string(),
+            input: create_test_input(),
+            output: Some(outputs),
+            dynamic_tool_params: DynamicToolParams::default(),
+            episode_id: Some(episode_id),
+            name: Some("Test Datapoint".to_string()),
+            tags: Some(tags.clone()),
+        };
+
+        let insert = request
+            .into_database_insert(&config, &fetch_context, "test_dataset")
+            .await
+            .unwrap();
+
+        // We should drop the name and arguments before going to database.
+        assert_eq!(
+            insert.output,
+            Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+                arguments: None,
+                id: "test_id".to_string(),
+                name: None,
+                raw_arguments: r#"{"foo": "bar"}"#.to_string(),
+                raw_name: "unknown_tool_name".to_string(),
+            })])
+        );
     }
 
     #[tokio::test]

@@ -635,15 +635,41 @@ pub async fn insert_datapoint(
                         message: format!("Failed to deserialize chat datapoint {i}: {e}"),
                     })
                 })?;
-                // Convert the output from Value to Vec<ContentBlockChatOutput>
-                let output = if let Some(output_value) = chat.output {
-                    Some(serde_json::from_value(output_value).map_err(|e| {
+
+                // Convert the legacy Value output to Vec<ContentBlockChatOutput>
+                // Prepare the tool config
+                let tool_config = function_config
+                    .prepare_tool_config(chat.dynamic_tool_params.clone(), &config.tools)?;
+                let dynamic_demonstration_info =
+                    DynamicDemonstrationInfo::Chat(tool_config.clone());
+                // Validate the output
+                let output = if let Some(output) = chat.output {
+                    let validated_output = validate_parse_demonstration(
+                        &function_config,
+                        &serde_json::to_value(output).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Failed to serialize chat output for datapoint {i}: {e}"
+                                ),
+                            })
+                        })?,
+                        dynamic_demonstration_info,
+                    )
+                    .await
+                    .map_err(|e| {
                         Error::new(ErrorDetails::InvalidRequest {
                             message: format!(
-                                "Failed to deserialize chat output for datapoint {i}: {e}"
+                                "Failed to validate chat output for datapoint {i}: {e}"
                             ),
                         })
-                    })?)
+                    })?;
+                    let DemonstrationOutput::Chat(output) = validated_output else {
+                        return Err(Error::new(ErrorDetails::InternalError {
+                            message: "Expected chat output from validate_parse_demonstration"
+                                .to_string(),
+                        }));
+                    };
+                    Some(output)
                 } else {
                     None
                 };
@@ -658,12 +684,65 @@ pub async fn insert_datapoint(
                     tags: chat.tags,
                 }));
             }
-            FunctionConfig::Json(_) => {
+            FunctionConfig::Json(json_function_config) => {
                 let json: JsonDatapointInsert = serde_json::from_value(datapoint).map_err(|e| {
                     Error::new(ErrorDetails::InvalidRequest {
                         message: format!("Failed to deserialize json datapoint {i}: {e}"),
                     })
                 })?;
+
+                // Legacy insert_datapoint API requires JSON output to be valid, but v1 API doesn't, so we explicitly validate here.
+                // We throw away the validation output
+                let output_schema = if let Some(user_schema) = &json.output_schema {
+                    // Validate the schema by attempting to parse it
+                    let schema_str = serde_json::to_string(user_schema).map_err(|e| {
+                        Error::new(ErrorDetails::Serialization {
+                            message: format!(
+                                "Failed to serialize output_schema for datapoint {i}: {e}"
+                            ),
+                        })
+                    })?;
+                    let parsed_schema =
+                        DynamicJSONSchema::parse_from_str(&schema_str).map_err(|e| {
+                            Error::new(ErrorDetails::InvalidRequest {
+                                message: format!("Invalid output_schema for datapoint {i}: {e}"),
+                            })
+                        })?;
+                    // Ensure the schema is valid by forcing compilation
+                    parsed_schema.ensure_valid().await?;
+                    user_schema.clone()
+                } else {
+                    json_function_config.output_schema.value.clone()
+                };
+                let dynamic_demonstration_info =
+                    DynamicDemonstrationInfo::Json(output_schema.clone());
+                if let Some(output) = &json.output {
+                    let validated_output = validate_parse_demonstration(
+                        &function_config,
+                        &serde_json::to_value(output).map_err(|e| {
+                            Error::new(ErrorDetails::Serialization {
+                                message: format!(
+                                    "Failed to serialize json output for datapoint {i}: {e}"
+                                ),
+                            })
+                        })?,
+                        dynamic_demonstration_info,
+                    )
+                    .await
+                    .map_err(|e| {
+                        Error::new(ErrorDetails::InvalidRequest {
+                            message: format!(
+                                "Failed to validate chat output for datapoint {i}: {e}"
+                            ),
+                        })
+                    })?;
+                    let DemonstrationOutput::Json(_) = validated_output else {
+                        return Err(Error::new(ErrorDetails::InternalError {
+                            message: "Expected valid JSON output from validate_parse_demonstration"
+                                .to_string(),
+                        }));
+                    };
+                }
 
                 // Convert legacy Value output to JsonDatapointOutputUpdate
                 let output_update = json.output.map(|output| JsonDatapointOutputUpdate {
