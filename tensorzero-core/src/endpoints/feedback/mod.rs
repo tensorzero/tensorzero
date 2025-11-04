@@ -914,7 +914,7 @@ mod tests {
     use crate::function::{FunctionConfigChat, FunctionConfigJson};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::testing::get_unit_test_gateway_handle;
-    use crate::tool::{StaticToolConfig, ToolCallOutput, ToolChoice, ToolConfig};
+    use crate::tool::{InferenceResponseToolCall, StaticToolConfig, ToolChoice, ToolConfig};
 
     #[tokio::test]
     async fn test_get_feedback_metadata() {
@@ -1368,8 +1368,8 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        let expected_parsed_value =
-            serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
+        let expected_parsed_value = serde_json::to_string(&vec![ContentBlockChatOutput::ToolCall(
+            InferenceResponseToolCall {
                 id: "get_temperature_123".to_string(),
                 name: Some("get_temperature".to_string()),
                 raw_name: "get_temperature".to_string(),
@@ -1378,8 +1378,9 @@ mod tests {
                     &json!({"location": "London", "unit": "celsius"}),
                 )
                 .unwrap(),
-            })])
-            .unwrap();
+            },
+        )])
+        .unwrap();
         assert_eq!(expected_parsed_value, parsed_value);
 
         // Case 3: a tool call to get_humidity, which does not exist

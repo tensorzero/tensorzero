@@ -434,10 +434,10 @@ mod tests {
     use tensorzero_core::evaluations::LLMJudgeOptimize;
     use tensorzero_core::inference::types::StoredInput;
     use tensorzero_core::inference::types::Usage;
-    use tensorzero_core::tool::ToolCallInput;
+    use tensorzero_core::tool::{ToolCall, ToolCallWrapper};
     use tensorzero_core::{
         inference::types::{ContentBlockChatOutput, RawText, Text, Thought, Unknown},
-        tool::{ToolCallOutput, ToolResult},
+        tool::{InferenceResponseToolCall, ToolResult},
     };
 
     use url::Url;
@@ -527,7 +527,7 @@ mod tests {
         );
         // Tool call and text content blocks
         let content = vec![
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 name: Some("tool".to_string()),
                 arguments: Some(json!({"foo": "bar"})),
                 id: "foooo".to_string(),
@@ -541,7 +541,7 @@ mod tests {
         let serialized_output = prepare_serialized_chat_output(&content).unwrap();
         assert_eq!(
             serialized_output,
-            r#"[{"type":"tool_call","arguments":{"foo":"bar"},"id":"foooo","name":"tool","raw_arguments":"{\"foo\": \"bar\"}","raw_name":"tool"},{"type":"text","text":"Hello, world!"}]"#
+            r#"[{"type":"tool_call","id":"foooo","raw_name":"tool","raw_arguments":"{\"foo\": \"bar\"}","name":"tool","arguments":{"foo":"bar"}},{"type":"text","text":"Hello, world!"}]"#
         );
     }
 
@@ -769,13 +769,11 @@ mod tests {
 
         // Test with ToolCall, ToolResult, etc. (should pass through)
         let content = vec![
-            ClientInputMessageContent::ToolCall(ToolCallInput {
-                name: Some("tool".to_string()),
-                arguments: Some(json!({"arg": "value"})),
+            ClientInputMessageContent::ToolCall(ToolCallWrapper::ToolCall(ToolCall {
                 id: "toolid".to_string(),
-                raw_name: None,
-                raw_arguments: None,
-            }),
+                name: "tool".to_string(),
+                arguments: json!({"arg": "value"}).to_string(),
+            })),
             ClientInputMessageContent::ToolResult(ToolResult {
                 name: "tool".to_string(),
                 result: "result".to_string(),

@@ -344,7 +344,8 @@ impl Optimizer for GCPVertexGeminiSFTConfig {
                 ),
                 credentials,
             )
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
 
         let request = client.post(url).headers(auth_headers);
         let res = request.json(&body).send().await.map_err(|e| {
@@ -423,7 +424,8 @@ impl JobHandle for GCPVertexGeminiSFTJobHandle {
                 ),
                 credentials,
             )
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
 
         // Use the stored job_url directly (it was already constructed with the helper)
         let res = client

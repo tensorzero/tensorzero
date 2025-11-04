@@ -696,7 +696,7 @@ mod tests {
             Text, Thought,
         },
         jsonschema_util::StaticJSONSchema,
-        tool::ToolCallOutput,
+        tool::InferenceResponseToolCall,
     };
 
     #[test]
@@ -1613,7 +1613,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "Hello world!".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 name: None,
                 raw_name: "my_tool_call".to_string(),
                 raw_arguments: "true".to_string(),
