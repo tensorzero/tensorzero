@@ -838,6 +838,7 @@ mod tests {
                     deferred_tasks: tokio_util::task::TaskTracker::new(),
                     scope_info: crate::rate_limiting::ScopeInfo {
                         tags: Arc::new(HashMap::new()),
+                        api_key_public_id: None,
                     },
                 },
             )

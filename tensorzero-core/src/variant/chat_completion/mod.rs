@@ -1219,6 +1219,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let templates = Arc::new(get_test_template_config());
@@ -2222,6 +2223,7 @@ mod tests {
             deferred_tasks: tokio_util::task::TaskTracker::new(),
             scope_info: ScopeInfo {
                 tags: Arc::new(HashMap::new()),
+                api_key_public_id: None,
             },
         };
         let templates = Box::leak(Box::new(get_test_template_config()));
