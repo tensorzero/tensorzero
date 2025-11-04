@@ -61,8 +61,7 @@ retries = { num_retries = 4, max_delay_s = 10 }
 
 If we specify multiple variants for a function, the gateway will try different variants until one succeeds or all fail.
 
-If no experimentation configuration is specified, the gateway will sample between all variants uniformly.
-
+By default, the gateway will sample between all variants uniformly.
 You can customize the sampling behavior, including fallback-only variants, using the `experimentation` section.
 
 For example, the configuration below would instruct the gateway to try `gpt_5_mini` and `claude_haiku_4_5` first (with 90/10 sampling probably), and finally `grok_4` if all previous variants fail.
