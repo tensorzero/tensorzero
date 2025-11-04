@@ -166,6 +166,8 @@ jobs:
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: 14.0
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
