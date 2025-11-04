@@ -730,6 +730,7 @@ async fn test_clickhouse_migration_manager() {
         reset_capture_logs();
         run_migrations_up_to(i).await;
     }
+    reset_capture_logs();
 
     let rows = get_all_migration_records(&clickhouse).await.unwrap();
     println!("Rows: {rows:#?}");
