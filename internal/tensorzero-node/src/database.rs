@@ -4,8 +4,8 @@ use tensorzero::{
     DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
     GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams, TimeWindow,
 };
-use tensorzero_core::db::clickhouse::query_builder::DatapointFilter;
 use tensorzero_core::db::datasets::GetDatapointsParams;
+use tensorzero_core::endpoints::datasets::v1::types::ListDatapointsRequest;
 use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use uuid::Uuid;
 
@@ -209,19 +209,19 @@ impl DatabaseClient {
 
     #[napi]
     pub async fn list_datapoints(&self, params: String) -> Result<String, napi::Error> {
-        // Deserialize ListDatapointsRequest from the params string
-        let request: ListDatapointsRequest =
+        // Deserialize ListDatapointsRequestWithDatasetName from the params string
+        let request_with_dataset: ListDatapointsRequestWithDatasetName =
             serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
-        // Convert ListDatapointsRequest to GetDatapointsParams
+        // Convert to GetDatapointsParams
         let get_params = GetDatapointsParams {
-            dataset_name: request.dataset_name,
-            function_name: request.function_name,
+            dataset_name: Some(request_with_dataset.dataset_name),
+            function_name: request_with_dataset.request.function_name,
             ids: None,
-            page_size: request.page_size.unwrap_or(20),
-            offset: request.offset.unwrap_or(0),
+            page_size: request_with_dataset.request.page_size.unwrap_or(20),
+            offset: request_with_dataset.request.offset.unwrap_or(0),
             allow_stale: false,
-            filter: request.filter,
+            filter: request_with_dataset.request.filter,
         };
 
         // Call get_datapoints on the database connection
@@ -332,12 +332,10 @@ struct GetFeedbackByVariantParams {
 }
 
 #[derive(Deserialize)]
-struct ListDatapointsRequest {
-    dataset_name: Option<String>,
-    function_name: Option<String>,
-    page_size: Option<u32>,
-    offset: Option<u32>,
-    filter: Option<DatapointFilter>,
+#[serde(deny_unknown_fields)]
+struct ListDatapointsRequestWithDatasetName {
+    dataset_name: String,
+    request: ListDatapointsRequest,
 }
 
 #[derive(Serialize)]

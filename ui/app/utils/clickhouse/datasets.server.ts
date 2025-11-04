@@ -79,11 +79,10 @@ export async function listDatapoints(
 ): Promise<DatasetDetailRow[]> {
   const dbClient = await getNativeDatabaseClient();
   const response = await dbClient.listDatapoints({
-    dataset_name: dataset_name,
-    function_name: function_name ?? null,
-    page_size: page_size ?? null,
-    offset: offset ?? null,
-    filter: null,
+    dataset_name,
+    function_name,
+    page_size,
+    offset,
   });
 
   // Convert full Datapoint objects to DatasetDetailRow summaries

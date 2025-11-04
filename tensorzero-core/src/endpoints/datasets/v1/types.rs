@@ -197,18 +197,22 @@ pub struct UpdateDatapointMetadataRequest {
 pub struct ListDatapointsRequest {
     /// Optional function name to filter datapoints by.
     /// If provided, only datapoints from this function will be returned.
+    #[cfg_attr(test, ts(optional))]
     pub function_name: Option<String>,
 
     /// The maximum number of datapoints to return.
     /// Defaults to 20.
+    #[cfg_attr(test, ts(optional))]
     pub page_size: Option<u32>,
 
     /// The number of datapoints to skip before starting to return results.
     /// Defaults to 0.
+    #[cfg_attr(test, ts(optional))]
     pub offset: Option<u32>,
 
     /// Optional filter to apply when querying datapoints.
     /// Supports filtering by tags, time, and logical combinations (AND/OR/NOT).
+    #[cfg_attr(test, ts(optional))]
     pub filter: Option<DatapointFilter>,
 }
 
