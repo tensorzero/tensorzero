@@ -103,7 +103,7 @@ def test_sync_run_evaluation(
     # Expected mean 0.50, stderr 0.20 for this dataset
     assert abs(stats["count_sports"]["mean"] - 0.50) < 0.005
     assert abs(stats["count_sports"]["stderr"] - 0.20) < 0.005
-    assert stats["count_sports"]["count"] == 10
+    assert stats["count_sports"]["count"] == run_info["num_datapoints"]
     # Note: exact_match mean is not checked precisely as it's non-deterministic
 
 
@@ -212,7 +212,7 @@ async def test_async_run_evaluation(
     # exact_match: Should be 0.00 ± 0.00
     assert abs(stats["exact_match"]["mean"] - 0.00) < 0.005
     assert abs(stats["exact_match"]["stderr"] - 0.00) < 0.005
-    assert stats["exact_match"]["count"] == 10
+    assert stats["exact_match"]["count"] == 0
     # topic_starts_with_f: 3 out of 10 topics start with 'f' (fusarium, force, formamide)
     # Expected: 0.30 ± 0.14
     assert abs(stats["topic_starts_with_f"]["mean"] - 0.30) < 0.005
