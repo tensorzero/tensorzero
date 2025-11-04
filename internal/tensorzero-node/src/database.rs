@@ -1,25 +1,58 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use std::sync::Arc;
 use tensorzero::{
-    setup_clickhouse_without_config, ClickHouseConnection, CountDatapointsForDatasetFunctionParams,
-    DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
-    GetDatasetMetadataParams, StaleDatapointParams, TimeWindow,
+    ClickHouseConnection, CountDatapointsForDatasetFunctionParams, DatasetQueryParams,
+    GetAdjacentDatapointIdsParams, GetDatapointParams, GetDatasetMetadataParams,
+    StaleDatapointParams, TimeWindow,
 };
+use tensorzero_core::config::{Config, ConfigFileGlob};
 use tensorzero_core::db::datasets::GetDatapointsParams;
-use tensorzero_core::endpoints::datasets::v1::types::ListDatapointsRequest;
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::v1::types::{
+    GetDatapointsResponse, ListDatapointsRequest,
+};
+use tensorzero_core::endpoints::datasets::Datapoint;
+use tensorzero_core::utils::gateway::setup_clickhouse;
 use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
-pub struct DatabaseClient(Box<dyn ClickHouseConnection>);
+pub struct DatabaseClient {
+    connection: Box<dyn ClickHouseConnection>,
+    config: Arc<Config>,
+}
 
 #[napi]
 impl DatabaseClient {
     #[napi(factory)]
-    pub async fn from_clickhouse_url(clickhouse_url: String) -> Result<Self, napi::Error> {
-        let connection = setup_clickhouse_without_config(clickhouse_url)
+    pub async fn from_clickhouse_url(
+        clickhouse_url: String,
+        config_path: Option<String>,
+    ) -> Result<Self, napi::Error> {
+        // Load config from the provided path or use empty config if None
+        let config = if let Some(path) = config_path {
+            let config_glob =
+                ConfigFileGlob::new(path).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+            Arc::new(
+                Config::load_and_verify_from_path(&config_glob)
+                    .await
+                    .map_err(|e| napi::Error::from_reason(e.to_string()))?,
+            )
+        } else {
+            Arc::new(
+                Config::new_empty()
+                    .await
+                    .map_err(|e| napi::Error::from_reason(e.to_string()))?,
+            )
+        };
+
+        // Setup ClickHouse with the loaded config
+        let connection = setup_clickhouse(&config, Some(clickhouse_url), true)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
-        Ok(Self(Box::new(connection)))
+
+        Ok(Self {
+            connection: Box::new(connection),
+            config,
+        })
     }
 
     #[napi]
@@ -203,33 +236,42 @@ impl DatabaseClient {
     }
 
     #[napi]
-    pub async fn list_datapoints(&self, params: String) -> Result<String, napi::Error> {
-        // Deserialize ListDatapointsRequestWithDatasetName from the params string
-        let request_with_dataset: ListDatapointsRequestWithDatasetName =
+    pub async fn list_datapoints(
+        &self,
+        dataset_name: String,
+        params: String,
+    ) -> Result<String, napi::Error> {
+        // Deserialize ListDatapointsRequest from the params string
+        let request: ListDatapointsRequest =
             serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
         // Convert to GetDatapointsParams
         let get_params = GetDatapointsParams {
-            dataset_name: Some(request_with_dataset.dataset_name),
-            function_name: request_with_dataset.request.function_name,
+            dataset_name: Some(dataset_name),
+            function_name: request.function_name,
             ids: None,
-            page_size: request_with_dataset.request.page_size.unwrap_or(20),
-            offset: request_with_dataset.request.offset.unwrap_or(0),
+            page_size: request.page_size.unwrap_or(20),
+            offset: request.offset.unwrap_or(0),
             allow_stale: false,
-            filter: request_with_dataset.request.filter,
+            filter: request.filter,
         };
 
         // Call get_datapoints on the database connection
         let stored_datapoints = self
-            .0
+            .connection
             .get_datapoints(&get_params)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
+        // Convert StoredDatapoint → Datapoint using config
+        let datapoints: Result<Vec<Datapoint>, _> = stored_datapoints
+            .into_iter()
+            .map(|dp| dp.into_datapoint(&self.config))
+            .collect();
+        let datapoints = datapoints.map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
         // Wrap in GetDatapointsResponse structure
-        let response = GetDatapointsResponse {
-            datapoints: stored_datapoints,
-        };
+        let response = GetDatapointsResponse { datapoints };
 
         // Serialize and return the result
         serde_json::to_string(&response).map_err(|e| napi::Error::from_reason(e.to_string()))
@@ -241,7 +283,7 @@ impl DatabaseClient {
             serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
         let result = self
-            .0
+            .connection
             .get_feedback_by_variant(
                 &params_struct.metric_name,
                 &params_struct.function_name,
@@ -324,17 +366,4 @@ struct GetFeedbackByVariantParams {
     function_name: String,
     #[ts(optional)]
     variant_names: Option<Vec<String>>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ListDatapointsRequestWithDatasetName {
-    dataset_name: String,
-    #[serde(flatten)]
-    request: ListDatapointsRequest,
-}
-
-#[derive(Serialize)]
-struct GetDatapointsResponse {
-    datapoints: Vec<StoredDatapoint>,
 }

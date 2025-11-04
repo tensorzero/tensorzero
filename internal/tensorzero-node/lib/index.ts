@@ -236,9 +236,12 @@ export class DatabaseClient {
     this.nativeDatabaseClient = client;
   }
 
-  static async fromClickhouseUrl(url: string): Promise<DatabaseClient> {
+  static async fromClickhouseUrl(
+    url: string,
+    configPath?: string | null,
+  ): Promise<DatabaseClient> {
     return new DatabaseClient(
-      await NativeDatabaseClient.fromClickhouseUrl(url),
+      await NativeDatabaseClient.fromClickhouseUrl(url, configPath ?? null),
     );
   }
 
@@ -374,10 +377,14 @@ export class DatabaseClient {
   }
 
   async listDatapoints(
-    params: ListDatapointsRequest & { dataset_name: string },
+    dataset_name: string,
+    params: ListDatapointsRequest,
   ): Promise<GetDatapointsResponse> {
     const paramsString = safeStringify(params);
-    const result = await this.nativeDatabaseClient.listDatapoints(paramsString);
+    const result = await this.nativeDatabaseClient.listDatapoints(
+      dataset_name,
+      paramsString,
+    );
     return JSON.parse(result) as GetDatapointsResponse;
   }
 

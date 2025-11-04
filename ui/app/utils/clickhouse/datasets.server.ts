@@ -74,12 +74,13 @@ export async function countDatasets(): Promise<number> {
 
 /// TODO (GabrielBianconi): This method currently retrieves the entire datapoint.
 /// For performance reasons, consider implementing a version that only returns what we need for the table view.
-// `input` and `output` can be especially large.
+/// `input` and `output` can be especially large.
 export async function listDatapoints(
-  params: ListDatapointsRequest & { dataset_name: string },
+  dataset_name: string,
+  params: ListDatapointsRequest,
 ): Promise<DatasetDetailRow[]> {
   const dbClient = await getNativeDatabaseClient();
-  const response = await dbClient.listDatapoints(params);
+  const response = await dbClient.listDatapoints(dataset_name, params);
 
   // Convert full Datapoint objects to DatasetDetailRow summaries
   return response.datapoints.map((dp) => ({

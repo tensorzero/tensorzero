@@ -5,6 +5,7 @@ import {
 } from "tensorzero-node";
 import type { CacheEnabledMode, EvaluationRunEvent } from "tensorzero-node";
 import { getEnv } from "../env.server";
+import { getConfigPath } from "../config/index.server";
 
 let _tensorZeroClient: TensorZeroClient | undefined;
 export async function getNativeTensorZeroClient(): Promise<TensorZeroClient> {
@@ -26,8 +27,10 @@ export async function getNativeDatabaseClient(): Promise<DatabaseClient> {
   }
 
   const env = getEnv();
+  const configPath = getConfigPath();
   _databaseClient = await DatabaseClient.fromClickhouseUrl(
     env.TENSORZERO_CLICKHOUSE_URL,
+    configPath,
   );
   return _databaseClient;
 }

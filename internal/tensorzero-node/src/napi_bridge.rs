@@ -72,7 +72,7 @@ macro_rules! napi_call {
         let params_struct: $param_type = serde_json::from_str(&$params)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         // Call the Rust method with the deserialized parameters. We pass each struct field as an argument to the method in the order they are specified.
-        let result = $self.0.$method($(params_struct.$field),+)
+        let result = $self.connection.$method($(params_struct.$field),+)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         // Serialize the result back to JSON.
@@ -86,7 +86,7 @@ macro_rules! napi_call {
         let params_struct: $param_type = serde_json::from_str(&$params)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         // Call the Rust method with the deserialized parameters. We pass the struct as a single argument to the method.
-        let result = $self.0.$method(&params_struct)
+        let result = $self.connection.$method(&params_struct)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         // Serialize the result back to JSON.
@@ -97,7 +97,7 @@ macro_rules! napi_call {
     // Variant 3: the Rust method doesn't take parameters.
     ($self:expr, $method:ident) => {{
         // Call the Rust method with no parameters.
-        let result = $self.0.$method()
+        let result = $self.connection.$method()
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         // Serialize the result back to JSON.
@@ -108,7 +108,7 @@ macro_rules! napi_call {
     // Variant 4: the Rust method takes a single parameter that doesn't need to be deserialized.
     ($self:expr, $method:ident, $param:expr) => {{
         // Call the Rust method with no parameters.
-        let result = $self.0.$method($param)
+        let result = $self.connection.$method($param)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         // Serialize the result back to JSON.
@@ -142,7 +142,7 @@ macro_rules! napi_call {
 /// ```ignore
 ///     #[napi]
 ///     pub async fn count_distinct_models_used(&self) -> Result<u32, napi::Error> {
-///         $self.0.count_distinct_models_used()
+///         $self.connection.count_distinct_models_used()
 ///             .await
 ///             .map_err(|e| napi::Error::from_reason(e.to_string()))
 ///     }
@@ -157,7 +157,7 @@ macro_rules! napi_call_no_deserializing {
         let params_struct: $param_type = serde_json::from_str(&$params)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         // Call the Rust method with the deserialized parameters. We pass each struct field as an argument to the method in the order they are specified.
-        $self.0.$method($(params_struct.$field),+)
+        $self.connection.$method($(params_struct.$field),+)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))
 
@@ -170,7 +170,7 @@ macro_rules! napi_call_no_deserializing {
         let params_struct: $param_type = serde_json::from_str(&$params)
             .map_err(|e| napi::Error::from_reason(e.to_string()))?;
         // Call the Rust method with the deserialized parameters. We pass the struct as a single argument to the method.
-        $self.0.$method(&params_struct)
+        $self.connection.$method(&params_struct)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))
 
@@ -180,7 +180,7 @@ macro_rules! napi_call_no_deserializing {
     // Variant 3: the Rust method doesn't take parameters.
     ($self:expr, $method:ident) => {
         // Call the Rust method with no parameters.
-        $self.0.$method()
+        $self.connection.$method()
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))
 
@@ -190,7 +190,7 @@ macro_rules! napi_call_no_deserializing {
     // Variant 4: the Rust method takes a single parameter that doesn't need to be deserialized.
     ($self:expr, $method:ident, $param:expr) => {{
         // Call the Rust method with the parameter.
-        $self.0.$method($param)
+        $self.connection.$method($param)
             .await
             .map_err(|e| napi::Error::from_reason(e.to_string()))?
 
