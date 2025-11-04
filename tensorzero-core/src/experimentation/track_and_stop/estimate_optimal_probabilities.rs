@@ -62,7 +62,7 @@ pub enum EstimateOptimalProbabilitiesError {
     #[error("Missing variance for variant '{variant_name}' - variance must be non-null")]
     MissingVariance { variant_name: String },
 }
-/// Compute optimal sampling proportions for ε-best arm identification given sub-Gaussian rewards.
+/// Compute optimal sampling proportions for ε-best arm identification.
 ///
 /// This function implements an allocation strategy for multi-armed bandits that
 /// efficiently identifies near-optimal arms. It solves a second-order cone program (SOCP)
@@ -119,6 +119,18 @@ pub enum EstimateOptimalProbabilitiesError {
 /// - Regularization strength scales with α_t = reg0 / √(total_pulls)
 /// - For ε = 0, this targets exact best-arm identification
 /// - For ε > 0, arms within ε of the best are considered acceptable
+///
+/// # References
+///
+/// This implementation is based on the sample complexity lower bound described in:
+///
+/// Garivier, A., & Kaufmann, E. (2016). Optimal Best Arm Identification with Fixed Confidence.
+/// In: JMLR: Workshop and Conference Proceedings. Vol. 49, pp. 1–30
+/// <https://proceedings.mlr.press/v49/garivier16a.html>
+///
+/// That bound is for one-parameter exponential family models. We use the form of the
+/// bound for (sub-)Gaussian rewards with known variances and simply substitute in
+/// estimated variances.
 pub fn estimate_optimal_probabilities(
     args: EstimateOptimalProbabilitiesArgs,
 ) -> Result<HashMap<String, f64>, EstimateOptimalProbabilitiesError> {
@@ -130,7 +142,7 @@ pub fn estimate_optimal_probabilities(
         reg0,
         metric_optimize,
     } = args;
-    // TODO: for boolean metrics, set default epsilon to e.g. 0.01. For float metrics, anchor to reward distributions once available.
+    // TODO(https://github.com/tensorzero/tensorzero/issues/4282): Consider nonzero default value for epsilon
     let epsilon: f64 = epsilon.unwrap_or(0.0);
     let variance_floor: f64 = variance_floor.unwrap_or(1e-12);
     // Default min_prob is 0.0, but we apply a floor of 1e-6 for numerical stability in the optimization
