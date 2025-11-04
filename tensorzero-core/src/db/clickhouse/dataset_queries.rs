@@ -1146,6 +1146,9 @@ mod tests {
     use crate::db::datasets::{
         ChatInferenceDatapointInsert, JsonInferenceDatapointInsert, MetricFilter,
     };
+    use crate::endpoints::datasets::v1::types::{
+        DatapointMetadataUpdate, UpdateDatapointMetadataRequest,
+    };
     use crate::inference::types::{ContentBlockChatOutput, JsonInferenceOutput, StoredInput, Text};
 
     use super::*;
@@ -4024,5 +4027,328 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 3); // 1 from chat + 2 from json
+    }
+
+    #[tokio::test]
+    async fn test_update_datapoints_metadata_validates_empty_request() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(0); // Should not make any DB calls
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .times(0); // Should not make any DB calls
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let result = conn
+            .update_datapoints_metadata(
+                "test_dataset",
+                UpdateDatapointsMetadataRequest { datapoints: vec![] },
+            )
+            .await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err().get_details(),
+            ErrorDetails::InvalidRequest { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_update_datapoints_metadata_validates_duplicate_ids() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .times(0); // Should not make any DB calls
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .times(0); // Should not make any DB calls
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let duplicate_id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
+
+        let result = conn
+            .update_datapoints_metadata(
+                "test_dataset",
+                UpdateDatapointsMetadataRequest {
+                    datapoints: vec![
+                        UpdateDatapointMetadataRequest {
+                            id: duplicate_id,
+                            metadata: DatapointMetadataUpdate {
+                                name: Some(Some("name1".to_string())),
+                            },
+                        },
+                        UpdateDatapointMetadataRequest {
+                            id: duplicate_id,
+                            metadata: DatapointMetadataUpdate {
+                                name: Some(Some("name2".to_string())),
+                            },
+                        },
+                    ],
+                },
+            )
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::InvalidRequest { .. }
+        ));
+        assert!(err.to_string().contains("Duplicate datapoint id"));
+    }
+
+    #[tokio::test]
+    async fn test_update_datapoints_metadata_datapoint_not_found() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .returning(|_, _| {
+                // Return empty result for get_datapoints
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 0,
+                    },
+                })
+            });
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
+
+        let result = conn
+            .update_datapoints_metadata(
+                "test_dataset",
+                UpdateDatapointsMetadataRequest {
+                    datapoints: vec![UpdateDatapointMetadataRequest {
+                        id,
+                        metadata: DatapointMetadataUpdate {
+                            name: Some(Some("new_name".to_string())),
+                        },
+                    }],
+                },
+            )
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(
+            err.get_details(),
+            ErrorDetails::DatapointNotFound { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_update_datapoints_metadata_executes_get_and_insert_chat() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // First call: get_datapoints
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                // Verify it's querying both tables with the correct ID
+                assert_query_contains(query, "ChatInferenceDatapoint");
+                assert_query_contains(query, "JsonInferenceDatapoint");
+                assert_query_contains(query, "dataset_name = {dataset_name:String}");
+                assert_query_contains(query, "staled_at IS NULL");
+
+                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+                // Verify the IDs are in the query (they're inlined as an array)
+                assert!(query.contains("123e4567-e89b-12d3-a456-426614174000"));
+
+                true
+            })
+            .returning(|_, _| {
+                // Return a chat datapoint in JSONEachRow format (one JSON object per line)
+                let datapoint_json = json!({
+                    "id": "123e4567-e89b-12d3-a456-426614174000",
+                    "type": "chat",
+                    "dataset_name": "test_dataset",
+                    "function_name": "test_function",
+                    "name": "old_name",
+                    "episode_id": null,
+                    "input": {"messages": []},
+                    "output": [{"type": "text", "text": "response"}],
+                    "tool_params": "",
+                    "output_schema": "",
+                    "tags": {},
+                    "auxiliary": "",
+                    "staled_at": null,
+                    "source_inference_id": null,
+                    "is_custom": false,
+                    "is_deleted": false,
+                    "updated_at": "2025-01-01T00:00:00Z"
+                });
+                Ok(ClickHouseResponse {
+                    response: datapoint_json.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        // Second call: insert_datapoints via run_query_with_external_data
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .withf(|external_data, query| {
+                // Verify the query is correct
+                assert!(query.contains("INSERT INTO ChatInferenceDatapoint"));
+
+                // Parse and verify the data
+                let actual_row_as_json: serde_json::Value =
+                    serde_json::from_str(&external_data.data).unwrap();
+
+                // Verify key fields are updated
+                assert_eq!(
+                    actual_row_as_json["id"],
+                    "123e4567-e89b-12d3-a456-426614174000"
+                );
+                assert_eq!(actual_row_as_json["name"], "new_name");
+                assert_eq!(actual_row_as_json["dataset_name"], "test_dataset");
+                assert_eq!(actual_row_as_json["function_name"], "test_function");
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 1,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let id = Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap();
+
+        let result = conn
+            .update_datapoints_metadata(
+                "test_dataset",
+                UpdateDatapointsMetadataRequest {
+                    datapoints: vec![UpdateDatapointMetadataRequest {
+                        id,
+                        metadata: DatapointMetadataUpdate {
+                            name: Some(Some("new_name".to_string())),
+                        },
+                    }],
+                },
+            )
+            .await;
+
+        assert!(result.is_ok(), "Expected success but got: {result:?}");
+        let response = result.unwrap();
+        assert_eq!(response.ids.len(), 1);
+        assert_eq!(response.ids[0], id);
+    }
+
+    #[tokio::test]
+    async fn test_update_datapoints_metadata_executes_get_and_insert_json() {
+        let mut mock_clickhouse_client = MockClickHouseClient::new();
+
+        // First call: get_datapoints
+        mock_clickhouse_client
+            .expect_run_query_synchronous()
+            .withf(|query, parameters| {
+                // Verify it's querying both tables with the correct ID
+                assert_query_contains(query, "ChatInferenceDatapoint");
+                assert_query_contains(query, "JsonInferenceDatapoint");
+                assert_query_contains(query, "dataset_name = {dataset_name:String}");
+                assert_query_contains(query, "staled_at IS NULL");
+
+                assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
+                // Verify the IDs are in the query (they're inlined as an array)
+                assert!(query.contains("223e4567-e89b-12d3-a456-426614174000"));
+
+                true
+            })
+            .returning(|_, _| {
+                // Return a JSON datapoint in JSONEachRow format (one JSON object per line)
+                let datapoint_json = json!({
+                    "id": "223e4567-e89b-12d3-a456-426614174000",
+                    "type": "json",
+                    "dataset_name": "test_dataset",
+                    "function_name": "test_function",
+                    "name": "old_name",
+                    "episode_id": null,
+                    "input": {"messages": []},
+                    "output": {"value": "test"},
+                    "tool_params": "",
+                    "output_schema": {"type": "object"},
+                    "tags": {},
+                    "auxiliary": "",
+                    "staled_at": null,
+                    "source_inference_id": null,
+                    "is_custom": false,
+                    "is_deleted": false,
+                    "updated_at": "2025-01-01T00:00:00Z"
+                });
+                Ok(ClickHouseResponse {
+                    response: datapoint_json.to_string(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 1,
+                        written_rows: 0,
+                    },
+                })
+            });
+
+        // Second call: insert_datapoints via run_query_with_external_data
+        mock_clickhouse_client
+            .expect_run_query_with_external_data()
+            .withf(|external_data, query| {
+                // Verify the query is correct
+                assert!(query.contains("INSERT INTO JsonInferenceDatapoint"));
+
+                // Parse and verify the data
+                let actual_row_as_json: serde_json::Value =
+                    serde_json::from_str(&external_data.data).unwrap();
+
+                // Verify key fields are updated
+                assert_eq!(
+                    actual_row_as_json["id"],
+                    "223e4567-e89b-12d3-a456-426614174000"
+                );
+                assert_eq!(actual_row_as_json["name"], "new_name");
+                assert_eq!(actual_row_as_json["dataset_name"], "test_dataset");
+                assert_eq!(actual_row_as_json["function_name"], "test_function");
+                assert!(actual_row_as_json.get("output_schema").is_some());
+
+                true
+            })
+            .returning(|_, _| {
+                Ok(ClickHouseResponse {
+                    response: String::new(),
+                    metadata: ClickHouseResponseMetadata {
+                        read_rows: 0,
+                        written_rows: 1,
+                    },
+                })
+            });
+
+        let conn = ClickHouseConnectionInfo::new_mock(Arc::new(mock_clickhouse_client));
+
+        let id = Uuid::parse_str("223e4567-e89b-12d3-a456-426614174000").unwrap();
+
+        let result = conn
+            .update_datapoints_metadata(
+                "test_dataset",
+                UpdateDatapointsMetadataRequest {
+                    datapoints: vec![UpdateDatapointMetadataRequest {
+                        id,
+                        metadata: DatapointMetadataUpdate {
+                            name: Some(Some("new_name".to_string())),
+                        },
+                    }],
+                },
+            )
+            .await;
+
+        assert!(result.is_ok(), "Expected success but got: {result:?}");
+        let response = result.unwrap();
+        assert_eq!(response.ids.len(), 1);
+        assert_eq!(response.ids[0], id);
     }
 }
