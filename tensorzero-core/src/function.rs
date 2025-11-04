@@ -429,11 +429,6 @@ impl FunctionConfig {
             FunctionConfig::Json(_) => HashSet::new(),
         };
 
-        // Partition tools into static (allowed) and dynamic (additional)
-        // let (static_tools, additional_tools): (Vec<_>, Vec<_>) = db_insert
-        //     .tools_available
-        //     .into_iter()
-        //     .partition(|tool| static_tool_names.contains(tool.name.as_str()));
         let allowed_tools = match allowed_tools.choice {
             AllowedToolsChoice::FunctionDefault => None,
             AllowedToolsChoice::DynamicAllowedTools => Some(allowed_tools.tools),
