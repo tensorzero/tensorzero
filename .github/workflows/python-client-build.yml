@@ -166,14 +166,13 @@ jobs:
 
   macos:
     runs-on: ${{ matrix.platform.runner }}
-    env:
-      MACOSX_DEPLOYMENT_TARGET: 14.0
     if: github.repository == 'tensorzero/tensorzero'
     strategy:
       matrix:
         platform:
+          # TODO - add back x86_64 support
           - runner: macos-14
-            target: x86_64
+            target: aarch64
           - runner: macos-15
             target: aarch64
     steps:
