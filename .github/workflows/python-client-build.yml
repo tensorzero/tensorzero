@@ -249,6 +249,6 @@ jobs:
       - name: Count wheels
         run: |
           ls -lh ./wheels-*/*
-          # Count the number of files named 'tensorzero-*.whl', and verify that it equals 7
+          # Count the number of files named 'tensorzero-*.whl', and verify that it equals 6
           # If we add new platforms / python versions, update this number
-          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 7
+          ls -lh ./wheels-*/* | grep -c 'tensorzero-.*\.whl' | grep -q 6
