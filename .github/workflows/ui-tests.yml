@@ -115,7 +115,7 @@ jobs:
       - name: Print Docker Compose status
         if: always()
         working-directory: ui
-        run: docker compose -f fixtures/docker-compose.yml ps
+        run: docker compose -f fixtures/docker-compose.yml ps --all
 
       - name: Make sure the current commit short hash is in the Docker Compose gateway logs
         if: always()
