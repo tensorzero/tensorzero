@@ -1,6 +1,6 @@
 import {
   getDatasetMetadata,
-  getDatasetRows,
+  listDatapoints,
 } from "~/utils/clickhouse/datasets.server";
 import type { Route } from "./+types/route";
 import DatasetRowTable from "./DatasetRowTable";
@@ -41,7 +41,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const [counts, rows] = await Promise.all([
     getDatasetMetadata({}),
-    getDatasetRows({ dataset_name, page_size: pageSize, offset }),
+    listDatapoints(dataset_name, undefined, pageSize, offset),
   ]);
   const count_info = counts.find(
     (count) => count.dataset_name === dataset_name,

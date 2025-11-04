@@ -1,9 +1,12 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tensorzero::{
     setup_clickhouse_without_config, ClickHouseConnection, CountDatapointsForDatasetFunctionParams,
     DatasetQueryParams, GetAdjacentDatapointIdsParams, GetDatapointParams,
     GetDatasetMetadataParams, GetDatasetRowsParams, StaleDatapointParams, TimeWindow,
 };
+use tensorzero_core::db::clickhouse::query_builder::DatapointFilter;
+use tensorzero_core::db::datasets::GetDatapointsParams;
+use tensorzero_core::endpoints::datasets::StoredDatapoint;
 use uuid::Uuid;
 
 #[napi(js_name = "DatabaseClient")]
@@ -205,6 +208,39 @@ impl DatabaseClient {
     }
 
     #[napi]
+    pub async fn list_datapoints(&self, params: String) -> Result<String, napi::Error> {
+        // Deserialize ListDatapointsRequest from the params string
+        let request: ListDatapointsRequest =
+            serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        // Convert ListDatapointsRequest to GetDatapointsParams
+        let get_params = GetDatapointsParams {
+            dataset_name: request.dataset_name,
+            function_name: request.function_name,
+            ids: None,
+            page_size: request.page_size.unwrap_or(20),
+            offset: request.offset.unwrap_or(0),
+            allow_stale: false,
+            filter: request.filter,
+        };
+
+        // Call get_datapoints on the database connection
+        let stored_datapoints = self
+            .0
+            .get_datapoints(&get_params)
+            .await
+            .map_err(|e| napi::Error::from_reason(e.to_string()))?;
+
+        // Wrap in GetDatapointsResponse structure
+        let response = GetDatapointsResponse {
+            datapoints: stored_datapoints,
+        };
+
+        // Serialize and return the result
+        serde_json::to_string(&response).map_err(|e| napi::Error::from_reason(e.to_string()))
+    }
+
+    #[napi]
     pub async fn get_feedback_by_variant(&self, params: String) -> Result<String, napi::Error> {
         let params_struct: GetFeedbackByVariantParams =
             serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
@@ -293,4 +329,18 @@ struct GetFeedbackByVariantParams {
     function_name: String,
     #[ts(optional)]
     variant_names: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct ListDatapointsRequest {
+    dataset_name: Option<String>,
+    function_name: Option<String>,
+    page_size: Option<u32>,
+    offset: Option<u32>,
+    filter: Option<DatapointFilter>,
+}
+
+#[derive(Serialize)]
+struct GetDatapointsResponse {
+    datapoints: Vec<StoredDatapoint>,
 }

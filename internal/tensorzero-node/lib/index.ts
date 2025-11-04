@@ -13,11 +13,13 @@ import type {
   CumulativeFeedbackTimeSeriesPoint,
   FeedbackByVariant,
   GetAdjacentDatapointIdsParams,
+  GetDatapointsResponse,
   GetDatasetMetadataParams,
   GetDatasetRowsParams,
   GetFeedbackByVariantParams,
   InferenceResponse,
   LaunchOptimizationWorkflowParams,
+  ListDatapointsRequest,
   ModelLatencyDatapoint,
   ModelUsageTimePoint,
   OptimizationJobHandle,
@@ -379,6 +381,14 @@ export class DatabaseClient {
     const paramsString = safeStringify(params);
     const result = await this.nativeDatabaseClient.getDatasetRows(paramsString);
     return JSON.parse(result) as DatasetDetailRow[];
+  }
+
+  async listDatapoints(
+    params: ListDatapointsRequest & { dataset_name: string },
+  ): Promise<GetDatapointsResponse> {
+    const paramsString = safeStringify(params);
+    const result = await this.nativeDatabaseClient.listDatapoints(paramsString);
+    return JSON.parse(result) as GetDatapointsResponse;
   }
 
   async countDatasets(): Promise<number> {

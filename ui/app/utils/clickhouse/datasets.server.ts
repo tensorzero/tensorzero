@@ -4,7 +4,6 @@ import type {
   DatasetQueryParams,
   DatasetDetailRow,
   GetDatasetMetadataParams,
-  GetDatasetRowsParams,
   GetDatapointParams,
   Datapoint,
   AdjacentDatapointIds,
@@ -72,11 +71,30 @@ export async function countDatasets(): Promise<number> {
   return await dbClient.countDatasets();
 }
 
-export async function getDatasetRows(
-  params: GetDatasetRowsParams,
+export async function listDatapoints(
+  dataset_name: string,
+  function_name?: string,
+  page_size?: number,
+  offset?: number,
 ): Promise<DatasetDetailRow[]> {
   const dbClient = await getNativeDatabaseClient();
-  return await dbClient.getDatasetRows(params);
+  const response = await dbClient.listDatapoints({
+    dataset_name: dataset_name,
+    function_name: function_name ?? null,
+    page_size: page_size ?? null,
+    offset: offset ?? null,
+    filter: null,
+  });
+
+  // Convert full Datapoint objects to DatasetDetailRow summaries
+  return response.datapoints.map((dp) => ({
+    id: dp.id,
+    type: dp.type,
+    function_name: dp.function_name,
+    name: dp.name ?? undefined,
+    episode_id: dp.episode_id ?? undefined,
+    updated_at: dp.updated_at,
+  }));
 }
 
 export async function getDatapoint(
