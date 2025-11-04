@@ -815,7 +815,6 @@ mod tests {
     use std::borrow::Cow;
 
     use serde_json::json;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::{
@@ -1099,8 +1098,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_tgi_provider_new_api_base_check() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Valid cases (should not warn)
         let _ = TGIProvider::new(
             Url::parse("http://localhost:1234/v1/").unwrap(),
@@ -1125,8 +1124,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_tgi_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

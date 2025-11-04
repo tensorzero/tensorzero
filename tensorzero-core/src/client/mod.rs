@@ -639,6 +639,9 @@ impl Client {
                         gateway.handle.app_state.postgres_connection_info.clone(),
                         gateway.handle.app_state.deferred_tasks.clone(),
                         params.try_into().map_err(err_to_http)?,
+                        // We currently ban auth-enabled configs in embedded gateway mode,
+                        // so we don't have an API key here
+                        None,
                     )
                     .await
                     .map_err(err_to_http)?;
@@ -961,8 +964,6 @@ pub use crate::observability;
 mod tests {
     use super::*;
     use tempfile::NamedTempFile;
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_missing_clickhouse() {
         // This config file requires ClickHouse, so it should fail if no ClickHouse URL is provided
@@ -1013,8 +1014,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_log_no_clickhouse() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Default observability and no ClickHouse URL
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: Some(PathBuf::from(
@@ -1036,8 +1037,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_log_no_config() {
+        let logs_contain = crate::utils::testing::capture_logs();
         ClientBuilder::new(ClientBuilderMode::EmbeddedGateway {
             config_file: None,
             clickhouse_url: None,

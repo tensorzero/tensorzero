@@ -11,11 +11,11 @@
 use std::collections::HashMap;
 
 use axum::body::Body;
-use axum::debug_handler;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use axum::{debug_handler, Extension};
 use futures::Stream;
 use mime::MediaType;
 #[cfg(feature = "pyo3")]
@@ -57,7 +57,7 @@ use super::inference::{
     InferenceStream,
 };
 use crate::embeddings::EmbeddingEncodingFormat;
-use crate::endpoints::RouteHandlers;
+use crate::endpoints::{RequestApiKeyExtension, RouteHandlers};
 use axum::routing::post;
 use axum::Router;
 
@@ -103,6 +103,7 @@ pub async fn inference_handler(
         deferred_tasks,
         ..
     }): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     if !openai_compatible_params.unknown_fields.is_empty() {
@@ -155,6 +156,7 @@ pub async fn inference_handler(
         postgres_connection_info,
         deferred_tasks,
         params,
+        api_key_ext,
     )
     .await?;
 
@@ -269,6 +271,7 @@ pub async fn embeddings_handler(
         deferred_tasks,
         ..
     }): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
 ) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
     let embedding_params = openai_compatible_params.try_into()?;
@@ -279,6 +282,7 @@ pub async fn embeddings_handler(
         postgres_connection_info,
         deferred_tasks,
         embedding_params,
+        api_key_ext,
     )
     .await?;
     Ok(Json(response.into()))
@@ -1464,12 +1468,10 @@ fn prepare_serialized_openai_compatible_events(
 mod tests {
 
     use super::*;
-    use serde_json::json;
-    use tracing_test::traced_test;
-
     use crate::cache::CacheEnabledMode;
     use crate::inference::types::{System, Text, TextChunk};
     use crate::tool::ToolCallChunk;
+    use serde_json::json;
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -1981,8 +1983,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_deprecated_custom_block() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let content = json!([{
             "country": "Japan",
             "city": "Tokyo",
@@ -2349,10 +2351,9 @@ mod tests {
             }
         );
     }
-
-    #[traced_test]
     #[test]
     fn test_try_from_embedding_params_deprecated() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let openai_embedding_params = OpenAICompatibleEmbeddingParams {
             input: EmbeddingInput::Single("foo".to_string()),
             model: "text-embedding-ada-002".to_string(),
@@ -2368,10 +2369,9 @@ mod tests {
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
         assert!(logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
-
-    #[traced_test]
     #[test]
     fn test_try_from_embedding_params_strip() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let openai_embedding_params = OpenAICompatibleEmbeddingParams {
             input: EmbeddingInput::Single("foo".to_string()),
             model: "tensorzero::embedding_model_name::text-embedding-ada-002".to_string(),

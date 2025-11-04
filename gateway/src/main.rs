@@ -522,7 +522,6 @@ fn print_configuration_info(glob: Option<&impl ConfigGlobInfo>) {
 mod tests {
     use super::*;
     use std::path::PathBuf;
-    use tracing_test::traced_test;
 
     // Mock implementation for testing
     struct MockConfigGlob {
@@ -541,8 +540,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_print_configuration_info_default() {
+        let logs_contain = tensorzero_core::utils::testing::capture_logs();
         let glob: Option<&MockConfigGlob> = None;
         print_configuration_info(glob);
 
@@ -550,8 +549,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_print_configuration_info_glob_no_matches() {
+        let logs_contain = tensorzero_core::utils::testing::capture_logs();
         // Create a mock with no paths for testing
         let glob = MockConfigGlob {
             glob: "*.nonexistent".to_string(),
@@ -566,8 +565,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_print_configuration_info_glob_single_path() {
+        let logs_contain = tensorzero_core::utils::testing::capture_logs();
         let glob = MockConfigGlob {
             glob: "config/*.toml".to_string(),
             paths: vec![PathBuf::from("config/app.toml")],
@@ -582,8 +581,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_print_configuration_info_glob_multiple_paths() {
+        let logs_contain = tensorzero_core::utils::testing::capture_logs();
         let glob = MockConfigGlob {
             glob: "config/**/*.toml".to_string(),
             paths: vec![
