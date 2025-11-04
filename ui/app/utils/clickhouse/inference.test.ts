@@ -620,7 +620,6 @@ test("displayModelInferenceInputMessageContentSchema accepts thought content blo
   );
   expect(result2.success).toBe(true);
   if (result2.success && result2.data.type === "thought") {
-    expect(result2.data.type).toBe("thought");
     expect(result2.data.text).toBe("Another thinking step");
     expect(result2.data.summary).toBeUndefined();
   }
