@@ -1337,7 +1337,6 @@ pub(super) fn openai_responses_to_tensorzero_chunk(
 mod tests {
     use super::*;
     use std::time::Duration;
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::inference::types::{FunctionType, ModelInferenceRequest, RequestMessage, Role};
@@ -2449,8 +2448,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_openai_responses_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {

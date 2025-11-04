@@ -900,8 +900,6 @@ mod tests {
 
     use serde_json::json;
     use std::collections::HashMap;
-    use tracing_test::traced_test;
-
     #[tokio::test]
     async fn test_prepare_model_inference_request() {
         // Setup common variables
@@ -1438,8 +1436,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_infer_model_request_errors() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
@@ -1604,7 +1602,7 @@ mod tests {
             InferenceResult::Json(_) => panic!("Expected Chat inference result"),
         }
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors:infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request{model_name=dummy_chat_model}:infer{model_name="dummy_chat_model" otel.name="model_inference" stream=false}:infer{provider_name="error"}:infer{provider_name="error" otel.name="model_provider_inference" stream=false}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 
@@ -1763,8 +1761,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_infer_model_request_errors_stream() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Setup common variables
         let api_keys = InferenceCredentials::default();
         let client = TensorzeroHttpClient::new().unwrap();
@@ -1934,7 +1932,7 @@ mod tests {
         assert_eq!(full_response, expected_response);
 
         assert!(logs_contain(
-            r#"ERROR test_infer_model_request_errors_stream:infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
+            r#"ERROR infer_model_request_stream{model_name=dummy_chat_model}:infer_stream{model_name="dummy_chat_model" otel.name="model_inference" stream=true}:infer_stream{provider_name="error" otel.name="model_provider_inference" stream=true}: tensorzero_core::error: Error from dummy client: Error sending request to Dummy provider for model 'error'."#
         ));
     }
 }

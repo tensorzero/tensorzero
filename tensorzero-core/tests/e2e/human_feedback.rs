@@ -10,7 +10,6 @@ use tensorzero_core::{
     },
 };
 use tokio::time::{sleep, Duration};
-use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -1198,8 +1197,8 @@ async fn e2e_test_boolean_feedback() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[traced_test]
 async fn test_fast_inference_then_feedback() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     use serde_json::json;
     use std::collections::HashMap;
     use std::sync::Arc;

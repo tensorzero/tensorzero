@@ -42,7 +42,6 @@ use tensorzero_core::{
 };
 use tokio::task::JoinSet;
 use tokio::time::{sleep, Duration};
-use tracing_test::traced_test;
 use uuid::Uuid;
 
 use tensorzero_core::db::clickhouse::test_helpers::{
@@ -3380,9 +3379,8 @@ async fn test_inference_input_tokens_output_tokens_zero() {
 }
 
 #[tokio::test]
-#[traced_test]
-
 async fn test_tool_call_input_no_warning() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let client = tensorzero::test_helpers::make_embedded_gateway_no_config().await;
     client
         .inference(ClientInferenceParams {
