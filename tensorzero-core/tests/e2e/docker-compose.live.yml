@@ -1,6 +1,11 @@
 include:
   - docker-compose-common.yml
 
+volumes:
+  # Note that we don't actually make this a tmpfs, since it can be quite large
+  # We need this for e2e tests that write to a tmpdir from a test, and then read it from the gateway
+  shared-tmpdir:
+
 services:
   mock-inference-provider:
     image: tensorzero/mock-inference-provider:${TENSORZERO_COMMIT_TAG}
@@ -104,6 +109,8 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       # Mount GCP JWT key file
       - ../../../gcp_jwt_key.json:/app/gcp_jwt_key.json:ro
+      # Shared tmpdir filesystem
+      - shared-tmpdir:/tmp
     depends_on:
       clickhouse:
         condition: service_healthy
@@ -219,6 +226,8 @@ services:
       - ../../fixtures:/app/tensorzero-core/fixtures:ro
       - .cargo/:/app/.cargo/
       - ../../../target/nextest:/app/target/nextest
+      # Shared tmpdir filesystem
+      - shared-tmpdir:/tmp
     depends_on:
       fixtures:
         condition: service_completed_successfully
