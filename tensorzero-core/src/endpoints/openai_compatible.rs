@@ -11,11 +11,11 @@
 use std::collections::HashMap;
 
 use axum::body::Body;
-use axum::debug_handler;
 use axum::extract::State;
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use axum::{debug_handler, Extension};
 use futures::Stream;
 use mime::MediaType;
 #[cfg(feature = "pyo3")]
@@ -44,7 +44,8 @@ use crate::inference::types::{
 };
 
 use crate::tool::{
-    DynamicToolParams, ProviderTool, Tool, ToolCallInput, ToolCallOutput, ToolChoice, ToolResult,
+    DynamicToolParams, InferenceResponseToolCall, ProviderTool, Tool, ToolCallWrapper, ToolChoice,
+    ToolResult,
 };
 use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 use crate::variant::JsonMode;
@@ -56,7 +57,7 @@ use super::inference::{
     InferenceStream,
 };
 use crate::embeddings::EmbeddingEncodingFormat;
-use crate::endpoints::RouteHandlers;
+use crate::endpoints::{RequestApiKeyExtension, RouteHandlers};
 use axum::routing::post;
 use axum::Router;
 
@@ -102,6 +103,7 @@ pub async fn inference_handler(
         deferred_tasks,
         ..
     }): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleParams>,
 ) -> Result<Response<Body>, Error> {
     if !openai_compatible_params.unknown_fields.is_empty() {
@@ -154,6 +156,7 @@ pub async fn inference_handler(
         postgres_connection_info,
         deferred_tasks,
         params,
+        api_key_ext,
     )
     .await?;
 
@@ -268,6 +271,7 @@ pub async fn embeddings_handler(
         deferred_tasks,
         ..
     }): AppState,
+    api_key_ext: Option<Extension<RequestApiKeyExtension>>,
     StructuredJson(openai_compatible_params): StructuredJson<OpenAICompatibleEmbeddingParams>,
 ) -> Result<Json<OpenAIEmbeddingResponse>, Error> {
     let embedding_params = openai_compatible_params.try_into()?;
@@ -278,6 +282,7 @@ pub async fn embeddings_handler(
         postgres_connection_info,
         deferred_tasks,
         embedding_params,
+        api_key_ext,
     )
     .await?;
     Ok(Json(response.into()))
@@ -1099,15 +1104,15 @@ impl From<OpenAICompatibleTool> for Tool {
     }
 }
 
-impl From<OpenAICompatibleToolCall> for ToolCallInput {
+impl From<OpenAICompatibleToolCall> for ToolCallWrapper {
     fn from(tool_call: OpenAICompatibleToolCall) -> Self {
-        ToolCallInput {
+        ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
             id: tool_call.id,
-            raw_name: Some(tool_call.function.name),
-            raw_arguments: Some(tool_call.function.arguments),
+            raw_name: tool_call.function.name,
+            raw_arguments: tool_call.function.arguments,
             name: None,
             arguments: None,
-        }
+        })
     }
 }
 
@@ -1200,8 +1205,8 @@ fn process_chat_content(
     (content_str, tool_calls)
 }
 
-impl From<ToolCallOutput> for OpenAICompatibleToolCall {
-    fn from(tool_call: ToolCallOutput) -> Self {
+impl From<InferenceResponseToolCall> for OpenAICompatibleToolCall {
+    fn from(tool_call: InferenceResponseToolCall) -> Self {
         OpenAICompatibleToolCall {
             id: tool_call.id,
             r#type: "function".to_string(),
@@ -1463,12 +1468,10 @@ fn prepare_serialized_openai_compatible_events(
 mod tests {
 
     use super::*;
-    use serde_json::json;
-    use tracing_test::traced_test;
-
     use crate::cache::CacheEnabledMode;
     use crate::inference::types::{System, Text, TextChunk};
     use crate::tool::ToolCallChunk;
+    use serde_json::json;
 
     #[test]
     fn test_try_from_openai_compatible_params() {
@@ -1650,13 +1653,15 @@ mod tests {
         let expected_text = InputMessageContent::Text(Text {
             text: "Hello, world!".to_string(),
         });
-        let expected_tool_call = InputMessageContent::ToolCall(ToolCallInput {
-            id: "1".to_string(),
-            raw_name: Some("test_tool".to_string()),
-            raw_arguments: Some("{}".to_string()),
-            name: None,
-            arguments: None,
-        });
+        let expected_tool_call = InputMessageContent::ToolCall(
+            ToolCallWrapper::InferenceResponseToolCall(InferenceResponseToolCall {
+                id: "1".to_string(),
+                raw_name: "test_tool".to_string(),
+                raw_arguments: "{}".to_string(),
+                name: None,
+                arguments: None,
+            }),
+        );
 
         assert!(
             input.messages[0].content.contains(&expected_text),
@@ -1978,8 +1983,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_deprecated_custom_block() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let content = json!([{
             "country": "Japan",
             "city": "Tokyo",
@@ -2019,7 +2024,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: "Hello".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 arguments: None,
                 name: Some("test_tool".to_string()),
                 id: "1".to_string(),
@@ -2048,7 +2053,7 @@ mod tests {
             ContentBlockChatOutput::Text(Text {
                 text: " second part".to_string(),
             }),
-            ContentBlockChatOutput::ToolCall(ToolCallOutput {
+            ContentBlockChatOutput::ToolCall(InferenceResponseToolCall {
                 arguments: None,
                 name: Some("middle_tool".to_string()),
                 id: "123".to_string(),
@@ -2346,10 +2351,9 @@ mod tests {
             }
         );
     }
-
-    #[traced_test]
     #[test]
     fn test_try_from_embedding_params_deprecated() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let openai_embedding_params = OpenAICompatibleEmbeddingParams {
             input: EmbeddingInput::Single("foo".to_string()),
             model: "text-embedding-ada-002".to_string(),
@@ -2365,10 +2369,9 @@ mod tests {
         assert_eq!(param.encoding_format, EmbeddingEncodingFormat::Float);
         assert!(logs_contain("Deprecation Warning: Model names in the OpenAI-compatible embeddings endpoint should be prefixed with 'tensorzero::embedding_model_name::'"));
     }
-
-    #[traced_test]
     #[test]
     fn test_try_from_embedding_params_strip() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let openai_embedding_params = OpenAICompatibleEmbeddingParams {
             input: EmbeddingInput::Single("foo".to_string()),
             model: "tensorzero::embedding_model_name::text-embedding-ada-002".to_string(),

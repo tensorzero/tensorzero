@@ -26,7 +26,9 @@ use crate::embeddings::{
     EmbeddingProviderResponse, EmbeddingRequest,
 };
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{warn_discarded_thought_block, DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{
+    warn_discarded_thought_block, DelayedError, DisplayOrDebugGateway, Error, ErrorDetails,
+};
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::batch::{
@@ -199,28 +201,30 @@ impl OpenAICredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Option<&'a SecretString>, Error> {
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
         match self {
             OpenAICredentials::Static(api_key) => Ok(Some(api_key)),
             OpenAICredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 }))
                 .transpose()
             }
             OpenAICredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
             OpenAICredentials::None => Ok(None),
         }
@@ -362,7 +366,10 @@ impl InferenceProvider for OpenAIProvider {
                 get_chat_url(self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL))?
             }
         };
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let request_body = self.make_body(request).await?;
         let mut request_builder = http_client.post(request_url);
@@ -479,7 +486,10 @@ impl InferenceProvider for OpenAIProvider {
         dynamic_api_keys: &'a InferenceCredentials,
         model_provider: &'a ModelProvider,
     ) -> Result<(PeekableProviderInferenceResponseStream, String), Error> {
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
 
         match self.api_type {
@@ -587,7 +597,10 @@ impl InferenceProvider for OpenAIProvider {
         client: &'a TensorzeroHttpClient,
         dynamic_api_keys: &'a InferenceCredentials,
     ) -> Result<StartBatchProviderInferenceResponse, Error> {
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let mut batch_requests = Vec::with_capacity(requests.len());
         for request in requests {
             batch_requests.push(
@@ -713,7 +726,10 @@ impl InferenceProvider for OpenAIProvider {
                 })
             })?
             .push(&batch_params.batch_id);
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let raw_request = request_url.to_string();
         let mut request_builder = http_client.get(request_url);
         if let Some(api_key) = api_key {
@@ -822,7 +838,10 @@ impl EmbeddingProvider for OpenAIProvider {
         dynamic_api_keys: &InferenceCredentials,
         model_provider_data: &EmbeddingProviderRequestInfo,
     ) -> Result<EmbeddingProviderResponse, Error> {
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let request_body = OpenAIEmbeddingRequest::new(
             &self.model_name,
             &request.input,
@@ -976,7 +995,10 @@ impl OpenAIProvider {
             self.api_base.as_ref().unwrap_or(&OPENAI_DEFAULT_BASE_URL),
             Some(file_id),
         )?;
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let api_key = self
+            .credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let mut request_builder = client.get(file_url);
         if let Some(api_key) = api_key {
             request_builder = request_builder.bearer_auth(api_key.expose_secret());
@@ -2685,13 +2707,6 @@ struct OpenAIBatchFileResponse {
 
 #[cfg(test)]
 mod tests {
-    use base64::prelude::*;
-    use base64::Engine;
-    use futures::FutureExt;
-    use serde_json::json;
-    use std::borrow::Cow;
-    use tracing_test::traced_test;
-
     use crate::inference::types::storage::{StorageKind, StoragePath};
     use crate::inference::types::{
         FunctionType, ObjectStorageFile, ObjectStoragePointer, PendingObjectStoreFile,
@@ -2701,6 +2716,11 @@ mod tests {
         MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL, WEATHER_TOOL_CONFIG,
     };
     use crate::tool::ToolCallConfig;
+    use base64::prelude::*;
+    use base64::Engine;
+    use futures::FutureExt;
+    use serde_json::json;
+    use std::borrow::Cow;
 
     use super::*;
 
@@ -4087,8 +4107,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_file_url_no_mime_type_fetch_and_encode() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let fetch_and_encode = OpenAIMessagesConfig {
             fetch_and_encode_input_files_before_inference: true,
             json_mode: None,
@@ -4141,7 +4161,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_file_url_warn_mime_type() {
         let fetch_and_encode = OpenAIMessagesConfig {
             fetch_and_encode_input_files_before_inference: false,
@@ -4190,8 +4209,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_forward_image_url() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let fetch_and_encode = OpenAIMessagesConfig {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
@@ -4227,8 +4246,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_cannot_forward_file_url() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let fetch_and_encode = OpenAIMessagesConfig {
             json_mode: None,
             provider_type: PROVIDER_TYPE,
@@ -4281,8 +4300,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_check_api_base_suffix() {
+        let logs_contain = crate::utils::testing::capture_logs();
         // Valid cases (should not warn)
         check_api_base_suffix(&Url::parse("http://localhost:1234/").unwrap());
         check_api_base_suffix(&Url::parse("http://localhost:1234/openai/").unwrap());
@@ -4315,8 +4334,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_openai_provider_new_api_base_check() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let model_name = "test-model".to_string();
 
         // Valid cases (should not warn)
@@ -4365,8 +4384,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[traced_test]
     async fn test_openai_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let request = ModelInferenceRequest {
             inference_id: Uuid::now_v7(),
             messages: vec![RequestMessage {

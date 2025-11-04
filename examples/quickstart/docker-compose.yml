@@ -5,12 +5,11 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.12-alpine
     environment:
-      CLICKHOUSE_USER: chuser
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-      CLICKHOUSE_PASSWORD: chpassword
+      - CLICKHOUSE_USER=chuser
+      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      - CLICKHOUSE_PASSWORD=chpassword
     ports:
       - "8123:8123"
-      - "9000:9000"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
     healthcheck:
@@ -25,5 +24,37 @@ services:
   # or interact with TensorZero via its HTTP API (for other programming languages).
   #
   # The TensorZero UI also requires the gateway service.
+  gateway:
+    image: tensorzero/gateway
+    volumes:
+      # Mount our tensorzero.toml file into the container
+      - ./config:/app/config:ro
+    command: --config-file /app/config/tensorzero.toml
+    environment:
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
+  ui:
+    image: tensorzero/ui
+    volumes:
+      # Mount our tensorzero.toml file into the container
+      - ./config:/app/config:ro
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:?Environment variable OPENAI_API_KEY must be set.}
+      - TENSORZERO_CLICKHOUSE_URL=http://chuser:chpassword@clickhouse:8123/tensorzero
+      - TENSORZERO_GATEWAY_URL=http://gateway:3000
+    ports:
+      - "4000:4000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+
 volumes:
   clickhouse-data:

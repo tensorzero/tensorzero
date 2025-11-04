@@ -18,7 +18,7 @@ use crate::endpoints::inference::InferenceCredentials;
 use crate::error::warn_discarded_thought_block;
 use crate::error::warn_discarded_unknown_chunk;
 use crate::error::IMPOSSIBLE_ERROR_MESSAGE;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::http::TensorZeroEventSource;
 use crate::http::TensorzeroHttpClient;
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
@@ -127,33 +127,36 @@ impl GoogleAIStudioCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             GoogleAIStudioCredentials::Static(api_key) => Ok(api_key),
             GoogleAIStudioCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             GoogleAIStudioCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            GoogleAIStudioCredentials::None => Err(ErrorDetails::ApiKeyMissing {
-                provider_name: PROVIDER_NAME.to_string(),
-                message: "No credentials are set".to_string(),
+            GoogleAIStudioCredentials::None => {
+                Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
+                    provider_name: PROVIDER_NAME.to_string(),
+                    message: "No credentials are set".to_string(),
+                }))
             }
-            .into()),
         }
     }
 }
@@ -181,7 +184,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                     ),
                 })
             })?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let mut url = self.request_url.clone();
         url.query_pairs_mut()
@@ -273,7 +279,10 @@ impl InferenceProvider for GoogleAIStudioGeminiProvider {
                     ),
                 })
             })?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let mut url = self.streaming_request_url.clone();
         url.query_pairs_mut()
@@ -1416,17 +1425,15 @@ fn handle_google_ai_studio_error(
 mod tests {
     use std::borrow::Cow;
 
-    use serde_json::json;
-    use tracing_test::traced_test;
-
     use super::*;
     use crate::inference::types::{FlattenUnknown, FunctionType, ModelInferenceRequestJsonMode};
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{ToolCallConfig, ToolResult};
+    use serde_json::json;
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_content_block_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         use std::time::Duration;
         let content = GeminiResponseContent {
             parts: vec![GeminiResponseContentPart {
@@ -2817,8 +2824,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_google_ai_studio_gemini_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

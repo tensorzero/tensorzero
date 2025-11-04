@@ -624,4 +624,4 @@ class NotFilter(InferenceFilter):
 class OrderBy:
     by: Literal["timestamp", "metric"]
     name: Optional[str] = None
-    direction: Literal["ASC", "DESC"] = "DESC"
+    direction: Literal["ascending", "descending"] = "descending"

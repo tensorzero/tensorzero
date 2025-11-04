@@ -577,7 +577,10 @@ impl Optimizer for FireworksSFTConfig {
             None
         };
 
-        let api_key = self.credentials.get_api_key(credentials)?;
+        let api_key = self
+            .credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
 
         // Run these concurrently
 
@@ -975,7 +978,9 @@ impl JobHandle for FireworksSFTJobHandle {
         let fireworks_credentials: FireworksCredentials = crate::model_table::FireworksKind
             .get_defaulted_credential(self.credential_location.as_ref(), default_credentials)
             .await?;
-        let api_key = fireworks_credentials.get_api_key(credentials)?;
+        let api_key = fireworks_credentials
+            .get_api_key(credentials)
+            .map_err(|e| e.log())?;
         let job_status = self.poll_job(client, api_key).await?;
         if let FireworksFineTuningJobState::JobStateCompleted = job_status.state {
             // Once the job has completed, start polling the model deployment.

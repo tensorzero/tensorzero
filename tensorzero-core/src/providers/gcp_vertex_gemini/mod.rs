@@ -4,6 +4,7 @@ use std::io::Write;
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
+use crate::error::DelayedError;
 use axum::http;
 use futures::future::try_join_all;
 use futures::StreamExt;
@@ -267,9 +268,9 @@ pub async fn make_gcp_object_store(
             // We need to recursively call this function with each credential
             match Box::pin(make_gcp_object_store(gs_url, default, dynamic_api_keys)).await {
                 Ok(store) => return Ok(store),
-                Err(_) => {
+                Err(e) => {
                     tracing::info!(
-                        "Default credential for {} is unavailable for GCS, attempting fallback",
+                        "Using fallback credential, as default credential for {} is unavailable for GCS: {e}",
                         PROVIDER_NAME
                     );
                     return Box::pin(make_gcp_object_store(gs_url, fallback, dynamic_api_keys))
@@ -805,7 +806,7 @@ impl GCPVertexCredentials {
         &'a self,
         audience: &'a str,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<HeaderMap, Error> {
+    ) -> Result<HeaderMap, DelayedError> {
         let bearer_token = match self {
             GCPVertexCredentials::Static { parsed, raw: _ } => {
                 Cow::Owned(parsed.get_jwt_token(audience)?)
@@ -814,7 +815,7 @@ impl GCPVertexCredentials {
                 dynamic_api_keys
                     .get(key_name)
                     .ok_or_else(|| {
-                        Error::new(ErrorDetails::ApiKeyMissing {
+                        DelayedError::new(ErrorDetails::ApiKeyMissing {
                             provider_name: PROVIDER_NAME.to_string(),
                             message: format!("Dynamic api key `{key_name}` is missing"),
                         })
@@ -826,7 +827,7 @@ impl GCPVertexCredentials {
                     .headers(http::Extensions::default())
                     .await
                     .map_err(|e| {
-                        Error::new(ErrorDetails::GCPCredentials {
+                        DelayedError::new(ErrorDetails::GCPCredentials {
                             message: format!("Failed to get GCP access token: {e}"),
                         })
                     })?;
@@ -837,7 +838,7 @@ impl GCPVertexCredentials {
                     } => return Ok(data),
                     // We didn't pass in any 'Extensions' when calling headers, so this should never happen
                     CacheableResource::NotModified => {
-                        return Err(Error::new(ErrorDetails::InternalError {
+                        return Err(DelayedError::new(ErrorDetails::InternalError {
                             message: "GCP SDK return CacheableResource::NotModified. This should never happen. Please file a bug report at https://github.com/tensorzero/tensorzero/discussions/new?category=bug-reports.".to_string(),
                         }))
                     }
@@ -847,10 +848,10 @@ impl GCPVertexCredentials {
                 // Try default first, fall back to fallback if it fails
                 match Box::pin(default.get_auth_headers(audience, dynamic_api_keys)).await {
                     Ok(headers) => return Ok(headers),
-                    Err(_) => {
-                        tracing::info!(
-                            "Default credential for {} is unavailable, attempting fallback",
-                            PROVIDER_NAME
+                    Err(e) => {
+                        e.log_at_level(
+                            format!("Using fallback credential, as default credential for {PROVIDER_NAME} is unavailable: ").as_str(),
+                            tracing::Level::WARN,
                         );
                         return Box::pin(fallback.get_auth_headers(audience, dynamic_api_keys))
                             .await;
@@ -858,7 +859,7 @@ impl GCPVertexCredentials {
                 }
             }
             GCPVertexCredentials::None => {
-                return Err(Error::new(ErrorDetails::ApiKeyMissing {
+                return Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                     provider_name: PROVIDER_NAME.to_string(),
                     message: "No credentials are set".to_string(),
                 }))
@@ -868,7 +869,7 @@ impl GCPVertexCredentials {
         headers.insert(
             "Authorization",
             HeaderValue::from_str(&format!("Bearer {bearer_token}",)).map_err(|e| {
-                Error::new(ErrorDetails::GCPCredentials {
+                DelayedError::new(ErrorDetails::GCPCredentials {
                     message: format!(
                         "Failed to create GCP Vertex Gemini credentials from SDK: {e}",
                     ),
@@ -985,20 +986,19 @@ impl GCPServiceAccountCredentials {
                     client_email: client_email.to_string(),
                 })
             }
-            _ => Err(ErrorDetails::GCPCredentials {
+            _ => Err(Error::new(ErrorDetails::GCPCredentials {
                 message: "GCP Vertex Gemini: missing required credentials".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 
     // Get a signed JWT token for the given audience valid from the current time.
-    pub fn get_jwt_token(&self, audience: &str) -> Result<String, Error> {
+    pub fn get_jwt_token(&self, audience: &str) -> Result<String, DelayedError> {
         let mut header = Header::new(Algorithm::RS256);
         header.kid = Some(self.private_key_id.clone());
         let claims = Claims::new(&self.client_email, &self.client_email, audience);
         let token = encode(&header, &claims, &self.private_key).map_err(|e| {
-            Error::new(ErrorDetails::GCPCredentials {
+            DelayedError::new(ErrorDetails::GCPCredentials {
                 message: format!("Failed to encode JWT: {}", DisplayOrDebugGateway::new(e)),
             })
         })?;
@@ -1034,7 +1034,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
         tracing::info!("Making request with URL: {}", self.request_url);
         let start_time = Instant::now();
         let builder = http_client.post(&self.request_url).headers(auth_headers);
@@ -1139,7 +1140,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(&self.streaming_request_url)
@@ -1189,7 +1191,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
 
         let mut raw_requests = Vec::with_capacity(requests.len());
         let mut jsonl_data = Vec::new();
@@ -1360,7 +1363,8 @@ impl InferenceProvider for GCPVertexGeminiProvider {
         let auth_headers = self
             .credentials
             .get_auth_headers(&self.audience, dynamic_api_keys)
-            .await?;
+            .await
+            .map_err(|e| e.log())?;
 
         let batch_params: GCPVertexBatchParams = serde_json::from_value(
             batch_request.batch_params.clone().into_owned(),
@@ -2680,15 +2684,13 @@ fn handle_gcp_vertex_gemini_error(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
-    use std::borrow::Cow;
-    use std::sync::Arc;
-    use tracing_test::traced_test;
-
     use crate::inference::types::{FunctionType, ModelInferenceRequestJsonMode};
     use crate::jsonschema_util::StaticJSONSchema;
     use crate::providers::test_helpers::{MULTI_TOOL_CONFIG, QUERY_TOOL, WEATHER_TOOL};
     use crate::tool::{StaticToolConfig, ToolCallConfig, ToolConfig, ToolResult};
+    use serde_json::json;
+    use std::borrow::Cow;
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_gcp_vertex_content_try_from() {
@@ -4101,8 +4103,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_convert_unknown_content_block_warn() {
+        let logs_contain = crate::utils::testing::capture_logs();
         use std::time::Duration;
 
         // Test with text content
@@ -4786,8 +4788,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_gcp_vertex_gemini_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

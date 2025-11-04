@@ -1,9 +1,6 @@
 use std::{collections::HashMap, ops::Deref};
 
-use secrecy::{ExposeSecret, SecretString};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use tensorzero_core::{
+use crate::{
     cache::CacheParamsOptions,
     config::UninitializedVariantInfo,
     endpoints::inference::{InferenceParams, Params},
@@ -14,9 +11,12 @@ use tensorzero_core::{
     },
     tool::DynamicToolParams,
 };
+use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
-use crate::client_input::{test_client_input_to_input, ClientInput};
+use super::client_input::{test_client_input_to_input, ClientInput};
 
 // This is a copy-paste of the `Params` struct from `tensorzero_core::endpoints::inference::Params`.
 // with just the `credentials` field adjusted to allow serialization.

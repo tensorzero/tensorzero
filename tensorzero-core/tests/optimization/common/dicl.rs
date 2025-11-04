@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use super::use_mock_inference_provider;
 use tensorzero::{
-    ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
+    ClientExt, ClientInferenceParams, ClientInput, ClientInputMessage, ClientInputMessageContent,
     DynamicToolParams, InferenceOutput, InferenceOutputSource, LaunchOptimizationWorkflowParams,
     RenderedSample, Role, System,
 };

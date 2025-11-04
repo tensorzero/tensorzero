@@ -24,7 +24,7 @@ use super::helpers::{
 use crate::{
     cache::ModelProviderRequest,
     endpoints::inference::InferenceCredentials,
-    error::{DisplayOrDebugGateway, Error, ErrorDetails},
+    error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails},
     inference::{
         types::{
             batch::{
@@ -134,33 +134,34 @@ impl FireworksCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<&'a SecretString, Error> {
+    ) -> Result<&'a SecretString, DelayedError> {
         match self {
             FireworksCredentials::Static(api_key) => Ok(api_key),
             FireworksCredentials::Dynamic(key_name) => {
                 dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 })
             }
             FireworksCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
-            &FireworksCredentials::None => Err(ErrorDetails::ApiKeyMissing {
+            &FireworksCredentials::None => Err(DelayedError::new(ErrorDetails::ApiKeyMissing {
                 provider_name: PROVIDER_NAME.to_string(),
                 message: "No credentials are set".to_string(),
-            }
-            .into()),
+            })),
         }
     }
 }
@@ -196,7 +197,7 @@ impl InferenceProvider for FireworksProvider {
         })?;
         let request_url = get_chat_url(&FIREWORKS_API_INFERENCE_BASE)?;
         let start_time = Instant::now();
-        let api_key = self.credentials.get_api_key(api_key)?;
+        let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
         let builder = http_client
             .post(request_url)
             .bearer_auth(api_key.expose_secret());
@@ -288,7 +289,7 @@ impl InferenceProvider for FireworksProvider {
             })
         })?;
         let request_url = get_chat_url(&FIREWORKS_API_INFERENCE_BASE)?;
-        let api_key = self.credentials.get_api_key(api_key)?;
+        let api_key = self.credentials.get_api_key(api_key).map_err(|e| e.log())?;
         let start_time = Instant::now();
         let builder = http_client
             .post(request_url)
@@ -878,8 +879,6 @@ impl<'a> TryFrom<FireworksResponseWithMetadata<'a>> for ProviderInferenceRespons
 mod tests {
     use std::borrow::Cow;
     use std::time::Duration;
-    use tracing_test::traced_test;
-
     use uuid::Uuid;
 
     use super::*;
@@ -1526,8 +1525,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_fireworks_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),

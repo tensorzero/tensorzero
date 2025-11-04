@@ -11,7 +11,7 @@ use crate::utils::gateway::{AppState, AppStateData, StructuredJson};
 
 use super::types::{GetDatapointsRequest, GetDatapointsResponse, ListDatapointsRequest};
 
-const DEFAULT_PAGE_SIZE: u32 = 20;
+const DEFAULT_LIMIT: u32 = 20;
 const DEFAULT_OFFSET: u32 = 0;
 const DEFAULT_ALLOW_STALE: bool = false;
 
@@ -60,11 +60,21 @@ async fn list_datapoints(
 ) -> Result<GetDatapointsResponse, Error> {
     validate_dataset_name(&dataset_name)?;
 
+    #[expect(deprecated)]
+    let limit = if let Some(limit) = request.limit {
+        limit
+    } else if let Some(page_size) = request.page_size {
+        tracing::warn!("`page_size` is deprecated. Please use `limit` instead.");
+        page_size
+    } else {
+        DEFAULT_LIMIT
+    };
+
     let params = GetDatapointsParams {
         dataset_name: Some(dataset_name),
         function_name: request.function_name,
         ids: None, // List all datapoints, not filtering by ID
-        page_size: request.page_size.unwrap_or(DEFAULT_PAGE_SIZE),
+        limit,
         offset: request.offset.unwrap_or(DEFAULT_OFFSET),
         allow_stale: DEFAULT_ALLOW_STALE,
         filter: request.filter,
@@ -94,7 +104,7 @@ async fn get_datapoints(
         function_name: None,
         ids: Some(request.ids),
         // Return all datapoints matching the IDs.
-        page_size: u32::MAX,
+        limit: u32::MAX,
         offset: 0,
         // Get Datapoints by ID should return stale datapoints.
         allow_stale: true,

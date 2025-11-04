@@ -15,7 +15,6 @@ use tensorzero_core::{
     inference::types::TextKind,
 };
 use tokio_stream::StreamExt;
-use tracing_test::traced_test;
 use uuid::Uuid;
 
 use crate::common::get_gateway_endpoint;
@@ -567,8 +566,8 @@ async fn slow_second_chunk_streaming(payload: Value) {
 
 // Test timeouts that occur at both the model and model-provider level
 #[tokio::test]
-#[traced_test]
 async fn test_double_model_timeout() {
+    let logs_contain = tensorzero_core::utils::testing::capture_logs();
     let config = r#"
 [functions.double_timeout]
 type = "chat"

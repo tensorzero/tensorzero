@@ -12,7 +12,7 @@ use url::Url;
 
 use crate::cache::ModelProviderRequest;
 use crate::endpoints::inference::InferenceCredentials;
-use crate::error::{DisplayOrDebugGateway, Error, ErrorDetails};
+use crate::error::{DelayedError, DisplayOrDebugGateway, Error, ErrorDetails};
 use crate::inference::types::batch::{BatchRequestRow, PollBatchInferenceResponse};
 use crate::inference::types::chat_completion_inference_params::{
     warn_inference_parameter_not_supported, ChatCompletionInferenceParamsV2,
@@ -105,28 +105,30 @@ impl SGLangCredentials {
     pub fn get_api_key<'a>(
         &'a self,
         dynamic_api_keys: &'a InferenceCredentials,
-    ) -> Result<Option<&'a SecretString>, Error> {
+    ) -> Result<Option<&'a SecretString>, DelayedError> {
         match self {
             SGLangCredentials::Static(api_key) => Ok(Some(api_key)),
             SGLangCredentials::Dynamic(key_name) => {
                 Some(dynamic_api_keys.get(key_name).ok_or_else(|| {
-                    ErrorDetails::ApiKeyMissing {
+                    DelayedError::new(ErrorDetails::ApiKeyMissing {
                         provider_name: PROVIDER_NAME.to_string(),
                         message: format!("Dynamic api key `{key_name}` is missing"),
-                    }
-                    .into()
+                    })
                 }))
                 .transpose()
             }
             SGLangCredentials::WithFallback { default, fallback } => {
                 // Try default first, fall back to fallback if it fails
-                default.get_api_key(dynamic_api_keys).or_else(|_| {
-                    tracing::info!(
-                        "Default credential for {} is unavailable, attempting fallback",
-                        PROVIDER_NAME
-                    );
-                    fallback.get_api_key(dynamic_api_keys)
-                })
+                match default.get_api_key(dynamic_api_keys) {
+                    Ok(key) => Ok(key),
+                    Err(e) => {
+                        e.log_at_level(
+                            "Using fallback credential, as default credential is unavailable: ",
+                            tracing::Level::WARN,
+                        );
+                        fallback.get_api_key(dynamic_api_keys)
+                    }
+                }
             }
             SGLangCredentials::None => Ok(None),
         }
@@ -158,7 +160,10 @@ impl InferenceProvider for SGLangProvider {
             })
         })?;
         let request_url = get_chat_url(&self.api_base)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let mut request_builder = http_client.post(request_url);
         if let Some(api_key) = api_key {
@@ -255,7 +260,10 @@ impl InferenceProvider for SGLangProvider {
         })?;
 
         let request_url = get_chat_url(&self.api_base)?;
-        let api_key = self.credentials.get_api_key(dynamic_api_keys)?;
+        let api_key = self
+            .credentials
+            .get_api_key(dynamic_api_keys)
+            .map_err(|e| e.log())?;
         let start_time = Instant::now();
         let mut request_builder = http_client.post(request_url);
         if let Some(api_key) = api_key {
@@ -717,7 +725,6 @@ impl<'a> TryFrom<SGLangResponseWithMetadata<'a>> for ProviderInferenceResponse {
 mod tests {
     use serde_json::json;
     use std::{borrow::Cow, time::Duration};
-    use tracing_test::traced_test;
     use uuid::Uuid;
 
     use crate::{
@@ -947,8 +954,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_sglang_provider_new_api_base_check() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let model_name = "test-model".to_string();
 
         // Valid cases (should not warn)
@@ -1063,8 +1070,8 @@ mod tests {
     }
 
     #[test]
-    #[traced_test]
     fn test_sglang_apply_inference_params_called() {
+        let logs_contain = crate::utils::testing::capture_logs();
         let inference_params = ChatCompletionInferenceParamsV2 {
             reasoning_effort: Some("high".to_string()),
             thinking_budget_tokens: Some(1024),
