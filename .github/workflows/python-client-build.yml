@@ -171,7 +171,7 @@ jobs:
       matrix:
         platform:
           - runner: macos-14
-            target: aarch64
+            target: x86_64
           - runner: macos-15
             target: aarch64
     steps:
