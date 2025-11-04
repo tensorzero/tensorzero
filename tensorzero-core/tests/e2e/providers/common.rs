@@ -2795,6 +2795,7 @@ pub async fn check_base64_image_response(
                             "kind": kind_json,
                             "path": format!("{prefix}observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"),
                         },
+                        "detail": "low"
                     }
                 ]
             }
@@ -2831,7 +2832,7 @@ pub async fn check_base64_image_response(
                     source_url: None,
                     mime_type: mime::IMAGE_PNG,
                     storage_path: expected_storage_path.clone(),
-                    detail: None,
+                    detail: Some(Detail::Low),
                 },)))
             ]
         },]
@@ -2947,6 +2948,7 @@ pub async fn check_url_image_response(
                             "kind": kind_json,
                             "path": "observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png"
                         },
+                        "detail": "low"
                     }
                 ]
             }
@@ -2981,7 +2983,7 @@ pub async fn check_url_image_response(
                             kind: kind.clone(),
                             path: Path::parse("observability/files/08bfa764c6dc25e658bab2b8039ddb494546c3bc5523296804efc4cab604df5d.png").unwrap(),
                         },
-                        detail: None,
+                        detail: Some(Detail::Low),
                     },
                 )))]
             },
