@@ -1160,7 +1160,7 @@ retries = { num_retries = 3 }
 
 #[tokio::test]
 async fn test_rate_limiting_cancelled_stream_return_tokens() {
-    let logs_contain = tensorzero_core::utils::testing::capture_logs();
+    let logs_contain = tensorzero_core::utils::testing::capture_logs_with_filter("sqlx=trace");
     let id = Uuid::now_v7();
     let config = generate_rate_limit_config(&[&format!(
         r#"[[rate_limiting.rules]]

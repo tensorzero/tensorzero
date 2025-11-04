@@ -17,6 +17,10 @@ const TEST_LOG_FILTER: &str = "gateway=trace,tensorzero_core=trace,tower_http::t
 
 static GLOBAL_BUF: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
 
+pub fn capture_logs() -> impl Fn(&str) -> bool {
+    capture_logs_with_filter(TEST_LOG_FILTER)
+}
+
 /// A replacement for the `tracing_test` crate, specialized for our needs.
 /// * We install a global subscriber without any per-function filtering.
 ///   All of our tests run under 'cargo nextest', which runs tests in separate processes (instead of separate threads)
@@ -24,11 +28,11 @@ static GLOBAL_BUF: OnceLock<Mutex<Vec<u8>>> = OnceLock::new();
 ///   that happen to be running correctly in the same process.
 ///   Since we don't need the function name, this no longer needs to be a macro.
 ///  * We customize the filter to exclude annoying output from crates like `hyper`
-pub fn capture_logs() -> impl Fn(&str) -> bool {
+pub fn capture_logs_with_filter(filter: &str) -> impl Fn(&str) -> bool {
     GLOBAL_BUF
         .set(Mutex::new(Vec::new()))
         .expect("Called `capture_logs` more than once");
-    install_subscriber(MockWriter::new(GLOBAL_BUF.get().unwrap()), TEST_LOG_FILTER);
+    install_subscriber(MockWriter::new(GLOBAL_BUF.get().unwrap()), filter);
 
     move |message: &str| {
         let logs = String::from_utf8(GLOBAL_BUF.get().unwrap().lock().unwrap().to_vec()).unwrap();
