@@ -1037,7 +1037,7 @@ impl ContentBlockChatOutput {
                 id: input_tool_call.id,
             };
             let validated_tool_call =
-                ToolCallOutput::new(unvalidated_tool_call, tool_call_config).await;
+                InferenceResponseToolCall::new(unvalidated_tool_call, tool_call_config).await;
             ContentBlockChatOutput::ToolCall(validated_tool_call)
         } else {
             self

@@ -39,7 +39,7 @@ impl CreateChatDatapointRequest {
             .into_stored_input(fetch_context.object_store_info)
             .await?;
 
-        // Validate and re-parse the raw fields in ToolCallOutput blocks against the tool call config.
+        // Validate and re-parse the raw fields in InferenceResponseToolCall blocks against the tool call config.
         let tool_config =
             function_config.prepare_tool_config(self.dynamic_tool_params, &config.tools)?;
 
@@ -193,7 +193,7 @@ mod tests {
     };
     use crate::inference::types::{Role, StoredInputMessage, StoredInputMessageContent};
     use crate::jsonschema_util::DynamicJSONSchema;
-    use crate::tool::{DynamicToolParams, ToolCallOutput};
+    use crate::tool::{DynamicToolParams, InferenceResponseToolCall};
     use serde_json::json;
     use std::collections::HashMap;
     use std::path::Path;
@@ -360,13 +360,15 @@ mod tests {
 
         // This tool call is not present in either function config or dynamic tool params, so we store the raw output
         // and drop any arguments and names before going to database.
-        let outputs = vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-            arguments: Some(json!({"foo": "bar"})),
-            id: "test_id".to_string(),
-            name: Some("unknown_tool_name".to_string()),
-            raw_arguments: r#"{"foo": "bar"}"#.to_string(),
-            raw_name: "unknown_tool_name".to_string(),
-        })];
+        let outputs = vec![ContentBlockChatOutput::ToolCall(
+            InferenceResponseToolCall {
+                arguments: Some(json!({"foo": "bar"})),
+                id: "test_id".to_string(),
+                name: Some("unknown_tool_name".to_string()),
+                raw_arguments: r#"{"foo": "bar"}"#.to_string(),
+                raw_name: "unknown_tool_name".to_string(),
+            },
+        )];
 
         let request = CreateChatDatapointRequest {
             function_name: "write_haiku".to_string(),
@@ -386,13 +388,15 @@ mod tests {
         // We should drop the name and arguments before going to database.
         assert_eq!(
             insert.output,
-            Some(vec![ContentBlockChatOutput::ToolCall(ToolCallOutput {
-                arguments: None,
-                id: "test_id".to_string(),
-                name: None,
-                raw_arguments: r#"{"foo": "bar"}"#.to_string(),
-                raw_name: "unknown_tool_name".to_string(),
-            })])
+            Some(vec![ContentBlockChatOutput::ToolCall(
+                InferenceResponseToolCall {
+                    arguments: None,
+                    id: "test_id".to_string(),
+                    name: None,
+                    raw_arguments: r#"{"foo": "bar"}"#.to_string(),
+                    raw_name: "unknown_tool_name".to_string(),
+                }
+            )])
         );
     }
 
