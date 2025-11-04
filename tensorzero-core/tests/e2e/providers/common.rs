@@ -42,6 +42,7 @@ use tensorzero_core::inference::types::file::{Base64File, ObjectStoragePointer, 
 use tensorzero_core::inference::types::stored_input::StoredFile;
 use tensorzero_core::inference::types::{Arguments, FinishReason, System, TextKind, Thought};
 use tensorzero_core::utils::gateway::AppStateData;
+use tensorzero_core::utils::testing::reset_capture_logs;
 use tensorzero_core::{
     cache::CacheEnabledMode,
     inference::types::{
@@ -198,9 +199,10 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test(flavor = "multi_thread")]
         async fn test_warn_ignored_thought_block() {
+            let logs_contain = tensorzero_core::utils::testing::capture_logs();
             let providers = $func().await.simple_inference;
             for provider in providers {
-                test_warn_ignored_thought_block_with_provider(provider).await;
+                test_warn_ignored_thought_block_with_provider(provider, &logs_contain).await;
             }
         }
 
@@ -299,12 +301,13 @@ macro_rules! generate_provider_tests {
 
         #[tokio::test]
         async fn test_provider_type_fallback_credentials() {
+            let logs_contain = tensorzero_core::utils::testing::capture_logs();
             // We just need a longhand model
             let all_providers = $func().await;
             let providers = all_providers.credential_fallbacks;
             let supports_dynamic_credentials = !all_providers.provider_type_default_credentials.is_empty();
             for provider in providers {
-                test_provider_type_fallback_credentials_with_provider(provider, supports_dynamic_credentials).await;
+                test_provider_type_fallback_credentials_with_provider(provider, supports_dynamic_credentials, &logs_contain).await;
             }
         }
 
@@ -1149,8 +1152,9 @@ defaults.{}
 pub async fn test_provider_type_fallback_credentials_with_provider(
     provider: ModelTestProvider,
     supports_dynamic_credentials_test: bool,
+    logs_contain: &impl Fn(&str) -> bool,
 ) {
-    let logs_contain = tensorzero_core::utils::testing::capture_logs();
+    reset_capture_logs();
     // Get the default credential location for this provider
     let default_location = get_default_credential_location(&provider.provider_type);
 
@@ -2399,8 +2403,11 @@ pub async fn test_bad_auth_extra_headers_with_provider_and_stream(
 
     assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
 }
-pub async fn test_warn_ignored_thought_block_with_provider(provider: E2ETestProvider) {
-    let logs_contain = tensorzero_core::utils::testing::capture_logs();
+pub async fn test_warn_ignored_thought_block_with_provider(
+    provider: E2ETestProvider,
+    logs_contain: &impl Fn(&str) -> bool,
+) {
+    reset_capture_logs();
     // Bedrock rejects input thoughts for these models
     if provider.model_name == "claude-3-haiku-20240307-aws-bedrock"
         || provider.model_name == "deepseek-r1-aws-bedrock"
