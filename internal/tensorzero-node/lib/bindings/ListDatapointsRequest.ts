@@ -15,6 +15,11 @@ export type ListDatapointsRequest = {
    * The maximum number of datapoints to return.
    * Defaults to 20.
    */
+  limit?: number;
+  /**
+   * The maximum number of datapoints to return. Defaults to 20.
+   * Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
+   */
   page_size?: number;
   /**
    * The number of datapoints to skip before starting to return results.

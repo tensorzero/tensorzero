@@ -246,11 +246,15 @@ impl DatabaseClient {
             serde_json::from_str(&params).map_err(|e| napi::Error::from_reason(e.to_string()))?;
 
         // Convert to GetDatapointsParams
+        // Use limit if provided, otherwise fall back to page_size (deprecated), default to 20
+        #[allow(deprecated)]
+        let limit = request.limit.or(request.page_size).unwrap_or(20);
+
         let get_params = GetDatapointsParams {
             dataset_name: Some(dataset_name),
             function_name: request.function_name,
             ids: None,
-            page_size: request.page_size.unwrap_or(20),
+            limit,
             offset: request.offset.unwrap_or(0),
             allow_stale: false,
             filter: request.filter,

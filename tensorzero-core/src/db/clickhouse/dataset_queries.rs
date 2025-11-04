@@ -139,9 +139,9 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             None => "",
         };
         let limit_clause = match params.page_size {
-            Some(page_size) => {
-                query_params_owned.insert("page_size".to_string(), page_size.to_string());
-                "LIMIT {page_size:UInt32}"
+            Some(limit) => {
+                query_params_owned.insert("limit".to_string(), limit.to_string());
+                "LIMIT {limit:UInt32}"
             }
             None => "",
         };
@@ -384,7 +384,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 dataset_name: Some(params.dataset_name.clone()),
                 function_name: None,
                 ids: Some(vec![params.datapoint_id]),
-                page_size: 1,
+                limit: 1,
                 offset: 0,
                 allow_stale,
                 filter: None,
@@ -410,14 +410,14 @@ impl DatasetQueries for ClickHouseConnectionInfo {
             dataset_name,
             function_name,
             ids,
-            page_size,
+            limit,
             offset,
             allow_stale,
             filter,
         } = params;
-        let page_size_str = page_size.to_string();
+        let limit_str = limit.to_string();
         let offset_str = offset.to_string();
-        let subquery_page_size_str = (page_size + offset).to_string();
+        let subquery_limit_str = (limit + offset).to_string();
 
         // If neither IDs nor dataset are provided, reject the query.
         if dataset_name.is_none() && ids.is_none() {
@@ -437,9 +437,9 @@ impl DatasetQueries for ClickHouseConnectionInfo {
 
         // Build params and where clauses.
         let mut query_params = HashMap::new();
-        query_params.insert("page_size", page_size_str.as_str());
+        query_params.insert("limit", limit_str.as_str());
         query_params.insert("offset", offset_str.as_str());
-        query_params.insert("subquery_page_size", subquery_page_size_str.as_str());
+        query_params.insert("subquery_limit", subquery_limit_str.as_str());
 
         let dataset_name_clause = match dataset_name {
             Some(dataset_name) => {
@@ -521,7 +521,7 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 {allow_stale_clause}
                 {filter_clause}
             {order_by_clause}
-            LIMIT {{subquery_page_size:UInt32}}
+            LIMIT {{subquery_limit:UInt32}}
             UNION ALL
             SELECT
                 'json' as type,
@@ -549,11 +549,11 @@ impl DatasetQueries for ClickHouseConnectionInfo {
                 {allow_stale_clause}
                 {filter_clause}
             {order_by_clause}
-            LIMIT {{subquery_page_size:UInt32}}
+            LIMIT {{subquery_limit:UInt32}}
         )
         SELECT * FROM dataset
         {order_by_clause}
-        LIMIT {{page_size:UInt32}}
+        LIMIT {{limit:UInt32}}
         OFFSET {{offset:UInt32}}
         FORMAT JSONEachRow
         "
@@ -1728,12 +1728,12 @@ mod tests {
                 )
                 GROUP BY dataset_name
                 ORDER BY last_updated DESC
-                LIMIT {page_size:UInt32}
+                LIMIT {limit:UInt32}
                 OFFSET {offset:UInt32}
                 FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("function_name"), Some(&"test_function"));
-                assert_eq!(parameters.get("page_size"), Some(&"10"));
+                assert_eq!(parameters.get("limit"), Some(&"10"));
                 assert_eq!(parameters.get("offset"), Some(&"20"));
 
                 true
@@ -1772,7 +1772,7 @@ mod tests {
             .expect_run_query_synchronous()
             .withf(|query, parameters| {
                 assert_query_does_not_contain(query, "AND function_name = {function_name:String}");
-                assert_query_does_not_contain(query, "LIMIT {page_size:UInt32}");
+                assert_query_does_not_contain(query, "LIMIT {limit:UInt32}");
                 assert_query_does_not_contain(query, "OFFSET {offset:UInt32}");
 
                 assert!(
@@ -1780,8 +1780,8 @@ mod tests {
                     "Should not provide function_name as a query parameter"
                 );
                 assert!(
-                    !parameters.contains_key("page_size"),
-                    "Should not provide page_size as a query parameter"
+                    !parameters.contains_key("limit"),
+                    "Should not provide limit as a query parameter"
                 );
                 assert!(
                     !parameters.contains_key("offset"),
@@ -2964,7 +2964,7 @@ mod tests {
                     AND id IN ['123e4567-e89b-12d3-a456-426614174000']
                     AND staled_at IS NULL");
                 assert_query_contains(query, "ORDER BY updated_at DESC, id DESC
-                    LIMIT {subquery_page_size:UInt32}");
+                    LIMIT {subquery_limit:UInt32}");
                 assert_query_contains(query, "UNION ALL");
                 assert_query_contains(query, "
                 SELECT
@@ -2994,14 +2994,14 @@ mod tests {
                 assert_query_contains(query, "SELECT *
                     FROM dataset
                     ORDER BY updated_at DESC, id DESC
-                    LIMIT {page_size:UInt32}
+                    LIMIT {limit:UInt32}
                     OFFSET {offset:UInt32}
                 FORMAT JSONEachRow");
 
                 assert_eq!(parameters.get("dataset_name"), Some(&"test_dataset"));
-                assert_eq!(parameters.get("page_size"), Some(&"1"));
+                assert_eq!(parameters.get("limit"), Some(&"1"));
                 assert_eq!(parameters.get("offset"), Some(&"0"));
-                assert_eq!(parameters.get("subquery_page_size"), Some(&"1"));
+                assert_eq!(parameters.get("subquery_limit"), Some(&"1"));
 
                 assert!(!parameters.contains_key("datapoint_id"), "Datapoint ID should be passed as a list of IDs");
 
@@ -3232,7 +3232,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: None,
                 ids: None,
-                page_size: u32::MAX,
+                limit: u32::MAX,
                 offset: 0,
                 allow_stale: false,
                 filter: None,
@@ -3282,7 +3282,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: None,
                 ids: Some(ids),
-                page_size: u32::MAX,
+                limit: u32::MAX,
                 offset: 0,
                 allow_stale: false,
                 filter: None,
@@ -3343,7 +3343,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: None,
                 ids: Some(ids),
-                page_size: u32::MAX,
+                limit: u32::MAX,
                 offset: 0,
                 allow_stale: false,
                 filter: None,
@@ -3388,7 +3388,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: None,
                 ids: Some(ids),
-                page_size: u32::MAX,
+                limit: u32::MAX,
                 offset: 0,
                 allow_stale: false,
                 filter: None,
@@ -3431,7 +3431,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: None,
                 ids: Some(ids),
-                page_size: u32::MAX,
+                limit: u32::MAX,
                 offset: 0,
                 allow_stale: true,
                 filter: None,
@@ -3490,7 +3490,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: None,
                 ids: Some(ids),
-                page_size: u32::MAX,
+                limit: u32::MAX,
                 offset: 0,
                 allow_stale: false,
                 filter: None,
@@ -3560,7 +3560,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: None,
                 ids: Some(ids),
-                page_size: u32::MAX,
+                limit: u32::MAX,
                 offset: 0,
                 allow_stale: false,
                 filter: None,
@@ -3603,7 +3603,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: Some("test_function".to_string()),
                 ids: None,
-                page_size: 20,
+                limit: 20,
                 offset: 0,
                 allow_stale: false,
                 filter: None,
@@ -3649,7 +3649,7 @@ mod tests {
                 dataset_name: Some("test_dataset".to_string()),
                 function_name: None,
                 ids: None,
-                page_size: 20,
+                limit: 20,
                 offset: 0,
                 allow_stale: false,
                 filter: Some(filter),

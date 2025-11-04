@@ -201,6 +201,11 @@ pub struct ListDatapointsRequest {
 
     /// The maximum number of datapoints to return.
     /// Defaults to 20.
+    pub limit: Option<u32>,
+
+    /// The maximum number of datapoints to return. Defaults to 20.
+    /// Deprecated: please use `limit`. If `limit` is provided, `page_size` is ignored.
+    #[deprecated(since = "2025.11.1", note = "Use `limit` instead")]
     pub page_size: Option<u32>,
 
     /// The number of datapoints to skip before starting to return results.
