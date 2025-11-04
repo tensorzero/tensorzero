@@ -49,8 +49,11 @@ services:
     image: tensorzero/gateway-e2e:${TENSORZERO_COMMIT_TAG}
     build:
       context: ../../..
-      dockerfile: tensorzero-core/tests/e2e/Dockerfile.gateway.e2e
+      dockerfile: gateway/Dockerfile
       target: gateway
+      args:
+        CARGO_BUILD_FLAGS: --features e2e_tests
+        PROFILE: dev
     environment:
       # Test environment variables
       TENSORZERO_GATEWAY_URL: http://gateway:3000
