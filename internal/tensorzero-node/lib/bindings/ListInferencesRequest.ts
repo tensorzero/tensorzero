@@ -32,7 +32,7 @@ export type ListInferencesRequest = {
    * The maximum number of inferences to return.
    * Defaults to 20.
    */
-  page_size?: number;
+  limit?: number;
   /**
    * The number of inferences to skip before starting to return results.
    * Defaults to 0.

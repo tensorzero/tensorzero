@@ -96,7 +96,7 @@ async fn update_datapoints(
             dataset_name: Some(dataset_name.to_string()),
             function_name: None,
             ids: Some(datapoint_ids),
-            page_size: u32::MAX, // No limit - fetch all matching datapoints
+            limit: u32::MAX, // No limit - fetch all matching datapoints
             offset: 0,
             allow_stale: false,
             filter: None, // No filtering when updating datapoints
