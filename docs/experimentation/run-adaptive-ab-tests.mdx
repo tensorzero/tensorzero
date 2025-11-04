@@ -151,7 +151,7 @@ In addition to `candidate_variants`, you can also specify `fallback_variants` in
 If a variant fails for any reason, TensorZero first resamples from `candidate_variants`.
 Once they are exhausted, it attempts to use the first variant in `fallback_variants`; if that fails, it goes to the second fallback variant, etc.
 
-Note that mixed episodes, meaning episodes that contain inferences that use different variants, are not utilized by the adaptive A/B testing algorithm.
+Note that episodes that contain inferences that use different variants for the same function (e.g. as a result of a fallback) are not used by the adaptive A/B testing algorithm.
 
 See the [Configuration Reference](/gateway/configuration-reference) for more details.
 
