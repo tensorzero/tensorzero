@@ -74,6 +74,7 @@ services:
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PASSWORD: chpassword
       CLICKHOUSE_USER: chuser
+      TENSORZERO_SKIP_LARGE_FIXTURES: 1
     depends_on:
       gateway:
         condition: service_healthy
