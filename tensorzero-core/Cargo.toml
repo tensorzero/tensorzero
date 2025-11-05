@@ -146,6 +146,7 @@ http-body = "1.0.1"
 tensorzero-auth = { path = "../internal/tensorzero-auth" }
 git2 = { workspace = true }
 tempfile = { version = "3.21.0" }
+schemars = { workspace = true, features = ["uuid1"] }
 
 [dev-dependencies]
 tempfile = "3.21.0"
@@ -165,3 +166,5 @@ mockall = "0.13"
 
 [build-dependencies]
 built = { version = "0.8.0", features = ["git2"] }
+schemars = { workspace = true, features = ["uuid1"] }
+serde_json = { workspace = true }

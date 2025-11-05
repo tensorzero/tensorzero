@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -13,7 +14,7 @@ use crate::serde_util::deserialize_double_option;
 use crate::tool::DynamicToolParams;
 
 /// Request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct UpdateDatapointsRequest {
@@ -22,7 +23,7 @@ pub struct UpdateDatapointsRequest {
 }
 
 /// A tagged request to update a single datapoint in a dataset.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, tag = "type", rename_all = "snake_case"))]
@@ -40,7 +41,7 @@ pub enum UpdateDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct UpdateChatDatapointRequest {
@@ -77,7 +78,7 @@ pub struct UpdateChatDatapointRequest {
 /// - If the field has a value, it will be set to the provided value.
 ///
 /// In Rust this is modeled as an `Option<Option<T>>`, where `None` means "unchanged" and `Some(None)` means "set to `null`" and `Some(Some(T))` means "set to the provided value".
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct UpdateJsonDatapointRequest {
@@ -112,7 +113,7 @@ pub struct UpdateJsonDatapointRequest {
 /// A request to update the output of a JSON datapoint.
 /// We intentionally only accept the `raw` field (in a JSON-serialized string), because datapoints can contain invalid outputs, and it's desirable
 /// for users to run evals against them.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct JsonDatapointOutputUpdate {
@@ -121,7 +122,7 @@ pub struct JsonDatapointOutputUpdate {
 }
 
 /// A request to update the metadata of a datapoint.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 pub struct DatapointMetadataUpdate {
@@ -131,7 +132,7 @@ pub struct DatapointMetadataUpdate {
 }
 
 /// A response to a request to update one or more datapoints in a dataset.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 pub struct UpdateDatapointsResponse {

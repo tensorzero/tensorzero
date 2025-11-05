@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -537,7 +538,7 @@ impl ToolCallConfigDatabaseInsert {
 /// ```
 ///
 /// See also: [`ToolCallConfigDatabaseInsert`] for the storage/database format
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[derive(ts_rs::TS)]
 #[ts(optional_fields)]
@@ -822,7 +823,7 @@ impl ToolResult {
 /// and even specify which tool to be used.
 ///
 /// This enum is used to denote this tool choice.
-#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(ts_rs::TS, Clone, Debug, Default, Deserialize, PartialEq, Serialize, JsonSchema)]
 #[ts(export)]
 #[serde(rename_all = "lowercase")]
 #[serde(deny_unknown_fields)]
@@ -835,7 +836,7 @@ pub enum ToolChoice {
     Specific(String),
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, JsonSchema)]
 pub struct ToolCallChunk {
     pub id: String,
     #[serde(serialize_with = "serialize_option_string_as_empty")]
