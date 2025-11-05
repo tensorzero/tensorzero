@@ -541,11 +541,11 @@ impl VariantSampler for TrackAndStopConfig {
                 set_variant
             } else {
                 // The variant that was already set for this episode is not active, fall back
-                fallback_sample(active_variants, &self.fallback_variants, uniform_sample)?
+                fallback_sample(active_variants, &self.fallback_variants)?
             }
         } else {
-            // State couldn't provide a variant, fall back to uniform sampling from fallback_variants
-            fallback_sample(active_variants, &self.fallback_variants, uniform_sample)?
+            // State couldn't provide a variant, fall back to fallback_variants
+            fallback_sample(active_variants, &self.fallback_variants)?
         };
 
         // Remove and return the sampled variant
@@ -858,30 +858,21 @@ fn get_count_by_variant<'a>(
         .collect()
 }
 
-/// Perform uniform sampling from fallback_variants that are in active_variants.
+/// Select the first variant from the ranked fallback_variants list that is active.
 /// Returns an error if no fallback variants are active.
 fn fallback_sample(
     active_variants: &BTreeMap<String, Arc<VariantInfo>>,
     fallback_variants: &[String],
-    uniform_sample: f64,
 ) -> Result<String, Error> {
-    let intersection: Vec<&String> = active_variants
-        .keys()
-        .filter(|variant_name| fallback_variants.contains(variant_name))
-        .collect();
-
-    if intersection.is_empty() {
-        return Err(ErrorDetails::NoFallbackVariantsRemaining.into());
+    // Select the first variant from the ranked fallback_variants list that is active
+    for variant_name in fallback_variants {
+        if active_variants.contains_key(variant_name) {
+            return Ok(variant_name.clone());
+        }
     }
 
-    let random_index = (uniform_sample * intersection.len() as f64).floor() as usize;
-    intersection
-        .get(random_index)
-        .ok_or_else(|| {
-            Error::new(ErrorDetails::InternalError { message:
-                format!("Failed to sample variant from nonempty intersection. {IMPOSSIBLE_ERROR_MESSAGE}.")})
-        })
-        .map(std::string::ToString::to_string)
+    // No active fallback variants found
+    Err(ErrorDetails::NoFallbackVariantsRemaining.into())
 }
 
 /// Sample a variant from active_variants using weighted probabilities.
@@ -1286,19 +1277,9 @@ mod tests {
         let active = create_test_variants(&["A", "B", "C"]);
         let fallbacks = vec!["A".to_string(), "B".to_string(), "C".to_string()];
 
-        // With 3 variants:
-        // A: [0.0, 1/3) -> [0.0, 0.333...)
-        // B: [1/3, 2/3) -> [0.333..., 0.666...)
-        // C: [2/3, 1.0) -> [0.666..., 1.0)
-
-        let result = fallback_sample(&active, &fallbacks, 0.1);
+        // With ranked list behavior, always returns the first active variant
+        let result = fallback_sample(&active, &fallbacks);
         assert_eq!(result.unwrap(), "A");
-
-        let result = fallback_sample(&active, &fallbacks, 0.5);
-        assert_eq!(result.unwrap(), "B");
-
-        let result = fallback_sample(&active, &fallbacks, 0.9);
-        assert_eq!(result.unwrap(), "C");
     }
 
     #[test]
@@ -1306,14 +1287,18 @@ mod tests {
         let active = create_test_variants(&["A", "C"]);
         let fallbacks = vec!["A".to_string(), "B".to_string(), "C".to_string()];
 
-        // With 2 active fallbacks (A, C):
-        // A: [0.0, 0.5)
-        // C: [0.5, 1.0)
-
-        let result = fallback_sample(&active, &fallbacks, 0.2);
+        // With ranked list, returns the first active variant (A)
+        let result = fallback_sample(&active, &fallbacks);
         assert_eq!(result.unwrap(), "A");
+    }
 
-        let result = fallback_sample(&active, &fallbacks, 0.7);
+    #[test]
+    fn test_fallback_sample_first_inactive() {
+        let active = create_test_variants(&["C"]);
+        let fallbacks = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+
+        // With ranked list, returns the first active variant (C, skipping A and B)
+        let result = fallback_sample(&active, &fallbacks);
         assert_eq!(result.unwrap(), "C");
     }
 
@@ -1323,10 +1308,7 @@ mod tests {
         let fallbacks = vec!["B".to_string(), "C".to_string()];
 
         // Only B is active, should always return B
-        let result = fallback_sample(&active, &fallbacks, 0.0);
-        assert_eq!(result.unwrap(), "B");
-
-        let result = fallback_sample(&active, &fallbacks, 0.999);
+        let result = fallback_sample(&active, &fallbacks);
         assert_eq!(result.unwrap(), "B");
     }
 
@@ -1335,7 +1317,7 @@ mod tests {
         let active = create_test_variants(&["A", "B"]);
         let fallbacks = vec!["C".to_string(), "D".to_string()];
 
-        let result = fallback_sample(&active, &fallbacks, 0.5);
+        let result = fallback_sample(&active, &fallbacks);
         assert!(result.is_err());
     }
 
@@ -1344,7 +1326,7 @@ mod tests {
         let active = create_test_variants(&["A", "B"]);
         let fallbacks = vec![];
 
-        let result = fallback_sample(&active, &fallbacks, 0.5);
+        let result = fallback_sample(&active, &fallbacks);
         assert!(result.is_err());
     }
 
@@ -1353,7 +1335,7 @@ mod tests {
         let active: BTreeMap<String, Arc<VariantInfo>> = create_test_variants(&[]);
         let fallbacks = vec!["A".to_string(), "B".to_string()];
 
-        let result = fallback_sample(&active, &fallbacks, 0.5);
+        let result = fallback_sample(&active, &fallbacks);
         assert!(result.is_err());
     }
 
