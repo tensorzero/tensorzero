@@ -494,3 +494,149 @@ impl CreateDatapointsFromInferenceOutputSource {
 
 // CreateDatapointsFromInferenceRequestParams is not exposed directly to Python
 // Instead, it's created from dicts when needed
+
+// ============================================================================
+// Wrapper Request Types
+// ============================================================================
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UpdateDatapointsRequest {
+    #[new]
+    fn new(py: Python<'_>, datapoints: Vec<Bound<'_, PyAny>>) -> PyResult<Self> {
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(py, dp))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { datapoints })
+    }
+
+    #[getter]
+    fn datapoints<'py>(&self, py: Python<'py>) -> PyResult<Vec<Py<PyAny>>> {
+        self.datapoints
+            .iter()
+            .map(|dp| serialize_to_dict(py, dp))
+            .collect()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl CreateDatapointsRequest {
+    #[new]
+    fn new(py: Python<'_>, datapoints: Vec<Bound<'_, PyAny>>) -> PyResult<Self> {
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(py, dp))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { datapoints })
+    }
+
+    #[getter]
+    fn datapoints<'py>(&self, py: Python<'py>) -> PyResult<Vec<Py<PyAny>>> {
+        self.datapoints
+            .iter()
+            .map(|dp| serialize_to_dict(py, dp))
+            .collect()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl UpdateDatapointsMetadataRequest {
+    #[new]
+    fn new(py: Python<'_>, datapoints: Vec<Bound<'_, PyAny>>) -> PyResult<Self> {
+        let datapoints = datapoints
+            .iter()
+            .map(|dp| deserialize_from_pyobj(py, dp))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { datapoints })
+    }
+
+    #[getter]
+    fn datapoints<'py>(&self, py: Python<'py>) -> PyResult<Vec<Py<PyAny>>> {
+        self.datapoints
+            .iter()
+            .map(|dp| serialize_to_dict(py, dp))
+            .collect()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl GetDatapointsRequest {
+    #[new]
+    fn new(_py: Python<'_>, ids: Vec<Bound<'_, PyAny>>) -> PyResult<Self> {
+        let ids: Vec<uuid::Uuid> = ids
+            .iter()
+            .map(|id| {
+                let id_str: String = id.extract()?;
+                uuid::Uuid::parse_str(&id_str).map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid UUID: {e}"))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { ids })
+    }
+
+    #[getter]
+    fn ids<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.ids
+            .iter()
+            .map(|id| uuid_to_python(py, *id))
+            .collect()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl DeleteDatapointsRequest {
+    #[new]
+    fn new(_py: Python<'_>, ids: Vec<Bound<'_, PyAny>>) -> PyResult<Self> {
+        let ids: Vec<uuid::Uuid> = ids
+            .iter()
+            .map(|id| {
+                let id_str: String = id.extract()?;
+                uuid::Uuid::parse_str(&id_str).map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("Invalid UUID: {e}"))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { ids })
+    }
+
+    #[getter]
+    fn ids<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+        self.ids
+            .iter()
+            .map(|id| uuid_to_python(py, *id))
+            .collect()
+    }
+}
+
+#[cfg(feature = "pyo3")]
+#[pymethods]
+impl CreateDatapointsFromInferenceRequest {
+    #[new]
+    fn new(
+        py: Python<'_>,
+        params: Bound<'_, PyAny>,
+        output_source: Option<CreateDatapointsFromInferenceOutputSource>,
+    ) -> PyResult<Self> {
+        let params = deserialize_from_pyobj(py, &params)?;
+        Ok(Self {
+            params,
+            output_source,
+        })
+    }
+
+    #[getter]
+    fn params<'py>(&self, py: Python<'py>) -> PyResult<Py<PyAny>> {
+        serialize_to_dict(py, &self.params)
+    }
+
+    #[getter]
+    fn output_source(&self) -> Option<CreateDatapointsFromInferenceOutputSource> {
+        self.output_source.clone()
+    }
+}

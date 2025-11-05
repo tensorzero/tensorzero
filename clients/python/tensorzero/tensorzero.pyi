@@ -191,6 +191,56 @@ class DeleteDatapointsResponse:
     def num_deleted_datapoints(self) -> int: ...
 
 @final
+class CreateDatapointsRequest:
+    """Request to create multiple datapoints."""
+    def __init__(self, datapoints: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    @property
+    def datapoints(self) -> List[Any]: ...
+
+@final
+class UpdateDatapointsRequest:
+    """Request to update multiple datapoints."""
+    def __init__(self, datapoints: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    @property
+    def datapoints(self) -> List[Any]: ...
+
+@final
+class UpdateDatapointsMetadataRequest:
+    """Request to update metadata for multiple datapoints."""
+    def __init__(self, datapoints: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    @property
+    def datapoints(self) -> List[Any]: ...
+
+@final
+class GetDatapointsRequest:
+    """Request to get specific datapoints by their IDs."""
+    def __init__(self, ids: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    @property
+    def ids(self) -> List[Any]: ...
+
+@final
+class DeleteDatapointsRequest:
+    """Request to delete specific datapoints by their IDs."""
+    def __init__(self, ids: List[Any], *args: Any, **kwargs: Any) -> None: ...
+    @property
+    def ids(self) -> List[Any]: ...
+
+@final
+class CreateDatapointsFromInferenceRequest:
+    """Request to create datapoints from inferences."""
+    def __init__(
+        self,
+        params: Any,
+        output_source: Optional[CreateDatapointsFromInferenceOutputSource] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> None: ...
+    @property
+    def params(self) -> Any: ...
+    @property
+    def output_source(self) -> Optional[CreateDatapointsFromInferenceOutputSource]: ...
+
+@final
 class CreateDatapointsFromInferenceOutputSource:
     """Specifies the source of output when creating datapoints from inferences.
 

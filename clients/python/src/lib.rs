@@ -65,12 +65,14 @@ use tensorzero_rust::{
     err_to_http, observability::LogFormat, CacheParamsOptions, Client, ClientBuilder,
     ClientBuilderMode, ClientExt, ClientInferenceParams, ClientInput, ClientSecretString,
     CreateChatDatapointRequest, CreateDatapointsFromInferenceOutputSource,
+    CreateDatapointsFromInferenceRequest, CreateDatapointsRequest,
     CreateDatapointsResponse, CreateJsonDatapointRequest,
-    Datapoint, DeleteDatapointsResponse, DynamicToolParams, FeedbackParams,
-    GetDatapointsResponse, InferenceOutput, InferenceParams, InferenceStream,
+    Datapoint, DeleteDatapointsRequest, DeleteDatapointsResponse, DynamicToolParams, FeedbackParams,
+    GetDatapointsRequest, GetDatapointsResponse, InferenceOutput, InferenceParams, InferenceStream,
     JsonDatapointOutputUpdate, LaunchOptimizationParams, ListDatapointsRequest, ListInferencesParams,
     OptimizationJobHandle, RenderedSample, StoredInference, TensorZeroError, Tool,
     UpdateChatDatapointRequest, UpdateDatapointMetadataRequest,
+    UpdateDatapointsMetadataRequest, UpdateDatapointsRequest,
     UpdateDatapointsResponse, UpdateJsonDatapointRequest, WorkflowEvaluationRunParams,
 };
 use tokio::sync::Mutex;
@@ -117,17 +119,23 @@ fn tensorzero(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ResolvedInputMessage>()?;
     m.add_class::<CreateChatDatapointRequest>()?;
     m.add_class::<CreateJsonDatapointRequest>()?;
+    m.add_class::<CreateDatapointsRequest>()?;
     m.add_class::<CreateDatapointsResponse>()?;
     m.add_class::<UpdateChatDatapointRequest>()?;
     m.add_class::<UpdateJsonDatapointRequest>()?;
+    m.add_class::<UpdateDatapointsRequest>()?;
     m.add_class::<UpdateDatapointsResponse>()?;
     m.add_class::<UpdateDatapointMetadataRequest>()?;
+    m.add_class::<UpdateDatapointsMetadataRequest>()?;
     m.add_class::<DatapointMetadataUpdate>()?;
     m.add_class::<JsonDatapointOutputUpdate>()?;
     m.add_class::<ListDatapointsRequest>()?;
+    m.add_class::<GetDatapointsRequest>()?;
     m.add_class::<GetDatapointsResponse>()?;
+    m.add_class::<DeleteDatapointsRequest>()?;
     m.add_class::<DeleteDatapointsResponse>()?;
     m.add_class::<CreateDatapointsFromInferenceOutputSource>()?;
+    m.add_class::<CreateDatapointsFromInferenceRequest>()?;
     m.add_class::<ConfigPyClass>()?;
     m.add_class::<FunctionsConfigPyClass>()?;
     m.add_class::<FunctionConfigChatPyClass>()?;

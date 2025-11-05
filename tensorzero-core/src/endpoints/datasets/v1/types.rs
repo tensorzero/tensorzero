@@ -158,7 +158,7 @@ pub struct UpdateDatapointsMetadataRequest {
 }
 
 /// A request to update the metadata of a single datapoint.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export, optional_fields))]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
@@ -224,7 +224,7 @@ pub struct GetDatapointsResponse {
 /// - `None`: Do not include any output in the datapoint.
 /// - `Inference`: Include the original inference output in the datapoint.
 /// - `Demonstration`: Include the latest demonstration feedback as output in the datapoint.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(ts_rs::TS))]
 #[cfg_attr(test, ts(export))]
 #[serde(rename_all = "snake_case")]
