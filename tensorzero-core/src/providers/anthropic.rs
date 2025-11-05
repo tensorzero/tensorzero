@@ -1192,7 +1192,7 @@ impl<'a> TryFrom<AnthropicResponseWithMetadata<'a>> for ProviderInferenceRespons
     }
 }
 
-fn handle_anthropic_error(
+pub(super) fn handle_anthropic_error(
     response_code: StatusCode,
     raw_request: String,
     raw_response: String,
