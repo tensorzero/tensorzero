@@ -1908,7 +1908,7 @@ impl AsyncTensorZeroGateway {
             };
             let res = client.list_datapoints(dataset_name, request).await;
             Python::attach(|py| match res {
-                Ok(wire_datapoints) => Ok(PyList::new(py, wire_datapoints.datapoints)?.unbind()),
+                Ok(response) => Ok(PyList::new(py, response.datapoints)?.unbind()),
                 Err(e) => Err(convert_error(py, e)),
             })
         })
