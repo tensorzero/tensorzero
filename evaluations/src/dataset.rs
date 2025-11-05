@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use tensorzero::{JsonInferenceDatapoint, StoredChatInferenceDatapoint};
-use tensorzero_core::endpoints::datasets::StoredDatapoint;
+use tensorzero_core::endpoints::datasets::{
+    JsonInferenceDatapoint, StoredChatInferenceDatapoint, StoredDatapoint,
+};
 use tensorzero_core::{db::clickhouse::ClickHouseConnectionInfo, function::FunctionConfig};
 use tracing::{debug, info, instrument};
 

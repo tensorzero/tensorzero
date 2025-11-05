@@ -62,6 +62,7 @@ pub struct ChatInferenceDatapointInsert {
     pub input: StoredInput,
 
     /// Output of the function that generated this datapoint. Optional.
+    /// TODO(#4405): this should be a new type StoredContentBlockChatOutput that takes the storage ToolCallOutput format.
     #[serde(
         default,
         deserialize_with = "deserialize_optional_string_or_parsed_json"

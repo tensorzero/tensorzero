@@ -8,8 +8,8 @@ use evaluations::dataset::query_dataset;
 use evaluations::evaluators::llm_judge::{run_llm_judge_evaluator, RunLLMJudgeEvaluatorParams};
 use evaluations::{Clients, ThrottledTensorZeroClient};
 use serde_json::json;
-use tensorzero::input_handling::resolved_input_to_client_input;
 use tensorzero_core::cache::CacheEnabledMode;
+use tensorzero_core::client::input_handling::resolved_input_to_client_input;
 use tensorzero_core::db::clickhouse::test_helpers::{
     select_inference_evaluation_human_feedback_clickhouse, select_model_inferences_clickhouse,
 };
@@ -28,8 +28,9 @@ use evaluations::{run_evaluation, stats::EvaluationUpdate, Args, OutputFormat};
 use std::collections::HashMap;
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
-use tensorzero::{ClientBuilder, ClientBuilderMode, FeedbackParams};
-use tensorzero::{InferenceResponse, Role};
+use tensorzero_core::client::{
+    ClientBuilder, ClientBuilderMode, FeedbackParams, InferenceResponse, Role,
+};
 use tensorzero_core::{
     db::clickhouse::test_helpers::{
         clickhouse_flush_async_insert, get_clickhouse, select_chat_inference_clickhouse,
@@ -1177,7 +1178,9 @@ async fn test_parse_args() {
 
 #[tokio::test]
 async fn test_run_evaluation_binary() {
-    let bin_path = env!("CARGO_BIN_EXE_evaluations");
+    // Compatibility with 'cargo nextest archive': https://nexte.st/docs/ci-features/archiving/#making-tests-relocatable
+    let bin_path = std::env::var("NEXTEST_BIN_EXE_evaluations")
+        .unwrap_or_else(|_| env!("CARGO_BIN_EXE_evaluations").to_string());
     println!("Running evaluations binary at {bin_path}");
     let output = std::process::Command::new(bin_path)
         .output()
