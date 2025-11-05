@@ -128,7 +128,14 @@ impl EvaluationStats {
                 stderr = stderr,
                 "Computed statistics for evaluator"
             );
-            stats.insert(evaluator_name.clone(), EvaluatorStats { mean, stderr });
+            stats.insert(
+                evaluator_name.clone(),
+                EvaluatorStats {
+                    mean,
+                    stderr,
+                    count,
+                },
+            );
         }
         info!(
             computed_stats = stats.len(),
@@ -202,11 +209,16 @@ pub struct EvaluationError {
 pub struct EvaluatorStats {
     pub mean: f32,
     pub stderr: f32,
+    pub count: usize,
 }
 
 impl std::fmt::Display for EvaluatorStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:.2} ± {:.2}", self.mean, self.stderr)
+        write!(
+            f,
+            "{:.2} ± {:.2} (n={})",
+            self.mean, self.stderr, self.count
+        )
     }
 }
 
