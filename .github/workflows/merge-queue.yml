@@ -107,6 +107,13 @@ jobs:
           GCP_JWT_KEY: ${{ secrets.GCP_JWT_KEY }}
         run: echo "$GCP_JWT_KEY" > $GITHUB_WORKSPACE/gcp_jwt_key.json
 
+      - name: Warm up Modal instances
+        run: |
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
+          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
+          # TODO: Re-enable once we can switch to a T4 GPU
+          # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
+
       - name: Pull images referenced by the compose file
         run: docker compose -f tensorzero-core/tests/e2e/docker-compose.live.yml pull --ignore-pull-failures
 
@@ -141,7 +148,7 @@ jobs:
 
   client-tests:
     name: "client-tests (batch_writes: ${{ matrix.batch_writes }})"
-    runs-on: namespace-profile-tensorzero-16x32
+    runs-on: ubuntu-latest
     if: github.repository == 'tensorzero/tensorzero'
     permissions:
       # Permission to checkout the repository
@@ -158,16 +165,6 @@ jobs:
 
       - name: Install gdb
         run: sudo apt-get update && sudo apt-get install -y gdb
-
-      - name: Warm up Modal instances
-        run: |
-          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-inference-vllm-inference.modal.run/docs > vllm_modal_logs.txt &
-          curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--sglang-0-4-10-inference-sglang-inference.modal.run/ > sglang_modal_logs.txt &
-          # TODO: Re-enable once we can switch to a T4 GPU
-          # curl -H "Modal-Key: $MODAL_KEY" -H "Modal-Secret: $MODAL_SECRET" https://tensorzero--vllm-gpt-oss-20b-serve.modal.run/ > vllm_gpt_oss_modal_logs.txt &
-
-      - name: Cleanup disk space
-        run: ./ci/free-disk-space.sh
 
       - name: Download client-tests provider-proxy cache
         # When running as a cron job, don't use the provider-proxy cache.
@@ -280,8 +277,9 @@ jobs:
           echo "__force_allow_embedded_batch_writes = true" >> tensorzero-core/tests/e2e/tensorzero.toml
 
       - name: Launch dependency services for E2E tests
+        # We only launch some of the services, as we don't need or want things like 'fixtures'
         run: |
-          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up --build -d --wait
+          docker compose -f tensorzero-core/tests/e2e/docker-compose.yml up mock-inference-provider clickhouse postgres gateway-postgres-migrations gateway-clickhouse-migrations -d --wait
 
       - name: Print ClickHouse container logs
         if: always()
